@@ -110,6 +110,32 @@ memory bandwidth, and thermal headroom on a single chip. See
 [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) for the full set and the
 competitor comparisons.
 
+## Zero-knowledge mode (research PoC)
+
+The `zk` cargo feature adds honest-verifier zero-knowledge on top of the
+succinct argument: STARK-style randomizer witness rows mask every PIOP
+message, and a hiding Ligerito commitment (low-half mask block + a blinder
+codeword `g` folded in as `F = message′ + c·g`) masks the opened rows, the
+internal sumcheck messages, and the final residual. The non-zk path is
+byte-identical with the feature off. Currently implemented for **BLAKE3
+batch statements** (`Blake3Setup::with_zk` + `prove_fast_zk`; the verifier
+is unchanged).
+
+```sh
+# ZK evidence: rank-audit certificates + differentials + roundtrips
+cargo test --release -p flock-core  --features zk zk_audit
+cargo test --release -p flock-prover --features zk --test zk_piop_audit
+cargo test --release -p flock-prover --features zk prove_fast_zk_ligerito_roundtrip -- --ignored
+
+# zk vs baseline benchmark (BLAKE3 batch proving)
+cargo bench --features zk --bench zk_vs_baseline
+```
+
+Measured on 8 threads (best of 3): zk proving costs 1.46× / 2.11× / 2.19×
+the baseline at batches 2^10 / 2^12 / 2^14, verify time is unchanged, proof
+sizes are 1.65–1.82×. Design, leakage map, machine-checked ZK certificates,
+and soundness accounting: [`docs/zk-leakage.md`](docs/zk-leakage.md).
+
 ## Acknowledgments and third-party code
 
 Flock incorporates code from the projects below; see the individual file

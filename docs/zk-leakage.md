@@ -1,0 +1,208 @@
+# Zero-knowledge Flock: leakage map, masking design, and ZK evidence
+
+This document specifies how the `zk` mode makes Flock's argument
+honest-verifier zero-knowledge (HVZK), classifies every prover→verifier
+message, states precisely what is claimed and what is machine-checked, and
+records the soundness accounting. Scope of the current implementation:
+**batch R1CS statements with the BLAKE3 encoder** (`Blake3Setup::with_zk` /
+`prove_fast_zk`); other encoders and the hash-chain statement are future work
+(see the end).
+
+## 1. Design summary
+
+Two mask species, both committed in the initial commitment — so every mask is
+bound by the Fiat–Shamir transcript **before any challenge that could depend
+on it** (the ordering requirement is structural, not a discipline):
+
+1. **Randomizer witness rows** (`flock_core::zk::ZkBlockLayout`). Each R1CS
+   block gets extra rows of two shapes, on fresh witness columns filled with
+   uniform bits from a prover-secret DRBG (`ZkRng`, BLAKE3-XOF, seeded from
+   OS entropy):
+   - A-type `u·1 = u`: the A row is a self-loop on the random column, the B
+     row selects the constant-1 wire; `C = I` makes the row's c/z-slot the
+     same bit. Randomness enters the a-cube, the product cube (`u·1 = u`,
+     affine — products are pointwise and A/B randomizer rows are disjoint,
+     so no `u_A·u_B` cross terms ever form), and the z-cube.
+   - B-type `1·u′ = u′`: symmetric, masking the b̂-side.
+   The rows are satisfied by any bit assignment, so completeness and the
+   knowledge claim about the real witness wires are unchanged. The optimized
+   zerocheck/lincheck kernels are untouched — they just process a witness
+   that contains random bits. The rows live **inside** `useful_bits` (the
+   padded kernels skip regions declared zero), and the layout is bound into
+   `statement_digest`.
+
+2. **Hiding PCS** (`pcs::commit_zk` + the blinded opening). The committed
+   message becomes `message′ = [mask ‖ z_packed]` with a uniform low-half
+   mask block (the low novel-basis slots `X̂_0..X̂_{t−1}` span all degrees
+   < t, so any t distinct opened positions receive a surjective mask→symbol
+   map — no dead zones; a top-block mask would vanish on the low subspace,
+   half the query domain at rate ½). A **full-support blinder** `g`, uniform
+   over the doubled message space, is committed alongside in shared wide
+   Merkle leaves (`leaf = [f′ lanes ‖ g lanes]`, one root). The opening runs
+   the unchanged Ligerito recursion on `F = message′ + c·g`, where the
+   prover first observes `y_g = ⟨g_top, b_combined⟩`, grinds
+   `fold_grinding_bits[0]+1` PoW bits, and only then samples `c`
+   (observing `y_g` after `c` would let a cheating prover shift the combined
+   target — the order is soundness-critical). The low-half mask hides the
+   raw f′ rows opened at L0; `g` hides everything downstream: all recursive
+   rows, every internal sumcheck message `(u_0, u_2)` including the pre-glue
+   ones, and the final residual `yr`. (Low-half masks alone provably leak:
+   the combined basis `b′ = [0 ‖ b_combined]` is zero on the mask half and
+   the LSB-first folds preserve the half split, so the first `initial_k+1`
+   sumcheck messages and the top half of `yr` would be clear witness
+   functionals — the PCS rank audit's negative control demonstrates exactly
+   this.)
+
+Why not the classical Chiesa–Forbes–Spooner / Libra masking-polynomial
+sumcheck: over F₂₁₂₈ the standard additive mask `g(x) = Σᵢ gᵢ(xᵢ)` has
+`Σ_cube g = 2^{m−1}(…) = 0` — characteristic 2 annihilates it — and Flock
+has no shared sumcheck seam (zerocheck, lincheck, and the PCS sumchecks are
+independently hand-optimized kernels). The randomizer-witness design achieves
+the same effect with zero kernel changes.
+
+## 2. Leakage map
+
+Every transcript `observe` site and clear-text proof field, classified.
+"Masked by" names the species that makes the value's conditional
+distribution witness-independent.
+
+| # | Message | Site | Masked by |
+|---|---------|------|-----------|
+| L1 | Commitment root | `proof.rs::bind_statement` | hiding commit (mask + g + randomizers in the committed message) |
+| L2 | `round1_ab`, `round1_c` (2×64 F128) | `zerocheck.rs:307-308` | randomizer rows |
+| L3 | zerocheck round pairs `(G(1),G(∞))` | `zerocheck.rs:349-350,412-413` | randomizer rows |
+| L4 | `final_a_eval`, `final_b_eval`, `final_c_eval` | `zerocheck.rs:437-438`, proof field | A-side / B-side randomizer rows |
+| L5 | lincheck rounds `(e1,einf)`, `z_partial`, claim `w` | `lincheck.rs:1311-1312,1338` | randomizer rows |
+| L6 | chain-shift rounds + `g_at_point` | `chain.rs:200-202` | **future work** (chain statements are not zk yet) |
+| L7a | `s_hat_v` (128 F128 per RS claim) | `ring_switch.rs:2222` | randomizer rows (needs ≥128 bits per bit-residue — see §4) |
+| L7b | Ligerito opened rows, all levels | `RecursiveProof.opened_rows` | low-half mask (L0 f′ rows) + blinder `g` (all levels) |
+| L7c | PCS sumcheck `(u_0,u_2)`; final `yr` | `sumcheck_transcript`, `FinalProof.yr` | blinder `g` (via the `c`-combination) |
+| L7d | Unopened Merkle siblings | `merkle.rs` | computational: every L0 leaf carries ≥8 KiB of fresh `g` entropy; deeper leaves are rows of `g`-blinded folds (no leaf salting — see §5) |
+| — | `y_g` | `BatchOpeningProofLigerito.zk_blind` | uniform by construction (linear in `g`) |
+
+Public, no treatment: statement digest (includes the zk layout), batch size,
+matrix structure, FS challenges, PoW nonces, query positions, and the claim
+values *as constrained quantities* (see §3).
+
+## 3. The precise HVZK claim
+
+- **Model:** honest-verifier; the interactive argument is public-coin and
+  compiled by the existing Fiat–Shamir transform, so HVZK lifts to NIZK in
+  the ROM as usual.
+- **Claim:** statistical witness-indistinguishability of the transcript
+  distribution, conditioned on the public inputs, for all revealed field
+  elements; **computational** (SHA-256 preimage) hiding for unopened Merkle
+  siblings. At fixed challenges every revealed value is an affine function
+  of `(randomizer bits, mask, g, witness)`; with the mask budgets of §4 the
+  witness-dependent directions lie inside the mask image, so transcripts of
+  any two witnesses for the same statement are identically distributed (up to
+  the statistical error of the budget margins, ~2^{-64} per the slack term).
+- **Conditioning on public inputs is necessary, not a caveat:** the PCS
+  opening *proves* `ẑ(point) = v`; the consistency equations genuinely
+  determine `γ·v + c·y_g` from the revealed values. The audits therefore
+  probe witness directions in the kernel of the public claim functionals
+  (PCS audit) / compare witnesses for the same statement (PIOP audit).
+
+## 4. Machine-checked evidence (the "prove it" deliverable)
+
+All evidence is re-runnable; the negative controls prove the detectors would
+catch an unwired or missing mask.
+
+1. **PCS rank audit** — `flock-core/src/pcs/zk_audit.rs`
+   (`cargo test -p flock-core --features zk zk_audit`). With a fixed
+   challenger, the map `(mask, g) → all revealed PCS values` is affine over
+   F₂₁₂₈; 192 unit probes extract it exactly at m=13, and Gaussian
+   elimination checks `Image(witness|_{ker claims}) ⊆ Image(masks)`.
+   Negative control: withholding `g` must fail (it does — the pre-glue
+   messages / `yr` leak class).
+2. **PIOP rank audit** — `flock-prover/tests/zk_piop_audit.rs`
+   (`cargo test -p flock-prover --features zk --test zk_piop_audit`).
+   Certifies **k-wise joint uniformity**: for random 6-value subsets drawn
+   across every message class (round-1 vectors, round pairs, final evals,
+   `z_partial`, both `s_hat_v` vectors), the restricted randomizer image is
+   the full 768-dim space. Full joint uniformity of all ~460 revealed values
+   needs ≈59k probe runs and is not run in CI; k-wise uniformity catches any
+   leaked or under-masked value in a sampled class. Negative control:
+   withholding the A-group must fail (it does).
+3. **Transcript differentials** — same statement, two DRBG seeds ⇒
+   essentially every masked value changes (asserted ≥90%); zeroed masks ⇒
+   byte-identical deterministic transcripts (the leak being closed).
+   End-to-end at the BLAKE3 level: `prove_fast_zk_ligerito_roundtrip`
+   asserts fresh seeds change the commitment root, `final_a_eval`, and
+   `z_partial`, while the proof still verifies.
+4. **Roundtrips + tamper rejection** — zk proofs verify via the unchanged
+   verifier entry points; tampering `z_partial`, round messages, final
+   evals, `s_hat_v`, `y_g`, a mask cell, or stripping `zk_blind` is
+   rejected (`pcs_zk_roundtrip_and_negatives`,
+   `r1cs_prove_verify_roundtrip_ligerito_zk`,
+   `prove_fast_zk_ligerito_roundtrip`).
+
+**Budget rules** (`ZkConfig::sized_for` errs high; the audits are ground
+truth): masking one revealed F128 needs ≥128 bits of randomizer entropy
+reaching it; the `s_hat_v` bit-slices additionally need ≥128 bits **per
+bit-residue** (slice r only sees witness bits at position r mod 128), i.e.
+`blocks × A-chunks-per-block ≥ 128` with margin. BLAKE3: 2 A-chunks + 1
+B-chunk + the 512-bit chain-mask pair (also A-type) per block ⇒ ≥6 A-type
+bits per residue per block × ≥256 blocks ≥ 1,536 per residue, and ~229k
+total randomizer bits against a ~72k-bit budget at m=22.
+
+## 5. Soundness accounting
+
+- **Statement change:** randomizer rows are unconstrained-but-satisfiable;
+  the knowledge claim on the hash wires is unchanged. The zk layout (and the
+  `useful_bits` extension) is absorbed into `statement_digest`.
+- **PCS shape change:** zk commits the (m+1)-dimensional message, so the
+  opening transparently uses the existing, audited `(m+1)` config ladder
+  (`configs/ligerito/m{m+1}_*.toml`); the proximity/UDR analysis is literally
+  the (m+1) analysis. The mask block and `g` are ordinary code dimensions.
+- **The `c` combination** is one extra interleave-fold round (the L0 word
+  has `2^{initial_k+1}` rows folded by `c` then the lane challenges): +1 bit
+  on the worst row-union term, priced by the mandatory
+  `fold_grinding_bits[0]+1` PoW grind before `c` is sampled. `y_g` is
+  observed before the grind.
+- **Merkle siblings:** not salted. Every L0 leaf contains its 64 `g`-lane
+  symbols (≥8,192 bits of fresh DRBG entropy); level ≥1 leaves are rows of
+  encodings of `g`-blinded folds. Unopened sibling hashes are therefore
+  hashes of high-min-entropy strings: computational hiding in the plain
+  model, statistical in the ROM. Salting would add bytes and a `merkle.rs`
+  fork for no gain in this model.
+- **DRBG:** `ZkRng` = BLAKE3 XOF keyed from `getrandom` OS entropy,
+  domain-separated forks for the witness randomizers and the PCS masks; it
+  never touches the FS transcript (mask randomness reaches the transcript
+  only through committed data).
+
+## 6. Measured cost (see `benches/zk_vs_baseline.rs`)
+
+zk mode costs, by construction: L0 commit ≈4× (message dim ×2, leaf width
+×2), the opening's lane-fold phase ≈2× (doubled `F`/`b′`), one extra
+`(m+1)`-ladder step in the recursion, ~2× L0 opened-row bytes in the proof,
+a few percent on the PIOP phases (extended useful region), and the DRBG fill.
+Measured end-to-end (BLAKE3 batch, 8 threads, best of 3,
+`cargo bench --features zk --bench zk_vs_baseline`):
+
+| batch | m | baseline prove | zk prove | prove × | verify × | proof size × |
+|---:|---:|---:|---:|---:|---:|---:|
+| 1,024 | 24 | 8.5 ms | 12.4 ms | 1.46 | 0.98 | 1.82 (288→525 KiB) |
+| 4,096 | 26 | 19.7 ms | 41.4 ms | 2.11 | 1.03 | 1.72 |
+| 16,384 | 28 | 70.9 ms | 155.3 ms | 2.19 | 1.02 | 1.65 |
+
+The ratio grows toward the commit-bound ~2–2.5× as m grows (the 4× L0
+commit is a larger fraction of the total). Future-work optimization: shrink
+the mask block below a full half (jagged-style basis gating) to cut the
+commit factor.
+
+## 7. Future work
+
+- sha2 / keccak / keccak3 randomizer sections (keccak's walker circuits need
+  the randomizer comb terms added to `fold_alpha_batched`).
+- Chain statements: the shift argument folds only the In/Out slots
+  (`chain_common.rs::fold_in_out`), so its messages are unmasked witness
+  functionals. Design (worked out, unimplemented): fold the committed
+  chain-mask slot pair (already allocated in the BLAKE3 zk layout) like
+  In/Out into a table `m(y,s₀)`; prover observes `σ = Σ m`, verifier samples
+  `γ`; run the sumcheck on `W·g + γ·m`; final check gains `γ·m_at_point`;
+  one extra packed-direct claim through the existing batched opening.
+- Batch-major zk witness generation (currently row-major only).
+- Full-rank (not k-wise) PIOP certificate as an offline job; a constructive
+  transcript simulator on top of the audits.
+- Cut the 2× mask-block overhead via jagged/partial mask blocks.

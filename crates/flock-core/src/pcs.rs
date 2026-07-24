@@ -25,6 +25,8 @@ pub mod ligerito;
 pub mod pack;
 pub mod ring_switch;
 pub mod tensor_algebra;
+#[cfg(all(test, feature = "zk"))]
+mod zk_audit;
 
 pub use commit::{
     Commitment, PcsParams, ProverData, commit, commit_into, prefault_codeword_during,
