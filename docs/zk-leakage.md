@@ -183,6 +183,14 @@ catch an unwired or missing mask.
    rejected (`pcs_zk_roundtrip_and_negatives`,
    `r1cs_prove_verify_roundtrip_ligerito_zk`,
    `prove_fast_zk_ligerito_roundtrip`).
+5. **Formal masking theorem** — `lean/` holds a Lean 4 + Mathlib proof
+   (no `sorry`) that the audited hypotheses imply zero-knowledge: an
+   affine transcript with mask-covered witness directions is
+   witness-independent, uniform on its coset, and exactly simulatable
+   from a public coset representative (`transcript_witness_indep`,
+   `simulator_exact`, `pmf_*`). The audits above check precisely those
+   hypotheses on the real prover; see `lean/README.md` for the two-layer
+   argument and its limits.
 
 **Budget rules** (`ZkConfig::sized_for` errs high; the audits are ground
 truth): masking one revealed F128 needs ≥128 bits of randomizer entropy
