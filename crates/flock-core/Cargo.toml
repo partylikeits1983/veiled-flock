@@ -19,6 +19,12 @@ hash-count = []
 # `chain_bench` example). NEVER enable it for a build that produces real proofs.
 unsound-challenger = []
 
+# Zero-knowledge mode: hiding commitments (per-lane mask block + blinder
+# codeword), randomizer-witness layouts, and the prover-side DRBG that feeds
+# them. Off by default; the non-zk paths are byte-identical with the feature
+# disabled. Pulls in `getrandom` for OS entropy.
+zk = ["dep:getrandom"]
+
 [dependencies]
 rayon = { workspace = true }
 sha2 = { workspace = true }
@@ -26,6 +32,7 @@ blake3 = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true }
 toml = { workspace = true }
+getrandom = { version = "0.2", optional = true }
 
 [dev-dependencies]
 # Used by `LigeritoSecurityConfig` serde round-trip tests.

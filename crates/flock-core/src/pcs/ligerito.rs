@@ -2971,6 +2971,50 @@ pub fn recursive_prover_with_basis<Ch: Challenger>(
         l0_codeword,
         l0_tree,
         None,
+        None,
+        challenger,
+    )
+}
+
+/// zk-L0 context for the hiding commitment: the L0 codeword carries wide
+/// leaves `[f′ lanes ‖ g lanes]`, and the recursion runs on `F = f′ + c·g`.
+/// The prover/verifier open the wide rows and combine them with `c` before
+/// the induce step; everything from level 1 on is the plain protocol.
+#[derive(Clone, Copy, Debug)]
+pub struct ZkL0 {
+    pub c: F128,
+}
+
+/// zk variant of [`recursive_prover_with_basis_precomputed_round0`]: same
+/// protocol, but the L0 commitment is the wide-leaf hiding commit
+/// (`pcs::commit_zk`) and the folded vector is `F = message′ + c·g`.
+/// `packed_witness` must already BE the materialized `F`, and `round0_uv`
+/// the round-0 prime of `(F, b_initial)`.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
+    config: &ProverConfig,
+    f_blinded: Vec<F128>,
+    b_initial: Vec<F128>,
+    target: F128,
+    l0_codeword: &[F128],
+    l0_tree: &[Hash],
+    round0_uv: (F128, F128),
+    zk_l0: ZkL0,
+    challenger: &mut Ch,
+) -> LigeritoProof {
+    recursive_prover_with_basis_impl(
+        config,
+        f_blinded,
+        b_initial,
+        target,
+        l0_codeword,
+        l0_tree,
+        Some(SumcheckMessage {
+            u_0: round0_uv.0,
+            u_2: round0_uv.1,
+        }),
+        Some(zk_l0),
         challenger,
     )
 }
@@ -3002,6 +3046,7 @@ pub fn recursive_prover_with_basis_precomputed_round0<Ch: Challenger>(
             u_0: round0_uv.0,
             u_2: round0_uv.1,
         }),
+        None,
         challenger,
     )
 }
@@ -3015,6 +3060,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     l0_codeword: &[F128],
     l0_tree: &[Hash],
     first_msg: Option<SumcheckMessage>,
+    zk_l0: Option<ZkL0>,
     challenger: &mut Ch,
 ) -> LigeritoProof {
     let log_n = packed_witness.len().trailing_zeros() as usize;
@@ -3031,7 +3077,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let log_msg_cols_0 = log_n - initial_k;
     let block_len_0 = 1usize << (log_msg_cols_0 + log_inv_rate_0);
     let num_interleaved_0 = 1usize << initial_k;
-    assert_eq!(l0_codeword.len(), block_len_0 * num_interleaved_0);
+    // zk: each L0 leaf additionally carries the blinder-g lanes.
+    let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
+    assert_eq!(l0_codeword.len(), block_len_0 * num_interleaved_0 * l0_lane_mult);
     assert_eq!(l0_tree.len(), 2 * block_len_0 - 1);
 
     let trace = std::env::var("LIG_PROVE_TRACE").is_ok();
@@ -3052,10 +3100,10 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     // wtns_0 access reduces to: root (last tree node), row(q), block_len.
     let initial_root: Hash = l0_tree[l0_tree.len() - 1];
     let l0_block_len = block_len_0;
-    let l0_num_interleaved = num_interleaved_0;
+    let l0_leaf_width = num_interleaved_0 * l0_lane_mult;
     let l0_row = |q: usize| -> &[F128] {
-        let start = q * l0_num_interleaved;
-        &l0_codeword[start..start + l0_num_interleaved]
+        let start = q * l0_leaf_width;
+        &l0_codeword[start..start + l0_leaf_width]
     };
     challenger.observe_bytes(&initial_root);
 
@@ -3172,8 +3220,21 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     if trace {
         t_opens += _t.elapsed();
     }
+    // zk: the wide rows go into the proof (the verifier re-derives the
+    // F-rows), but the induce step consumes the c-combined F-rows.
+    let induce_rows_0: Vec<Vec<F128>> = match zk_l0 {
+        Some(zk) => opened_rows_0
+            .iter()
+            .map(|row| {
+                (0..num_interleaved_0)
+                    .map(|j| row[j] + zk.c * row[num_interleaved_0 + j])
+                    .collect()
+            })
+            .collect(),
+        None => opened_rows_0.clone(),
+    };
     let initial_proof = RecursiveProof {
-        opened_rows: opened_rows_0.clone(),
+        opened_rows: opened_rows_0,
         merkle_proof: merkle_proof_0,
     };
 
@@ -3186,7 +3247,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         n1,
         log_inv_rate_0,
         &sks_vks_n1,
-        &opened_rows_0,
+        &induce_rows_0,
         &r_lane_fold,
         &queries_0,
         &alpha_0,
@@ -3415,6 +3476,7 @@ pub fn recursive_verifier_with_basis_succinct<Ch, F>(
     target: F128,
     expected_initial_root: &Hash,
     eval_b_residual: F,
+    zk_l0: Option<ZkL0>,
     challenger: &mut Ch,
 ) -> bool
 where
@@ -3564,12 +3626,15 @@ where
     }
     let alpha_0 = challenger.sample_f128_vec(ceil_log2(num_queries_0));
     let _t = std::time::Instant::now();
+    // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
+    // rows, then combine each into an F-row with c for the enforced sum.
+    let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
     if !verify_level_opens(
         &proof.initial_root,
         block_len_0,
         &queries_0,
         &proof.initial_proof.opened_rows,
-        num_interleaved_0,
+        num_interleaved_0 * l0_lane_mult,
         &proof.initial_proof.merkle_proof,
     ) {
         return false;
@@ -3583,8 +3648,25 @@ where
     // see `induce_sumcheck_evaluate_at_residual`).
     let n1 = log_n - initial_k;
     let _t = std::time::Instant::now();
+    let combined_rows_0: Vec<Vec<F128>>;
+    let enforced_rows_0: &[Vec<F128>] = match zk_l0 {
+        Some(zk) => {
+            combined_rows_0 = proof
+                .initial_proof
+                .opened_rows
+                .iter()
+                .map(|row| {
+                    (0..num_interleaved_0)
+                        .map(|j| row[j] + zk.c * row[num_interleaved_0 + j])
+                        .collect()
+                })
+                .collect();
+            &combined_rows_0
+        }
+        None => &proof.initial_proof.opened_rows,
+    };
     let enforced_sum_0 = induce_sumcheck_enforced_sum(
-        &proof.initial_proof.opened_rows,
+        enforced_rows_0,
         &r_lane_fold,
         &queries_0,
         &alpha_0,
@@ -6625,6 +6707,7 @@ mod tests {
             target,
             &initial_root,
             eval_b_residual,
+            None,
             &mut v_ch2,
         );
         assert!(succ_ok, "succinct verifier must accept");
@@ -6758,6 +6841,7 @@ mod tests {
                 target,
                 &initial_root,
                 &eval_b_residual,
+                None,
                 &mut ch,
             )
         };

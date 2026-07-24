@@ -76,6 +76,12 @@ pub struct BlockR1cs {
     /// `None` and carry the pin on their own `LincheckCircuit`. See
     /// `docs/const-wire-pin.md`.
     pub const_pin: Option<usize>,
+    /// Zero-knowledge randomizer-block layout, or `None` for the plain
+    /// (non-hiding) statement. Part of the statement: bound into
+    /// [`Self::statement_digest`], and `useful_bits` must equal
+    /// `zk.useful_bits_zk` when set (the randomizer rows are real witness
+    /// rows, inside the useful region).
+    pub zk: Option<crate::zk::ZkBlockLayout>,
     /// Lazily-cached BLAKE3 digest of the R1CS instance — see
     /// [`Self::statement_digest`]. Computed on first access; reused thereafter
     /// (the matrices are public fields, so callers that mutate them after the
@@ -103,6 +109,7 @@ impl Clone for BlockR1cs {
             c_0: self.c_0.clone(),
             layout: self.layout,
             const_pin: self.const_pin,
+            zk: self.zk,
             digest_cache: std::sync::OnceLock::new(),
             csc_cache: std::sync::OnceLock::new(),
         }
@@ -344,6 +351,14 @@ impl BlockR1cs {
                 WitnessLayout::RowMajor => 0u8,
                 WitnessLayout::BatchMajor => 1u8,
             }]);
+            // The zk randomizer layout (and the useful-bits extension it
+            // implies) determines which rows may carry mask bits — part of
+            // the statement. Absorbed only when present so the non-zk digest
+            // is byte-identical to the pre-zk protocol.
+            if let Some(zk) = &self.zk {
+                h.update(&(self.useful_bits as u64).to_le_bytes());
+                zk.absorb_into(&mut h);
+            }
             absorb_matrix(&mut h, &self.a_0);
             absorb_matrix(&mut h, &self.b_0);
             absorb_matrix(&mut h, &self.c_0);
@@ -818,6 +833,7 @@ mod tests {
             c_0: identity(1 << k_log),
             layout: WitnessLayout::RowMajor,
             const_pin: None,
+            zk: None,
             digest_cache: std::sync::OnceLock::new(),
             csc_cache: std::sync::OnceLock::new(),
         };
@@ -847,6 +863,7 @@ mod tests {
             c_0: identity(1 << k_log),
             layout: WitnessLayout::RowMajor,
             const_pin: None,
+            zk: None,
             digest_cache: std::sync::OnceLock::new(),
             csc_cache: std::sync::OnceLock::new(),
         };
@@ -855,5 +872,41 @@ mod tests {
         let mut z_nonzero = vec![false; 1 << m];
         z_nonzero[5] = true;
         assert!(!r1cs.satisfies(&z_nonzero));
+    }
+
+    #[test]
+    fn statement_digest_binds_zk_layout() {
+        let k_log = 10;
+        let mk = |zk: Option<crate::zk::ZkBlockLayout>| BlockR1cs {
+            m: 11,
+            k_log,
+            k_skip: 2,
+            useful_bits: 1 << k_log,
+            a_0: identity(1 << k_log),
+            b_0: identity(1 << k_log),
+            c_0: identity(1 << k_log),
+            layout: WitnessLayout::RowMajor,
+            const_pin: None,
+            zk,
+            digest_cache: std::sync::OnceLock::new(),
+            csc_cache: std::sync::OnceLock::new(),
+        };
+        let plain = mk(None);
+        let cfg = crate::zk::ZkConfig {
+            rand_chunks_a: 1,
+            rand_chunks_b: 1,
+            chain_mask: false,
+        };
+        let zk_a = mk(Some(crate::zk::ZkBlockLayout::new(k_log, 128, None, &cfg)));
+        let cfg_b = crate::zk::ZkConfig {
+            rand_chunks_a: 2,
+            ..cfg
+        };
+        let zk_b = mk(Some(crate::zk::ZkBlockLayout::new(k_log, 128, None, &cfg_b)));
+        // zk layout is part of the statement; different layouts ⇒ different
+        // digests, and None keeps the pre-zk digest formula.
+        assert_ne!(plain.statement_digest(), zk_a.statement_digest());
+        assert_ne!(zk_a.statement_digest(), zk_b.statement_digest());
+        assert_eq!(plain.statement_digest(), mk(None).statement_digest());
     }
 }

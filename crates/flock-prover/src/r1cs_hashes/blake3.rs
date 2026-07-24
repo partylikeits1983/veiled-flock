@@ -467,6 +467,39 @@ fn initial_lane_words() -> [Word; 16] {
 /// Build the per-block base matrices `(A_0, B_0)`. `C_0 = I_k` (circuit-shape
 /// R1CS — every z slot is the output of its row).
 pub fn build_matrices() -> (SparseBinaryMatrix, SparseBinaryMatrix) {
+    build_matrices_zk(None)
+}
+
+/// [`build_matrices`] plus, when `zk` is set, the randomizer rows: A-type
+/// slots get `u·1 = u` (A self-loop, B on the constant wire), B-type slots
+/// `1·u′ = u′`. Satisfied for any bit, they carry the prover's mask
+/// randomness into the a-, b- and z-cubes so every PIOP message is blinded
+/// (see `flock_core::zk`).
+pub fn build_matrices_zk(
+    zk: Option<&flock_core::zk::ZkBlockLayout>,
+) -> (SparseBinaryMatrix, SparseBinaryMatrix) {
+    let (mut a_rows, mut b_rows) = build_matrices_rows();
+    if let Some(layout) = zk {
+        for s in layout.a_bits() {
+            debug_assert!(a_rows[s].is_empty() && b_rows[s].is_empty());
+            a_rows[s] = vec![s];
+            b_rows[s] = vec![Z_CONST_POS];
+        }
+        for s in layout.b_bits() {
+            debug_assert!(a_rows[s].is_empty() && b_rows[s].is_empty());
+            a_rows[s] = vec![Z_CONST_POS];
+            b_rows[s] = vec![s];
+        }
+    }
+    let to_mat = |rows| SparseBinaryMatrix {
+        num_rows: K,
+        num_cols: K,
+        rows,
+    };
+    (to_mat(a_rows), to_mat(b_rows))
+}
+
+fn build_matrices_rows() -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let mut a_rows: Vec<Vec<usize>> = vec![Vec::new(); K];
     let mut b_rows: Vec<Vec<usize>> = vec![Vec::new(); K];
 
@@ -604,14 +637,10 @@ pub fn build_matrices() -> (SparseBinaryMatrix, SparseBinaryMatrix) {
     }
 
     // Padding rows [USEFUL_BITS..K): A = B = []. Constraint 0·0 = z[i]
-    // forces z[i] = 0 for all padding bits.
+    // forces z[i] = 0 for all padding bits. (In zk mode, `build_matrices_zk`
+    // converts the randomizer slots inside that range into real rows.)
 
-    let to_mat = |rows| SparseBinaryMatrix {
-        num_rows: K,
-        num_cols: K,
-        rows,
-    };
-    (to_mat(a_rows), to_mat(b_rows))
+    (a_rows, b_rows)
 }
 
 /// Build a [`BlockR1cs`] batching `2^n_blocks_log` independent BLAKE3
@@ -629,6 +658,47 @@ pub fn build_block_r1cs(n_blocks_log: usize) -> BlockR1cs {
         // in every block. Requires padding blocks filled with valid compressions.
         Some(Z_CONST_POS),
     )
+}
+
+/// The BLAKE3 zk randomizer sizing: 2 A-chunks + 1 B-chunk end at
+/// 15,872 = 31·512, so the chain-mask slot pair (2×256 bits, 512-aligned)
+/// sits flush and `useful_bits_zk` fills the block exactly (16,384). The
+/// pair's rows are also A-type, so the effective A-side entropy is
+/// (2·128 + 512) bits/block × 2^n_log blocks — comfortably above the
+/// `128·V_free` budget for every supported batch size (the leakage-rank
+/// audit is the ground truth; see `docs/zk-leakage.md`).
+pub fn zk_config() -> flock_core::zk::ZkConfig {
+    flock_core::zk::ZkConfig {
+        rand_chunks_a: 2,
+        rand_chunks_b: 1,
+        chain_mask: true,
+    }
+}
+
+/// zk block layout for this encoder (chain-mask pair aligned to the 256-bit
+/// I/O slot geometry, `region_log = 8`).
+pub fn zk_layout() -> flock_core::zk::ZkBlockLayout {
+    flock_core::zk::ZkBlockLayout::new(K_LOG, USEFUL_BITS, Some(8), &zk_config())
+}
+
+/// zk variant of [`build_block_r1cs`]: randomizer rows in the matrices, the
+/// zk layout bound into the statement, and `useful_bits` extended to cover
+/// the randomizer sections (they are real witness rows — the padded kernels
+/// must not skip them).
+pub fn build_block_r1cs_zk(n_blocks_log: usize) -> BlockR1cs {
+    let layout = zk_layout();
+    let (a_0, b_0) = build_matrices_zk(Some(&layout));
+    let mut r1cs = super::common::build_block_r1cs_with_matrices(
+        n_blocks_log,
+        K_LOG,
+        K_SKIP,
+        layout.useful_bits_zk,
+        a_0,
+        b_0,
+        Some(Z_CONST_POS),
+    );
+    r1cs.zk = Some(layout);
+    r1cs
 }
 
 // ---------------------------------------------------------------------------
@@ -1246,6 +1316,34 @@ pub fn generate_witness_with_ab_packed_and_lincheck(
     )
 }
 
+/// zk variant of [`generate_witness_with_ab_packed_and_lincheck`]: every
+/// block slot additionally gets its randomizer sections filled from
+/// `rand_words` (pre-generated from the prover's `ZkRng`).
+pub fn generate_witness_with_ab_packed_and_lincheck_zk(
+    blocks: &[Compression],
+    n_blocks_log: usize,
+    layout: &flock_core::zk::ZkBlockLayout,
+    rand_words: &[u64],
+) -> (
+    Vec<flock_core::field::F128>,
+    Vec<flock_core::field::F128>,
+    Vec<flock_core::field::F128>,
+    Vec<u8>,
+) {
+    let padding: Compression = ([0u32; 8], [0u32; 16], 0u64, 0u32, 0u32);
+    super::common::drive_witness_packed_and_lincheck_zk(
+        blocks,
+        Some(&padding),
+        n_blocks_log,
+        K_LOG,
+        |block: &Compression, z_u64, a_u64, b_u64| {
+            let (cv, m, t, bl, fl) = block;
+            build_block_witness_ab_packed_into(cv, m, *t, *bl, *fl, z_u64, a_u64, b_u64);
+        },
+        Some((layout, rand_words)),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Convenience API: Blake3Setup
 // ---------------------------------------------------------------------------
@@ -1333,12 +1431,83 @@ impl Blake3Setup {
             log_inv_rate,
             log_batch_size: 6,
             profile,
+            zk: false,
         };
         Self {
             n_blocks,
             r1cs,
             pcs_params,
         }
+    }
+
+    /// Zero-knowledge setup: randomizer rows in the statement, hiding
+    /// commitment + blinded opening in the PCS. Prove with
+    /// [`Self::prove_fast_zk`]; [`Self::verify`] works unchanged (the zk
+    /// layout travels in the statement digest and `Commitment.params`).
+    #[cfg(feature = "zk")]
+    pub fn with_zk(n_blocks: usize) -> Self {
+        let mut s = Self::new(n_blocks);
+        s.r1cs = build_block_r1cs_zk(min_n_blocks_log(n_blocks));
+        s.r1cs.csc_lincheck_circuit();
+        s.pcs_params.zk = true;
+        s
+    }
+
+    /// zk prove — witness randomizers and PCS masks drawn from OS entropy.
+    #[cfg(feature = "zk")]
+    pub fn prove_fast_zk<Ch: Challenger>(
+        &self,
+        blocks: &[Compression],
+        challenger: &mut Ch,
+    ) -> (flock_core::proof::R1csProofLigerito, Commitment, R1csClaim) {
+        let mut rng = flock_core::zk::ZkRng::from_entropy();
+        self.prove_fast_zk_with_rng(blocks, &mut rng, challenger)
+    }
+
+    /// [`Self::prove_fast_zk`] with a caller-provided DRBG (deterministic
+    /// tests, the leakage audits). One per-proof `ZkRng` instance feeds both
+    /// mask species through domain-separated forks.
+    #[cfg(feature = "zk")]
+    pub fn prove_fast_zk_with_rng<Ch: Challenger>(
+        &self,
+        blocks: &[Compression],
+        rng: &mut flock_core::zk::ZkRng,
+        challenger: &mut Ch,
+    ) -> (flock_core::proof::R1csProofLigerito, Commitment, R1csClaim) {
+        use flock_core::zk::MaskSampler;
+        assert_eq!(blocks.len(), self.n_blocks);
+        assert!(self.pcs_params.zk, "use Blake3Setup::with_zk");
+        let layout = self.r1cs.zk.expect("zk setup carries a layout");
+        assert_eq!(
+            self.r1cs.layout,
+            flock_core::r1cs::WitnessLayout::RowMajor,
+            "zk witness generation currently supports the row-major layout"
+        );
+        let mut wit_rng = rng.fork(b"witness-rand");
+        let mut pcs_rng = rng.fork(b"pcs-masks");
+        let n_total = self.n_block_slots();
+        let mut rand_words =
+            vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
+        wit_rng.fill_u64s(&mut rand_words);
+        let (z_packed, a_packed_f128, b_packed_f128, z_packed_lincheck) =
+            generate_witness_with_ab_packed_and_lincheck_zk(
+                blocks,
+                self.n_blocks_log(),
+                &layout,
+                &rand_words,
+            );
+        let lc_circuit = self.r1cs.csc_lincheck_circuit();
+        crate::prover::prove_fast_ligerito_from_witness_zk(
+            &self.r1cs,
+            &self.pcs_params,
+            z_packed,
+            a_packed_f128,
+            b_packed_f128,
+            z_packed_lincheck,
+            lc_circuit,
+            &mut pcs_rng,
+            challenger,
+        )
     }
 
     pub fn m(&self) -> usize {
@@ -2109,6 +2278,92 @@ mod tests {
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("ligerito verify rejected: {e:?}"));
         assert_eq!(claim_p, claim_v);
+    }
+
+    /// End-to-end zk BLAKE3 batch roundtrip (the M4 gate): randomizer rows in
+    /// the witness, hiding commit, blinded open — verified by the unchanged
+    /// verifier. Plus satisfiability of the zk witness, mask-seed freshness,
+    /// and tamper rejection.
+    #[cfg(feature = "zk")]
+    #[test]
+    #[ignore] // Heavier — Ligerito needs m=22
+    fn prove_fast_zk_ligerito_roundtrip() {
+        use flock_core::challenger::FsChallenger;
+        let setup = Blake3Setup::with_zk(256);
+        assert!(setup.r1cs.zk.is_some());
+        assert_eq!(setup.r1cs.useful_bits, 1 << K_LOG, "blake3 zk fills the block");
+        let mut rng = Rng::new(0xb1a_3211e);
+        let blocks: Vec<Compression> = (0..256)
+            .map(|_| {
+                let cv: [u32; 8] = std::array::from_fn(|_| rng.next_u32());
+                let m: [u32; 16] = std::array::from_fn(|_| rng.next_u32());
+                (cv, m, 0u64, 64u32, 11u32)
+            })
+            .collect();
+
+        // The zk witness (randomizers included) must satisfy the zk R1CS.
+        {
+            let layout = setup.r1cs.zk.unwrap();
+            let n_total = setup.n_block_slots();
+            let mut wr = flock_core::zk::ZkRng::from_seed([9u8; 32]);
+            let mut rand_words =
+                vec![0u64; n_total * super::super::common::zk_rand_words_per_block(&layout)];
+            flock_core::zk::MaskSampler::fill_u64s(&mut wr, &mut rand_words);
+            let (z_packed, _a, _b, _stripe) = generate_witness_with_ab_packed_and_lincheck_zk(
+                &blocks,
+                setup.n_blocks_log(),
+                &layout,
+                &rand_words,
+            );
+            assert!(
+                setup.r1cs.satisfies_packed(&z_packed),
+                "zk witness must satisfy the zk-extended R1CS"
+            );
+        }
+
+        let prove_seeded = |seed: [u8; 32]| {
+            let mut zk_rng = flock_core::zk::ZkRng::from_seed(seed);
+            let mut ch_p = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+            setup.prove_fast_zk_with_rng(&blocks, &mut zk_rng, &mut ch_p)
+        };
+        let (proof, commitment, claim_p) = prove_seeded([1u8; 32]);
+        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+        let claim_v = setup
+            .verify(&commitment, &proof, &mut ch_v)
+            .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
+        assert_eq!(claim_p, claim_v);
+        assert!(proof.pcs_open.zk_blind.is_some());
+
+        // Fresh seed ⇒ fresh commitment root and different masked values, still verifies.
+        let (proof2, commitment2, _) = prove_seeded([2u8; 32]);
+        let mut ch_v2 = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+        setup
+            .verify(&commitment2, &proof2, &mut ch_v2)
+            .expect("fresh-seed zk proof must verify");
+        assert_ne!(commitment.root, commitment2.root);
+        assert_ne!(
+            proof.zerocheck.final_a_eval, proof2.zerocheck.final_a_eval,
+            "final_a_eval must be masked by the witness randomizers"
+        );
+        assert_ne!(
+            proof.lincheck.z_partial, proof2.lincheck.z_partial,
+            "z_partial must be masked by the witness randomizers"
+        );
+
+        // Tamper rejection in zk mode.
+        for tamper in 0..3 {
+            let mut bad = proof.clone();
+            match tamper {
+                0 => bad.lincheck.z_partial[0].lo ^= 1,
+                1 => bad.zerocheck.final_a_eval.lo ^= 1,
+                _ => bad.pcs_open.zk_blind.as_mut().unwrap().y_g.lo ^= 1,
+            }
+            let mut ch = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+            assert!(
+                setup.verify(&commitment, &bad, &mut ch).is_err(),
+                "tamper {tamper} must be rejected"
+            );
+        }
     }
 
     /// Generic (matrix-driven) Ligerito prove produces a byte-identical

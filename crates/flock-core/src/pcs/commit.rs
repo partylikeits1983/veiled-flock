@@ -40,12 +40,30 @@ pub struct PcsParams {
     /// (`profile.log_inv_rate() == log_inv_rate`). Defaults to `Fast`.
     #[serde(default)]
     pub profile: crate::pcs::ligerito::LigeritoProfile,
+    /// Zero-knowledge mode. The committed message becomes
+    /// `[mask ‖ z_packed]` (uniform low half, witness in the top half), and a
+    /// full-support blinder codeword `g` is committed alongside it in shared
+    /// wide Merkle leaves. Doubles both the message dimension and the leaf
+    /// width; the opening folds `F = message′ + c·g` for an FS challenge `c`.
+    /// Requires the `zk` cargo feature.
+    #[serde(default)]
+    pub zk: bool,
 }
 
 impl PcsParams {
-    /// Total log message length (= log2 packed witness length).
+    /// Log length of the **committed** message (= log2 packed witness length,
+    /// +1 in zk mode for the low-half mask block).
     pub fn log_msg_len(&self) -> usize {
+        self.m - LOG_PACKING + (self.zk as usize)
+    }
+    /// Log length of the packed **witness** (excludes the zk mask block).
+    pub fn witness_log_msg_len(&self) -> usize {
         self.m - LOG_PACKING
+    }
+    /// Log lane count actually committed per Merkle leaf: the f′ lanes, plus
+    /// the blinder-`g` lanes in zk mode.
+    pub fn log_lanes_committed(&self) -> usize {
+        self.log_batch_size + (self.zk as usize)
     }
     /// Per-sub-NTT log dimension (= number of "position" coords).
     pub fn log_dim(&self) -> usize {
@@ -64,14 +82,15 @@ impl PcsParams {
         1usize << self.log_batch_size
     }
     /// Total codeword length in F_{2^128} elements
-    /// (= `n_positions() * num_ntts()`).
+    /// (= `n_positions() * num_ntts()`, ×2 in zk mode for the `g` lanes).
     pub fn codeword_len_f128(&self) -> usize {
-        self.n_positions() * self.num_ntts()
+        self.n_positions() << self.log_lanes_committed()
     }
     /// `log_2` of the F_{2^128} count per **initial** Merkle leaf
-    /// (= `log_batch_size`; just the row-batch lanes per position).
+    /// (= `log_batch_size`; in zk mode +1 — each leaf carries the f′ lanes
+    /// followed by the `g` lanes at the same position).
     pub fn log_leaf_f128_count(&self) -> usize {
-        self.log_batch_size
+        self.log_lanes_committed()
     }
     /// Number of initial-tree Merkle leaves
     /// (= `codeword_len_f128() / 2^log_batch_size = 2^k_code`).
@@ -94,6 +113,11 @@ impl PcsParams {
             self.log_inv_rate >= 1,
             "log_inv_rate must be ≥ 1 for a non-trivial RS code",
         );
+        #[cfg(not(feature = "zk"))]
+        assert!(
+            !self.zk,
+            "PcsParams.zk requires the `zk` cargo feature",
+        );
     }
 }
 
@@ -113,6 +137,12 @@ pub struct Commitment {
 pub struct ProverData {
     pub codeword: Vec<F128>,
     pub merkle_tree: Vec<Hash>,
+    /// zk mode only: the uniform low-half mask block of the committed message
+    /// `message′ = [zk_mask ‖ z_packed]` (length `2^{m−7}`; empty otherwise).
+    pub zk_mask: Vec<F128>,
+    /// zk mode only: the full-support blinder codeword `g` (length `2^{m−6}`;
+    /// empty otherwise). The opening runs on `F = message′ + c·g`.
+    pub zk_blind: Vec<F128>,
 }
 
 // Recycle the codeword buffer (the prover's largest single allocation —
@@ -120,6 +150,12 @@ pub struct ProverData {
 impl Drop for ProverData {
     fn drop(&mut self) {
         crate::scratch::give_f128(std::mem::take(&mut self.codeword));
+        if !self.zk_mask.is_empty() {
+            crate::scratch::give_f128(std::mem::take(&mut self.zk_mask));
+        }
+        if !self.zk_blind.is_empty() {
+            crate::scratch::give_f128(std::mem::take(&mut self.zk_blind));
+        }
     }
 }
 
@@ -140,11 +176,10 @@ impl Drop for ProverData {
 /// `z_packed.len()` must equal `2^(m - LOG_PACKING) = 2^(m - 7)`.
 pub fn commit(z_packed: &[F128], params: &PcsParams) -> (Commitment, ProverData) {
     params.validate();
+    assert!(!params.zk, "zk params require commit_zk");
     assert_eq!(z_packed.len(), 1usize << params.log_msg_len());
 
-    let num_ntts = params.num_ntts();
-    let n_positions = params.n_positions();
-    let codeword_len = n_positions * num_ntts;
+    let codeword_len = params.codeword_len_f128();
 
     // ---- Codeword buffer (SoA): codeword[pos * num_ntts + lane].
     // Copy first 2^log_msg_len positions from packed witness; zero-pad the rest.
@@ -173,8 +208,9 @@ pub fn commit_into(
     mut codeword: Vec<F128>,
 ) -> (Commitment, ProverData) {
     params.validate();
+    assert!(!params.zk, "zk params require commit_zk");
     assert_eq!(z_packed.len(), 1usize << params.log_msg_len());
-    let codeword_len = params.n_positions() * params.num_ntts();
+    let codeword_len = params.codeword_len_f128();
     assert_eq!(
         codeword.len(),
         codeword_len,
@@ -190,6 +226,91 @@ pub fn commit_into(
     replicate_message_fill(&mut codeword, z_packed);
 
     finalize_commit(codeword, params)
+}
+
+/// Zero-knowledge commit: commits `message′ = [mask ‖ z_packed]` (uniform
+/// low-half mask, witness in the top half) **and** a full-support uniform
+/// blinder `g` of the same length, in shared wide Merkle leaves:
+///
+/// ```text
+/// leaf(pos) = [ f′ lane symbols (num_ntts) ‖ g lane symbols (num_ntts) ]
+/// ```
+///
+/// Both are RS-encoded by the same interleaved NTT (2·num_ntts lanes). The
+/// opening phase runs the Ligerito recursion on `F = message′ + c·g` for an
+/// FS challenge `c` sampled after the basis is fixed; the mask block hides
+/// the raw f′ rows revealed at L0, and `g` hides everything downstream
+/// (recursive rows, sumcheck messages, the final residual).
+///
+/// Mask randomness comes from `rng` — a prover-secret DRBG, never the FS
+/// transcript. The sampled `mask` and `g` are returned in
+/// [`ProverData::zk_mask`] / [`ProverData::zk_blind`].
+#[cfg(feature = "zk")]
+pub fn commit_zk<R: crate::zk::MaskSampler + ?Sized>(
+    z_packed: &[F128],
+    params: &PcsParams,
+    rng: &mut R,
+) -> (Commitment, ProverData) {
+    params.validate();
+    assert!(params.zk, "commit_zk requires PcsParams.zk");
+    assert_eq!(z_packed.len(), 1usize << params.witness_log_msg_len());
+
+    let w = z_packed.len();
+    let mut mask = crate::scratch::take_f128(w);
+    rng.fill_f128(&mut mask);
+    let mut blind = crate::scratch::take_f128(2 * w);
+    rng.fill_f128(&mut blind);
+
+    let mut codeword = crate::scratch::take_f128(params.codeword_len_f128());
+    replicate_message_fill_zk(
+        &mut codeword,
+        &mask,
+        z_packed,
+        &blind,
+        params.num_ntts(),
+    );
+    let (commitment, mut pd) = finalize_commit(codeword, params);
+    pd.zk_mask = mask;
+    pd.zk_blind = blind;
+    (commitment, pd)
+}
+
+/// Fill the wide zk codeword buffer with the replicated interleaved message —
+/// the exact state after the first `log_inv_rate` forward-NTT layers on the
+/// zero-padded wide coefficient vector. Lane `j < num_ntts` of position `p`
+/// carries `message′[p·num_ntts + j]` (`message′ = [mask ‖ z_packed]` flat);
+/// lane `num_ntts + j` carries `g[p·num_ntts + j]`.
+#[cfg(feature = "zk")]
+pub(crate) fn replicate_message_fill_zk(
+    codeword: &mut [F128],
+    mask: &[F128],
+    z_packed: &[F128],
+    g: &[F128],
+    num_ntts: usize,
+) {
+    use rayon::prelude::*;
+    debug_assert_eq!(mask.len(), z_packed.len());
+    debug_assert_eq!(g.len(), 2 * z_packed.len());
+    let wide = 2 * num_ntts;
+    debug_assert!(codeword.len().is_multiple_of(wide));
+    let msg_positions = g.len() / num_ntts;
+    let mask_positions = mask.len() / num_ntts;
+    debug_assert!((codeword.len() / wide).is_multiple_of(msg_positions));
+    codeword
+        .par_chunks_mut(wide)
+        .with_min_len(1 << 10)
+        .enumerate()
+        .for_each(|(pos, leaf)| {
+            let p = pos % msg_positions;
+            let f_src = if p < mask_positions {
+                &mask[p * num_ntts..(p + 1) * num_ntts]
+            } else {
+                let q = p - mask_positions;
+                &z_packed[q * num_ntts..(q + 1) * num_ntts]
+            };
+            leaf[..num_ntts].copy_from_slice(f_src);
+            leaf[num_ntts..].copy_from_slice(&g[p * num_ntts..(p + 1) * num_ntts]);
+        });
 }
 
 /// Fill `codeword` with `2^r` replicas of `msg` (`r = log2(codeword.len() /
@@ -230,7 +351,9 @@ fn finalize_commit(mut codeword: Vec<F128>, params: &PcsParams) -> (Commitment, 
     let ntt = AdditiveNttF128::standard(params.k_code());
     ntt.forward_transform_interleaved_from_layer(
         &mut codeword,
-        params.num_ntts(),
+        // In zk mode the leaf-width lanes include the blinder-g lanes; the
+        // NTT treats them as additional independent sub-NTTs.
+        1usize << params.log_lanes_committed(),
         params.log_inv_rate,
     );
     if timing {
@@ -271,6 +394,8 @@ fn finalize_commit(mut codeword: Vec<F128>, params: &PcsParams) -> (Commitment, 
         ProverData {
             codeword,
             merkle_tree,
+            zk_mask: Vec::new(),
+            zk_blind: Vec::new(),
         },
     )
 }
@@ -314,7 +439,7 @@ pub fn prefault_codeword_during<R>(
         // offload and keeps fixed-thread-count sweeps honest.
         return (None, generate());
     }
-    let codeword_len = params.n_positions() * params.num_ntts();
+    let codeword_len = params.codeword_len_f128();
     // Warm path: a pooled buffer is already resident — there is nothing to
     // pre-fault, and commit_into writes every slot itself. Skip the thread.
     if let Some(buf) = crate::scratch::try_take_f128(codeword_len) {
@@ -364,6 +489,7 @@ mod tests {
             log_inv_rate: 1,
             log_batch_size: 1,
             profile: Default::default(),
+            zk: false,
         }
     }
 
@@ -381,6 +507,7 @@ mod tests {
                 log_inv_rate,
                 log_batch_size,
                 profile: Default::default(),
+                zk: false,
             };
             let z = rng.bits(1 << m);
             let z_packed = super::super::pack::pack_witness(&z, m);
@@ -408,6 +535,89 @@ mod tests {
                 "root mismatch at m={m} r={log_inv_rate}"
             );
         }
+    }
+
+    /// zk commit must equal the definitional wide encoding: the interleaved
+    /// coefficient vector `[message′ ‖ g]` (per-position: f′ lanes then g
+    /// lanes), zero-padded, through the FULL forward NTT with 2·num_ntts
+    /// lanes, Merkle-committed over wide leaves.
+    #[cfg(feature = "zk")]
+    #[test]
+    fn commit_zk_matches_wide_oracle() {
+        use crate::ntt::AdditiveNttF128;
+        use crate::zk::{MaskSampler, ZkRng};
+        let mut rng = Rng::new(0xC0FFEE);
+        for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
+            let params = PcsParams {
+                m,
+                log_inv_rate,
+                log_batch_size,
+                profile: Default::default(),
+                zk: true,
+            };
+            let z = rng.bits(1 << m);
+            let z_packed = super::super::pack::pack_witness(&z, m);
+            let w = z_packed.len();
+
+            let mut mask_rng = ZkRng::from_seed([3u8; 32]);
+            let (commitment, pd) = commit_zk(&z_packed, &params, &mut mask_rng);
+
+            // Reproduce the masks from the same seed, in the same order.
+            let mut oracle_rng = ZkRng::from_seed([3u8; 32]);
+            let mut mask = vec![F128::ZERO; w];
+            oracle_rng.fill_f128(&mut mask);
+            let mut g = vec![F128::ZERO; 2 * w];
+            oracle_rng.fill_f128(&mut g);
+            assert_eq!(pd.zk_mask, mask);
+            assert_eq!(pd.zk_blind, g);
+
+            // Definitional wide coefficient vector, full NTT from layer 0.
+            let num_ntts = params.num_ntts();
+            let wide = 2 * num_ntts;
+            let msg_positions = (2 * w) / num_ntts;
+            let mut oracle = vec![F128::ZERO; params.codeword_len_f128()];
+            let msg_prime: Vec<F128> = mask.iter().chain(z_packed.iter()).copied().collect();
+            for p in 0..msg_positions {
+                for j in 0..num_ntts {
+                    oracle[p * wide + j] = msg_prime[p * num_ntts + j];
+                    oracle[p * wide + num_ntts + j] = g[p * num_ntts + j];
+                }
+            }
+            let ntt = AdditiveNttF128::standard(params.k_code());
+            ntt.forward_transform_interleaved(&mut oracle, wide);
+            assert_eq!(pd.codeword, oracle, "zk codeword mismatch at m={m}");
+
+            let oracle_bytes: &[u8] = unsafe {
+                core::slice::from_raw_parts(oracle.as_ptr() as *const u8, oracle.len() * 16)
+            };
+            let oracle_root = *crate::merkle::merkle_tree(oracle_bytes, params.n_leaves())
+                .last()
+                .unwrap();
+            assert_eq!(commitment.root, oracle_root, "zk root mismatch at m={m}");
+
+            // Determinism under the seed; fresh masks under a new seed.
+            let mut rng_same = ZkRng::from_seed([3u8; 32]);
+            let (c2, _pd2) = commit_zk(&z_packed, &params, &mut rng_same);
+            assert_eq!(commitment.root, c2.root);
+            let mut rng_other = ZkRng::from_seed([4u8; 32]);
+            let (c3, _pd3) = commit_zk(&z_packed, &params, &mut rng_other);
+            assert_ne!(commitment.root, c3.root, "root must depend on the masks");
+        }
+    }
+
+    #[cfg(feature = "zk")]
+    #[test]
+    #[should_panic(expected = "zk params require commit_zk")]
+    fn plain_commit_rejects_zk_params() {
+        let params = PcsParams {
+            m: 10,
+            log_inv_rate: 1,
+            log_batch_size: 1,
+            profile: Default::default(),
+            zk: true,
+        };
+        let z_packed = vec![F128::ZERO; 1 << 3];
+        let _ = commit(&z_packed, &params);
     }
 
     #[test]

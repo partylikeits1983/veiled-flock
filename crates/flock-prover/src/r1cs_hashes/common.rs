@@ -178,6 +178,7 @@ pub(crate) fn build_block_r1cs_with_matrices(
         c_0: identity(k),
         layout: WitnessLayout::RowMajor,
         const_pin,
+        zk: None,
         digest_cache: OnceLock::new(),
         csc_cache: OnceLock::new(),
     }
@@ -219,6 +220,80 @@ pub(crate) fn drive_witness_packed_and_lincheck<S: Sync, F>(
 where
     F: Fn(&S, &mut [u64], &mut [u64], &mut [u64]) + Sync,
 {
+    drive_witness_packed_and_lincheck_zk(
+        initial_states,
+        padding,
+        n_blocks_log,
+        k_log,
+        per_block,
+        None,
+    )
+}
+
+/// Random u64 words consumed per block by [`write_zk_randomizers`].
+pub(crate) fn zk_rand_words_per_block(layout: &flock_core::zk::ZkBlockLayout) -> usize {
+    layout.rand_bits_per_block() / 64
+}
+
+/// Write one block's randomizer sections into the `(z, a, b)` word buffers.
+///
+/// A-type rows (`u·1 = u`): z-word = a-word = random, b-word = all-ones
+/// (their B row selects the constant-1 wire). B-type rows (`1·u′ = u′`):
+/// z = b = random, a = all-ones. The chain-mask slot pair is A-type. All
+/// section bases are 64-bit aligned by construction (`ZkBlockLayout::new`).
+pub(crate) fn write_zk_randomizers(
+    layout: &flock_core::zk::ZkBlockLayout,
+    rand: &[u64],
+    z: &mut [u64],
+    a: &mut [u64],
+    b: &mut [u64],
+) {
+    let mut ri = 0usize;
+    let mut fill = |bit_base: usize, n_bits: usize, a_type: bool| {
+        debug_assert!(bit_base.is_multiple_of(64) && n_bits.is_multiple_of(64));
+        let w0 = bit_base / 64;
+        for w in 0..n_bits / 64 {
+            let r = rand[ri];
+            ri += 1;
+            z[w0 + w] = r;
+            if a_type {
+                a[w0 + w] = r;
+                b[w0 + w] = !0u64;
+            } else {
+                b[w0 + w] = r;
+                a[w0 + w] = !0u64;
+            }
+        }
+    };
+    fill(layout.rand_bit_base, 128 * layout.chunks_a, true);
+    fill(
+        layout.rand_bit_base + 128 * layout.chunks_a,
+        128 * layout.chunks_b,
+        false,
+    );
+    if let Some(pb) = layout.mask_pair_bit_base {
+        fill(pb, 2 << layout.mask_region_log, true);
+    }
+    debug_assert_eq!(ri, zk_rand_words_per_block(layout));
+}
+
+/// zk-aware variant of [`drive_witness_packed_and_lincheck`]: when `zk` is
+/// `Some((layout, rand_words))`, every block slot — real, padding, or empty —
+/// gets its randomizer sections written from its `zk_rand_words_per_block`
+/// slice of `rand_words` BEFORE the lincheck stripe transpose (so the stripe
+/// sees them). `rand_words` is pre-generated sequentially by the caller from
+/// its `ZkRng`, keeping the parallel build deterministic under a seed.
+pub(crate) fn drive_witness_packed_and_lincheck_zk<S: Sync, F>(
+    initial_states: &[S],
+    padding: Option<&S>,
+    n_blocks_log: usize,
+    k_log: usize,
+    per_block: F,
+    zk: Option<(&flock_core::zk::ZkBlockLayout, &[u64])>,
+) -> (Vec<F128>, Vec<F128>, Vec<F128>, Vec<u8>)
+where
+    F: Fn(&S, &mut [u64], &mut [u64], &mut [u64]) + Sync,
+{
     use rayon::prelude::*;
 
     let k = 1usize << k_log;
@@ -234,6 +309,13 @@ where
         n_total >= 8 && n_total.is_multiple_of(8),
         "lincheck stripe layout requires n_total ≥ 8 and divisible by 8"
     );
+    if let Some((layout, rand)) = zk {
+        assert_eq!(
+            rand.len(),
+            n_total * zk_rand_words_per_block(layout),
+            "zk randomizer buffer must cover every block slot"
+        );
+    }
 
     let total_f128 = n_total * f128_per_block;
     // z/a/b are allocated uninitialized and zeroed *inside* the parallel loop
@@ -266,16 +348,16 @@ where
             }
             for k_in in 0..8 {
                 let global_idx = 8 * g + k_in;
-                let init: &S = if global_idx < n_blocks {
-                    &initial_states[global_idx]
-                } else if let Some(p) = padding {
-                    // Fill the padding slot with a real block so its constant
-                    // wire is set (see `padding` docs above).
-                    p
+                let init: Option<&S> = if global_idx < n_blocks {
+                    Some(&initial_states[global_idx])
                 } else {
-                    // No padding block — leave this slot zero.
-                    continue;
+                    // Padding slot: fill with a real block so its constant
+                    // wire is set (see `padding` docs above), or leave zero.
+                    padding
                 };
+                if init.is_none() && zk.is_none() {
+                    continue; // all-zero slot, nothing to write
+                }
                 let z_chunk = &mut z_grp[k_in * f128_per_block..(k_in + 1) * f128_per_block];
                 let a_chunk = &mut a_grp[k_in * f128_per_block..(k_in + 1) * f128_per_block];
                 let b_chunk = &mut b_grp[k_in * f128_per_block..(k_in + 1) * f128_per_block];
@@ -299,7 +381,21 @@ where
                         b_chunk.len() * 2,
                     )
                 };
-                per_block(init, z_u64, a_u64, b_u64);
+                if let Some(init) = init {
+                    per_block(init, z_u64, a_u64, b_u64);
+                }
+                // Randomizer sections — every slot, real or padding, gets
+                // fresh randomness (rank aggregates across the whole batch).
+                if let Some((layout, rand)) = zk {
+                    let wpb = zk_rand_words_per_block(layout);
+                    write_zk_randomizers(
+                        layout,
+                        &rand[global_idx * wpb..(global_idx + 1) * wpb],
+                        z_u64,
+                        a_u64,
+                        b_u64,
+                    );
+                }
             }
 
             // Bit-transpose 8 z chunks into the lincheck stripe.

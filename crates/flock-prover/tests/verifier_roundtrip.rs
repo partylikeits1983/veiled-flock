@@ -47,6 +47,7 @@ fn identity_r1cs(m: usize, k_log: usize, k_skip: usize, useful_bits: usize) -> B
         c_0: identity(1 << k_log),
         layout: WitnessLayout::RowMajor,
         const_pin: None,
+        zk: None,
         digest_cache: std::sync::OnceLock::new(),
         csc_cache: std::sync::OnceLock::new(),
     }
@@ -73,6 +74,7 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
         log_inv_rate: 1,
         log_batch_size: 6,
         profile: Default::default(),
+        zk: false,
     };
     let mut ch_p = FsChallenger::new(b"flock-lig-r1cs-v0");
     let z_packed = pcs::pack_witness(&z, r1cs.m);
@@ -109,5 +111,74 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
         let res =
             verifier::verify_ligerito(&r1cs, &commitment, &bad, &lc_circuit, &pcs_params, &mut ch);
         assert!(matches!(res, Err(VerifyError::PcsAb(_))));
+    }
+}
+
+/// zk twin of the roundtrip above: hiding commitment + blinded Ligerito open
+/// (using the embedded (m+1) ladder), same verifier entry point. Also checks
+/// mask-seed freshness and tamper rejection on the zk blinder fields.
+#[cfg(feature = "zk")]
+#[test]
+#[ignore] // Heavier — run with `cargo test r1cs_prove_verify_roundtrip_ligerito_zk -- --ignored --nocapture`
+fn r1cs_prove_verify_roundtrip_ligerito_zk() {
+    use flock_prover::prover::prove_ligerito_zk;
+    let m = 22;
+    let k_log = 6;
+    let k_skip = 6;
+    let r1cs = identity_r1cs(m, k_log, k_skip, 1 << k_log);
+    let mut rng = Rng::new(20_240_609);
+    let z = rng.bits(r1cs.n());
+    assert!(r1cs.satisfies(&z));
+
+    let pcs_params = PcsParams {
+        m,
+        log_inv_rate: 1,
+        log_batch_size: 6,
+        profile: Default::default(),
+        zk: true,
+    };
+    let prove_seeded = |seed: [u8; 32]| {
+        let mut zk_rng = flock_prover::zk::ZkRng::from_seed(seed);
+        let mut ch_p = FsChallenger::new(b"flock-lig-r1cs-zk-v0");
+        let z_packed = pcs::pack_witness(&z, r1cs.m);
+        prove_ligerito_zk(&r1cs, z_packed, &pcs_params, &mut zk_rng, &mut ch_p)
+    };
+    let (proof, commitment, claim_p) = prove_seeded([1u8; 32]);
+
+    let lc_circuit = r1cs.sparse_lincheck_circuit();
+    let verify = |commitment: &pcs::Commitment, proof: &_| {
+        let mut ch_v = FsChallenger::new(b"flock-lig-r1cs-zk-v0");
+        verifier::verify_ligerito(&r1cs, commitment, proof, &lc_circuit, &pcs_params, &mut ch_v)
+    };
+    let claim_v = verify(&commitment, &proof)
+        .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
+    assert_eq!(claim_p, claim_v);
+    assert!(proof.pcs_open.zk_blind.is_some(), "zk proof must carry zk_blind");
+
+    // A different mask seed still verifies, with a different commitment root.
+    let (proof2, commitment2, _) = prove_seeded([2u8; 32]);
+    verify(&commitment2, &proof2).expect("fresh-seed zk proof must verify");
+    assert_ne!(commitment.root, commitment2.root);
+
+    // Tamper: y_g.
+    {
+        let mut bad = proof.clone();
+        bad.pcs_open.zk_blind.as_mut().unwrap().y_g.lo ^= 1;
+        assert!(verify(&commitment, &bad).is_err());
+    }
+    // Tamper: strip the blinder.
+    {
+        let mut bad = proof.clone();
+        bad.pcs_open.zk_blind = None;
+        assert!(verify(&commitment, &bad).is_err());
+    }
+    // Tamper: lincheck z_partial still rejects in zk mode.
+    {
+        let mut bad = proof.clone();
+        bad.lincheck.z_partial[0].lo ^= 1;
+        assert!(matches!(
+            verify(&commitment, &bad),
+            Err(VerifyError::Lincheck(_))
+        ));
     }
 }

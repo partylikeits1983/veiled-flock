@@ -905,6 +905,7 @@ impl KeccakSetup {
             log_inv_rate,
             log_batch_size: 6,
             profile,
+            zk: false,
         };
         Self {
             n_keccaks,

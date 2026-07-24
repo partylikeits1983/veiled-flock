@@ -10,6 +10,7 @@ description = "Apple-silicon-optimized end-to-end prover for Flock (R1CS over GF
 # Forwarded to flock-core. See that crate's manifest for semantics.
 hash-count = ["flock-core/hash-count"]
 unsound-challenger = ["flock-core/unsound-challenger"]
+zk = ["flock-core/zk"]
 
 [dependencies]
 flock-core = { path = "../flock-core" }

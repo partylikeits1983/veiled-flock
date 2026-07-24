@@ -44,6 +44,20 @@ use serde::{Deserialize, Serialize};
 pub struct BatchOpeningProofLigerito {
     pub ring_switches: Vec<RingSwitchProof>,
     pub ligerito: ligerito::LigeritoProof,
+    /// zk mode only: the blinder-combination opening. `y_g = ⟨g_top,
+    /// b_combined⟩` is observed BEFORE the combination challenge `c` is
+    /// sampled (soundness-critical: `y_g` shifts the combined target), with a
+    /// PoW grind pricing the extra fold round. `None` for non-zk proofs
+    /// (serde-default keeps old proofs readable).
+    #[serde(default)]
+    pub zk_blind: Option<ZkBlindOpening>,
+}
+
+/// The zk blinder opening data (see [`BatchOpeningProofLigerito::zk_blind`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ZkBlindOpening {
+    pub y_g: F128,
+    pub c_grind_nonce: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -137,17 +151,43 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
         trace,
     );
 
+    let CombinedClaim {
+        ring_switches,
+        b_combined,
+        target_combined,
+        round0_prime,
+    } = combined;
+
     let t = std::time::Instant::now();
-    let ligerito_proof = ligerito::recursive_prover_with_basis_precomputed_round0(
-        lig_config,
-        packed_witness,
-        combined.b_combined,
-        combined.target_combined,
-        &prover_data.codeword,
-        &prover_data.merkle_tree,
-        combined.round0_prime,
-        challenger,
-    );
+    let (ligerito_proof, zk_blind) = if commitment.params.zk {
+        #[cfg(feature = "zk")]
+        {
+            let (p, b) = open_zk_blinded(
+                packed_witness,
+                prover_data,
+                b_combined,
+                target_combined,
+                round0_prime,
+                lig_config,
+                challenger,
+            );
+            (p, Some(b))
+        }
+        #[cfg(not(feature = "zk"))]
+        unreachable!("PcsParams.zk requires the `zk` cargo feature")
+    } else {
+        let p = ligerito::recursive_prover_with_basis_precomputed_round0(
+            lig_config,
+            packed_witness,
+            b_combined,
+            target_combined,
+            &prover_data.codeword,
+            &prover_data.merkle_tree,
+            round0_prime,
+            challenger,
+        );
+        (p, None)
+    };
     if trace {
         eprintln!(
             "  [open_batch] ligerito::recursive_prover_with_basis: {:6.2} ms",
@@ -160,9 +200,97 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
     }
 
     BatchOpeningProofLigerito {
-        ring_switches: combined.ring_switches,
+        ring_switches,
         ligerito: ligerito_proof,
+        zk_blind,
     }
+}
+
+/// zk open path: combine the blinder `g` into the folded vector.
+///
+/// Steps (transcript-order is soundness-critical):
+/// 1. `y_g = ⟨g_top, b_combined⟩` (+ its round-0 prime terms) — one pass.
+/// 2. Observe `y_g`; PoW-grind `fold_grinding_bits[0]+1` bits (the `c`
+///    combination is one extra interleave-fold round); sample `c`.
+/// 3. Materialize `F = [mask + c·g_lo ‖ z_packed + c·g_top]` and
+///    `b′ = [0 ‖ b_combined]`; shift target and round-0 prime by `c·(…)`.
+/// 4. Run the unchanged Ligerito recursion on `(F, b′)` with wide-leaf L0.
+#[cfg(feature = "zk")]
+fn open_zk_blinded<Ch: Challenger>(
+    packed_witness: Vec<F128>,
+    prover_data: &ProverData,
+    b_combined: Vec<F128>,
+    target_combined: F128,
+    round0_prime: (F128, F128),
+    lig_config: &ligerito::ProverConfig,
+    challenger: &mut Ch,
+) -> (ligerito::LigeritoProof, ZkBlindOpening) {
+    use rayon::prelude::*;
+    let w = packed_witness.len();
+    assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
+    assert_eq!(prover_data.zk_blind.len(), 2 * w, "commit_zk blinder missing");
+    let g = &prover_data.zk_blind;
+    let g_top = &g[w..];
+
+    // (1) y_g and the blinder's round-0 prime contribution, one fused pass.
+    //     Pairing is the wide LSB pairing restricted to the top half, which
+    //     coincides with the witness-space pairing (w is even).
+    let (u0g, u2g, y_g) = g_top
+        .par_chunks(2)
+        .zip(b_combined.par_chunks(2))
+        .map(|(gp, bp)| {
+            let u0 = gp[0] * bp[0];
+            let u2 = (gp[0] + gp[1]) * (bp[0] + bp[1]);
+            (u0, u2, u0 + gp[1] * bp[1])
+        })
+        .reduce(
+            || (F128::ZERO, F128::ZERO, F128::ZERO),
+            |(a0, a2, ay), (b0, b2, by)| (a0 + b0, a2 + b2, ay + by),
+        );
+
+    // (2) y_g before c — a prover that could pick y_g after seeing c could
+    //     shift the combined target to prove a false claim.
+    challenger.observe_label(b"flock-pcs-zk-blind-v0");
+    challenger.observe_f128(y_g);
+    let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let c_grind_nonce = challenger.grind_pow(c_bits);
+    let c = challenger.sample_f128();
+
+    // (3) F = message′ + c·g and the offset-embedded basis b′ = [0 ‖ b].
+    let mut f_blinded = crate::scratch::take_f128(2 * w);
+    {
+        let (lo, hi) = f_blinded.split_at_mut(w);
+        lo.par_iter_mut().enumerate().for_each(|(i, s)| {
+            *s = prover_data.zk_mask[i] + c * g[i];
+        });
+        hi.par_iter_mut().enumerate().for_each(|(i, s)| {
+            *s = packed_witness[i] + c * g_top[i];
+        });
+    }
+    let mut b_wide = crate::scratch::take_f128(2 * w);
+    {
+        let (lo, hi) = b_wide.split_at_mut(w);
+        lo.par_iter_mut().for_each(|s| *s = F128::ZERO);
+        hi.copy_from_slice(&b_combined);
+    }
+    crate::scratch::give_f128(b_combined);
+    crate::scratch::give_f128(packed_witness);
+
+    let target_prime = target_combined + c * y_g;
+    let prime_wide = (round0_prime.0 + c * u0g, round0_prime.1 + c * u2g);
+
+    let proof = ligerito::recursive_prover_with_basis_precomputed_round0_zk(
+        lig_config,
+        f_blinded,
+        b_wide,
+        target_prime,
+        &prover_data.codeword,
+        &prover_data.merkle_tree,
+        prime_wide,
+        ligerito::ZkL0 { c },
+        challenger,
+    );
+    (proof, ZkBlindOpening { y_g, c_grind_nonce })
 }
 
 /// What ring_switch + claim-combination produces, fed to the Ligerito backend.
@@ -612,13 +740,36 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
         target_combined += *g * pd.value;
     }
 
+    // 3b. zk: mirror the blinder combination — observe y_g, check its PoW,
+    //     sample c, shift the target. Reject a zk/non-zk mode mismatch
+    //     between params and proof either way.
+    let zk_l0 = if commitment.params.zk {
+        let Some(zkb) = &proof.zk_blind else {
+            return Err(VerifyError::Ligerito);
+        };
+        challenger.observe_label(b"flock-pcs-zk-blind-v0");
+        challenger.observe_f128(zkb.y_g);
+        let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+        if !challenger.verify_pow(zkb.c_grind_nonce, c_bits) {
+            return Err(VerifyError::Ligerito);
+        }
+        let c = challenger.sample_f128();
+        target_combined += c * zkb.y_g;
+        Some(ligerito::ZkL0 { c })
+    } else {
+        if proof.zk_blind.is_some() {
+            return Err(VerifyError::Ligerito);
+        }
+        None
+    };
+
     // 4. Batch evaluator: returns b_combined at all yr positions in one call.
     //    For RS claims, precompute the ring_switch tensor PREFIX once (over
     //    the ris part) and only re-do the yr_log_n-step suffix per y.
     //    For PD claims, precompute eq prefix factors over ris and finish per y.
     //    For BLAKE3 m=30: ris is 19 dims, yr is 4 dims → 19× prefix reuse.
-    let log_n = commitment.params.m - LOG_PACKING;
-    let eval_b_residual = |ris: &[F128], yr_log_n: usize| -> Vec<F128> {
+    let log_n = commitment.params.log_msg_len();
+    let eval_b_witness = |ris: &[F128], yr_log_n: usize| -> Vec<F128> {
         use crate::zerocheck::multilinear::eq_eval;
         let yr_len = 1usize << yr_log_n;
         let prefix_len = ris.len();
@@ -682,6 +833,26 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
             .collect()
     };
 
+    // zk: the committed message is `[mask ‖ z_packed]`, so the combined
+    // basis is `b′ = [0 ‖ b_combined]` — as a multilinear, the top (MSB)
+    // residual variable gates the witness-space evaluation. The residual
+    // suffix y therefore contributes 0 when its top bit is 0, and the
+    // witness formula on the remaining bits when it is 1. The ris prefix
+    // length is identical in both modes (log_n−yr_log_n = log_n_wit−(yr−1)),
+    // so the inner closure is reused unchanged.
+    let eval_b_residual = |ris: &[F128], yr_log_n: usize| -> Vec<F128> {
+        if zk_l0.is_some() {
+            debug_assert!(yr_log_n >= 1);
+            let inner = eval_b_witness(ris, yr_log_n - 1);
+            let half = 1usize << (yr_log_n - 1);
+            let mut out = vec![F128::ZERO; 1usize << yr_log_n];
+            out[half..].copy_from_slice(&inner);
+            out
+        } else {
+            eval_b_witness(ris, yr_log_n)
+        }
+    };
+
     // 5. Drive ligerito SUCCINCT verifier — eval_b_residual is called ONCE
     //    at the residual check (returns all yr_len values in one batch).
     let ok = ligerito::recursive_verifier_with_basis_succinct(
@@ -691,6 +862,7 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
         target_combined,
         &commitment.root,
         eval_b_residual,
+        zk_l0,
         challenger,
     );
     if !ok {
@@ -748,6 +920,160 @@ mod tests {
         acc
     }
 
+    /// Small hand-built Ligerito config pair for the zk roundtrip at m=13
+    /// (wide log_n = 7): initial_k=2, two recursive steps, small query counts.
+    #[cfg(feature = "zk")]
+    fn tiny_zk_configs() -> (
+        crate::pcs::ligerito::ProverConfig,
+        crate::pcs::ligerito::VerifierConfig,
+    ) {
+        let recursive_ks = vec![2usize, 2];
+        let log_inv_rates = vec![1usize, 2, 3];
+        let queries = vec![6usize, 4, 4];
+        let n_levels = log_inv_rates.len();
+        let p = crate::pcs::ligerito::ProverConfig {
+            log_inv_rates: log_inv_rates.clone(),
+            recursive_steps: recursive_ks.len(),
+            initial_log_msg_cols: 7 - 2,
+            initial_log_num_interleaved: 2,
+            initial_k: 2,
+            recursive_log_msg_cols: vec![3, 1],
+            recursive_ks: recursive_ks.clone(),
+            queries: queries.clone(),
+            grinding_bits: vec![0; n_levels],
+            fold_grinding_bits: vec![0; n_levels],
+            ood_samples: vec![0; n_levels],
+        };
+        let v = crate::pcs::ligerito::VerifierConfig {
+            log_inv_rates,
+            recursive_steps: recursive_ks.len(),
+            initial_log_msg_cols: 7 - 2,
+            initial_log_num_interleaved: 2,
+            initial_k: 2,
+            recursive_log_msg_cols: vec![3, 1],
+            recursive_ks,
+            queries,
+            grinding_bits: vec![0; n_levels],
+            fold_grinding_bits: vec![0; n_levels],
+            ood_samples: vec![0; n_levels],
+        };
+        (p, v)
+    }
+
+    /// zk PCS roundtrip at m=13: hiding commit, blinded open (RS claim + one
+    /// packed-direct claim), succinct verify; then tamper/negative cases.
+    #[cfg(feature = "zk")]
+    #[test]
+    fn pcs_zk_roundtrip_and_negatives() {
+        use crate::zerocheck::univariate_skip::build_eq;
+        use crate::zk::ZkRng;
+        let m = 13usize;
+        let mut rng = Rng::new(0x2CF0);
+        let z = rng.bits(1 << m);
+        let z_skip = rng.f128();
+        let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
+        let rs_claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
+
+        let params = PcsParams {
+            m,
+            log_inv_rate: 1,
+            log_batch_size: 2,
+            profile: Default::default(),
+            zk: true,
+        };
+        let z_packed = pack_witness(&z, m);
+
+        // Packed-direct claim at a random point.
+        let pd_point: Vec<F128> = (0..(m - 7)).map(|_| rng.f128()).collect();
+        let pd_eq = build_eq(&pd_point);
+        let pd_value: F128 = pd_eq
+            .iter()
+            .zip(z_packed.iter())
+            .map(|(e, z)| *e * *z)
+            .fold(F128::ZERO, |a, b| a + b);
+
+        let (lig_p_cfg, lig_v_cfg) = tiny_zk_configs();
+
+        let prove = |mask_seed: [u8; 32], tamper_mask: bool, tamper_y_g: bool| {
+            let mut zk_rng = ZkRng::from_seed(mask_seed);
+            let (commitment, mut prover_data) = commit::commit_zk(&z_packed, &params, &mut zk_rng);
+            if tamper_mask {
+                prover_data.zk_mask[0] += F128::ONE;
+            }
+            let mut ch_p = FsChallenger::new(b"flock-test-lig-zk-v0");
+            let mut proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
+                z_packed.clone(),
+                &prover_data,
+                &commitment,
+                &[x_outer.as_slice()],
+                &[],
+                &[PackedDirectClaim {
+                    point: pd_point.clone(),
+                    value: pd_value,
+                    eq_ind: DirectEqInd::Dense(pd_eq.clone()),
+                }],
+                &PaddingSpec::dense(m),
+                &lig_p_cfg,
+                &mut ch_p,
+            );
+            if tamper_y_g {
+                let zkb = proof.zk_blind.as_mut().unwrap();
+                zkb.y_g += F128::ONE;
+            }
+            (commitment, proof)
+        };
+        let verify = |commitment: &Commitment, proof: &BatchOpeningProofLigerito| {
+            let mut ch_v = FsChallenger::new(b"flock-test-lig-zk-v0");
+            verify_opening_batch_ligerito_mixed(
+                commitment,
+                &[rs_claim],
+                &[z_skip],
+                &[x_outer.as_slice()],
+                &[PackedDirectClaimRef {
+                    point: &pd_point,
+                    value: pd_value,
+                }],
+                proof,
+                &lig_v_cfg,
+                &mut ch_v,
+            )
+        };
+
+        // Honest roundtrip.
+        let (commitment, proof) = prove([5u8; 32], false, false);
+        verify(&commitment, &proof)
+            .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
+        assert!(proof.zk_blind.is_some());
+        // L0 opened rows must be wide (f′ + g lanes).
+        assert!(
+            proof.ligerito.initial_proof.opened_rows[0].len() == 2 * (1 << 2),
+            "expected wide L0 rows"
+        );
+
+        // Different mask seed ⇒ different transcript, still verifies.
+        let (c2, p2) = prove([6u8; 32], false, false);
+        verify(&c2, &p2).expect("fresh-seed zk proof must verify");
+        assert_ne!(commitment.root, c2.root);
+        assert_ne!(
+            proof.zk_blind.unwrap().y_g,
+            p2.zk_blind.unwrap().y_g,
+            "y_g must depend on the blinder"
+        );
+
+        // Tampered mask (commit/open inconsistency) ⇒ reject.
+        let (c3, p3) = prove([5u8; 32], true, false);
+        assert!(verify(&c3, &p3).is_err(), "tampered mask must be rejected");
+
+        // Tampered y_g ⇒ reject.
+        let (c4, p4) = prove([5u8; 32], false, true);
+        assert!(verify(&c4, &p4).is_err(), "tampered y_g must be rejected");
+
+        // Proof stripped of its zk_blind ⇒ mode mismatch ⇒ reject.
+        let (c5, mut p5) = prove([5u8; 32], false, false);
+        p5.zk_blind = None;
+        assert!(verify(&c5, &p5).is_err(), "missing zk_blind must be rejected");
+    }
+
     /// End-to-end Ligerito backend roundtrip through pcs::open_batch_mixed_ligerito
     /// and verify_opening_batch_ligerito_mixed. Single ring-switched claim
     /// (no PD — PD path is task #11).
@@ -768,12 +1094,16 @@ mod tests {
             log_inv_rate: 1,
             log_batch_size: initial_k,
             profile: Default::default(),
+            zk: false,
         };
         let z_packed = pack_witness(&z, m);
         let (commitment, prover_data) = commit(&z_packed, &params);
 
         let recursive_ks = vec![3usize, 3, 3];
-        let log_inv_rates = vec![1usize, 3, 4, 6];
+        // Last level: msg_cols = 0 ⇒ block_len = 2^rate, which must fit the
+        // UDR query count (udr_queries(7) = 102 ≤ 128; rate 6 gave 103 > 64
+        // and tripped sample_distinct_queries — pre-existing stale config).
+        let log_inv_rates = vec![1usize, 3, 4, 7];
         let queries: Vec<usize> = log_inv_rates
             .iter()
             .map(|&r| crate::pcs::ligerito::udr_queries(r))

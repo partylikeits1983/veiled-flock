@@ -98,6 +98,60 @@ pub fn prove_ligerito<Ch: Challenger>(
     pcs_params: &PcsParams,
     challenger: &mut Ch,
 ) -> (R1csProofLigerito, Commitment, R1csClaim) {
+    prove_ligerito_impl(r1cs, z_packed, pcs_params, None, challenger)
+}
+
+/// zk variant of [`prove_ligerito`]: hiding commitment fed by `zk_rng`
+/// (a prover-secret mask sampler, independent of the FS transcript).
+/// `pcs_params.zk` must be set; the witness is expected to already carry its
+/// randomizer rows (`r1cs.zk`).
+pub fn prove_ligerito_zk<Ch: Challenger>(
+    r1cs: &BlockR1cs,
+    z_packed: Vec<F128>,
+    pcs_params: &PcsParams,
+    zk_rng: &mut dyn flock_core::zk::MaskSampler,
+    challenger: &mut Ch,
+) -> (R1csProofLigerito, Commitment, R1csClaim) {
+    assert!(pcs_params.zk, "prove_ligerito_zk requires PcsParams.zk");
+    prove_ligerito_impl(r1cs, z_packed, pcs_params, Some(zk_rng), challenger)
+}
+
+/// Commit dispatch shared by the prove paths: hiding commit in zk mode (mask
+/// sampler required; any prefaulted buffer is recycled back to the scratch
+/// pool since `commit_zk` sizes its own), plain commit otherwise.
+fn commit_dispatch(
+    z_packed: &[F128],
+    pcs_params: &PcsParams,
+    prefaulted_codeword: Option<Vec<F128>>,
+    zk_rng: Option<&mut dyn flock_core::zk::MaskSampler>,
+) -> (Commitment, pcs::ProverData) {
+    if pcs_params.zk {
+        #[cfg(feature = "zk")]
+        {
+            let rng = zk_rng
+                .expect("zk PcsParams require a mask sampler — use a *_zk prove entry point");
+            if let Some(buf) = prefaulted_codeword {
+                flock_core::scratch::give_f128(buf);
+            }
+            return pcs::commit::commit_zk(z_packed, pcs_params, rng);
+        }
+        #[cfg(not(feature = "zk"))]
+        panic!("PcsParams.zk requires the `zk` cargo feature");
+    }
+    let _ = zk_rng;
+    match prefaulted_codeword {
+        Some(buf) => pcs::commit_into(z_packed, pcs_params, buf),
+        None => pcs::commit(z_packed, pcs_params),
+    }
+}
+
+fn prove_ligerito_impl<Ch: Challenger>(
+    r1cs: &BlockR1cs,
+    z_packed: Vec<F128>,
+    pcs_params: &PcsParams,
+    zk_rng: Option<&mut dyn flock_core::zk::MaskSampler>,
+    challenger: &mut Ch,
+) -> (R1csProofLigerito, Commitment, R1csClaim) {
     assert_eq!(
         r1cs.layout,
         flock_core::r1cs::WitnessLayout::RowMajor,
@@ -108,12 +162,14 @@ pub fn prove_ligerito<Ch: Challenger>(
     assert_eq!(z_packed.len(), 1usize << (r1cs.m - 7));
     assert_eq!(pcs_params.m, r1cs.m);
 
-    let log_n = r1cs.m - pcs::LOG_PACKING;
+    // In zk mode the committed message is one dimension larger (mask half),
+    // so the ladder is keyed on the committed length — the (m+1) config.
+    let log_n = pcs_params.log_msg_len();
     let lig_config =
         pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito default config; bump m for tiny instances");
 
-    let (commitment, prover_data) = pcs::commit(&z_packed, pcs_params);
+    let (commitment, prover_data) = commit_dispatch(&z_packed, pcs_params, None, zk_rng);
     bind_statement(challenger, r1cs, &commitment);
 
     // a = A·z, b = B·z; for the C = I convention c aliases z.
@@ -211,7 +267,63 @@ pub fn prove_fast_ligerito_from_witness<Ch: Challenger>(
     prefaulted_codeword: Option<Vec<F128>>,
     challenger: &mut Ch,
 ) -> (R1csProofLigerito, Commitment, R1csClaim) {
-    let log_n = r1cs.m - pcs::LOG_PACKING;
+    prove_fast_ligerito_from_witness_impl(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        prefaulted_codeword,
+        None,
+        challenger,
+    )
+}
+
+/// zk variant of [`prove_fast_ligerito_from_witness`] (hiding commitment fed
+/// by `zk_rng`). The witness must already carry its randomizer rows.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_fast_ligerito_from_witness_zk<Ch: Challenger>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    zk_rng: &mut dyn flock_core::zk::MaskSampler,
+    challenger: &mut Ch,
+) -> (R1csProofLigerito, Commitment, R1csClaim) {
+    assert!(pcs_params.zk, "zk prove entry requires PcsParams.zk");
+    prove_fast_ligerito_from_witness_impl(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        None,
+        Some(zk_rng),
+        challenger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prove_fast_ligerito_from_witness_impl<Ch: Challenger>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    prefaulted_codeword: Option<Vec<F128>>,
+    zk_rng: Option<&mut dyn flock_core::zk::MaskSampler>,
+    challenger: &mut Ch,
+) -> (R1csProofLigerito, Commitment, R1csClaim) {
+    let log_n = pcs_params.log_msg_len();
     let lig_config =
         pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito default config; bump m for tiny instances");
@@ -226,7 +338,7 @@ pub fn prove_fast_ligerito_from_witness<Ch: Challenger>(
         z_packed,
         s_hat_v_ab,
         s_hat_v_c,
-    } = prove_fast_core_with_codeword(
+    } = prove_fast_core_impl(
         r1cs,
         pcs_params,
         z_packed,
@@ -235,6 +347,7 @@ pub fn prove_fast_ligerito_from_witness<Ch: Challenger>(
         z_packed_lincheck,
         lincheck_circuit,
         prefaulted_codeword,
+        zk_rng,
         challenger,
     );
 
@@ -334,10 +447,63 @@ pub fn prove_fast_core_with_codeword<Ch: Challenger>(
     prefaulted_codeword: Option<Vec<F128>>,
     challenger: &mut Ch,
 ) -> ProveCore {
-    let (commitment, prover_data) = match prefaulted_codeword {
-        Some(buf) => pcs::commit_into(&z_packed, pcs_params, buf),
-        None => pcs::commit(&z_packed, pcs_params),
-    };
+    prove_fast_core_impl(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        prefaulted_codeword,
+        None,
+        challenger,
+    )
+}
+
+/// zk variant of [`prove_fast_core`] — see [`prove_fast_ligerito_from_witness_zk`].
+#[allow(clippy::too_many_arguments)]
+pub fn prove_fast_core_zk<Ch: Challenger>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    zk_rng: &mut dyn flock_core::zk::MaskSampler,
+    challenger: &mut Ch,
+) -> ProveCore {
+    assert!(pcs_params.zk, "zk prove entry requires PcsParams.zk");
+    prove_fast_core_impl(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        None,
+        Some(zk_rng),
+        challenger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn prove_fast_core_impl<Ch: Challenger>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    prefaulted_codeword: Option<Vec<F128>>,
+    zk_rng: Option<&mut dyn flock_core::zk::MaskSampler>,
+    challenger: &mut Ch,
+) -> ProveCore {
+    let (commitment, prover_data) =
+        commit_dispatch(&z_packed, pcs_params, prefaulted_codeword, zk_rng);
     bind_statement(challenger, r1cs, &commitment);
 
     let padding = r1cs.padding_spec();

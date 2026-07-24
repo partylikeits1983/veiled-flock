@@ -81,6 +81,7 @@ fn bench_commit_breakdown(m: usize) {
         log_inv_rate: 1,
         log_batch_size: 6,
         profile: Default::default(),
+        zk: false,
     };
     let n_bits = 1usize << m;
     let n_packed = 1usize << params.log_msg_len();
@@ -215,6 +216,7 @@ fn bench_commit_packed_only(m: usize) {
         log_inv_rate: 1,
         log_batch_size: 6,
         profile: Default::default(),
+        zk: false,
     };
     let n_packed = 1usize << params.log_msg_len();
     let n_code = params.codeword_len_f128();
@@ -268,6 +270,7 @@ fn bench_commit_packed_breakdown(m: usize) {
         log_inv_rate: 1,
         log_batch_size: 6,
         profile: Default::default(),
+        zk: false,
     };
     let n_packed = 1usize << params.log_msg_len();
     let n_code = params.codeword_len_f128();

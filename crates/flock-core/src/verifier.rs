@@ -112,7 +112,9 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
         })
         .collect();
     let x_refs: Vec<&[F128]> = x_fulls.iter().map(|v| v.as_slice()).collect();
-    let log_n = pcs_params.m - pcs::LOG_PACKING;
+    // zk mode commits one extra dimension (mask half) — key the ladder on
+    // the committed length.
+    let log_n = pcs_params.log_msg_len();
     let lig_v_config = crate::pcs::ligerito::verifier_config_for(
         log_n,
         pcs_params.log_batch_size,
