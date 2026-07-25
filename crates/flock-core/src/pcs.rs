@@ -1074,6 +1074,150 @@ mod tests {
         assert!(verify(&c5, &p5).is_err(), "missing zk_blind must be rejected");
     }
 
+    /// **Z2: hiding P,Q commitment + opening at the zerocheck point ρ.**
+    ///
+    /// The A1′ amendment commits two fresh witness-free multilinears P,Q and
+    /// reveals P(ρ),Q(ρ) at the zerocheck point. To keep the joint-coverage
+    /// leakage L = {P(ρ),Q(ρ)} (not the codeword rows), P,Q are opened via the
+    /// HIDING opening (`open_zk_blinded`). This test wires it end to end:
+    ///   1. commit P,Q with `commit_zk` (hiding);
+    ///   2. observe their roots BEFORE the zerocheck (so γ/ρ bind them);
+    ///   3. run the amended zerocheck (`prove_packed_padded_zk`);
+    ///   4. open P,Q at ρ = (z, mlv_challenges) as RS claims;
+    ///   5. verifier re-derives ρ via `verify_zk` and authenticates
+    ///      `final_p_eval`/`final_q_eval` against the P,Q commitments.
+    /// The honest roundtrip verifies; a tampered `final_p_eval` is rejected
+    /// (either by the combined sumcheck check or by the opening).
+    #[cfg(feature = "zk")]
+    #[test]
+    fn zk_pq_hiding_open_roundtrip() {
+        use crate::zerocheck::univariate_skip::pack_bits;
+        use crate::zk::ZkRng;
+        let m = 13usize;
+        let mut rng = Rng::new(0x9A2B);
+        let a = rng.bits(1 << m);
+        let b = rng.bits(1 << m);
+        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
+        let p = rng.bits(1 << m);
+        let q = rng.bits(1 << m);
+
+        let params = PcsParams {
+            m,
+            log_inv_rate: 1,
+            log_batch_size: 2,
+            profile: Default::default(),
+            zk: true,
+        };
+        let p_packed = pack_witness(&p, m);
+        let q_packed = pack_witness(&q, m);
+        let (lig_p, lig_v) = tiny_zk_configs();
+        let pad = PaddingSpec::dense(m);
+        let (ap, bp, cp) = (pack_bits(&a), pack_bits(&b), pack_bits(&c));
+        let (pbp, qbp) = (pack_bits(&p), pack_bits(&q));
+
+        let run = |tamper_pr: bool| {
+            let mut zk_p = ZkRng::from_seed([3u8; 32]);
+            let mut zk_q = ZkRng::from_seed([4u8; 32]);
+            let (comm_p, pd_p) = commit::commit_zk(&p_packed, &params, &mut zk_p);
+            let (comm_q, pd_q) = commit::commit_zk(&q_packed, &params, &mut zk_q);
+            let mut ch = FsChallenger::new(b"flock-z2-v0");
+            ch.observe_bytes(&comm_p.root);
+            ch.observe_bytes(&comm_q.root);
+            let (mut zkproof, claim) =
+                crate::zerocheck::prove_packed_padded_zk(&ap, &bp, &cp, &pbp, &qbp, m, &pad, &mut ch);
+            if tamper_pr {
+                zkproof.final_p_eval += F128::ONE;
+            }
+            let x_point = claim.mlv_challenges.clone();
+            // P and Q openings are independent claims, each bound to the
+            // post-zerocheck transcript (which includes both roots and every
+            // zerocheck message). Fork the challenger per opening with a domain
+            // tag so the two openings don't chain-desync (an opening need not
+            // leave the challenger in a verify-matching state).
+            let mut ch_p = ch.clone();
+            ch_p.observe_label(b"flock-pq-open-P");
+            let proof_p = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
+                p_packed.clone(),
+                &pd_p,
+                &comm_p,
+                &[x_point.as_slice()],
+                &[],
+                &[],
+                &pad,
+                &lig_p,
+                &mut ch_p,
+            );
+            let mut ch_q = ch.clone();
+            ch_q.observe_label(b"flock-pq-open-Q");
+            let proof_q = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
+                q_packed.clone(),
+                &pd_q,
+                &comm_q,
+                &[x_point.as_slice()],
+                &[],
+                &[],
+                &pad,
+                &lig_p,
+                &mut ch_q,
+            );
+            (comm_p, comm_q, zkproof, proof_p, proof_q)
+        };
+
+        let verify = |comm_p: &Commitment,
+                      comm_q: &Commitment,
+                      zkproof: &crate::zerocheck::ZkZerocheckProof,
+                      proof_p: &BatchOpeningProofLigerito,
+                      proof_q: &BatchOpeningProofLigerito|
+         -> bool {
+            let mut ch = FsChallenger::new(b"flock-z2-v0");
+            ch.observe_bytes(&comm_p.root);
+            ch.observe_bytes(&comm_q.root);
+            let claim = match crate::zerocheck::verify_zk(m, zkproof, &mut ch) {
+                Ok(c) => c,
+                Err(_) => return false,
+            };
+            let x_point = claim.mlv_challenges.clone();
+            let mut ch_p = ch.clone();
+            ch_p.observe_label(b"flock-pq-open-P");
+            let ok_p = verify_opening_batch_ligerito_mixed(
+                comm_p,
+                &[zkproof.final_p_eval],
+                &[claim.z],
+                &[x_point.as_slice()],
+                &[],
+                proof_p,
+                &lig_v,
+                &mut ch_p,
+            )
+            .is_ok();
+            let mut ch_q = ch.clone();
+            ch_q.observe_label(b"flock-pq-open-Q");
+            let ok_q = verify_opening_batch_ligerito_mixed(
+                comm_q,
+                &[zkproof.final_q_eval],
+                &[claim.z],
+                &[x_point.as_slice()],
+                &[],
+                proof_q,
+                &lig_v,
+                &mut ch_q,
+            )
+            .is_ok();
+            ok_p && ok_q
+        };
+
+        let (cp_, cq_, pf, pp, pq) = run(false);
+        assert!(
+            verify(&cp_, &cq_, &pf, &pp, &pq),
+            "honest P,Q hiding openings at ρ must verify"
+        );
+        let (cp2, cq2, pf2, pp2, pq2) = run(true);
+        assert!(
+            !verify(&cp2, &cq2, &pf2, &pp2, &pq2),
+            "tampered P(ρ) must be rejected"
+        );
+    }
+
     /// End-to-end Ligerito backend roundtrip through pcs::open_batch_mixed_ligerito
     /// and verify_opening_batch_ligerito_mixed. Single ring-switched claim
     /// (no PD — PD path is task #11).
