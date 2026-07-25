@@ -163,22 +163,38 @@ analysis, and it is now backed by measurement, not intuition.
   round-pair kernels + skip fold); the fused optimized variant is a
   differential-tested follow-up. Returns `P(ρ),Q(ρ)` for PCS authentication.
 
-- **NEXT — Z2: hiding `P,Q` commitment + opening at ρ** (the substantial
-  remaining crux). `P,Q` must be committed (roots bound before `γ`) and
-  opened at the zerocheck point through a HIDING opening so only
-  `P(ρ),Q(ρ)` leak — not the codeword rows (required by §0's finding).
-  Concrete route: reuse `commit_zk` per polynomial (single hiding commitment
-  for `P`, one for `Q`) and open at the (z, mlv_rhos) zerocheck point using
-  the same ring-switch machinery the c-claim opening already uses; wire into
-  a reference `prove_fast_zk_a1` path that swaps the zerocheck for
-  `prove_packed_padded_zk`. This is deep PCS integration (multi-session).
+- **DONE — Z2: hiding `P,Q` commitment + authenticated opening at ρ**
+  (`pcs::tests::zk_pq_hiding_open_roundtrip`, committed). `commit_zk` per
+  polynomial (hiding — codeword rows blinded by `g`); roots observed before
+  the zerocheck so `γ`/`ρ` bind them; opened at ρ=(z, mlv_challenges) as RS
+  claims authenticating `final_p_eval`/`final_q_eval`. Point convention
+  verified (`final_p_eval == zhat_skip_reference` at forward `mlv_challenges`).
+  Two openings derived from a forked+domain-tagged post-zerocheck challenger
+  (independent, both transcript-bound). Honest roundtrip verifies; tampered
+  `P(ρ)` rejected. Keeps the joint-coverage leakage `L = {P(ρ),Q(ρ)}`.
 
-- **THEN — Z4/Z6/Z7/Z8/Z9**: the full-transcript joint certificate over the
-  integrated prover (all classes, small param set); explicit nonzero-minor
-  rank bound; per-parameter certificates + runtime gating; written WI
-  theorem + deterministic certificate format + reproducible checker; minimal
-  test set (small-field exact equality, real-vs-sim, negative controls);
-  fresh-masks enforcement + narrow API.
+- **DONE — Z4 (zerocheck layer): full joint coverage on the REAL prover**
+  (`full_conditional_coverage_zk_zerocheck`). Runs
+  `prove_packed_padded_zk`; with the complete `P`-leakage `L={P(ρ),σ_z}`,
+  conditioning removes 2 F128 directions but the witness residuals stay
+  determined by the public ab-claim — no claim-preserving witness direction
+  leaks. Lincheck/ring-switch coords are affine (existing
+  `affine_classes_exactly_covered`); `μ,g` by the PCS audit; compose by
+  `MaskingSurjective.coprod_covers`.
+
+- **NEXT — end-to-end wiring** (the gating remainder for a ZK shipped
+  prover): thread Z1+Z2 into `prove_fast_ligerito_from_witness_zk`
+  (commit P,Q; observe roots before `bind_statement`; swap the zerocheck for
+  `prove_packed_padded_zk` — add `s_hat_v_c` capture for the c-claim; open
+  P,Q at ρ) + the verifier mirror + the proof-struct extension. Components
+  de-risked (Z1, Z2 tested); this is a large soundness-critical integration.
+
+- **THEN — Z6/Z7/Z8/Z9**: explicit nonzero-minor rank bound; per-parameter
+  certificates + runtime gating; written WI theorem + deterministic
+  certificate format + reproducible checker; minimal test set (small-field
+  exact equality, real-vs-sim, negative controls); fresh-masks enforcement +
+  narrow API. Paper v4 published (secret gist) with the implemented-amendment
+  status.
 
 ## 4. Honest status after this research
 
