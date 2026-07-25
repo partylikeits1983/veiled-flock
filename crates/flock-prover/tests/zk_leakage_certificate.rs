@@ -38,7 +38,7 @@ use flock_core::field::F128;
 use flock_core::lincheck::{self, pack_z_lincheck_from_packed};
 use flock_core::pcs::{self, ring_switch};
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
-use flock_core::zerocheck;
+use flock_core::zerocheck::{self, PaddingSpec};
 
 struct RecordingChallenger<C: Challenger> {
     inner: C,
@@ -284,6 +284,174 @@ fn coord(t: &[F128], i: usize) -> [u64; 2] {
 }
 fn coord_xor(a: [u64; 2], b: [u64; 2]) -> [u64; 2] {
     [a[0] ^ b[0], a[1] ^ b[1]]
+}
+
+// --- F₂ linear algebra over a wide vector (dynamic width) ---
+
+#[derive(Default)]
+struct F2Space {
+    basis: Vec<Vec<u64>>,
+    pivots: Vec<usize>,
+}
+
+impl F2Space {
+    fn reduce(&self, mut v: Vec<u64>) -> Vec<u64> {
+        for (b, &p) in self.basis.iter().zip(&self.pivots) {
+            let (w, msk) = (p / 64, 1u64 << (p % 64));
+            if v[w] & msk != 0 {
+                for k in 0..v.len() {
+                    v[k] ^= b[k];
+                }
+            }
+        }
+        v
+    }
+    fn insert(&mut self, v: Vec<u64>) -> bool {
+        let r = self.reduce(v);
+        let Some(p) = first_set_bit(&r) else {
+            return false;
+        };
+        self.basis.push(r);
+        self.pivots.push(p);
+        true
+    }
+    fn rank(&self) -> usize {
+        self.basis.len()
+    }
+}
+
+fn first_set_bit(v: &[u64]) -> Option<usize> {
+    for (i, &w) in v.iter().enumerate() {
+        if w != 0 {
+            return Some(i * 64 + w.trailing_zeros() as usize);
+        }
+    }
+    None
+}
+
+fn flatten(vals: &[F128]) -> Vec<u64> {
+    let mut out = Vec::with_capacity(vals.len() * 2);
+    for v in vals {
+        out.push(v.lo);
+        out.push(v.hi);
+    }
+    out
+}
+
+// ---------------------------------------------------------------------------
+// A1′ validation: the degree-2 committed mask channel γ·P·Q closes the
+// round-pair leak. This de-risks the amendment BEFORE any kernel surgery,
+// analogously to the WS-0 tripwire.
+//
+// The mask channel adds γ·(round pairs of the P·Q product-sumcheck) to the
+// zerocheck round pairs, where P, Q are fresh full-support committed random
+// multilinears carrying NO witness. So the mask contribution's distribution
+// is witness-independent by construction; the combined round pair is
+// G_j(witness) + γ·M_j(P,Q). Hiding reduces to: for (almost) every fixed Q,
+// the map P ↦ (all round-pair coordinates of P·Q) is SURJECTIVE onto the
+// round-pair space (2·(m−k_skip) F128 = 2304 bits here). Then at fixed Q the
+// combined value is uniform over that space regardless of the witness term
+// G_j — exact distribution equality (affine-in-P, full image), and mixing
+// over Q keeps it witness-independent since Q is witness-free.
+//
+// A degree-1 (multilinear) channel would give M_j(∞)=0 and FAIL this test on
+// the ∞-coordinates — which is exactly why the linear amendment is
+// insufficient and the degree-2 P·Q channel is required.
+// ---------------------------------------------------------------------------
+
+const N_MLV: usize = M - K_SKIP; // 9 multilinear rounds
+const ROUND_PAIR_VALUES: usize = 2 * N_MLV; // 18 F128 (G(1),G(∞)) per round
+
+/// Round pairs of the P·Q product sumcheck at the fixed challenge schedule
+/// (same seed ⇒ same challenges as any other run: RandomChallenger ignores
+/// observations). Returns the 18 round-pair F128 values, interleaved
+/// (m1_0, minf_0, m1_1, minf_1, …).
+fn mask_round_pairs(p_bits: &[bool], q_bits: &[bool]) -> Vec<F128> {
+    let mut zp = vec![false; 1 << M];
+    zp.copy_from_slice(p_bits);
+    let mut zq = vec![false; 1 << M];
+    zq.copy_from_slice(q_bits);
+    let p_packed = pcs::pack_witness(&zp, M);
+    let q_packed = pcs::pack_witness(&zq, M);
+    let zero_c = pcs::pack_witness(&vec![false; 1 << M], M);
+    let cast = |v: &[F128]| -> &[u8] {
+        unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
+    };
+    let mut ch = RandomChallenger::new(CH_SEED);
+    let (proof, _claim) = zerocheck::prove_packed_padded(
+        cast(&p_packed),
+        cast(&q_packed),
+        cast(&zero_c),
+        M,
+        &PaddingSpec::dense(M),
+        &mut ch,
+    );
+    assert_eq!(proof.multilinear_rounds.len(), N_MLV);
+    let mut out = Vec::with_capacity(ROUND_PAIR_VALUES);
+    for (m1, minf) in &proof.multilinear_rounds {
+        out.push(*m1);
+        out.push(*minf);
+    }
+    out
+}
+
+#[test]
+fn a1_prime_masks_round_pairs() {
+    let mut rng = Rng(0xA1B2C3);
+    let n = 1 << M;
+
+    // The mask channel is disabled if the OTHER factor is zero: negative
+    // control. Q = 0 ⇒ P·Q = 0 ⇒ no round-pair coverage.
+    {
+        let p = rng.bits(n);
+        let q0 = vec![false; n];
+        let m = mask_round_pairs(&p, &q0);
+        assert!(
+            m.iter().all(|&v| v == F128::ZERO),
+            "P·0 must give zero mask messages (channel disabled)"
+        );
+    }
+
+    // For UNIFORM random Q (as A1′ samples it), the map P ↦ round-pairs(P·Q)
+    // must be SURJECTIVE onto the full round-pair space — including the ∞
+    // (leading-coefficient) coordinates a degree-1 channel cannot reach.
+    for qi in 0..3 {
+        let q = rng.bits(n);
+        let mut img = F2Space::default();
+        let full = ROUND_PAIR_VALUES * 128;
+        for i in 0..n {
+            if img.rank() == full {
+                break;
+            }
+            img.insert(flatten(&mask_round_pairs(&unit(n, i), &q)));
+        }
+        assert_eq!(
+            img.rank(),
+            full,
+            "uniform Q draw {qi}: P ↦ round-pairs(P·Q) image is rank {} of {full} \
+             — round pairs not uniformly masked",
+            img.rank()
+        );
+    }
+
+    // Edge case (documents why Q must be sampled UNIFORMLY, not structured,
+    // and motivates the bad-mask probability bound in the proof): a CONSTANT
+    // Q has zero slope, so M_j(∞) = Σ eq·ΔP·ΔQ ≡ 0 — the ∞ (leading)
+    // coordinates get NO coverage; only the 9 G(1) coordinates are hit. Such
+    // Q form a measure-≈0 set the uniform draw avoids w.h.p.
+    {
+        let q_const = vec![true; n];
+        let mut img = F2Space::default();
+        for i in 0..n {
+            img.insert(flatten(&mask_round_pairs(&unit(n, i), &q_const)));
+        }
+        assert_eq!(
+            img.rank(),
+            N_MLV * 128,
+            "constant Q should cover exactly the G(1) half ({} bits)",
+            N_MLV * 128
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
