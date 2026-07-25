@@ -22,13 +22,28 @@ what is not yet done.
 
 ## 0. Status and what is not proven here
 
-- The amendment A1′ is **validated** (its hiding and completeness are certified,
-  §7–§8) but **not yet wired** into the optimized single-pass Fiat–Shamir
-  prover; the shipped prover currently realizes only the affine-class masking
-  plus the (superseded) mixture argument for the round pairs. The theorems
-  below describe the amended protocol.
+- The amendment A1′ is **implemented end to end, reference-correct, and
+  verifying**: `prover::prove_r1cs_zk_a1` / `verify_r1cs_zk_a1` run the full
+  amended pipeline on a real 256-block BLAKE3 zk statement — commit witness +
+  fresh `P,Q` hidingly, bind all roots before any challenge, masked zerocheck
+  `â·b̂+γ·P·Q` (`zerocheck::prove_packed_padded_zk`/`verify_zk`), lincheck,
+  and hiding openings of the witness and `P,Q` at ρ (leakage `L={P(ρ),Q(ρ)}`).
+  Tested: honest roundtrip verifies; fresh masks ⇒ different verifying
+  transcript; tampering `σ_z`,`P(ρ)`,`Q(ρ)`, or a masked round message is
+  rejected (`prove_verify_r1cs_zk_a1_roundtrip`). This is a self-contained
+  reference path; the optimized fused prover is a differential-tested
+  follow-up (the shipped `prove_fast_zk` still runs the un-amended zerocheck).
+- The joint conditional coverage is verified on the **real amended prover** at
+  the zerocheck layer (`full_conditional_coverage_zk_zerocheck`, `L={P(ρ),σ_z}`
+  — no claim-preserving witness direction leaks); the affine and PCS layers
+  reuse the existing exact certificates, composing by the independent-channel
+  lemma (`MaskingSurjective.coprod_covers`, Lean). What remains: assembling
+  these into **one** complete-transcript certificate over the integrated
+  prover, for a small explicit parameter set (currently one fixture per
+  layer).
 - The bad-mask probability bound (§8) and the Merkle-sibling hiding argument
-  (§9) are closed-form but **not machine-checked**.
+  (§9) are closed-form but **not machine-checked** with an explicit numerical
+  constant; per-parameter certificate gating is not yet wired.
 - Out of scope entirely: SHA-256/Keccak encoders, the hash-chain statement,
   QROM *soundness*, side-channel resistance, and independent cryptographic
   review.
