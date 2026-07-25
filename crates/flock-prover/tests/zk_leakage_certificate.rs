@@ -487,6 +487,7 @@ fn zk_zerocheck_transcript(
 /// direction escapes the joint image once σ_z is also revealed. If σ_z removed
 /// a witness-relevant direction, this would fail (a real leak from sending σ_z).
 #[test]
+#[ignore = "offline exact certificate (~33k prover runs); run via scripts/zk-certify.sh"]
 fn full_conditional_coverage_zk_zerocheck() {
     let r1cs = masked_r1cs();
     let mut rng = Rng(0x5161ADD);
@@ -566,7 +567,11 @@ fn full_conditional_coverage_zk_zerocheck() {
         "LEAK: a claim-preserving witness direction escapes R(ker L={{P(ρ),σ_z}}) \
          on the REAL amended prover — sending σ_z (or P(ρ)) un-covers a witness direction"
     );
-    println!("VERDICT: amended zerocheck transcript (incl. σ_z, P(ρ), Q(ρ)) has joint \
+    // NOTE: this experiment holds Q fixed at a single draw, so Q(ρ) is a
+    // constant here and conditioning on it would be vacuous — the verdict
+    // covers the P-side leakage {P(ρ), σ_z} only. The joint (P,Q)-side
+    // statement is the job of the zk_joint_certificate suite.
+    println!("VERDICT: amended zerocheck transcript, P-side leakage L={{P(ρ), σ_z}}, has joint \
               conditional coverage — no claim-preserving witness direction leaks.");
 }
 
@@ -588,6 +593,7 @@ fn full_conditional_coverage_zk_zerocheck() {
 ///     that lost direction is the PUBLIC CLAIM direction (which we condition
 ///     on) or an extra witness functional (a real leak requiring a fix).
 #[test]
+#[ignore = "offline exact certificate (~66k prover runs); run via scripts/zk-certify.sh"]
 fn conditional_coverage_p_rho() {
     let mut rng = Rng(0xC0AA1);
     let n = 1 << M;
