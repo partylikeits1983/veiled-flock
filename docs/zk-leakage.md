@@ -1,12 +1,21 @@
 # Zero-knowledge Flock: leakage map, masking design, and ZK evidence
 
-This document specifies how the `zk` mode makes Flock's argument
-honest-verifier zero-knowledge (HVZK), classifies every prover→verifier
-message, states precisely what is claimed and what is machine-checked, and
-records the soundness accounting. Scope of the current implementation:
-**batch R1CS statements with the BLAKE3 encoder** (`Blake3Setup::with_zk` /
-`prove_fast_zk`); other encoders and the hash-chain statement are future work
-(see the end).
+This document is the **leakage map and evidence index**; the scoped
+zero-knowledge **proof** (exact security claim, the reduction to
+witness-indistinguishability + explicit simulator, the amendment A1′, the
+separated soundness/hiding theorems, the assumptions, and the disposition
+of every external-review item) is in [`zk-proof.md`](zk-proof.md). It
+classifies every prover→verifier message, states what is claimed and what is
+machine-checked, and records the soundness accounting. Scope of the current
+implementation: **batch R1CS statements with the BLAKE3 encoder**
+(`Blake3Setup::with_zk` / `prove_fast_zk`); other encoders and the hash-chain
+statement are future work (see the end).
+
+**Status: candidate / experimental.** The exact leakage certificate
+(`tests/zk_leakage_certificate.rs`) proves the affine transcript classes are
+hidden exactly and validates the degree-2 `P·Q` mask channel (amendment A1′)
+that closes the zerocheck round pairs; A1′ is validated but not yet wired
+into the optimized single-pass prover. See `zk-proof.md` §0.
 
 ## 1. Design summary
 
@@ -108,10 +117,16 @@ values *as constrained quantities* (see §3).
   - **Zerocheck round pairs** `(G(1), G(∞))`: bilinear across the two
     randomizer species with witness-dependent linear coefficients — but
     affine in `u_A` at any fixed `u_B` (no within-species cross terms:
-    A-rows only meet the constant-1 wire on the b̂-side). The mixture
-    masking theorem applies: constant full `u_A`-image plus coset coverage
-    across `(witness, u_B)` — both audited — give witness-independence of
-    the joint distribution by mixing over `u_B`.
+    A-rows only meet the constant-1 wire on the b̂-side). *Superseded by
+    amendment A1′* (`zk-proof.md` §5): a degree-2 committed mask channel
+    `γ·P·Q` (two witness-free full-support random multilinears) makes this
+    class **surjectively** masked — `G(∞)`, the degree-2 leading
+    coefficient no degree-1 mask can reach, included — so it too reduces to
+    the single-map masking theorem. The mixture argument below is retained
+    only as the fallback for the un-amended protocol; note the exact
+    certificate found that its `h_coset` hypothesis is false for the full
+    transcript (the b̂-side final evaluation has an identically-zero
+    `u_A`-derivative), which A1′ avoids.
 
   Both up to the statistical error of the budget margins (~2^{-64} per the
   slack term).
