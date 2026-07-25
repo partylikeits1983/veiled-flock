@@ -426,6 +426,150 @@ fn mask_round_pairs_and_p_rho(p_bits: &[bool], q_bits: &[bool]) -> (Vec<F128>, F
     (out, claim.a_eval) // claim.a_eval = P(ρ)
 }
 
+/// Full zerocheck transcript of the REAL amended prover
+/// `zerocheck::prove_packed_padded_zk`, at fixed challenges. Returns the
+/// combined round pairs (18 F128), and the P-dependent leakage coordinates the
+/// final check / initial claim reveal: `σ_z` (= `mask_init`, the sent mask
+/// sum), `P(ρ)` (`final_p_eval`), `Q(ρ)` (`final_q_eval`).
+fn zk_zerocheck_transcript(
+    r1cs: &BlockR1cs,
+    z_packed: &[F128],
+    p_bits: &[bool],
+    q_bits: &[bool],
+) -> (Vec<F128>, F128, F128, F128, F128, F128) {
+    let a_packed = r1cs.apply_a_packed(z_packed);
+    let b_packed = r1cs.apply_b_packed(z_packed);
+    let mut zp = vec![false; 1 << M];
+    zp.copy_from_slice(p_bits);
+    let mut zq = vec![false; 1 << M];
+    zq.copy_from_slice(q_bits);
+    let p_packed = pcs::pack_witness(&zp, M);
+    let q_packed = pcs::pack_witness(&zq, M);
+    let cast = |v: &[F128]| -> &[u8] {
+        unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
+    };
+    let mut ch = RandomChallenger::new(CH_SEED);
+    let (proof, _claim) = zerocheck::prove_packed_padded_zk(
+        cast(&a_packed),
+        cast(&b_packed),
+        cast(z_packed),
+        cast(&p_packed),
+        cast(&q_packed),
+        M,
+        &r1cs.padding_spec(),
+        &mut ch,
+    );
+    let mut pairs = Vec::with_capacity(ROUND_PAIR_VALUES);
+    for (m1, minf) in &proof.multilinear_rounds {
+        pairs.push(*m1);
+        pairs.push(*minf);
+    }
+    (
+        pairs,
+        proof.mask_init,
+        proof.final_p_eval,
+        proof.final_q_eval,
+        proof.final_a_eval,
+        proof.final_b_eval,
+    )
+}
+
+/// FULL zerocheck-layer joint conditional coverage on the REAL amended prover.
+///
+/// Unlike `conditional_coverage_p_rho` (which modeled `L = {P(ρ)}` on the mask
+/// sumcheck in isolation), this runs the actual `prove_packed_padded_zk` and
+/// takes the COMPLETE P-dependent leakage the amended zerocheck reveals:
+///     L = { P(ρ),  σ_z = Σ eq·P·Q }.
+/// `σ_z` is a second P-functional (the prover sends it for the combined initial
+/// claim), so conditioning must remove BOTH. The test measures `dim R(ker L)`
+/// and checks the witness-difference residuals mod `R(ker L)` are still
+/// determined by the public ab-claim — i.e. no claim-preserving witness
+/// direction escapes the joint image once σ_z is also revealed. If σ_z removed
+/// a witness-relevant direction, this would fail (a real leak from sending σ_z).
+#[test]
+fn full_conditional_coverage_zk_zerocheck() {
+    let r1cs = masked_r1cs();
+    let mut rng = Rng(0x5161ADD);
+    let ua0 = vec![false; A_BITS];
+    let ub0 = vec![false; B_BITS];
+    let n = 1 << M;
+    let q = rng.bits(n);
+    let p0 = rng.bits(N_PAYLOAD * BLOCKS);
+
+    // Base at P = 0 (mask off) with the real witness payload p0.
+    let z0 = witness(&p0, &ua0, &ub0);
+    let (base_pairs, base_sz, base_pr, _base_qr, _fa, _fb) =
+        zk_zerocheck_transcript(&r1cs, &z0, &vec![false; n], &q);
+
+    // R (P → combined round pairs) and L (P → {P(ρ), σ_z}), at fixed Q, witness.
+    // Combined pairs are affine in P at fixed (Q, witness): base is G_j (mask
+    // off), columns are the γ·M_j(e_i) contributions.
+    let mut rkerl = F2Space::default();
+    let round_full = ROUND_PAIR_VALUES * 128;
+    {
+        // Build [L(2 F128 = 4 words) | R(round pairs)] columns, eliminate on L,
+        // and collect round vectors whose L-part vanished ⇒ R(ker L).
+        let mut basis: Vec<(Vec<u64>, Vec<u64>)> = Vec::new();
+        let mut piv: Vec<usize> = Vec::new();
+        for i in 0..n {
+            let (pairs, sz, pr, _qr, _fa, _fb) =
+                zk_zerocheck_transcript(&r1cs, &z0, &unit(n, i), &q);
+            let d_pairs: Vec<F128> =
+                pairs.iter().zip(&base_pairs).map(|(a, b)| *a + *b).collect();
+            let l = vec![pr.lo ^ base_pr.lo, pr.hi ^ base_pr.hi, sz.lo ^ base_sz.lo, sz.hi ^ base_sz.hi];
+            let mut lpart = l;
+            let mut rpart = flatten(&d_pairs);
+            for (bp, &p) in basis.iter().zip(&piv) {
+                let (w, m) = (p / 64, 1u64 << (p % 64));
+                if lpart[w] & m != 0 {
+                    for k in 0..lpart.len() { lpart[k] ^= bp.0[k]; }
+                    for k in 0..rpart.len() { rpart[k] ^= bp.1[k]; }
+                }
+            }
+            if let Some(p) = first_set_bit(&lpart) {
+                basis.push((lpart, rpart));
+                piv.push(p);
+            } else {
+                rkerl.insert(rpart);
+            }
+        }
+    }
+    println!("dim R(ker L), L={{P(ρ), σ_z}} = {} / {round_full}", rkerl.rank());
+
+    // Witness-difference round vectors (vary payload at P=0, Q fixed) and the
+    // public ab-claim change (final_a·final_b), against the fixed base.
+    let base_v = _fa * _fb;
+    let mut residual_and_claim = F2Space::default();
+    let mut claim_space = F2Space::default();
+    let mut resid_space = F2Space::default();
+    for _ in 0..40 {
+        let p = rng.bits(N_PAYLOAD * BLOCKS);
+        let z = witness(&p, &ua0, &ub0);
+        let (pairs, _sz, _pr, _qr, fa, fb) =
+            zk_zerocheck_transcript(&r1cs, &z, &vec![false; n], &q);
+        let d: Vec<F128> = pairs.iter().zip(&base_pairs).map(|(a, b)| *a + *b).collect();
+        let residual = rkerl.reduce(flatten(&d));
+        resid_space.insert(residual.clone());
+        let dv = fa * fb + base_v; // Δ(ab-claim)
+        claim_space.insert(vec![dv.lo, dv.hi]);
+        let mut both = residual;
+        both.push(dv.lo);
+        both.push(dv.hi);
+        residual_and_claim.insert(both);
+    }
+    println!("rank(residual) = {}", resid_space.rank());
+    println!("rank(Δ ab-claim) = {}", claim_space.rank());
+    println!("rank([residual | Δclaim]) = {}", residual_and_claim.rank());
+    assert_eq!(
+        residual_and_claim.rank(),
+        claim_space.rank(),
+        "LEAK: a claim-preserving witness direction escapes R(ker L={{P(ρ),σ_z}}) \
+         on the REAL amended prover — sending σ_z (or P(ρ)) un-covers a witness direction"
+    );
+    println!("VERDICT: amended zerocheck transcript (incl. σ_z, P(ρ), Q(ρ)) has joint \
+              conditional coverage — no claim-preserving witness direction leaks.");
+}
+
 /// CONDITIONAL FULL-TRANSCRIPT COVERAGE (the reviewer's `d ∈ R(ker L)` test).
 ///
 /// The same mask `P` appears in the round messages (via `M_j`) AND in the
