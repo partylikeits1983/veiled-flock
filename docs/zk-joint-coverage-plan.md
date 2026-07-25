@@ -152,6 +152,34 @@ analysis, and it is now backed by measurement, not intuition.
 4. T3.* (assurance) and T4.* (Lean + API + CI gates), then independent
    review.
 
+## 3b. Implementation progress (minimum path)
+
+- **DONE — Z1: reference-correct A1′ combined masked zerocheck**
+  (`zerocheck::prove_packed_padded_zk` / `verify_zk`, committed). Runs the AB
+  sumcheck on `â·b̂ + γ·P·Q`; combined round messages `G_j+γM_j`, initial
+  claim `+γσ_z`, final check `â(ρ)b̂(ρ)+γP(ρ)Q(ρ)`. Tested: FsChallenger
+  roundtrip (completeness, m=13..16) + tamper rejection of `σ_z`, `P(ρ)`,
+  `Q(ρ)`, round messages, `final_a` (soundness). Reference-quality (naive
+  round-pair kernels + skip fold); the fused optimized variant is a
+  differential-tested follow-up. Returns `P(ρ),Q(ρ)` for PCS authentication.
+
+- **NEXT — Z2: hiding `P,Q` commitment + opening at ρ** (the substantial
+  remaining crux). `P,Q` must be committed (roots bound before `γ`) and
+  opened at the zerocheck point through a HIDING opening so only
+  `P(ρ),Q(ρ)` leak — not the codeword rows (required by §0's finding).
+  Concrete route: reuse `commit_zk` per polynomial (single hiding commitment
+  for `P`, one for `Q`) and open at the (z, mlv_rhos) zerocheck point using
+  the same ring-switch machinery the c-claim opening already uses; wire into
+  a reference `prove_fast_zk_a1` path that swaps the zerocheck for
+  `prove_packed_padded_zk`. This is deep PCS integration (multi-session).
+
+- **THEN — Z4/Z6/Z7/Z8/Z9**: the full-transcript joint certificate over the
+  integrated prover (all classes, small param set); explicit nonzero-minor
+  rank bound; per-parameter certificates + runtime gating; written WI
+  theorem + deterministic certificate format + reproducible checker; minimal
+  test set (small-field exact equality, real-vs-sim, negative controls);
+  fresh-masks enforcement + narrow API.
+
 ## 4. Honest status after this research
 
 - The **methodology gap the reviewer identified is real** and is now fixed
