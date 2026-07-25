@@ -395,6 +395,137 @@ fn mask_round_pairs(p_bits: &[bool], q_bits: &[bool]) -> Vec<F128> {
     out
 }
 
+/// Verifier's multilinear telescoping (mirrors `zerocheck::verify`): given the
+/// initial running claim and the round pairs `(G(1),G(∞))`, propagate the
+/// running claim through all rounds. `r_eq[i]` is the eq weight of round i
+/// (= `claim.r_rest[i]`), `rhos[i]` the round challenge.
+fn telescope(init: F128, rounds: &[(F128, F128)], r_eq: &[F128], rhos: &[F128]) -> F128 {
+    let mut c = init;
+    for (i, &(g1, ginf)) in rounds.iter().enumerate() {
+        let one_plus_req = F128::ONE + r_eq[i];
+        let g0 = (c + r_eq[i] * g1) * one_plus_req.inv();
+        let rho = rhos[i];
+        let one_plus_rho = F128::ONE + rho;
+        c = g0 * one_plus_rho + g1 * rho + ginf * rho * one_plus_rho;
+    }
+    c
+}
+
+/// The telescoping is affine in the initial claim; recover the unique initial
+/// claim that reaches `target` (= what the real verifier reconstructs, since
+/// the proof verifies). Over F₂₁₂₈: `init = (target − β)·α⁻¹` with
+/// `β = telescope(0)`, `α = telescope(1) − telescope(0)`.
+fn recover_init(target: F128, rounds: &[(F128, F128)], r_eq: &[F128], rhos: &[F128]) -> F128 {
+    let beta = telescope(F128::ZERO, rounds, r_eq, rhos);
+    let alpha = telescope(F128::ONE, rounds, r_eq, rhos) + beta;
+    (target + beta) * alpha.inv()
+}
+
+/// A1′ COMBINED COMPLETENESS + SOUNDNESS (reference, fixed challenges).
+///
+/// Builds the amended zerocheck's combined transcript from the real prover
+/// primitives — main product-sumcheck on (a,b) and mask product-sumcheck on
+/// (P,Q) at identical challenges — and checks the combined verifier's final
+/// equation, `combined_running == final_a·final_b + γ·P(ρ)·Q(ρ)`. By linearity
+/// of the sumcheck in both the initial claim and the messages, the honest
+/// combined proof satisfies it (completeness); tampering any masked round pair
+/// breaks it (the round-pair channel is bound). This validates the amendment's
+/// arithmetic on real prover output; the remaining WS-1 work is wiring the
+/// combined sumcheck into the single-pass Fiat–Shamir prover/verifier and
+/// opening P,Q at ρ through the PCS.
+#[test]
+fn a1_prime_combined_completeness_and_soundness() {
+    let r1cs = masked_r1cs();
+    let mut rng = Rng(0x0C0FFEE);
+    let payload = rng.bits(N_PAYLOAD * BLOCKS);
+    let ua = rng.bits(A_BITS);
+    let ub = rng.bits(B_BITS);
+    let z_main = witness(&payload, &ua, &ub);
+
+    // Main product-sumcheck (a·b) via the real prover.
+    let a_packed = r1cs.apply_a_packed(&z_main);
+    let b_packed = r1cs.apply_b_packed(&z_main);
+    let cast = |v: &[F128]| -> &[u8] {
+        unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
+    };
+    let padding = r1cs.padding_spec();
+    let (main_proof, main_claim) = zerocheck::prove_packed_padded(
+        cast(&a_packed),
+        cast(&b_packed),
+        cast(&z_main),
+        M,
+        &padding,
+        &mut RandomChallenger::new(CH_SEED),
+    );
+
+    // Mask product-sumcheck (P·Q), full-support random, at the SAME challenges
+    // (RandomChallenger ignores observations ⇒ identical schedule).
+    let mut zp = vec![false; 1 << M];
+    zp.copy_from_slice(&rng.bits(1 << M));
+    let mut zq = vec![false; 1 << M];
+    zq.copy_from_slice(&rng.bits(1 << M));
+    let p_packed = pcs::pack_witness(&zp, M);
+    let q_packed = pcs::pack_witness(&zq, M);
+    let zero_c = pcs::pack_witness(&vec![false; 1 << M], M);
+    let (mask_proof, mask_claim) = zerocheck::prove_packed_padded(
+        cast(&p_packed),
+        cast(&q_packed),
+        cast(&zero_c),
+        M,
+        &PaddingSpec::dense(M),
+        &mut RandomChallenger::new(CH_SEED),
+    );
+
+    // Challenges are identical (same seed).
+    assert_eq!(main_claim.z, mask_claim.z);
+    assert_eq!(main_claim.mlv_challenges, mask_claim.mlv_challenges);
+    let r_eq = &main_claim.r_rest; // r[k_skip..]; r_eq[i] used at round i
+    let rhos = &main_claim.mlv_challenges;
+
+    // Reconstructed initial claims (= what the real verifier derives).
+    let ab_init = recover_init(
+        main_claim.a_eval * main_claim.b_eval,
+        &main_proof.multilinear_rounds,
+        r_eq,
+        rhos,
+    );
+    let sigma_z = recover_init(
+        mask_claim.a_eval * mask_claim.b_eval,
+        &mask_proof.multilinear_rounds,
+        r_eq,
+        rhos,
+    );
+
+    let gamma = F128 { lo: 0x9E37_79B9, hi: 0x1234_5678 };
+
+    // Combined proof: round1 unmasked (randomizer-covered), mlv round pairs
+    // masked by γ·M_j, initial claim shifted by γ·σ_z, final gains γ·P(ρ)Q(ρ).
+    let combined_rounds: Vec<(F128, F128)> = main_proof
+        .multilinear_rounds
+        .iter()
+        .zip(&mask_proof.multilinear_rounds)
+        .map(|(&(g1, gi), &(m1, mi))| (g1 + gamma * m1, gi + gamma * mi))
+        .collect();
+    let combined_init = ab_init + gamma * sigma_z;
+    let combined_final = telescope(combined_init, &combined_rounds, r_eq, rhos);
+    let expected =
+        main_claim.a_eval * main_claim.b_eval + gamma * (mask_claim.a_eval * mask_claim.b_eval);
+    assert_eq!(
+        combined_final, expected,
+        "A1′ combined completeness: the combined sumcheck must telescope to \
+         final_a·final_b + γ·P(ρ)·Q(ρ)"
+    );
+
+    // Soundness: tampering a masked round pair breaks the combined check.
+    let mut tampered = combined_rounds.clone();
+    tampered[N_MLV / 2].1 += F128::ONE;
+    assert_ne!(
+        telescope(combined_init, &tampered, r_eq, rhos),
+        expected,
+        "tampering a masked round pair must break the combined check"
+    );
+}
+
 #[test]
 fn a1_prime_masks_round_pairs() {
     let mut rng = Rng(0xA1B2C3);
