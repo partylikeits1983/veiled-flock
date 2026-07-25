@@ -28,7 +28,7 @@ use serde::{Deserialize, Serialize};
 /// (`2^log_batch_size · 16` bytes per leaf). This trades leaf-call SHA-256
 /// overhead (was 16 B leaves, now 512 B leaves at default `log_batch_size=5`)
 /// for much fewer Merkle nodes and better scaling to large `m`.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct PcsParams {
     pub m: usize,
     pub log_inv_rate: usize,

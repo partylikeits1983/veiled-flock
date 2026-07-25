@@ -105,6 +105,13 @@ pub fn prove_ligerito<Ch: Challenger>(
 /// (a prover-secret mask sampler, independent of the FS transcript).
 /// `pcs_params.zk` must be set; the witness is expected to already carry its
 /// randomizer rows (`r1cs.zk`).
+///
+/// **Warning:** this entry does not check `r1cs.zk`. A statement without
+/// randomizer rows yields a hiding commitment over an **unmasked PIOP
+/// transcript** (the PCS-only tests rely on this seam). Full zero-knowledge
+/// needs both mask species — use an encoder entry point like
+/// `Blake3Setup::prove_fast_zk`, which builds the statement with its
+/// randomizer layout.
 pub fn prove_ligerito_zk<Ch: Challenger>(
     r1cs: &BlockR1cs,
     z_packed: Vec<F128>,

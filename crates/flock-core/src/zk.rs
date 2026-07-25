@@ -7,8 +7,12 @@
 //! 1. **Randomizer witness rows** — extra R1CS rows of the form `u·1 = u`
 //!    (A-type; the row's A entry is a self-loop on a fresh witness column
 //!    holding a uniform bit, B selects the constant-1 wire) and `1·u′ = u′`
-//!    (B-type, symmetric). Every PIOP message becomes affine in these bits at
-//!    fixed challenges, so enough of them makes each revealed value uniform.
+//!    (B-type, symmetric). At fixed challenges the transcript is affine in
+//!    each species separately — zerocheck round messages are bilinear across
+//!    the two, since sumcheck folds merge A- and B-regions — so masking is
+//!    argued conditionally: fix the B-bits, the transcript is affine in the
+//!    A-bits with full image, and mix over the B-bits. With enough bits every
+//!    revealed value is uniform; see `docs/zk-leakage.md` §3.
 //!    [`ZkBlockLayout`] describes where they live inside a block; it is part
 //!    of the statement and is bound into `BlockR1cs::statement_digest`.
 //! 2. **PCS masks** — the low-half mask block and the blinder codeword `g` of

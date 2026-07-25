@@ -101,6 +101,13 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
     pcs_params: &crate::pcs::PcsParams,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
+    // The commitment carries a params copy for shape bookkeeping, but the
+    // verification circuit (config ladder, query counts, zk branch) must be
+    // keyed by the verifier's own params — a mismatch is a reject, not a
+    // shape accident downstream.
+    if commitment.params != *pcs_params {
+        return Err(pcs::VerifyError::Ligerito);
+    }
     let z_skips: Vec<F128> = claims.iter().map(|c| c.point.z_skip).collect();
     let values: Vec<F128> = claims.iter().map(|c| c.value).collect();
     let x_fulls: Vec<Vec<F128>> = claims
