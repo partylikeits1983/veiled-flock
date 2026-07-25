@@ -183,14 +183,20 @@ catch an unwired or missing mask.
    rejected (`pcs_zk_roundtrip_and_negatives`,
    `r1cs_prove_verify_roundtrip_ligerito_zk`,
    `prove_fast_zk_ligerito_roundtrip`).
-5. **Formal masking theorem** — `lean/` holds a Lean 4 + Mathlib proof
-   (no `sorry`) that the audited hypotheses imply zero-knowledge: an
-   affine transcript with mask-covered witness directions is
-   witness-independent, uniform on its coset, and exactly simulatable
-   from a public coset representative (`transcript_witness_indep`,
-   `simulator_exact`, `pmf_*`). The audits above check precisely those
-   hypotheses on the real prover; see `lean/README.md` for the two-layer
-   argument and its limits.
+5. **Formal masking theorems** — `lean/` holds a Lean 4 + Mathlib proof
+   (no `sorry`) that the audited hypotheses imply zero-knowledge, in two
+   forms matching the two transcript classes of §3. `Masking.lean` (the
+   affine classes): an affine transcript with mask-covered witness
+   directions is witness-independent, uniform on its coset, and exactly
+   simulatable from a public coset representative
+   (`transcript_witness_indep`, `simulator_exact`, `pmf_*`).
+   `MaskingMixture.lean` (the round-pair class): for a family of affine
+   maps indexed by `(witness, u_B)` with constant image and coset-covered
+   offsets, the joint distribution over uniform `(u_A, u_B)` is
+   witness-independent and exactly simulatable
+   (`mixture_witness_indep`, `pmf_mixture_*`). Item 2 checks the first
+   theorem's hypotheses, item 2b the second's; see `lean/README.md` for
+   the two-layer argument and its limits.
 
 **Budget rules** (`ZkConfig::sized_for` errs high; the audits are ground
 truth): masking one revealed F128 needs ≥128 bits of randomizer entropy
