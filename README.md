@@ -125,15 +125,16 @@ is unchanged).
 # ZK evidence: rank-audit certificates + differentials + roundtrips
 cargo test --release -p flock-core  --features zk zk_audit
 cargo test --release -p flock-prover --features zk --test zk_piop_audit
+cargo test --release -p flock-prover --features zk --test zk_affinity_probe
 cargo test --release -p flock-prover --features zk prove_fast_zk_ligerito_roundtrip -- --ignored
 
 # zk vs baseline benchmark (BLAKE3 batch proving)
 cargo bench --features zk --bench zk_vs_baseline
 ```
 
-Measured on 8 threads (best of 3): zk proving costs 1.46× / 2.11× / 2.19×
+Measured on 8 threads (min of 5): zk proving costs 2.2× / 3.0× / 3.8×
 the baseline at batches 2^10 / 2^12 / 2^14, verify time is unchanged, proof
-sizes are 1.65–1.82×. Design, leakage map, machine-checked ZK certificates,
+sizes are 1.64–1.82×. Design, leakage map, machine-checked ZK certificates,
 and soundness accounting: [`docs/zk-leakage.md`](docs/zk-leakage.md).
 
 ## Acknowledgments and third-party code

@@ -20,9 +20,13 @@ on it** (the ordering requirement is structural, not a discipline):
    OS entropy):
    - A-type `u·1 = u`: the A row is a self-loop on the random column, the B
      row selects the constant-1 wire; `C = I` makes the row's c/z-slot the
-     same bit. Randomness enters the a-cube, the product cube (`u·1 = u`,
-     affine — products are pointwise and A/B randomizer rows are disjoint,
-     so no `u_A·u_B` cross terms ever form), and the z-cube.
+     same bit. Randomness enters the a-cube, the product cube, and the
+     z-cube. In the cube itself products are pointwise and A/B rows are
+     disjoint, so no `u_A·u_B` cross terms exist **in the cube** — but
+     zerocheck *round messages* multiply folded â·b̂ values, so cross terms
+     do enter the round pairs once a fold group spans an A/B region
+     boundary. The masking claim for that class is the conditional one of
+     §3; every other class is jointly affine in the masks.
    - B-type `1·u′ = u′`: symmetric, masking the b̂-side.
    The rows are satisfied by any bit assignment, so completeness and the
    knowledge claim about the real witness wires are unchanged. The optimized
@@ -92,11 +96,25 @@ values *as constrained quantities* (see §3).
 - **Claim:** statistical witness-indistinguishability of the transcript
   distribution, conditioned on the public inputs, for all revealed field
   elements; **computational** (SHA-256 preimage) hiding for unopened Merkle
-  siblings. At fixed challenges every revealed value is an affine function
-  of `(randomizer bits, mask, g, witness)`; with the mask budgets of §4 the
-  witness-dependent directions lie inside the mask image, so transcripts of
-  any two witnesses for the same statement are identically distributed (up to
-  the statistical error of the budget margins, ~2^{-64} per the slack term).
+  siblings. At fixed challenges the revealed values split in two
+  (structure measured by `tests/zk_affinity_probe.rs`):
+  - **Affine classes** (everything except the zerocheck round pairs —
+    round-1 vectors are saved by the 128-bit region alignment; lincheck,
+    ring-switch, and all PCS values are F₂₁₂₈-linear in the committed
+    data): affine in `(randomizer bits, mask, g)` with witness-independent
+    linear part. With the budgets of §4 the witness-dependent offsets lie
+    inside the mask image; the masking theorem gives identical
+    distributions and an exact simulator.
+  - **Zerocheck round pairs** `(G(1), G(∞))`: bilinear across the two
+    randomizer species with witness-dependent linear coefficients — but
+    affine in `u_A` at any fixed `u_B` (no within-species cross terms:
+    A-rows only meet the constant-1 wire on the b̂-side). The mixture
+    masking theorem applies: constant full `u_A`-image plus coset coverage
+    across `(witness, u_B)` — both audited — give witness-independence of
+    the joint distribution by mixing over `u_B`.
+
+  Both up to the statistical error of the budget margins (~2^{-64} per the
+  slack term).
 - **Conditioning on public inputs is necessary, not a caveat:** the PCS
   opening *proves* `ẑ(point) = v`; the consistency equations genuinely
   determine `γ·v + c·y_g` from the revealed values. The audits therefore
@@ -123,7 +141,21 @@ catch an unwired or missing mask.
    the full 768-dim space. Full joint uniformity of all ~460 revealed values
    needs ≈59k probe runs and is not run in CI; k-wise uniformity catches any
    leaked or under-masked value in a sampled class. Negative control:
-   withholding the A-group must fail (it does).
+   withholding the A-group must fail (it does). Scope: mixed-species probes
+   make this a valid *uniformity* certificate for the affine classes only;
+   for the bilinear round-pair class it is a detector, and the valid
+   certificate is item 2b.
+2b. **Conditional PIOP certificate** — `flock-prover/tests/zk_affinity_probe.rs`
+   (`cargo test -p flock-prover --features zk --test zk_affinity_probe`).
+   First measures the affinity structure: the joint F₂ affinity defect and
+   the mask-map witness-dependence are confined to the zerocheck round
+   pairs; no within-species defects; at fixed `u_B` the transcript is
+   affine in `u_A` everywhere. Then the fixed-`u_B` rank certificate:
+   random `u_A` probes (genuinely affine deltas) reach full 768-dim rank on
+   per-class subsets **and** on a subset drawn entirely from the round-pair
+   class, at multiple `u_B` draws, with witness deltas and cross-`u_B`
+   offsets contained in the `u_A`-image — exactly the constant-image and
+   coset-coverage hypotheses of the mixture masking theorem.
 3. **Transcript differentials** — same statement, two DRBG seeds ⇒
    essentially every masked value changes (asserted ≥90%); zeroed masks ⇒
    byte-identical deterministic transcripts (the leak being closed).
@@ -177,19 +209,20 @@ zk mode costs, by construction: L0 commit ≈4× (message dim ×2, leaf width
 ×2), the opening's lane-fold phase ≈2× (doubled `F`/`b′`), one extra
 `(m+1)`-ladder step in the recursion, ~2× L0 opened-row bytes in the proof,
 a few percent on the PIOP phases (extended useful region), and the DRBG fill.
-Measured end-to-end (BLAKE3 batch, 8 threads, best of 3,
-`cargo bench --features zk --bench zk_vs_baseline`):
+Measured end-to-end (BLAKE3 batch, 8 threads, min of 5, idle machine,
+`ZKB_RUNS=5 cargo bench --features zk --bench zk_vs_baseline`):
 
 | batch | m | baseline prove | zk prove | prove × | verify × | proof size × |
 |---:|---:|---:|---:|---:|---:|---:|
-| 1,024 | 24 | 8.5 ms | 12.4 ms | 1.46 | 0.98 | 1.82 (288→525 KiB) |
-| 4,096 | 26 | 19.7 ms | 41.4 ms | 2.11 | 1.03 | 1.72 |
-| 16,384 | 28 | 70.9 ms | 155.3 ms | 2.19 | 1.02 | 1.65 |
+| 1,024 | 24 | 5.6 ms | 12.1 ms | 2.15 | 0.96 | 1.82 (288→524 KiB) |
+| 4,096 | 26 | 12.1 ms | 36.0 ms | 2.97 | 1.05 | 1.72 |
+| 16,384 | 28 | 34.1 ms | 130.1 ms | 3.82 | 1.00 | 1.64 |
 
-The ratio grows toward the commit-bound ~2–2.5× as m grows (the 4× L0
-commit is a larger fraction of the total). Future-work optimization: shrink
-the mask block below a full half (jagged-style basis gating) to cut the
-commit factor.
+Size and verify ratios are stable; prove times are load-sensitive. The
+ratio grows toward the 4× L0 commit factor as m grows (the commit is a
+larger fraction of the total). Future-work optimization: shrink the mask
+block below a full half (jagged-style basis gating) to cut the commit
+factor.
 
 ## 7. Future work
 

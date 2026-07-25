@@ -4,27 +4,33 @@
 //! Setup: a "masked identity" R1CS (m = 15, k_log = 12, 8 blocks) whose
 //! blocks carry a constant wire, free payload bits, genuine product rows (so
 //! the zerocheck cube is really quadratic in the payload), A-type randomizer
-//! rows `u·1 = u`, and B-type rows `1·u′ = u′`. A- and B-rows are disjoint
-//! and pointwise, so at **fixed challenges** (RandomChallenger ignores
-//! observations) the full prover transcript is **jointly affine over F₂** in
-//! the randomizer bits, with a payload-independent linear part:
+//! rows `u·1 = u`, and B-type rows `1·u′ = u′`. At **fixed challenges**
+//! (RandomChallenger ignores observations) the transcript's structure,
+//! measured by `zk_affinity_probe.rs`, is: every message class EXCEPT the
+//! zerocheck round pairs is jointly affine over F₂ in the randomizer bits
+//! with a payload-independent linear part, `transcript(w, u) = A·u + f(w)`;
+//! the round pairs are bilinear across the two species (folded â·b̂
+//! products create `u_A·u_B` cross terms once fold groups span a region
+//! boundary) and affine in `u_A` at any fixed `u_B`.
 //!
-//! ```text
-//!     transcript(w, u) = A·u + f(w)
-//! ```
-//!
-//! **What is certified.** Full joint uniformity of all ~460 revealed F128
-//! values would need rank ≈ 128·460 ≈ 59k — probing it exactly needs one
-//! prover run per randomizer bit (tens of thousands). The feasible-and-strong
-//! certificate used here is **k-wise joint uniformity**: for random subsets S
-//! of 6 revealed values (one per message class: round-1 vectors, round pairs,
+//! **What is certified here.** Full joint uniformity of all ~460 revealed
+//! F128 values would need rank ≈ 128·460 ≈ 59k — probing it exactly needs
+//! one prover run per randomizer bit (tens of thousands). The feasible
+//! certificate here is **k-wise joint uniformity**: for random subsets S of
+//! 6 revealed values (one per message class: round-1 vectors, round pairs,
 //! final evals, z_partial, both s_hat_v vectors), the restricted map
-//! `u ↦ transcript|_S` is surjective onto F₂^{768} — so those values are
-//! jointly uniform under the masks, and payload variation inside S is
-//! trivially covered. Any single leaked (or under-masked) value in a sampled
-//! class makes its 128-dim block rank-deficient and fails the assert. The
-//! restriction of one probe run serves every subset, so ~1.1k random-combo
-//! probes certify all classes at once.
+//! `u ↦ transcript|_S` is surjective onto F₂^{768}, and payload variation
+//! inside S is covered. For the **affine classes** full rank of the probe
+//! deltas is a valid uniformity inference (the masking theorem,
+//! `lean/Flockzk/Masking.lean`). For the bilinear round-pair class the
+//! probe deltas here mix both species, so span alone does not imply
+//! uniformity — the valid inference for that class is the conditional
+//! (fixed-`u_B`) certificate in `zk_affinity_probe.rs`, paired with the
+//! mixture masking theorem (`lean/Flockzk/MaskingMixture.lean`). Any single
+//! leaked (or under-masked) value in a sampled class still makes its
+//! 128-dim block rank-deficient and fails the assert, so this audit remains
+//! the broad-coverage detector; ~1.1k random-combo probes serve every
+//! subset at once.
 //!
 //! **Budget note.** Masking one revealed F128 needs ≥128 bits of randomizer
 //! entropy reaching it; the s_hat_v bit-slices additionally need ≥128 bits
