@@ -1,16 +1,31 @@
 # Formal proof that the zk-Flock masking design is zero-knowledge
 
-A Lean 4 + Mathlib development proving the two **masking theorems** behind
-Flock's `zk` mode. `Flockzk/Masking.lean`: if the prover's transcript is
-an affine function of uniform secret masks, and every witness-dependent
-direction (conditioned on the public inputs) lies inside the mask image,
-then the transcript distribution is witness-independent and exactly
-simulatable without the witness. `Flockzk/MaskingMixture.lean`: the
-conditional form needed for the zerocheck round pairs, which are bilinear
+A Lean 4 + Mathlib development of the **masking theorems** behind Flock's
+`zk` mode. `Flockzk/Masking.lean`: if the prover's transcript is an affine
+function of uniform secret masks, and every witness-dependent direction
+(conditioned on the public inputs) lies inside the mask image, then the
+transcript distribution is witness-independent and exactly simulatable
+without the witness.
+
+`Flockzk/MaskingSurjective.lean` (the amended protocol A1′, main line): the
+two facts that *discharge* the coverage hypothesis for A1′.
+`transcript_witness_indep_of_surjective` — a mask map that is **surjective**
+onto the value space needs no coset condition: the transcript is
+witness-independent for every witness pair (this is the zerocheck round-pair
+block under the degree-2 `γ·P·Q` channel, which the WS-0/A1′ certificate
+shows is surjective onto that block for a uniform `Q`).
+`mem_range_coprod` / `coprod_covers` — the ranges of two *independent* mask
+channels compose (sumset), so "`P·Q` covers the round pairs" + "existing
+masks cover the affine classes" gives full coverage of the joint map,
+feeding `transcript_witness_indep`. Together with `Masking.lean` these
+reduce the *entire amended transcript* to the single-map masking theorem.
+
+`Flockzk/MaskingMixture.lean` (fallback, unamended protocol): the
+conditional form for the zerocheck round pairs when they are left bilinear
 across the two randomizer species — for a family of affine maps indexed by
 `(witness, u_B)` with constant image and coset-covered offsets, the joint
-distribution over uniform `(u_A, u_B)` is witness-independent and exactly
-simulatable.
+distribution over uniform `(u_A, u_B)` is witness-independent. (Superseded
+on the main line by A1′, which makes the round pairs directly surjective.)
 
 ## The two-layer argument
 
