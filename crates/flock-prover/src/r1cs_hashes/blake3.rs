@@ -2366,6 +2366,117 @@ mod tests {
         }
     }
 
+    /// **Z10: end-to-end A1′ reference prover/verifier on a real BLAKE3 zk
+    /// statement.** Generates a real zk witness (with randomizer rows), runs
+    /// `prove_r1cs_zk_a1` (masked zerocheck â·b̂+γ·P·Q + hiding P,Q openings at
+    /// ρ + the hiding witness opening), and verifies through
+    /// `verify_r1cs_zk_a1`. Confirms the full amended pipeline produces an
+    /// accepting proof; fresh masks give a different transcript that still
+    /// verifies; tampering `P(ρ)`, `σ_z`, or a masked round message is
+    /// rejected.
+    #[test]
+    #[ignore = "e2e A1′ reference prover (256-block BLAKE3)"]
+    fn prove_verify_r1cs_zk_a1_roundtrip() {
+        use flock_core::challenger::FsChallenger;
+        let setup = Blake3Setup::with_zk(256);
+        let layout = setup.r1cs.zk.unwrap();
+        let mut rng = Rng::new(0xA1E2E);
+        let blocks: Vec<Compression> = (0..256)
+            .map(|_| {
+                let cv: [u32; 8] = std::array::from_fn(|_| rng.next_u32());
+                let m: [u32; 16] = std::array::from_fn(|_| rng.next_u32());
+                (cv, m, 0u64, 64u32, 11u32)
+            })
+            .collect();
+        let lc_circuit = setup.r1cs.csc_lincheck_circuit();
+
+        let prove = |seed: [u8; 32]| {
+            let n_total = setup.n_block_slots();
+            let mut wr = flock_core::zk::ZkRng::from_seed(seed);
+            let mut rand_words =
+                vec![0u64; n_total * super::super::common::zk_rand_words_per_block(&layout)];
+            flock_core::zk::MaskSampler::fill_u64s(&mut wr, &mut rand_words);
+            let (z_packed, a_f128, b_f128, stripe) =
+                generate_witness_with_ab_packed_and_lincheck_zk(
+                    &blocks,
+                    setup.n_blocks_log(),
+                    &layout,
+                    &rand_words,
+                );
+            let mut zk_rng = flock_core::zk::ZkRng::from_seed(seed);
+            let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
+            crate::prover::prove_r1cs_zk_a1(
+                &setup.r1cs,
+                &setup.pcs_params,
+                z_packed,
+                a_f128,
+                b_f128,
+                stripe,
+                lc_circuit,
+                &mut zk_rng,
+                &mut ch,
+            )
+        };
+
+        let (proof, comm) = prove([1u8; 32]);
+        let mut chv = FsChallenger::new(b"flock-a1-e2e-v0");
+        crate::prover::verify_r1cs_zk_a1(
+            &setup.r1cs,
+            &setup.pcs_params,
+            &proof,
+            &comm,
+            lc_circuit,
+            &mut chv,
+        )
+        .expect("A1′ e2e proof must verify");
+
+        // Fresh masks ⇒ different transcript, still verifies.
+        let (proof2, comm2) = prove([2u8; 32]);
+        let mut chv2 = FsChallenger::new(b"flock-a1-e2e-v0");
+        crate::prover::verify_r1cs_zk_a1(
+            &setup.r1cs,
+            &setup.pcs_params,
+            &proof2,
+            &comm2,
+            lc_circuit,
+            &mut chv2,
+        )
+        .expect("fresh-mask A1′ proof must verify");
+        assert_ne!(comm.root, comm2.root, "fresh witness mask ⇒ fresh root");
+        assert_ne!(
+            proof.zerocheck.final_p_eval, proof2.zerocheck.final_p_eval,
+            "fresh P ⇒ different P(ρ)"
+        );
+
+        // Tamper rejection.
+        for t in 0..3 {
+            let mut bad = crate::prover::R1csProofZkA1 {
+                zerocheck: proof.zerocheck.clone(),
+                lincheck: proof.lincheck.clone(),
+                pcs_open: proof.pcs_open.clone(),
+                ab: proof.ab.clone(),
+                c: proof.c.clone(),
+                open_p: proof.open_p.clone(),
+                open_q: proof.open_q.clone(),
+                comm_p: proof.comm_p.clone(),
+                comm_q: proof.comm_q.clone(),
+            };
+            match t {
+                0 => bad.zerocheck.final_p_eval.lo ^= 1,
+                1 => bad.zerocheck.mask_init.lo ^= 1,
+                _ => bad.zerocheck.multilinear_rounds[2].1.lo ^= 1,
+            }
+            let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
+            assert!(
+                crate::prover::verify_r1cs_zk_a1(
+                    &setup.r1cs, &setup.pcs_params, &bad, &comm, lc_circuit, &mut ch
+                )
+                .is_err(),
+                "A1′ tamper {t} must be rejected"
+            );
+        }
+    }
+
     /// Generic (matrix-driven) Ligerito prove produces a byte-identical
     /// proof to the specialized `prove_fast` — pins that the generic path
     /// (bool trace → pack → apply → prove) and the fused path agree.
