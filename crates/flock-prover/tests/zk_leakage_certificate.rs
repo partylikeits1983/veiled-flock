@@ -395,6 +395,201 @@ fn mask_round_pairs(p_bits: &[bool], q_bits: &[bool]) -> Vec<F128> {
     out
 }
 
+/// Like `mask_round_pairs`, but also returns the opened evaluation `P(ρ)`
+/// (= the mask sumcheck's `final_a_eval`), which the final check reveals and
+/// which therefore is part of the joint P-dependent transcript.
+fn mask_round_pairs_and_p_rho(p_bits: &[bool], q_bits: &[bool]) -> (Vec<F128>, F128) {
+    let mut zp = vec![false; 1 << M];
+    zp.copy_from_slice(p_bits);
+    let mut zq = vec![false; 1 << M];
+    zq.copy_from_slice(q_bits);
+    let p_packed = pcs::pack_witness(&zp, M);
+    let q_packed = pcs::pack_witness(&zq, M);
+    let zero_c = pcs::pack_witness(&vec![false; 1 << M], M);
+    let cast = |v: &[F128]| -> &[u8] {
+        unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
+    };
+    let mut ch = RandomChallenger::new(CH_SEED);
+    let (proof, claim) = zerocheck::prove_packed_padded(
+        cast(&p_packed),
+        cast(&q_packed),
+        cast(&zero_c),
+        M,
+        &PaddingSpec::dense(M),
+        &mut ch,
+    );
+    let mut out = Vec::with_capacity(ROUND_PAIR_VALUES);
+    for (m1, minf) in &proof.multilinear_rounds {
+        out.push(*m1);
+        out.push(*minf);
+    }
+    (out, claim.a_eval) // claim.a_eval = P(ρ)
+}
+
+/// CONDITIONAL FULL-TRANSCRIPT COVERAGE (the reviewer's `d ∈ R(ker L)` test).
+///
+/// The same mask `P` appears in the round messages (via `M_j`) AND in the
+/// opened evaluation `P(ρ)`. Marginal surjectivity of `P ↦ round-pairs` is
+/// therefore insufficient — revealing `P(ρ)` constrains `P`. The correct
+/// condition is that the round-map image *restricted to the kernel of the
+/// leakage map* `L = {P(ρ)}` still covers the witness directions:
+///     R(ker L) ⊇ (witness-difference directions).
+///
+/// This experiment measures `dim R(ker L)` exactly. Interpretation:
+///   - dim R(ker L) = 2304 (full): revealing P(ρ) removes nothing — A1′ hides
+///     the round pairs jointly, no augmentation needed.
+///   - dim R(ker L) = 2176 (one F128 lost): P(ρ) is a linear consequence of
+///     the round messages (the sumcheck telescoping), so exactly one direction
+///     is un-coverable while holding P(ρ)=0. It must then be checked whether
+///     that lost direction is the PUBLIC CLAIM direction (which we condition
+///     on) or an extra witness functional (a real leak requiring a fix).
+#[test]
+fn conditional_coverage_p_rho() {
+    let mut rng = Rng(0xC0AA1);
+    let n = 1 << M;
+    let q = rng.bits(n);
+
+    // Round map R (P → 18 F128 round pairs) and leakage map L (P → P(ρ)),
+    // extracted by unit-probing P at fixed Q. Base P=0 gives 0 (bilinear,
+    // linear in P), so columns are the probe values directly.
+    let mut r_only = F2Space::default();
+    let mut r_stacked_l = F2Space::default(); // rows of R with P(ρ) appended
+    let mut l_only = F2Space::default();
+    let round_full = ROUND_PAIR_VALUES * 128;
+
+    for i in 0..n {
+        let (pairs, p_rho) = mask_round_pairs_and_p_rho(&unit(n, i), &q);
+        let mut rvec = flatten(&pairs); // 2304 bits
+        r_only.insert(rvec.clone());
+        // stacked [R | L]: append P(ρ)'s 128 bits
+        rvec.push(p_rho.lo);
+        rvec.push(p_rho.hi);
+        r_stacked_l.insert(rvec);
+        l_only.insert(vec![p_rho.lo, p_rho.hi]);
+    }
+
+    let rank_r = r_only.rank();
+    let rank_l = l_only.rank();
+    let rank_rl = r_stacked_l.rank();
+    // dim R(ker L) = rank[R;L] − rank[L].
+    let dim_r_ker_l = rank_rl - rank_l;
+
+    println!("rank(R) = {rank_r} / {round_full}");
+    println!("rank(L=P(ρ)) = {rank_l} / 128");
+    println!("rank([R;L]) = {rank_rl}");
+    println!("dim R(ker L) = {dim_r_ker_l}  (full round space = {round_full})");
+    println!(
+        "conditioning on P(ρ) removes {} F128 direction(s) from round coverage",
+        (round_full - dim_r_ker_l) / 128
+    );
+
+    assert_eq!(rank_r, round_full, "sanity: R is marginally surjective");
+
+    // Is the lost direction the PUBLIC ab-claim (conditioned out) or an extra
+    // witness functional (a real leak)? Measure the witness-difference
+    // directions on the round messages (vary the payload in the MAIN prover),
+    // reduce each modulo R(ker L), and rank the residuals + the claim change.
+    //   - If residuals span ≤ 1 F128 AND collapse to 0 once Δ(ab-claim) is
+    //     included, the lost direction IS the claim ⇒ no net leak beyond what
+    //     the opening already reveals.
+    let r1cs = masked_r1cs();
+    let ua0 = vec![false; A_BITS];
+    let ub0 = vec![false; B_BITS];
+    // Basis of R(ker L): R applied to a basis of ker L. Rebuild it explicitly.
+    let mut rkerl = F2Space::default();
+    {
+        // ker L over the probe index space is spanned by pairs e_i ⊕ e_j whose
+        // P(ρ) columns cancel; simplest exact route: collect (round, p_rho)
+        // columns, then any P-direction with p_rho-part 0 maps into R(ker L).
+        // Reconstruct by Gaussian elimination on [p_rho | round] and reading
+        // rows with zero p_rho part.
+        let mut cols: Vec<(Vec<u64>, Vec<u64>)> = Vec::new(); // (p_rho 2w, round 36w)
+        for i in 0..n {
+            let (pairs, p_rho) = mask_round_pairs_and_p_rho(&unit(n, i), &q);
+            cols.push((vec![p_rho.lo, p_rho.hi], flatten(&pairs)));
+        }
+        // Eliminate on the p_rho part; combinations that zero p_rho give R(ker L).
+        // Track the round part alongside.
+        let mut basis: Vec<(Vec<u64>, Vec<u64>)> = Vec::new();
+        let mut piv: Vec<usize> = Vec::new();
+        for (mut pr, mut rd) in cols {
+            for (bp, &p) in basis.iter().zip(&piv) {
+                let (w, m) = (p / 64, 1u64 << (p % 64));
+                if pr[w] & m != 0 {
+                    for k in 0..2 { pr[k] ^= bp.0[k]; }
+                    for k in 0..rd.len() { rd[k] ^= bp.1[k]; }
+                }
+            }
+            if let Some(p) = first_set_bit(&pr) {
+                basis.push((pr, rd));
+                piv.push(p);
+            } else {
+                // p_rho eliminated to 0 ⇒ this round vector ∈ R(ker L).
+                rkerl.insert(rd);
+            }
+        }
+    }
+    println!("dim R(ker L) rebuilt = {}", rkerl.rank());
+
+    // Witness-difference round vectors from payload variation.
+    let cast = |v: &[F128]| -> &[u8] {
+        unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
+    };
+    let padding = r1cs.padding_spec();
+    let main_round = |p: &[bool]| -> (Vec<F128>, F128) {
+        let z = witness(p, &ua0, &ub0);
+        let a = r1cs.apply_a_packed(&z);
+        let b = r1cs.apply_b_packed(&z);
+        let (proof, claim) = zerocheck::prove_packed_padded(
+            cast(&a), cast(&b), cast(&z), M, &padding, &mut RandomChallenger::new(CH_SEED),
+        );
+        let mut out = Vec::new();
+        for (m1, mi) in &proof.multilinear_rounds { out.push(*m1); out.push(*mi); }
+        (out, claim.a_eval * claim.b_eval) // round pairs, ab-claim value
+    };
+    let mut rprng = Rng(0xD1FF3);
+    let p0 = rprng.bits(N_PAYLOAD * BLOCKS);
+    let (g0, v0) = main_round(&p0);
+
+    // Residuals of witness diffs mod R(ker L), and the corresponding claim change.
+    let mut residual_space = F2Space::default();
+    let mut residual_and_claim = F2Space::default(); // [residual(2304) | Δv_ab(128)]
+    let mut claim_space = F2Space::default();
+    for _ in 0..40 {
+        let p = rprng.bits(N_PAYLOAD * BLOCKS);
+        let (g, v) = main_round(&p);
+        let d: Vec<F128> = g.iter().zip(&g0).map(|(a, b)| *a + *b).collect();
+        let residual = rkerl.reduce(flatten(&d));
+        residual_space.insert(residual.clone());
+        let dv = v + v0;
+        claim_space.insert(vec![dv.lo, dv.hi]);
+        let mut both = residual;
+        both.push(dv.lo);
+        both.push(dv.hi);
+        residual_and_claim.insert(both);
+    }
+    let rank_resid = residual_space.rank();
+    let rank_claim = claim_space.rank();
+    let rank_both = residual_and_claim.rank();
+    println!("rank(witness-diff residuals mod R(ker L)) = {rank_resid}");
+    println!("rank(Δ ab-claim) = {rank_claim}");
+    println!("rank([residual | Δclaim]) = {rank_both}  (= rank(Δclaim) ⟺ residual determined by the claim)");
+
+    // The decisive check: the residuals (the part of the witness difference NOT
+    // covered by the round-mask after conditioning on P(ρ)) are ENTIRELY
+    // explained by the change in the public ab-claim — i.e. no witness
+    // direction that preserves the claim escapes R(ker L). Then conditioning on
+    // the claim (which the opening reveals anyway) restores full coverage.
+    assert_eq!(
+        rank_both, rank_claim,
+        "LEAK: witness-diff residual mod R(ker L) is NOT determined by the ab-claim \
+         — a claim-preserving witness direction escapes the joint mask image"
+    );
+    assert!(rank_resid <= 128, "residuals should live in one F128 (the claim direction)");
+    println!("VERDICT: the only round direction P(ρ) un-covers is the public ab-claim; \
+              conditioning on the claim gives full joint coverage.");
+}
+
 /// Verifier's multilinear telescoping (mirrors `zerocheck::verify`): given the
 /// initial running claim and the round pairs `(G(1),G(∞))`, propagate the
 /// running claim through all rounds. `r_eq[i]` is the eq weight of round i
