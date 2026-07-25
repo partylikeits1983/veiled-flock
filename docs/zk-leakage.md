@@ -90,7 +90,7 @@ distribution witness-independent.
 | L7a | `s_hat_v` (128 F128 per RS claim) | `ring_switch.rs:2222` | randomizer rows (needs ≥128 bits per bit-residue — see §4) |
 | L7b | Ligerito opened rows, all levels | `RecursiveProof.opened_rows` | low-half mask (L0 f′ rows) + blinder `g` (all levels) |
 | L7c | PCS sumcheck `(u_0,u_2)`; final `yr` | `sumcheck_transcript`, `FinalProof.yr` | blinder `g` (via the `c`-combination) |
-| L7d | Unopened Merkle siblings | `merkle.rs` | computational: every L0 leaf carries ≥8 KiB of fresh `g` entropy; deeper leaves are rows of `g`-blinded folds (no leaf salting — see §5) |
+| L7d | Unopened Merkle siblings | `merkle.rs` | computational: every L0 leaf carries ≥8192 **bits** (1 KiB) of fresh `g` entropy; deeper leaves are rows of `g`-blinded folds (no leaf salting — see §5) |
 | — | `y_g` | `BatchOpeningProofLigerito.zk_blind` | uniform by construction (linear in `g`) |
 
 Public, no treatment: statement digest (includes the zk layout), batch size,
@@ -117,19 +117,20 @@ values *as constrained quantities* (see §3).
   - **Zerocheck round pairs** `(G(1), G(∞))`: bilinear across the two
     randomizer species with witness-dependent linear coefficients — but
     affine in `u_A` at any fixed `u_B` (no within-species cross terms:
-    A-rows only meet the constant-1 wire on the b̂-side). *Superseded by
+    A-rows only meet the constant-1 wire on the b̂-side). *Addressed by
     amendment A1′* (`zk-proof.md` §5): a degree-2 committed mask channel
-    `γ·P·Q` (two witness-free full-support random multilinears) makes this
-    class **surjectively** masked — `G(∞)`, the degree-2 leading
-    coefficient no degree-1 mask can reach, included — so it too reduces to
-    the single-map masking theorem. The mixture argument below is retained
-    only as the fallback for the un-amended protocol; note the exact
-    certificate found that its `h_coset` hypothesis is false for the full
-    transcript (the b̂-side final evaluation has an identically-zero
-    `u_A`-derivative), which A1′ avoids.
-
-  Both up to the statistical error of the budget margins (~2^{-64} per the
-  slack term).
+    `γ·P·Q` (two witness-free full-support random multilinears) reaches
+    `G(∞)` — the degree-2 leading coefficient no degree-1 mask can touch.
+    The load-bearing hiding condition is **conditional**, not marginal
+    surjectivity: the same `P` is revealed through `P(ρ)`, `σ_z`, and its
+    opening-internal values, so the required statement is coverage on the
+    kernel of those leaked functionals ((★′) in `zk-proof.md` §5), composed
+    with the affine classes by the *triangular* argument of `zk-proof.md`
+    §4 — **not** the coproduct lemma, whose additivity hypothesis the
+    randomizer channel violates on this class. The mixture argument below
+    is retained only as a stepping stone; the exact certificate found its
+    `h_coset` hypothesis is false for the full transcript (the b̂-side
+    final evaluation has an identically-zero `u_A`-derivative).
 - **Conditioning on public inputs is necessary, not a caveat:** the PCS
   opening *proves* `ẑ(point) = v`; the consistency equations genuinely
   determine `γ·v + c·y_g` from the revealed values. The audits therefore
@@ -169,8 +170,12 @@ catch an unwired or missing mask.
    random `u_A` probes (genuinely affine deltas) reach full 768-dim rank on
    per-class subsets **and** on a subset drawn entirely from the round-pair
    class, at multiple `u_B` draws, with witness deltas and cross-`u_B`
-   offsets contained in the `u_A`-image — exactly the constant-image and
-   coset-coverage hypotheses of the mixture masking theorem.
+   offsets contained in the `u_A`-image. **Caveat:** these were built as the
+   mixture theorem's hypotheses, and the coset half is *disproved on the
+   full transcript* (`final_b_breaks_full_mixture_hcoset` — the 6-value
+   subsets simply never sampled `final_b_eval`). The within-slice image
+   measurements survive as evidence for the triangular argument's inner
+   stage; the cross-`u_B` coset claim does not.
 3. **Transcript differentials** — same statement, two DRBG seeds ⇒
    essentially every masked value changes (asserted ≥90%); zeroed masks ⇒
    byte-identical deterministic transcripts (the leak being closed).
@@ -194,9 +199,12 @@ catch an unwired or missing mask.
    maps indexed by `(witness, u_B)` with constant image and coset-covered
    offsets, the joint distribution over uniform `(u_A, u_B)` is
    witness-independent and exactly simulatable
-   (`mixture_witness_indep`, `pmf_mixture_*`). Item 2 checks the first
-   theorem's hypotheses, item 2b the second's; see `lean/README.md` for
-   the two-layer argument and its limits.
+   (`mixture_witness_indep`, `pmf_mixture_*`) — **but its coset hypothesis
+   is disproved on the full transcript** (see item 2b's caveat); the
+   replacement is the triangular composition lemma
+   (`MaskingTriangular.lean`, `zk-proof.md` §4). Item 2 checks the first
+   theorem's hypotheses; see `lean/README.md` for the two-layer argument
+   and its limits.
 
 **Budget rules** (`ZkConfig::sized_for` errs high; the audits are ground
 truth): masking one revealed F128 needs ≥128 bits of randomizer entropy

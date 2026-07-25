@@ -7,25 +7,34 @@ function of uniform secret masks, and every witness-dependent direction
 transcript distribution is witness-independent and exactly simulatable
 without the witness.
 
-`Flockzk/MaskingSurjective.lean` (the amended protocol A1′, main line): the
-two facts that *discharge* the coverage hypothesis for A1′.
+`Flockzk/MaskingSurjective.lean` (the amended protocol A1′):
 `transcript_witness_indep_of_surjective` — a mask map that is **surjective**
 onto the value space needs no coset condition: the transcript is
-witness-independent for every witness pair (this is the zerocheck round-pair
-block under the degree-2 `γ·P·Q` channel, which the WS-0/A1′ certificate
-shows is surjective onto that block for a uniform `Q`).
-`mem_range_coprod` / `coprod_covers` — the ranges of two *independent* mask
-channels compose (sumset), so "`P·Q` covers the round pairs" + "existing
-masks cover the affine classes" gives full coverage of the joint map,
-feeding `transcript_witness_indep`. Together with `Masking.lean` these
-reduce the *entire amended transcript* to the single-map masking theorem.
+witness-independent for every witness pair. This applies to the zerocheck
+round-pair block under the degree-2 `γ·P·Q` channel **only in its
+conditional form**: the load-bearing hypothesis is coverage on the kernel of
+the leaked `P`-functionals (`P(ρ)`, `σ_z`, opening-internal values), a Rust
+measurement (★′ in `docs/zk-proof.md` §5), not a Lean fact.
+`mem_range_coprod` / `coprod_covers` — the ranges of two *independent
+additive* mask channels compose (sumset). **Correction:** an earlier revision
+used `coprod_covers` to compose the existing-mask channel with the `P·Q`
+channel and concluded the entire amended transcript reduces to the single-map
+theorem. That instantiation is invalid — the existing-mask channel is
+*bilinear* (not additive) on the round-pair coordinates
+(`zk_affinity_probe.rs` certifies the nonzero cross-species defect), so
+`coprod_covers`'s hypothesis fails on exactly the class it was needed for.
+The valid composition is triangular/conditional; the corresponding lemma
+(`MaskingTriangular.lean`) is the replacement — see `docs/zk-proof.md` §4.
 
-`Flockzk/MaskingMixture.lean` (fallback, unamended protocol): the
-conditional form for the zerocheck round pairs when they are left bilinear
-across the two randomizer species — for a family of affine maps indexed by
-`(witness, u_B)` with constant image and coset-covered offsets, the joint
-distribution over uniform `(u_A, u_B)` is witness-independent. (Superseded
-on the main line by A1′, which makes the round pairs directly surjective.)
+`Flockzk/MaskingMixture.lean` (historical stepping stone): the conditional
+form for the zerocheck round pairs when they are left bilinear across the two
+randomizer species — for a family of affine maps indexed by `(witness, u_B)`
+with constant image and coset-covered offsets, the joint distribution over
+uniform `(u_A, u_B)` is witness-independent. **Its `h_coset` hypothesis is
+disproved on the full transcript** (`final_b_breaks_full_mixture_hcoset`:
+`final_b_eval` has an identically-zero `u_A`-derivative but varies with
+`u_B`), so this theorem does not apply as-is; it is retained only as a
+stepping stone toward the triangular argument.
 
 ## The two-layer argument
 
@@ -54,8 +63,9 @@ theorem and machine-checked hypotheses:
    No `sorry`; the proofs depend only on Lean's standard axioms
    (`propext`, `Classical.choice`, `Quot.sound`).
 
-2. **The Rust rank audits (checked per instance, in CI)** verify exactly
-   those hypotheses on the real prover at fixed challenges:
+2. **The Rust rank audits** (re-runnable locally; CI integration is being
+   added — as of this revision no CI job compiles or runs the `zk` feature)
+   verify hypotheses on the real prover at fixed challenges:
    - *PCS layer* (`crates/flock-core/src/pcs/zk_audit.rs`): unit-probe
      differencing extracts the mask map, and Gaussian elimination checks
      that witness-difference directions, restricted to the kernel of the
@@ -70,10 +80,13 @@ theorem and machine-checked hypotheses:
    - *PIOP layer, zerocheck round pairs*
      (`crates/flock-prover/tests/zk_affinity_probe.rs`): measures that
      the joint-affinity defect is confined to the round pairs and absent
-     at fixed `u_B`, then checks the mixture theorem's hypotheses —
-     full constant `u_A`-image (per-class and pure round-pair subsets,
-     several `u_B` draws) and coset coverage of both witness deltas and
-     cross-`u_B` offsets.
+     at fixed `u_B`. **Caveat:** its second test was built to check the
+     mixture theorem's hypotheses on 6-value subsets, and passed only
+     because those subsets never sampled `final_b_eval` — the coordinate
+     on which the hypothesis is disproved
+     (`final_b_breaks_full_mixture_hcoset`). Its within-slice image
+     measurements survive as evidence for the triangular argument's
+     inner-stage hypotheses; the cross-`u_B` coset claim does not.
 
    Negative controls (withholding the blinder `g`, withholding the A-type
    randomizer group) make the audits fail, demonstrating the checks are
