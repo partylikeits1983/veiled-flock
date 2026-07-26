@@ -27,7 +27,7 @@ use flock_core::r1cs::BlockR1cs;
 /// lincheck mask channel): the wire format gained `comm_s`, `open_s`,
 /// `sigma_lc` and `s_eval`, and the lincheck transcript changed meaning, so
 /// an A1′-only certificate must not certify this protocol.
-pub const PROTOCOL_VERSION: &str = "flock-zk-a1a2-v1";
+pub const PROTOCOL_VERSION: &str = "flock-zk-a1a2a3-v1";
 
 /// Field representation the certificates were computed over.
 pub const FIELD_REPR: &str = "gf2_128_ghash";
@@ -131,6 +131,9 @@ const EVIDENCE_V1: &[&str] = &[
     "production_checked_prove_verifies",
     "blake3_witness_has_no_linear_difference_family",
     "l3_round1_region_alignment_holds",
+    "blake3_witness_difference_lies_in_the_mask_image",
+    "control_same_procedure_on_the_passing_fixture",
+    "prove_verify_zk_round1_mask_roundtrip",
 ];
 
 /// The certified configurations. **One entry today**: the 256-block BLAKE3
