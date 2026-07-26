@@ -187,7 +187,7 @@ fn run(
 /// lincheck classes — the PIOP layer. Restricting to them keeps the image
 /// saturable at this size: membership is decided against a *spanned* space,
 /// which is what makes a negative result meaningful.
-fn piop_coords_and_paths(setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::ligerito::ProverConfig, blocks: &[Compression], rand: &[u64], p: &[u64], q: &[u64], cw: &[F128], cp: &[F128], cq: &[F128]) -> (Vec<usize>, Vec<(&'static str, std::ops::Range<usize>)>) {
+fn coords_and_paths(class_filter: &dyn Fn(&str) -> bool, setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::ligerito::ProverConfig, blocks: &[Compression], rand: &[u64], p: &[u64], q: &[u64], cw: &[F128], cp: &[F128], cq: &[F128]) -> (Vec<usize>, Vec<(&'static str, std::ops::Range<usize>)>) {
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
         flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk(
@@ -212,7 +212,7 @@ fn piop_coords_and_paths(setup: &Blake3Setup, params: &PcsParams, lig: &flock_co
     let mut out = Vec::new();
     let mut paths = Vec::new();
     for (path, range) in idx.ranges_by_class(&flat, LeakageClass::WitnessDependent) {
-        if path.starts_with("zerocheck.") || path.starts_with("lincheck.") {
+        if class_filter(path) {
             let start = out.len();
             out.extend(range);
             paths.push((path, start..out.len()));
@@ -260,6 +260,28 @@ fn piop_coords_and_paths(setup: &Blake3Setup, params: &PcsParams, lig: &flock_co
 /// on the real statement family — which would be a finding of the form the
 /// task's decision label C describes, not label A.
 ///
+/// **LOCALIZED TO THE LINCHECK LAYER.** Isolating classes
+/// (`ZK_BLAKE3_CLASSES`) settles where it lives:
+///
+/// * `zerocheck.round1_c` alone — image spans 8192 of 8192 bits, criterion
+///   PASSES. The zerocheck round-1 class is fully covered.
+/// * `lincheck.*` alone — image spans 9728 of 10240 bits and the criterion
+///   FAILS by the same 128 bits, on `lincheck.rounds` and `lincheck.z_partial`.
+///
+/// So the A1′ amendment does its job: the classes it targets are covered.
+/// The uncovered direction is in the **lincheck**, which no mask channel
+/// touches — it is covered only by the randomizer rows. On the synthetic
+/// fixture the witness is ~81% randomizer and that suffices; on a real
+/// BLAKE3 statement the randomizer rows are ~5.5% of the witness and it does
+/// not. This is an undocumented sizing/coverage constraint on the lincheck
+/// layer, distinct from the `s_hat_v` per-bit-residue rule.
+///
+/// Proposed repair (not implemented here — it is a change to the
+/// construction): extend a committed mask channel to the lincheck sumcheck,
+/// as A1′ did for the zerocheck round messages, or establish and enforce a
+/// lincheck-layer randomizer sizing rule the way the `s_hat_v` rule is
+/// enforced. Which of the two is right is a design decision.
+///
 /// The escaping direction is **localized**: residual attribution puts it on
 /// `zerocheck.round1_c`, `lincheck.rounds` and `lincheck.z_partial` — the
 /// C-side/witness-side coordinates — and not on the round pairs or the final
@@ -298,7 +320,16 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         run(&setup, &params, &lig, blocks, rand, p, q_words.as_slice(), cw, cp, &cq)
     };
 
-    let (coords, coord_paths) = piop_coords_and_paths(&setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
+    // ZK_BLAKE3_CLASSES selects which coordinate classes are under test, so
+    // a single class can be isolated to localize an escaping direction.
+    let only = std::env::var("ZK_BLAKE3_CLASSES").unwrap_or_else(|_| "piop".into());
+    let class_filter = move |path: &str| match only.as_str() {
+        "round1_c" => path == "zerocheck.round1_c",
+        "round1" => path.starts_with("zerocheck.round1"),
+        "lincheck" => path.starts_with("lincheck."),
+        _ => path.starts_with("zerocheck.") || path.starts_with("lincheck."),
+    };
+    let (coords, coord_paths) = coords_and_paths(&class_filter, &setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
     let proj = |v: &[F128]| -> Vec<u64> { flatten(&coords.iter().map(|&i| v[i]).collect::<Vec<_>>()) };
     let base = proj(&go(&base_rand, &p_words, &cw, &cp, &blocks_a));
     let dim = base.len() * 64;
