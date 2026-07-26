@@ -701,7 +701,13 @@ the randomizer rows. On the synthetic fixture the witness is some $81\%$
 randomizer and that suffices; on a real BLAKE3 statement the randomizer rows
 are about $5.5\%$ of the witness and it does not. That is a coverage
 constraint on the lincheck layer, distinct from the $\shatv$
-per-bit-residue rule and not previously documented. Of the two candidate repairs, the sizing one is \emph{ruled out}:
+per-bit-residue rule and not previously documented. Two candidate explanations have since been eliminated by measurement. The
+conditioning one: the zerocheck's $\hat a(\rho)$ and $\hat b(\rho)$ are
+transcript values the verifier consumes to form the lincheck's target, so
+adding both to the claim set (saturating at $5\times128$ bits over 768 real
+witness pairs) tests whether the escape is simply an unconditioned public
+value --- it left the result unchanged. And of the two candidate repairs, the
+sizing one is \emph{ruled out}:
 reallocating the block's randomizer budget to $2.3\times$ the entropy in the
 covering species (4 A-chunks and 3 B-chunks in place of $2+1$, spending the
 chain-mask reservation batch statements do not use) left the measured image

@@ -421,7 +421,9 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     // FAILURE could implicate a combination that corresponds to no real
     // witness pair. So this test can certify, and its negative direction is
     // merely conservative.
-    let n_pairs = 512usize;
+    // > 5*128 = 640 bits of claim space, so claim-preserving combinations are
+    // forced to exist and the criterion can bite.
+    let n_pairs = 768usize;
     let base_claims = claims_of(&setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
     let mut claim_space = F2Space::default();
     let mut resid_and_claim = F2Space::default();
@@ -450,7 +452,7 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     );
     assert_eq!(
         claim_space.rank(),
-        3 * 128,
+        5 * 128,
         "VACUOUS: the Δclaim space did not saturate, so no claim-preserving \
          combination is forced to exist and the criterion cannot bite"
     );
@@ -494,7 +496,7 @@ fn claims_of(
     cw: &[F128],
     cp: &[F128],
     cq: &[F128],
-) -> [F128; 3] {
+) -> [F128; 5] {
     use flock_core::{lincheck, zerocheck};
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
@@ -523,7 +525,10 @@ fn claims_of(
         zc.a_eval, zc.b_eval, &proof.lincheck, &mut chv,
     )
     .expect("honest");
-    [zc.a_eval * zc.b_eval, lc.w, zc.c_eval]
+    // a_eval and b_eval are transcript values the verifier consumes to form
+    // the lincheck's target, so the lincheck transcript is conditioned on them
+    // whether or not they are listed as "claims".
+    [zc.a_eval * zc.b_eval, lc.w, zc.c_eval, zc.a_eval, zc.b_eval]
 }
 
 /// **Methodological control: the same procedure, on the fixture that passes.**

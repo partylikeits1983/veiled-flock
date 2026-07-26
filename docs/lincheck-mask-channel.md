@@ -43,12 +43,12 @@ One F128 direction of *claim-preserving* witness difference is uncovered, on
 Why the fixture passes and BLAKE3 does not: the fixture's witness is ~81%
 randomizer rows, a real BLAKE3 witness ~5.5%. Both results are correct.
 
-## A hypothesis to test before building anything
+## The conditioning hypothesis — tested and REFUTED
 
 The deficit is **512 bits = exactly 4 field elements**, and it stayed at 4
-under a 2.3× change in randomizer entropy. That constancy suggests it is not a
-coverage shortfall at all but the dimension of the *algebraic dependencies*
-the lincheck transcript satisfies by construction:
+under a 2.3× change in randomizer entropy. That constancy suggested it might
+not be a coverage shortfall at all but the dimension of the *algebraic
+dependencies* the lincheck transcript satisfies by construction:
 
 - the sumcheck's running claim telescopes, so the round messages are tied to
   the initial target — which is itself fixed by the zerocheck's `a_eval` and
@@ -57,17 +57,23 @@ the lincheck transcript satisfies by construction:
   linking the rounds to `z_partial`;
 - the constant-wire pin contributes a further fixed shift.
 
-If those dependencies account for all 4 dimensions, then the mask image is
-*correctly* smaller than the ambient space and the witness differences lie in
-the same constrained subspace — in which case the escaping 128 bits are a
-**conditioning** failure (a transcript-determined value not yet in the claim
-set) rather than a masking failure, and A2 would be the wrong repair.
+If those accounted for the deficit, the escaping 128 bits would be a
+**conditioning** failure — a transcript-determined value missing from the
+claim set — rather than a masking failure, and the cheap fix would be to
+condition on it.
 
-**Check this first.** Enumerate the public algebraic relations the lincheck
-transcript satisfies, verify they span exactly 4 field dimensions, and test
-whether the escaping direction lies inside that span. If it does, the fix is
-to condition on the missing value — cheap, and no change to the construction.
-Only if it does not is a mask channel warranted.
+**This was tested.** The zerocheck's `a_eval` and `b_eval` are exactly such
+values: the verifier consumes them to form the lincheck's target, so the
+lincheck transcript is conditioned on them whether or not they are called
+claims. Adding both to the claim set (saturating at 5 × 128 = 640 bits over
+768 real witness pairs) left the result **unchanged**: same image rank
+9728/10240, same 128 bits escaping, same attribution.
+
+So the cheap fix is ruled out too. Every conditioning value the verifier
+demonstrably learns at this layer is already accounted for, and the direction
+still escapes. That is what makes a mask channel the remaining candidate —
+and it is also what would make a *genuine leak* the alternative, which is why
+the checks below matter more than the construction.
 
 ## The construction
 
