@@ -399,6 +399,44 @@ inner image and require the residual to be affine in the outer masks with a
 witness-independent linear part, with claim-equal witnesses' residues differing
 inside the outer image.
 
+\paragraph{The lincheck needs a channel of its own (amendment A2).} The
+randomizer rows of step~1 were believed to cover the lincheck's classes.
+Measurement on a real BLAKE3 statement says otherwise: with the zerocheck's
+own classes fully covered, the lincheck classes alone left one $\Fbig$
+direction of claim-preserving witness difference outside the mask image
+(image 9{,}728 of 10{,}240 bits). The fixture passes the same test because its
+witness is some $81\%$ randomizer rows; a real BLAKE3 witness is about
+$5.5\%$. Six candidate explanations --- the harness, the zerocheck classes,
+region alignment, the constant-wire pin, the randomizer budget, and a missing
+conditioning value --- were eliminated by measurement before the construction
+was touched; two of them by making the change, measuring no improvement, and
+reverting.
+
+The repair is a second channel, and it is \emph{not} a copy of the first. The
+zerocheck masks a product $\hat a\hat b$ of two witness-dependent
+multilinears, so its mask must live in the same degree-2 space and coverage of
+a witness direction inside that quadratic form is a rank condition to be
+certified. The lincheck's sumcheck instead has a \emph{public} multiplier
+$\mathrm{comb}$ and a \emph{linear} $z$-slot, so an additive shift suffices:
+run it on $z+\gamma_{lc}S$ for a witness-free $S$ committed before
+$\gamma_{lc}$, and recover the output claim with $\hat S(\rho)$ opened against
+$S$'s commitment. Every message of the layer is then a function of the shifted
+table alone --- the honest transcript of a shifted witness --- so the layer is
+masked outright rather than covered to a rank condition. Measured after the
+amendment: image $10{,}240$ of $10{,}240$ bits, and
+$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
+= \mathrm{rank}(\Delta\text{claim}) = 640$, i.e.\ nothing escapes.
+
+One caveat is worth stating precisely, because it is the difference between
+``masked'' and ``unconditionally masked''. The commitment scheme commits
+bit-valued data, so $S$ is Boolean and the reachable shift on the folded table
+is $\gamma_{lc}\sum_j \mathrm{eq}_j S[j,i]$ --- an $\Ftwo$-combination of the
+eq-table entries, drawn independently per slot. It covers all of $\Fbig$ per
+slot exactly when the eq table $\Ftwo$-spans the field, which is a property of
+the challenges and is therefore \emph{measured by the coverage certificate},
+not assumed. A field-valued mask would remove that step; a Boolean one does
+not.
+
 \begin{theorem}[Triangular composition; Lean~4, no \texttt{sorry}]\label{thm:tri}
 Let $T(w,u,b)=A_{w,b}u+g_{w,b}$ with $U$, $B$ finite. If
 (H1) $\Img A_{w,b}=V_0$ for all $w,b$;

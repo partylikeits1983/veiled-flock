@@ -106,6 +106,20 @@ property of the challenges. That is **measured by the coverage certificate**,
 not assumed. It is the one place where a field-valued mask would give an
 unconditional argument and a Boolean one does not.
 
+### A known, deliberately deferred optimization
+
+`S` is committed as a full `2^m` cube, so it costs a fourth full-size
+commitment and opening. It does not need to be: the channel only ever masks
+the *folded* `z_vec` of length `2^k_log` (4096 at the certified shape, against
+`2^22`), and a commitment over that domain would be some three orders of
+magnitude smaller. The obstacle is only that the opening point is then a
+`k_log`-variate quirky point with no outer part, which the PCS ladder is not
+currently shaped for.
+
+This is left as-is on purpose: correctness first, cost second. The
+reference path is certification-oriented, not optimized, and the benchmark
+panel reports what it actually costs rather than what a tuned version would.
+
 ## How to tell it worked
 
 1. `cargo test --release --workspace --features zk` — completeness, the
