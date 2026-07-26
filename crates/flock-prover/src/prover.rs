@@ -998,6 +998,39 @@ pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     (proof, comm)
 }
 
+/// Where the A1′ prover's zerocheck sub-proof comes from.
+///
+/// This exists so a **simulator** can supply zerocheck messages of its own
+/// while every other part of the proof — the six hiding commitments, the
+/// masked lincheck, the batched opening — runs the production code
+/// unmodified. The alternative, a second orchestration maintained alongside
+/// this one, would drift; and a simulator that runs different code from the
+/// prover demonstrates nothing about the prover.
+///
+/// Production never constructs one: the prove entry points pass `None`.
+#[cfg(feature = "zk")]
+pub trait ZerocheckSource<Ch: Challenger> {
+    /// Emit a zerocheck sub-proof, absorbing exactly what the honest prover
+    /// would absorb, and return it with the claim the verifier will
+    /// reconstruct and the A3 round-1 mask transcript.
+    fn emit(
+        &mut self,
+        m: usize,
+        challenger: &mut Ch,
+        honest: &mut dyn FnMut(
+            &mut Ch,
+        ) -> (
+            zerocheck::ZkZerocheckProof,
+            zerocheck::ZerocheckClaim,
+            zerocheck::Round1MaskTranscript,
+        ),
+    ) -> (
+        zerocheck::ZkZerocheckProof,
+        zerocheck::ZerocheckClaim,
+        zerocheck::Round1MaskTranscript,
+    );
+}
+
 /// The A1′ prover with every mask channel supplied explicitly. This is the
 /// map the leakage certificates probe.
 #[cfg(feature = "zk")]
@@ -1030,6 +1063,7 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         lig_config,
         masks,
         &mut |_: &mut Ch| Vec::new(),
+        None,
         coverage_probe_seed,
         challenger,
     )
@@ -1061,6 +1095,7 @@ pub fn prove_r1cs_zk_a1_with_masks_pd<Ch: Challenger + Clone>(
     lig_config: &pcs::ligerito::ProverConfig,
     masks: A1MaskSources<'_>,
     packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<pcs::PackedDirectClaim>,
+    zerocheck_source: Option<&mut dyn ZerocheckSource<Ch>>,
     coverage_probe_seed: Option<u64>,
     challenger: &mut Ch,
 ) -> (
@@ -1133,21 +1168,37 @@ pub fn prove_r1cs_zk_a1_with_masks_pd<Ch: Challenger + Clone>(
         Some(Err(failed)) => Some(failed.report),
     };
 
-    let (zk_zc, zc_claim, zc_mask) = zerocheck::prove_packed_padded_zk_masked(
-        cast(&a_packed_f128),
-        cast(&b_packed_f128),
-        cast(&z_packed),
-        cast(&p_f128),
-        cast(&q_f128),
-        m,
-        &padding,
-        Some(zerocheck::Round1Mask {
-            s_c_packed: cast(&s_c_f128),
-            s_h_packed: cast(&s_h_f128),
-        }),
-        challenger,
-    );
-    let zc_mask = zc_mask.expect("mask=Some must produce a round-1 mask transcript");
+    // The zerocheck seam. Production passes `None` and the honest masked
+    // zerocheck runs. A *simulator* passes a source that emits its own
+    // messages here — and only here — so that everything else (the
+    // commitments, the lincheck, the openings) stays on this exact code path
+    // rather than a copy of it that could drift out of agreement with the
+    // prover it is supposed to be indistinguishable from.
+    let mut honest = |ch: &mut Ch| {
+        let (p, c, mk) = zerocheck::prove_packed_padded_zk_masked(
+            cast(&a_packed_f128),
+            cast(&b_packed_f128),
+            cast(&z_packed),
+            cast(&p_f128),
+            cast(&q_f128),
+            m,
+            &padding,
+            Some(zerocheck::Round1Mask {
+                s_c_packed: cast(&s_c_f128),
+                s_h_packed: cast(&s_h_f128),
+            }),
+            ch,
+        );
+        (
+            p,
+            c,
+            mk.expect("mask=Some must produce a round-1 mask transcript"),
+        )
+    };
+    let (zk_zc, zc_claim, zc_mask) = match zerocheck_source {
+        Some(src) => src.emit(m, challenger, &mut honest),
+        None => honest(challenger),
+    };
     flock_core::scratch::give_f128(a_packed_f128);
     flock_core::scratch::give_f128(b_packed_f128);
 

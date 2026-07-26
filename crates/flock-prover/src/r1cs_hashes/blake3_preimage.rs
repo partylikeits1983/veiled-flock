@@ -471,6 +471,7 @@ impl Blake3PreimageZkSetup {
                 vec![digest_claim(&stmt_for_claim, layout_kind, &dch)]
             },
             None,
+            None,
             challenger,
         );
         Ok((proof, comm))
@@ -512,7 +513,7 @@ impl Blake3PreimageZkSetup {
 /// subsequent challenge — and therefore the whole proof — specific to this
 /// digest list, in this order, with this padding rule. Without it a proof
 /// could be replayed against a permuted or truncated list.
-fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &DigestStatement) {
+pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &DigestStatement) {
     challenger.observe_label(b"flock-blake3-preimage-v1");
     challenger.observe_bytes(&stmt.public_digest());
 }
@@ -744,5 +745,225 @@ mod tests {
         // The oracle recorded a query transcript — the object a straightline
         // extractor reads.
         assert!(oracle.lock().unwrap().query_count() > 0);
+    }
+
+    /// **The zero-knowledge result: a proof with no preimage behind it.**
+    ///
+    /// The simulator receives only the public digests. It never sees — and
+    /// never computes — a message hashing to any of them; the vector it
+    /// commits is an honest trace for messages of its own choosing whose
+    /// output region has been overwritten with the public digests, which is
+    /// not a satisfying assignment at all. The unmodified verifier accepts.
+    #[test]
+    fn simulator_produces_an_accepting_proof_without_any_preimage() {
+        use crate::preimage_simulator::simulate;
+        use crate::r1cs_hashes::blake3::{
+            ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+        };
+        use crate::sim_oracle::{OracleChallenger, shared_oracle};
+
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        // The statement: digests of messages the simulator will never see.
+        let secret = msgs_of(0x5EC1_5EC1, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&secret);
+        let stmt = setup.statement(&digests);
+
+        // The simulator's own, unrelated messages.
+        let own = msgs_of(0x09E4_09E4, N_TEST);
+        let layout = setup.r1cs.zk.expect("zk layout");
+        let n_slots = setup.n_block_slots();
+        let mut zrng = flock_core::zk::ZkRng::from_seed([3u8; 32]);
+        let mut rand_words =
+            vec![0u64; n_slots * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)];
+        {
+            use flock_core::zk::MaskSampler;
+            zrng.fill_u64s(&mut rand_words);
+        }
+        let build = || {
+            let blocks: Vec<Compression> = own.iter().map(message_compression).collect();
+            let (z, _a, _b, stripe) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+                &blocks,
+                setup.n_blocks_log(),
+                &layout,
+                &rand_words,
+                ParamPinning::RootHash64,
+            );
+            (z, stripe)
+        };
+
+        // Overwrite the output slots with the PUBLIC digests. Packed word
+        // (block i, slot j) holds out_lo's two halves at j = 2, 3.
+        let patch = |z: &mut [flock_core::field::F128]| {
+            let words_per_block = (1usize << 14) / 128;
+            for (i, d) in digests.iter().enumerate() {
+                for half in 0..2usize {
+                    let mut w = flock_core::field::F128::ZERO;
+                    for b in 0..128usize {
+                        let bit = half * 128 + b;
+                        let byte = d[bit / 8];
+                        if (byte >> (bit % 8)) & 1 == 1 {
+                            if b < 64 {
+                                w.lo |= 1u64 << b;
+                            } else {
+                                w.hi |= 1u64 << (b - 64);
+                            }
+                        }
+                    }
+                    z[i * words_per_block + 2 + half] = w;
+                }
+            }
+        };
+
+        let oracle = shared_oracle();
+        let sim = simulate(
+            &setup.r1cs,
+            &setup.pcs_params,
+            setup.r1cs.csc_lincheck_circuit(),
+            &stmt,
+            build,
+            &patch,
+            0xC0FFEE,
+            &oracle,
+            b"b3-preimage-zk",
+        )
+        .expect("simulation must succeed");
+
+        println!("simulator programmed {} oracle points", sim.programmed);
+
+        let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
+        setup
+            .verify(&sim.commitment, &sim.proof, &digests, &mut chv)
+            .expect("the UNMODIFIED verifier must accept the simulated proof");
+    }
+
+    /// **Control 1: the vector the simulator commits is not a witness.**
+    /// Overwriting the output region destroys the compression relation, so
+    /// the patched vector fails the R1CS — which is the whole reason the
+    /// zerocheck had to be simulated rather than run.
+    #[test]
+    fn the_simulators_committed_vector_is_not_a_valid_witness() {
+        use crate::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_pinned, generate_witness};
+
+        let n_log = 3usize;
+        let r1cs = build_block_r1cs_pinned(n_log, ParamPinning::RootHash64);
+        let own = msgs_of(0x1111, 1);
+        let target = Blake3PreimageSetup::digests_of(&msgs_of(0x2222, 1));
+
+        let mut all: Vec<Compression> = own.iter().map(message_compression).collect();
+        all.resize(
+            1usize << n_log,
+            ParamPinning::RootHash64.padding_compression(),
+        );
+        let mut z = generate_witness(&all, n_log);
+        assert!(r1cs.satisfies(&z), "the unpatched trace is a valid witness");
+
+        // Patch out_lo of block 0 to the target digest.
+        for w in 0..8usize {
+            let word = u32::from_le_bytes(target[0][w * 4..w * 4 + 4].try_into().unwrap());
+            for b in 0..32usize {
+                z[256 + w * 32 + b] = (word >> b) & 1 == 1;
+            }
+        }
+        assert!(
+            !r1cs.satisfies(&z),
+            "patching the output region must break the R1CS — otherwise the \
+             simulator would not need to fabricate the zerocheck at all"
+        );
+    }
+
+    /// **Control 2: an honest prover cannot produce this proof.** Running the
+    /// real prover on the same patched vector — i.e. without simulating the
+    /// zerocheck — is rejected. So the simulator's acceptance comes from the
+    /// simulation, not from the patched vector being secretly acceptable.
+    #[test]
+    fn honest_prover_on_the_patched_vector_is_rejected() {
+        use crate::r1cs_hashes::blake3::{
+            ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+        };
+        use crate::sim_oracle::{OracleChallenger, shared_oracle};
+        use flock_core::zk::MaskSampler;
+
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        let secret = msgs_of(0x7777, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&secret);
+        let stmt = setup.statement(&digests);
+        let own = msgs_of(0x8888, N_TEST);
+
+        let layout = setup.r1cs.zk.expect("zk layout");
+        let mut zrng = flock_core::zk::ZkRng::from_seed([5u8; 32]);
+        let mut rand_words = vec![
+            0u64;
+            setup.n_block_slots()
+                * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+        ];
+        zrng.fill_u64s(&mut rand_words);
+        let blocks: Vec<Compression> = own.iter().map(message_compression).collect();
+        let (mut z, _a, _b, _l) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+            &blocks,
+            setup.n_blocks_log(),
+            &layout,
+            &rand_words,
+            ParamPinning::RootHash64,
+        );
+        // Same patch the simulator applies.
+        let words_per_block = (1usize << 14) / 128;
+        for (i, d) in digests.iter().enumerate() {
+            for half in 0..2usize {
+                let mut w = flock_core::field::F128::ZERO;
+                for b in 0..128usize {
+                    let bit = half * 128 + b;
+                    if (d[bit / 8] >> (bit % 8)) & 1 == 1 {
+                        if b < 64 {
+                            w.lo |= 1u64 << b;
+                        } else {
+                            w.hi |= 1u64 << (b - 64);
+                        }
+                    }
+                }
+                z[i * words_per_block + 2 + half] = w;
+            }
+        }
+        let a = setup.r1cs.apply_a_packed(&z);
+        let b = setup.r1cs.apply_b_packed(&z);
+        let stripe =
+            flock_core::lincheck::pack_z_lincheck_from_packed(&z, setup.r1cs.m, setup.r1cs.k_log);
+
+        let lig = flock_core::pcs::ligerito::prover_config_for(
+            setup.pcs_params.log_msg_len(),
+            setup.pcs_params.log_batch_size,
+            setup.pcs_params.profile,
+        )
+        .unwrap();
+        let oracle = shared_oracle();
+        let mut ch = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
+        crate::r1cs_hashes::blake3_preimage::absorb_statement(&mut ch, &stmt);
+        let mut mrng = flock_core::zk::ZkRng::from_seed([6u8; 32]);
+        let mut forks = crate::prover::A1MaskForks::from_rng(&mut mrng);
+        let layout_kind = setup.r1cs.layout;
+        let stmt2 = stmt.clone();
+        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd(
+            &setup.r1cs,
+            &setup.pcs_params,
+            z,
+            a,
+            b,
+            stripe,
+            setup.r1cs.csc_lincheck_circuit(),
+            &lig,
+            forks.sources(),
+            &mut |c: &mut OracleChallenger| {
+                let dch = crate::digest_bind::DigestChallenges::sample(&stmt2, c);
+                vec![crate::digest_bind::digest_claim(&stmt2, layout_kind, &dch)]
+            },
+            None, // honest zerocheck — no simulation
+            None,
+            &mut ch,
+        );
+        let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle);
+        assert!(
+            setup.verify(&comm, &proof, &digests, &mut chv).is_err(),
+            "an HONEST prover on the patched vector must be rejected; if this \
+             passed, the digest binding would not be enforcing anything"
+        );
     }
 }

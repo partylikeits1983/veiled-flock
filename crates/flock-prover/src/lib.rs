@@ -17,6 +17,8 @@ pub use flock_core::*;
 pub mod chain;
 pub mod digest_bind;
 pub mod merkle_path;
+#[cfg(feature = "zk")]
+pub mod preimage_simulator;
 pub mod proof_io;
 pub mod prover;
 pub mod r1cs_hashes;

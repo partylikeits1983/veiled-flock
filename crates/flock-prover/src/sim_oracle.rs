@@ -215,6 +215,48 @@ impl OracleChallenger {
     /// Returns `None` — having programmed nothing — if the point was already
     /// queried, which is the bad event of the security argument. Callers
     /// should treat `None` as a simulation failure rather than continuing.
+    /// Program the *next* vector squeeze of length `n` to `values`. Same
+    /// contract as [`Self::program_next_scalar`]: call immediately before the
+    /// `sample_f128_vec` it governs.
+    ///
+    /// A vector squeeze spans `ceil(n·16 / 32)` oracle blocks, so this
+    /// programs each block of the stream.
+    pub fn program_next_vec(&mut self, values: &[F128]) -> Option<Vec<Vec<u8>>> {
+        let mut probe = self.clone();
+        probe.absorb(&[OP_SQUEEZE, KIND_SLICE]);
+        probe.absorb(&(values.len() as u64).to_le_bytes());
+
+        // The byte stream the squeeze must produce.
+        let mut stream = Vec::with_capacity(values.len() * 16);
+        for v in values {
+            stream.extend_from_slice(&v.lo.to_le_bytes());
+            stream.extend_from_slice(&v.hi.to_le_bytes());
+        }
+
+        let mut points = Vec::new();
+        let mut off = 0usize;
+        let mut ctr = 0u64;
+        while off < stream.len() {
+            let point = probe.squeeze_point(ctr);
+            let take = (stream.len() - off).min(32);
+            let mut block = [0u8; 32];
+            block[..take].copy_from_slice(&stream[off..off + take]);
+            // Bytes past the requested length are never read by the squeeze,
+            // so leaving them zero is harmless.
+            {
+                let mut oracle = self.oracle.lock().expect("oracle poisoned");
+                if oracle.was_queried(&point) {
+                    return None;
+                }
+                oracle.program(point.clone(), block);
+            }
+            points.push(point);
+            off += take;
+            ctr = ctr.wrapping_add(1);
+        }
+        Some(points)
+    }
+
     pub fn program_next_scalar(&mut self, value: F128) -> Option<Vec<u8>> {
         // Mirror what `sample_f128` absorbs before squeezing.
         let mut probe = self.clone();
