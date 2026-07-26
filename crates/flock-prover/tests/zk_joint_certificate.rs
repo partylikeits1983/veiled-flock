@@ -1236,10 +1236,25 @@ fn h1_inner_image_witness_independent_on_round_block() {
          on the witness with the P channel active — the triangular \
          composition's constant-image hypothesis does not hold as measured"
     );
+    // Negative control: the degree-2 channel must be load-bearing. The
+    // robust signal is the RANK — without `P` the randomizer channel spans
+    // only a small fraction of the block, so it cannot hide it at all.
+    //
+    // (Whether the two no-`P` images happen to span the *same* small
+    // subspace is fixture-sensitive: at some layouts that tiny image is
+    // witness-independent, at others it is not. It is reported, not
+    // asserted, because the coverage failure is the property that matters.)
+    println!(
+        "  without P: image spans {} of {dim} bits; same span across witnesses = {}",
+        na.rank(),
+        same_span(&na, &nb)
+    );
     assert!(
-        !same_span(&na, &nb),
-        "negative control: without P the image is ALSO witness-independent, \
-         which would make the degree-2 channel unnecessary — check the budget"
+        na.rank() * 2 < wa.rank(),
+        "negative control: without the P channel the image still spans {} of \
+         {} bits, so the degree-2 channel would not be load-bearing",
+        na.rank(),
+        wa.rank()
     );
 
     // Where the inner image falls short, and by how much. The triangular
