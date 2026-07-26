@@ -1587,6 +1587,98 @@ impl Blake3Setup {
         ))
     }
 
+    /// [`Self::prove_zk_a1_with_rng`] with the **per-proof mask-coverage
+    /// self-check** enabled: the mask draw is verified to cover the
+    /// round-pair block, and a draw that fails is discarded and resampled
+    /// (up to `max_resamples`) rather than emitted.
+    ///
+    /// This is what makes `ε_rank = 0` true of emitted proofs rather than a
+    /// probability bound (see `crate::zk_rank_check` for why the previous
+    /// Schwartz–Zippel bound was withdrawn). The failure event depends only
+    /// on `(Q, challenges)`, both witness-independent, so discarding and
+    /// resampling leaks nothing about the witness.
+    ///
+    /// It is a separate entry point because the check runs thousands of fold
+    /// passes over the full cube and dominates proving at production size;
+    /// callers choose between paying it per proof and relying on the
+    /// certificates' measured coverage at the certified configuration.
+    #[cfg(feature = "zk")]
+    pub fn prove_zk_a1_checked<Ch: Challenger + Clone>(
+        &self,
+        blocks: &[Compression],
+        rng: &mut flock_core::zk::ZkRng,
+        max_resamples: usize,
+        challenger: &mut Ch,
+    ) -> Result<
+        (
+            crate::prover::R1csProofZkA1,
+            Commitment,
+            crate::zk_rank_check::RankCheckReport,
+        ),
+        crate::zk_certificate::ZkGateError,
+    > {
+        use crate::zk_certificate::{StatementFamily, require_certified};
+        use flock_core::zk::MaskSampler;
+
+        require_certified(
+            StatementFamily::Blake3Batch,
+            self.n_blocks,
+            &self.r1cs,
+            &self.pcs_params,
+        )?;
+        assert_eq!(blocks.len(), self.n_blocks);
+        let layout = self.r1cs.zk.expect("zk setup carries a layout");
+        let lc_circuit = self.r1cs.csc_lincheck_circuit();
+        let log_n = self.pcs_params.log_msg_len();
+        let lig_config = flock_core::pcs::ligerito::prover_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        )
+        .expect("Ligerito config");
+
+        for attempt in 0..=max_resamples {
+            let mut wit_rng = rng.fork(b"a1-witness-rand");
+            let mut mask_rng = rng.fork(b"a1-masks");
+            let n_total = self.n_block_slots();
+            let mut rand_words =
+                vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
+            wit_rng.fill_u64s(&mut rand_words);
+            let (z_packed, a_f128, b_f128, stripe) =
+                generate_witness_with_ab_packed_and_lincheck_zk(
+                    blocks,
+                    self.n_blocks_log(),
+                    &layout,
+                    &rand_words,
+                );
+            let mut forks = crate::prover::A1MaskForks::from_rng(&mut mask_rng);
+            let mut ch = challenger.clone();
+            let (proof, comm, report) = crate::prover::prove_r1cs_zk_a1_with_masks(
+                &self.r1cs,
+                &self.pcs_params,
+                z_packed,
+                a_f128,
+                b_f128,
+                stripe,
+                lc_circuit,
+                &lig_config,
+                forks.sources(),
+                Some(0xC0FF_EE00 ^ attempt as u64),
+                &mut ch,
+            );
+            let mut report = report.expect("coverage check requested");
+            if report.covered() {
+                report.resamples = attempt;
+                *challenger = ch;
+                return Ok((proof, comm, report));
+            }
+            // Draw rejected: the proof is discarded, never emitted.
+        }
+        Err(crate::zk_certificate::ZkGateError::MaskCoverageExhausted {
+            attempts: max_resamples + 1,
+        })
+    }
+
     /// Verifier for [`Self::prove_zk_a1`].
     #[cfg(feature = "zk")]
     pub fn verify_zk_a1<Ch: Challenger + Clone>(

@@ -900,7 +900,7 @@ pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     challenger: &mut Ch,
 ) -> (R1csProofZkA1, Commitment) {
     let mut forks = A1MaskForks::from_rng(zk_rng);
-    prove_r1cs_zk_a1_with_masks(
+    let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
         r1cs,
         pcs_params,
         z_packed,
@@ -910,8 +910,10 @@ pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
         lincheck_circuit,
         lig_config,
         forks.sources(),
+        None,
         challenger,
-    )
+    );
+    (proof, comm)
 }
 
 /// The A1′ prover with every mask channel supplied explicitly. This is the
@@ -928,8 +930,9 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_config: &pcs::ligerito::ProverConfig,
     masks: A1MaskSources<'_>,
+    coverage_probe_seed: Option<u64>,
     challenger: &mut Ch,
-) -> (R1csProofZkA1, Commitment) {
+) -> (R1csProofZkA1, Commitment, Option<crate::zk_rank_check::RankCheckReport>) {
     assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
     let m = r1cs.m;
     let padding = r1cs.padding_spec();
@@ -949,6 +952,19 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     bind_statement(challenger, r1cs, &commitment);
     challenger.observe_bytes(&comm_p.root);
     challenger.observe_bytes(&comm_q.root);
+
+    // Per-proof mask-coverage self-check (ε_rank): the challenger is now at
+    // exactly the position `prove_packed_padded_zk` starts from, so a clone
+    // sees the same challenge schedule the proof will use. Pure observer —
+    // it never touches `challenger` itself.
+    let coverage = coverage_probe_seed.map(|seed| {
+        crate::zk_rank_check::check_mask_coverage(cast(&q_f128), m, seed, &*challenger)
+    });
+    let coverage = match coverage {
+        None => None,
+        Some(Ok(report)) => Some(report),
+        Some(Err(failed)) => Some(failed.report),
+    };
 
     let (zk_zc, zc_claim) = zerocheck::prove_packed_padded_zk(
         cast(&a_packed_f128),
@@ -1013,6 +1029,7 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     (
         R1csProofZkA1 { zerocheck: zk_zc, lincheck: lc_proof, pcs_open, open_p, open_q, comm_p, comm_q },
         commitment,
+        coverage,
     )
 }
 

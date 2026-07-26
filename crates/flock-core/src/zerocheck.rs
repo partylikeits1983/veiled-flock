@@ -815,6 +815,67 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     (proof, claim)
 }
 
+/// The degree-2 mask channel's contribution to the round messages, in
+/// isolation: the round pairs `(M_j(1), M_j(∞))` of the `P·Q` product
+/// sumcheck, at the same challenge schedule the amended prover uses.
+///
+/// This is the map whose F₂ image the prover's per-proof coverage
+/// self-check measures (`flock_prover::zk_rank_check`). It runs the SAME
+/// kernels as [`prove_packed_padded_zk`] — the skip fold and the naive
+/// round-pair kernel on the same folded cubes — so what is measured is the
+/// shipped map, not a re-derivation of it.
+///
+/// `challenger` is consumed by value: callers pass a clone, since sampling
+/// the schedule here must not disturb the real proof transcript.
+pub fn mask_round_pairs<C: Challenger>(
+    p_packed: &[u8],
+    q_packed: &[u8],
+    m: usize,
+    challenger: &mut C,
+) -> Vec<(F128, F128)> {
+    let k_skip = K_SKIP;
+    const N_INNER: usize = 7;
+    assert!(m >= k_skip + N_INNER);
+    let n_mlv = m - k_skip;
+    let dense = PaddingSpec::dense(m);
+
+    challenger.observe_label(b"flock-zerocheck-zk-v0");
+    let r_skip = challenger.sample_f128_vec(k_skip);
+    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
+    let mut r = vec![F128::ZERO; m];
+    r[..k_skip].copy_from_slice(&r_skip);
+    for (i, val) in small_challenges_ghash().iter().enumerate() {
+        r[k_skip + i] = *val;
+    }
+    for (i, val) in medium_challenges_ghash().iter().enumerate() {
+        r[k_skip + 3 + i] = *val;
+    }
+    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let z = challenger.sample_f128();
+
+    let fold_table = UniSkipFoldTable::new(k_skip, z);
+    let mut mlv_arg = vec![F128::ONE; n_mlv];
+    mlv_arg[1..].copy_from_slice(&r[k_skip + 1..]);
+    let (mut p_mlv, mut q_mlv, mm2_1, mm2_inf) =
+        uni_skip_fold_and_round_pair_optimized_packed_padded(
+            p_packed, q_packed, m, k_skip, &fold_table, &mlv_arg, &dense,
+        );
+    let mut out = Vec::with_capacity(n_mlv);
+    out.push((mm2_1, mm2_inf));
+    // The fold challenges ρ_j are whatever the caller's challenger yields at
+    // this position; the map is linear in P for any fixed schedule.
+    let mut rho = challenger.sample_f128();
+    for i in 0..(n_mlv - 1) {
+        let log_n_before = p_mlv.len().trailing_zeros() as usize;
+        let mut r_next = vec![F128::ONE; log_n_before - 1];
+        r_next[1..].copy_from_slice(&r[k_skip + i + 2..]);
+        fold_in_place_pair(&mut p_mlv, &mut q_mlv, rho);
+        out.push(round_pair_naive(&p_mlv, &q_mlv, &r_next));
+        rho = challenger.sample_f128();
+    }
+    out
+}
+
 /// Verify an A1′ zerocheck proof. Checks the combined sumcheck equation
 /// `running == â(ρ)·b̂(ρ) + γ·P(ρ)·Q(ρ)`. The caller MUST additionally
 /// authenticate `proof.final_p_eval == P(ρ)` and `proof.final_q_eval == Q(ρ)`

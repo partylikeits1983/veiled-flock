@@ -219,7 +219,7 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
         commit_q: &mut s_cq,
     };
     let mut ch = RandomChallenger::new(r.ch_seed);
-    let (proof, comm) = prove_r1cs_zk_a1_with_masks(
+    let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
         &r.fx.r1cs,
         &r.fx.pcs_params,
         z,
@@ -229,6 +229,7 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
         &circuit,
         &r.fx.lig_prover,
         masks,
+        None,
         &mut ch,
     );
     let flat = flatten_a1(&comm, &proof);
@@ -296,7 +297,7 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
         commit_q: &mut s_cq,
     };
     let mut ch = RandomChallenger::new(1);
-    let (proof, comm) = prove_r1cs_zk_a1_with_masks(
+    let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
         &fx.r1cs,
         &fx.pcs_params,
         z,
@@ -306,6 +307,7 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
         &circuit,
         &fx.lig_prover,
         masks,
+        None,
         &mut ch,
     );
     let flat = flatten_a1(&comm, &proof);

@@ -25,3 +25,5 @@ pub mod transcript_schema;
 pub mod zk_audit_support;
 #[cfg(feature = "zk")]
 pub mod zk_certificate;
+#[cfg(feature = "zk")]
+pub mod zk_rank_check;

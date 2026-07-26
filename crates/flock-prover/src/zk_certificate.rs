@@ -79,6 +79,10 @@ pub enum ZkGateError {
     /// A BLAKE3 batch statement, but no certificate exists for this exact
     /// configuration (batch size / PCS parameters / circuit digest).
     Uncertified { batch_size: usize, m: usize },
+    /// Every mask draw failed the per-proof coverage self-check. Emitting
+    /// anyway would mean emitting a proof whose hiding is not established,
+    /// so the prover fails closed instead.
+    MaskCoverageExhausted { attempts: usize },
 }
 
 impl std::fmt::Display for ZkGateError {
@@ -93,6 +97,11 @@ impl std::fmt::Display for ZkGateError {
                 f,
                 "no zk certificate for this configuration (batch_size={batch_size}, m={m}); \
                  run scripts/zk-certify.sh at this shape and register a ZkCertificate"
+            ),
+            Self::MaskCoverageExhausted { attempts } => write!(
+                f,
+                "all {attempts} mask draws failed the coverage self-check; \
+                 refusing to emit a proof whose hiding is not established"
             ),
         }
     }

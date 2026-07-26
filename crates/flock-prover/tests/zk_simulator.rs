@@ -169,7 +169,7 @@ fn simulator_translation_exact_transcript_equality() {
             commit_q: &mut s_cq,
         };
         let mut ch = RandomChallenger::new(ch_seed);
-        let (proof, comm) = prove_r1cs_zk_a1_with_masks(
+        let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
             &fx.r1cs,
             &fx.pcs_params,
             z,
@@ -179,6 +179,7 @@ fn simulator_translation_exact_transcript_equality() {
             &circuit,
             &fx.lig_prover,
             masks,
+            None,
             &mut ch,
         );
         let flat = flatten_a1(&comm, &proof);
