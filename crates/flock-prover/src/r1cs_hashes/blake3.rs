@@ -2569,8 +2569,14 @@ mod tests {
     /// accepting proof; fresh masks give a different transcript that still
     /// verifies; tampering `P(ρ)`, `σ_z`, or a masked round message is
     /// rejected.
+    ///
+    /// **Not `#[ignore]`d, deliberately.** It costs under a second in release
+    /// and it is the only fast-suite test that exercises the *batch-major*
+    /// witness layout end to end. That matters for amendment A2: batch-major
+    /// `ab_claim_point` reshuffles the quirky point, and `S` is opened at
+    /// exactly that point, so the A2 opening takes a code path the row-major
+    /// m=15 fixture never reaches.
     #[test]
-    #[ignore = "e2e A1′ reference prover (256-block BLAKE3)"]
     fn prove_verify_r1cs_zk_a1_roundtrip() {
         use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(256);
