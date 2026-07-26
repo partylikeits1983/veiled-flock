@@ -695,6 +695,20 @@ fn certify_tuple(
         let mut ub = u_b0.clone();
         ub[i] = !ub[i];
         let (t, _) = go(&payload0, &u_a0, &ub, &p0, &cw, &cp);
+        // Outer-stage directions are added to the covering space WITHOUT
+        // L-conditioning, which is only legitimate because they move no
+        // mask-only coordinate: `u_B` is a witness randomizer, while every
+        // coordinate in L is a functional of P, Q, or the commitment masks
+        // (σ_z, P(ρ), Q(ρ), y_g, and the P/Q opening interiors). Assert it
+        // rather than assume it — if some L coordinate did depend on the
+        // witness randomizers, adding these directions unconditioned would
+        // overstate coverage.
+        let l_delta = xor(&l_of(&payload0, &u_a0, &ub, &p0, &cw, &cp), &base_l);
+        assert!(
+            l_delta.iter().all(|w| *w == 0),
+            "an outer-stage (u_B) probe moved a mask-only coordinate; the \
+             unconditioned outer stage would overstate coverage"
+        );
         joint.insert(xor(&t, &base));
         n_probes += 1;
         i += bud.ub_stride;
