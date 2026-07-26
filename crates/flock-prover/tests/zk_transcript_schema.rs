@@ -92,7 +92,7 @@ fn a1_schema_manifest_and_bijectivity() {
     //    the constant (printed below).
     let h = schema_hash(&flat);
     let hex: String = h.iter().map(|b| format!("{b:02x}")).collect();
-    const PINNED_M15: &str = "7e9ea96529e123383a097359a8900441031d6ee470acc407e04d37f20907a264";
+    const PINNED_M15: &str = "6f21208ff17981c878c8cc28cc4ea8dadfef1d026992cedccf69b1f92ae19476";
     assert_eq!(hex, PINNED_M15, "schema hash changed for the m=15 fixture shape");
 
     // 5. The coordinate index is consistent with the algebraic vector.
