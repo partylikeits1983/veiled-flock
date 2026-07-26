@@ -14,7 +14,7 @@
 //! the path the zero-knowledge claim attaches to. The optimized
 //! `prove_fast_zk` path runs the *un-amended* zerocheck; the round-message
 //! hiding argument does not apply to it, so it is excluded from the claim
-//! and is exercised here only as a self-generated-witness demonstration.
+//! and no test in this file drives it.
 //!
 //! Two things are tested, and they are different in kind:
 //!

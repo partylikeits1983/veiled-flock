@@ -133,7 +133,7 @@ fn splitmix64(state: &mut u64) -> u64 {
 }
 
 // ---------------------------------------------------------------------------
-// FsChallenger — BLAKE3-based Fiat-Shamir.
+// FsChallenger — SHA-256-based Fiat-Shamir (Merlin-style duplex).
 //
 // Tag bytes (one-byte op + one-byte kind) encode the operation type so that
 // e.g. an `observe_f128_slice` of length 1 cannot collide with `observe_f128`,

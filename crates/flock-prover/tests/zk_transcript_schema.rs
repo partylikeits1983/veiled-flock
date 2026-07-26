@@ -218,9 +218,9 @@ fn a1_schema_matches_wire_order() {
     assert_eq!(
         extras.len(),
         6,
-        "expected exactly 4 derived absorptions (one combined Ligerito target \
-         per opening: witness, P, Q, A2's S, and A3's S_c/S_h); anything else is an \
-         unclassified absorption: {extras:?}"
+        "expected exactly 6 derived absorptions (one combined Ligerito target \
+         per hiding opening: witness, P, Q, A2's S, A3's S_c and S_h); anything \
+         else is an unclassified absorption: {extras:?}"
     );
     // No extra may be a proof value: collect EVERY F128 in the proof
     // (regardless of class or fs flag) and check disjointness.

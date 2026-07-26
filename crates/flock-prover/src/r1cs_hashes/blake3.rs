@@ -1518,9 +1518,10 @@ impl Blake3Setup {
     /// Gated: refuses any configuration without a matching
     /// [`crate::zk_certificate::ZkCertificate`]. Owns the whole mask
     /// lifecycle from a single per-proof DRBG — witness randomizer rows plus
-    /// the forks `prove_r1cs_zk_a1` makes for `P`, `Q`, and the three hiding
-    /// commitments — so every mask channel the certificates reason about is
-    /// sampled here, independently and domain-separated.
+    /// the forks `prove_r1cs_zk_a1` makes for `P`, `Q`, A2's `S`, A3's
+    /// `S_c`/`S_h`, and the six hiding commitments — so every mask channel
+    /// the certificates reason about is sampled here, independently and
+    /// domain-separated.
     ///
     /// Contrast [`Self::prove_fast_zk`]: optimized, but its zerocheck is
     /// **un-amended**, so the round-message hiding argument does not apply
@@ -1598,7 +1599,13 @@ impl Blake3Setup {
     /// This is what makes `ε_rank = 0` true of emitted proofs rather than a
     /// probability bound (see `crate::zk_rank_check` for why the previous
     /// Schwartz–Zippel bound was withdrawn). The failure event depends only
-    /// on `(Q, challenges)`, both witness-independent, so discarding and
+    /// on `(Q, challenges)` — not on the witness directly. One caveat is
+    /// load-bearing: under Fiat–Shamir the challenges are derived from the
+    /// witness *commitment* (this check runs after `bind_statement` absorbs
+    /// it), so the event's witness-independence is **computational** — it
+    /// rests on the commitment's hiding (ROM assumption), the same step the
+    /// FS lift already relies on — not unconditional. See
+    /// `docs/zk-proof.md` §8. Under that assumption, discarding and
     /// resampling leaks nothing about the witness.
     ///
     /// It is a separate entry point because the check runs thousands of fold

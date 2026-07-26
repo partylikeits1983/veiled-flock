@@ -68,8 +68,10 @@ pub struct ZkCertificate {
     /// Certificate-generator revision (bump when the probing methodology or
     /// the certified predicate changes).
     pub generator_rev: &'static str,
-    /// Tests that constitute this certificate's evidence. Must match what
-    /// `scripts/zk-certify.sh` runs (asserted by a test).
+    /// Tests that constitute this certificate's evidence. Must be exactly
+    /// the set of tests `scripts/zk-certify.sh` runs — asserted in both
+    /// directions by `zk_certificate_evidence_matches_script`, by exact name
+    /// (the last `::` segment of each `run` invocation), not substring.
     pub evidence: &'static [&'static str],
 }
 
@@ -112,28 +114,34 @@ impl std::fmt::Display for ZkGateError {
 
 impl std::error::Error for ZkGateError {}
 
-/// Evidence set behind the currently certified configuration. Kept in sync
-/// with `scripts/zk-certify.sh` by `zk_certificate_evidence_matches_script`.
+/// Evidence set behind the currently certified configuration. Exactly the
+/// set of tests `scripts/zk-certify.sh` runs, in script order — asserted in
+/// both directions by `zk_certificate_evidence_matches_script`.
 const EVIDENCE_V1: &[&str] = &[
     "affine_classes_exactly_covered",
     "full_conditional_coverage_zk_zerocheck",
     "conditional_coverage_p_rho",
-    "prove_verify_r1cs_zk_a1_roundtrip",
     "h1_inner_image_witness_independent_on_round_block",
     "p_channel_image_requires_nondegenerate_q",
     "joint_certificate_smoke",
     "joint_certificate_negative_controls",
-    "simulator_translation_exact_transcript_equality",
-    "joint_conditional_coverage_full_transcript",
+    "mask_reuse_across_proofs_is_a_leak",
     "mask_only_coordinates_are_witness_independent",
+    "joint_conditional_coverage_full_transcript",
+    "blake3_witness_difference_lies_in_the_mask_image",
+    "control_same_procedure_on_the_passing_fixture",
+    "simulator_translation_exact_transcript_equality",
+    "simulator_produces_accepting_proof_without_a_witness",
     "production_mask_channel_covers_round_block",
     "production_s_hat_v_randomizer_margin",
     "production_checked_prove_verifies",
     "blake3_witness_has_no_linear_difference_family",
     "l3_round1_region_alignment_holds",
-    "blake3_witness_difference_lies_in_the_mask_image",
-    "control_same_procedure_on_the_passing_fixture",
+    "pcs_rank_audit_witness_image_covered",
+    "pcs_rank_audit_negative_control_without_g",
     "prove_verify_zk_round1_mask_roundtrip",
+    "prove_verify_r1cs_zk_a1_roundtrip",
+    "prove_fast_zk_ligerito_roundtrip",
 ];
 
 /// The certified configurations. **One entry today**: the 256-block BLAKE3
@@ -208,19 +216,45 @@ pub fn require_certified(
 mod tests {
     use super::*;
 
+    /// Test names the certify script actually invokes: the third argument of
+    /// every `run` line, reduced to its bare name (last `::` segment, since
+    /// lib tests are addressed by full module path).
+    fn script_evidence_names(script: &str) -> std::collections::BTreeSet<&str> {
+        script
+            .lines()
+            .filter_map(|line| line.trim_start().strip_prefix("run "))
+            .filter_map(|rest| rest.split_whitespace().nth(2))
+            .map(|name| name.rsplit("::").next().unwrap_or(name))
+            .collect()
+    }
+
     /// The registry's evidence list must be exactly what the certificate
-    /// runner script executes — otherwise the gate would vouch for tests
-    /// that never run (or miss ones that do).
+    /// runner script executes — in both directions, by exact name. A
+    /// substring check is not enough: it passes for tests the script never
+    /// runs (name embedded in a comment) and cannot notice tests the script
+    /// runs but the registry does not vouch for.
     #[test]
     fn zk_certificate_evidence_matches_script() {
-        let script = include_str!("../../../scripts/zk-certify.sh");
+        let ran = script_evidence_names(include_str!("../../../scripts/zk-certify.sh"));
+        assert!(!ran.is_empty(), "no `run` lines parsed from zk-certify.sh");
         for cert in CERTIFIED {
-            for name in cert.evidence {
-                assert!(
-                    script.contains(name),
-                    "certificate evidence `{name}` is not run by scripts/zk-certify.sh"
-                );
-            }
+            let listed: std::collections::BTreeSet<&str> = cert.evidence.iter().copied().collect();
+            assert_eq!(
+                listed.len(),
+                cert.evidence.len(),
+                "duplicate names in the evidence list"
+            );
+            let not_run: Vec<_> = listed.difference(&ran).collect();
+            assert!(
+                not_run.is_empty(),
+                "certificate evidence not run by scripts/zk-certify.sh: {not_run:?}"
+            );
+            let not_listed: Vec<_> = ran.difference(&listed).collect();
+            assert!(
+                not_listed.is_empty(),
+                "scripts/zk-certify.sh runs tests the certificate does not list \
+                 as evidence: {not_listed:?}"
+            );
         }
     }
 

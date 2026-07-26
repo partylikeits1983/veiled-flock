@@ -31,9 +31,19 @@
 //! * **H3** whatever the inner stage cannot reach is covered by the outer
 //!   (`u_B`) stage, or is the public claim direction itself.
 //!
-//! Negative controls (each must FAIL — they validate the detector):
-//! no-`P`, constant-`Q`, no-`μ`, no-`g`, an added leakage coordinate, and
-//! mask reuse across proofs.
+//! Negative controls (each must FAIL — they validate a detector). Two live
+//! in this file; the others are owned by the test of the channel they
+//! exercise, because they are not *coverage* controls for this block:
+//!
+//! * added unmasked leakage coordinate → `joint_certificate_negative_controls`;
+//! * mask reuse across proofs → `mask_reuse_across_proofs_is_a_leak`;
+//! * no-`P` breaks H1 (witness-independence of the inner image), not slice
+//!   coverage → `h1_inner_image_witness_independent_on_round_block`;
+//! * constant `Q` collapses the P-channel image to the `G(1)` half →
+//!   `p_channel_image_requires_nondegenerate_q`;
+//! * no-`μ` / no-`g` cannot reach this block at all; the PCS layer's own
+//!   control is `pcs::zk_audit::pcs_rank_audit_negative_control_without_g`
+//!   (flock-core, in the certificate evidence set).
 //!
 //! Cost: unit probes are real prover runs. The full-support probes are
 //! `#[ignore]`d and run by `scripts/zk-certify.sh`; a reduced-probe smoke
@@ -667,7 +677,9 @@ fn certify_tuple(
     // pays their leakage without crediting their coverage. Probing them could
     // only enlarge the image and make the criterion easier to satisfy — so a
     // pass here remains sound, and is in fact a stronger statement than the
-    // protocol needs.
+    // protocol needs. The A3 channel's own image IS probed where A3 is
+    // load-bearing: `zk_blake3_certificate` probes `S_c`/`S_h` on the real
+    // m=20 statement, whose round-1 residual is the reason A3 exists.
     let sc0 = rng.bits(n);
     let sh0 = rng.bits(n);
     let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
@@ -1556,6 +1568,166 @@ fn joint_certificate_negative_controls() {
              this failure mode, so it certifies nothing"
         );
     }
+}
+
+/// **Mask reuse across proofs is a leak — fresh per-proof masks are
+/// load-bearing.**
+///
+/// On every affine witness-dependent coordinate the transcript is
+/// `T(w, u) = A·u + f(w)` with a witness-independent linear part `A`
+/// (Lemma L2; the affinity gate in `zk_leakage_certificate` certifies it).
+/// If two proofs of different witnesses REUSE the complete mask draw `u`,
+/// the observable pair-difference is
+///
+/// > `T(w_a, u) + T(w_b, u) = f(w_a) + f(w_b)`
+///
+/// — a deterministic witness functional that NO mask draw can move: an
+/// uncoverable leaked direction by this certificate's own criterion, handed
+/// to any observer of both proofs. With fresh masks per proof the same two
+/// witnesses produce an observable that moves with the draw.
+///
+/// Four real prover runs check exactly that:
+/// * reuse: the pair-difference is bit-identical across two unrelated mask
+///   draws (deterministic), and nonzero (it exposes the witness difference);
+/// * fresh: re-proving the SAME witness under a fresh draw moves essentially
+///   every affine coordinate, and a fresh-mask pair's difference is not the
+///   witness functional.
+///
+/// This is the control behind the "masks are drawn fresh per proof"
+/// requirement (`ZkRng::from_entropy` per proof + domain-separated forks);
+/// the multi-proof composition argument in `docs/zk-proof.md` §10 is what
+/// this failure mode would otherwise break.
+#[test]
+fn mask_reuse_across_proofs_is_a_leak() {
+    let fx = FixtureA1M15::new();
+    let (split, _) = split_by_class(&fx);
+    let seed = 0x7777_1234;
+    let n = 1usize << FixtureA1M15::M;
+    let mut rng = Rng(0x5EED_2E05);
+
+    // Two witnesses from the linear family (only free payload bits differ,
+    // so the difference is a genuine witness difference — see certify_tuple).
+    let free = |i: usize| i % FixtureA1M15::N_PAYLOAD >= FixtureA1M15::FREE_PAYLOAD_BASE;
+    let mut payload_a = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    for (i, b) in payload_a.iter_mut().enumerate() {
+        if !free(i) {
+            *b = false;
+        }
+    }
+    let mut payload_b = payload_a.clone();
+    for i in (0..payload_b.len()).filter(|i| free(*i)).take(17) {
+        payload_b[i] = !payload_b[i];
+    }
+
+    // A complete, independent mask draw: every channel the prover consumes.
+    struct MaskSet {
+        u_a: Vec<bool>,
+        u_b: Vec<bool>,
+        p: Vec<bool>,
+        q: Vec<bool>,
+        s: Vec<bool>,
+        sc: Vec<bool>,
+        sh: Vec<bool>,
+        cw: Vec<F128>,
+        cp: Vec<F128>,
+        cq: Vec<F128>,
+        cs: Vec<F128>,
+    }
+    let draw = |rng: &mut Rng| MaskSet {
+        u_a: rng.bits(FixtureA1M15::A_BITS),
+        u_b: rng.bits(FixtureA1M15::B_BITS),
+        p: rng.bits(n),
+        q: rng.bits(n),
+        s: rng.bits(n),
+        sc: rng.bits(n),
+        sh: rng.bits(n),
+        cw: (0..MASK_MATERIAL).map(|_| rng.f128()).collect(),
+        cp: (0..MASK_MATERIAL).map(|_| rng.f128()).collect(),
+        cq: (0..MASK_MATERIAL).map(|_| rng.f128()).collect(),
+        cs: (0..MASK_MATERIAL).map(|_| rng.f128()).collect(),
+    };
+    let m1 = draw(&mut rng);
+    let m2 = draw(&mut rng);
+
+    let go = |payload: &[bool], m: &MaskSet| -> Vec<F128> {
+        let r = Run {
+            fx: &fx,
+            payload,
+            u_a: &m.u_a,
+            u_b: &m.u_b,
+            p_bits: &m.p,
+            q_bits: &m.q,
+            s_bits: &m.s,
+            s_c_bits: &m.sc,
+            s_h_bits: &m.sh,
+            commit_w: &m.cw,
+            commit_p: &m.cp,
+            commit_q: &m.cq,
+            commit_s: &m.cs,
+            commit_s_c: &m.cs,
+            commit_s_h: &m.cs,
+            ch_seed: seed,
+        };
+        run(&r).0
+    };
+    let a1 = go(&payload_a, &m1);
+    let b1 = go(&payload_b, &m1);
+    let a2 = go(&payload_a, &m2);
+    let b2 = go(&payload_b, &m2);
+
+    // The affine witness-dependent coordinates: everything in R except the
+    // bilinear round-pair block, whose mask-linear part is witness-dependent
+    // (L4) so exact cancellation is not the prediction there.
+    let affine: Vec<usize> = (0..split.r_idx.len())
+        .filter(|i| !split.round_block.contains(i))
+        .collect();
+    let restrict = |t: &[F128]| -> Vec<F128> {
+        let r = pick(t, &split.r_idx);
+        affine.iter().map(|&i| r[i]).collect()
+    };
+    let dvec =
+        |x: &[F128], y: &[F128]| -> Vec<F128> { x.iter().zip(y).map(|(u, v)| *u + *v).collect() };
+
+    // Reused masks: deterministic, witness-determined, unmaskable.
+    let d1 = dvec(&restrict(&a1), &restrict(&b1));
+    let d2 = dvec(&restrict(&a2), &restrict(&b2));
+    assert_eq!(
+        d1, d2,
+        "reused-mask pair-differences disagree across draws — the affine \
+         linear part is not witness-independent as certified, and this \
+         control's premise (Lemma L2) is broken"
+    );
+    let leaked = d1.iter().filter(|v| **v != F128::ZERO).count();
+    assert!(
+        leaked > 0,
+        "the reused-mask pair-difference is zero everywhere: the two \
+         witnesses are not distinguished by any affine coordinate, so the \
+         control exercised nothing"
+    );
+
+    // Fresh masks: the same witness re-proved under a new draw must look
+    // different essentially everywhere the masks reach.
+    let same_w_fresh = dvec(&restrict(&a1), &restrict(&a2));
+    let moved = same_w_fresh.iter().filter(|v| **v != F128::ZERO).count();
+    assert!(
+        moved * 2 > affine.len(),
+        "a fresh mask draw moved only {moved} of {} affine coordinates — \
+         the masks do not blind the transcript the way the reuse argument \
+         assumes",
+        affine.len()
+    );
+    // And a fresh-mask pair's difference is not the witness functional.
+    let fresh_pair = dvec(&restrict(&a1), &restrict(&b2));
+    assert_ne!(
+        fresh_pair, d1,
+        "a fresh-mask pair reproduced the deterministic witness functional"
+    );
+    println!(
+        "mask reuse: pair-difference deterministic across draws, nonzero on \
+         {leaked}/{} affine coordinates; fresh draw moves {moved}/{}",
+        affine.len(),
+        affine.len()
+    );
 }
 
 /// The `ZeroSampler` / `PlaybackSampler` plumbing used by the controls is

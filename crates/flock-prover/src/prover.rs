@@ -748,10 +748,10 @@ pub fn prove_fast_ligerito_timed<Ch: Challenger>(
 // hiding PCS. The whole thing verifies through `verify_r1cs_zk_a1`.
 // ===========================================================================
 
-/// The A1′+A2 end-to-end proof: the masked zerocheck, the masked lincheck,
+/// The A1′+A2+A3 end-to-end proof: the masked zerocheck, the masked lincheck,
 /// the witness PCS opening (for the `ab`,`c` claims, which the verifier
-/// recomputes itself), and the three hiding mask openings `P,Q` at ρ and `S`
-/// at the lincheck's output point.
+/// recomputes itself), and the five hiding mask openings — `P`,`Q` at ρ, `S`
+/// at the lincheck's output point, and A3's `S_c`,`S_h` at the c-claim point.
 ///
 /// Deliberately carries **no** claim values: the verifier derives the `ab`/`c`
 /// claims from the transcript, so shipping copies in the proof would be
@@ -847,7 +847,9 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
     )
 }
 
-/// The five independent mask streams the A1′ prover consumes. Production
+/// The eleven independent mask streams the A1′ prover consumes — five
+/// bit-cube channels (`P`, `Q`, A2's `S`, A3's `S_c`/`S_h`), the witness
+/// commitment's μ/g stream, and one μ/g stream per mask commitment. Production
 /// builds these by domain-separated forks of one per-proof DRBG (see
 /// [`A1MaskSources::from_rng`]); the leakage certificates substitute
 /// playback samplers to unit-probe one channel at a time, which is how the
@@ -898,7 +900,7 @@ pub struct A1MaskForks {
 
 #[cfg(feature = "zk")]
 impl A1MaskForks {
-    /// Derive the seven streams from one per-proof DRBG. The labels are part
+    /// Derive the eleven streams from one per-proof DRBG. The labels are part
     /// of the protocol: they make the channels independent, which is a
     /// hypothesis of the composition argument.
     pub fn from_rng(zk_rng: &mut flock_core::zk::ZkRng) -> Self {
