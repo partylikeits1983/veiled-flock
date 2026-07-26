@@ -90,7 +90,15 @@ pub fn verify_claims_ligerito<Ch: Challenger>(
 ) -> Result<(), pcs::VerifyError> {
     // Verification is single-threaded; run the body on the dedicated 1-thread pool.
     verifier_pool().install(move || {
-        verify_claims_ligerito_inner(commitment, claims, pcs_open, pcs_params, None, challenger)
+        verify_claims_ligerito_inner(
+            commitment,
+            claims,
+            &[],
+            pcs_open,
+            pcs_params,
+            None,
+            challenger,
+        )
     })
 }
 
@@ -106,10 +114,40 @@ pub fn verify_claims_ligerito_with_config<Ch: Challenger>(
     lig_v_config: &crate::pcs::ligerito::VerifierConfig,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
+    verify_claims_ligerito_with_config_pd(
+        commitment,
+        claims,
+        &[],
+        pcs_open,
+        pcs_params,
+        lig_v_config,
+        challenger,
+    )
+}
+
+/// [`verify_claims_ligerito_with_config`] plus **packed-direct** claims —
+/// public evaluation claims on the committed witness that ride the same
+/// batched opening (see `pcs::PackedDirectClaim`).
+///
+/// The values of packed-direct claims are the verifier's own: it recomputes
+/// each target from public data rather than reading it from the proof, so a
+/// prover cannot move them. Used to bind public hash digests to the witness's
+/// output region.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_claims_ligerito_with_config_pd<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    packed_direct: &[pcs::PackedDirectClaimRef<'_>],
+    pcs_open: &pcs::BatchOpeningProofLigerito,
+    pcs_params: &crate::pcs::PcsParams,
+    lig_v_config: &crate::pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+) -> Result<(), pcs::VerifyError> {
     verifier_pool().install(move || {
         verify_claims_ligerito_inner(
             commitment,
             claims,
+            packed_direct,
             pcs_open,
             pcs_params,
             Some(lig_v_config),
@@ -121,6 +159,7 @@ pub fn verify_claims_ligerito_with_config<Ch: Challenger>(
 fn verify_claims_ligerito_inner<Ch: Challenger>(
     commitment: &Commitment,
     claims: &[ZClaim],
+    packed_direct: &[pcs::PackedDirectClaimRef<'_>],
     pcs_open: &pcs::BatchOpeningProofLigerito,
     pcs_params: &crate::pcs::PcsParams,
     lig_v_config: Option<&crate::pcs::ligerito::VerifierConfig>,
@@ -165,7 +204,7 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
         &values,
         &z_skips,
         &x_refs,
-        &[],
+        packed_direct,
         pcs_open,
         lig_v_config,
         challenger,

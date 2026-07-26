@@ -634,17 +634,25 @@ fn build_matrices_rows_pinned(pinning: ParamPinning) -> (Vec<Vec<usize>>, Vec<Ve
             input_emit(FLAGS_BASE, WORD_BITS);
         }
         Some(p) => {
-            // Force `z_s = bit`: `1·1 = z_s` for a set bit, `0·0 = z_s` for a
+            // Force `z_s = bit`: `1·1 = z_s` for a set bit, `0·1 = z_s` for a
             // clear one. Both are unconditional — no free assignment satisfies
             // the row with the other value.
+            //
+            // The clear case deliberately keeps the constant wire on the
+            // b-side rather than emptying both rows. `0·0 = z_s` would pin
+            // just as well, but the witness generator emits `b[s] = 1` for
+            // every parameter slot; the R1CS product would still agree while
+            // the `B·z` *vector* would not, and the lincheck — which checks
+            // the matrix-vector products, not just their Hadamard product —
+            // would reject every honest proof. Keeping `b` on the constant
+            // wire makes the existing generator correct unchanged.
             let mut pin_bit = |s: usize, bit: bool| {
                 if bit {
                     a_rows[s] = vec![Z_CONST_POS];
-                    b_rows[s] = vec![Z_CONST_POS];
                 } else {
                     a_rows[s] = Vec::new();
-                    b_rows[s] = Vec::new();
                 }
+                b_rows[s] = vec![Z_CONST_POS];
             };
             let pin_word = |base: usize, value: u32, pin: &mut dyn FnMut(usize, bool)| {
                 for b in 0..WORD_BITS {
@@ -1510,7 +1518,31 @@ pub fn generate_witness_with_ab_packed_and_lincheck_zk(
     Vec<flock_core::field::F128>,
     Vec<u8>,
 ) {
-    let padding: Compression = ([0u32; 8], [0u32; 16], 0u64, 0u32, 0u32);
+    generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+        blocks,
+        n_blocks_log,
+        layout,
+        rand_words,
+        ParamPinning::Free,
+    )
+}
+
+/// [`generate_witness_with_ab_packed_and_lincheck_zk`] under a
+/// [`ParamPinning`] — the padding slots take the pinning's padding
+/// compression so the pinned parameter rows hold in every block.
+pub fn generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+    blocks: &[Compression],
+    n_blocks_log: usize,
+    layout: &flock_core::zk::ZkBlockLayout,
+    rand_words: &[u64],
+    pinning: ParamPinning,
+) -> (
+    Vec<flock_core::field::F128>,
+    Vec<flock_core::field::F128>,
+    Vec<flock_core::field::F128>,
+    Vec<u8>,
+) {
+    let padding: Compression = pinning.padding_compression();
     super::common::drive_witness_packed_and_lincheck_zk(
         blocks,
         Some(&padding),

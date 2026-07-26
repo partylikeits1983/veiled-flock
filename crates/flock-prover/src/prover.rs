@@ -65,6 +65,34 @@ pub(crate) fn open_claims_with_precomputed_ligerito<Ch: Challenger>(
     lig_config: &pcs::ligerito::ProverConfig,
     challenger: &mut Ch,
 ) -> pcs::BatchOpeningProofLigerito {
+    open_claims_with_precomputed_ligerito_pd(
+        z_packed,
+        prover_data,
+        commitment,
+        claims,
+        precomputed_s_hat_v,
+        &[],
+        padding,
+        lig_config,
+        challenger,
+    )
+}
+
+/// [`open_claims_with_precomputed_ligerito`] plus packed-direct claims, which
+/// ride the same batched opening. Used to bind public digests to the
+/// witness's output region (see `crate::digest_bind`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn open_claims_with_precomputed_ligerito_pd<Ch: Challenger>(
+    z_packed: Vec<F128>,
+    prover_data: &pcs::ProverData,
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[pcs::PackedDirectClaim],
+    padding: &zerocheck::PaddingSpec,
+    lig_config: &pcs::ligerito::ProverConfig,
+    challenger: &mut Ch,
+) -> pcs::BatchOpeningProofLigerito {
     let x_fulls: Vec<Vec<F128>> = claims
         .iter()
         .map(|c| quirky_x_outer_full(&c.point))
@@ -76,7 +104,7 @@ pub(crate) fn open_claims_with_precomputed_ligerito<Ch: Challenger>(
         commitment,
         &x_refs,
         precomputed_s_hat_v,
-        &[],
+        packed_direct,
         padding,
         lig_config,
         challenger,
@@ -991,6 +1019,55 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     Commitment,
     Option<crate::zk_rank_check::RankCheckReport>,
 ) {
+    prove_r1cs_zk_a1_with_masks_pd(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        lig_config,
+        masks,
+        &mut |_: &mut Ch| Vec::new(),
+        coverage_probe_seed,
+        challenger,
+    )
+}
+
+/// [`prove_r1cs_zk_a1_with_masks`] with **public packed-direct claims**.
+///
+/// `packed_direct` is a callback rather than a slice because the claims'
+/// challenges must be drawn from the live transcript, at a position both
+/// prover and verifier agree on: after the zerocheck and lincheck, immediately
+/// before the batched opening. The callback receives the challenger at exactly
+/// that point and returns the claims it built.
+///
+/// This is the seam the fixed-digest statement uses: the callback samples the
+/// digest-binding point and returns one claim whose value is a public function
+/// of the statement (see `crate::digest_bind`). Because the value is public,
+/// the verifier recomputes it rather than reading it from the proof, and the
+/// hiding argument may condition on it legitimately.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn prove_r1cs_zk_a1_with_masks_pd<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_config: &pcs::ligerito::ProverConfig,
+    masks: A1MaskSources<'_>,
+    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<pcs::PackedDirectClaim>,
+    coverage_probe_seed: Option<u64>,
+    challenger: &mut Ch,
+) -> (
+    R1csProofZkA1,
+    Commitment,
+    Option<crate::zk_rank_check::RankCheckReport>,
+) {
     assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
     let m = r1cs.m;
     let padding = r1cs.padding_spec();
@@ -1186,12 +1263,16 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         &mut ch_s,
     );
 
-    let pcs_open = open_claims_with_precomputed_ligerito(
+    // Public packed-direct claims (e.g. the fixed-digest binding) are built
+    // here: after every PIOP message is bound, immediately before the open.
+    let pd = packed_direct(challenger);
+    let pcs_open = open_claims_with_precomputed_ligerito_pd(
         z_packed,
         &prover_data,
         &commitment,
         &[ab, c],
         &[None, None],
+        &pd,
         &padding,
         lig_config,
         challenger,
@@ -1232,11 +1313,39 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
+    verify_r1cs_zk_a1_pd(
+        r1cs,
+        pcs_params,
+        proof,
+        commitment,
+        lincheck_circuit,
+        &mut |_: &mut Ch| Vec::new(),
+        challenger,
+    )
+}
+
+/// [`verify_r1cs_zk_a1`] with public packed-direct claims. Mirror of
+/// [`prove_r1cs_zk_a1_with_masks_pd`]: the callback runs at the same
+/// transcript position and must rebuild the same claims — from public data
+/// only, since the verifier has no witness. A claim whose value the verifier
+/// recomputes cannot be forged by the prover; a claim it fails to reproduce
+/// makes the opening's combined target disagree and the proof is rejected.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_r1cs_zk_a1_pd<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    challenger: &mut Ch,
+) -> Result<(), flock_core::verifier::VerifyError> {
     let log_n = pcs_params.log_msg_len();
     let lig_v =
         pcs::ligerito::verifier_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito verifier config");
-    verify_r1cs_zk_a1_with_config(
+    verify_r1cs_zk_a1_with_config_pd(
         r1cs,
         pcs_params,
         proof,
@@ -1244,6 +1353,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         lincheck_circuit,
         &lig_v,
         challenger,
+        packed_direct,
     )
 }
 
@@ -1258,6 +1368,31 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_v: &pcs::ligerito::VerifierConfig,
     challenger: &mut Ch,
+) -> Result<(), flock_core::verifier::VerifyError> {
+    verify_r1cs_zk_a1_with_config_pd(
+        r1cs,
+        pcs_params,
+        proof,
+        commitment,
+        lincheck_circuit,
+        lig_v,
+        challenger,
+        &mut |_: &mut Ch| Vec::new(),
+    )
+}
+
+/// [`verify_r1cs_zk_a1_with_config`] with public packed-direct claims.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_r1cs_zk_a1_with_config_pd<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_v: &pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
 ) -> Result<(), flock_core::verifier::VerifyError> {
     use flock_core::verifier::VerifyError;
     let m = r1cs.m;
@@ -1404,9 +1539,18 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     )
     .map_err(VerifyError::PcsAb)?;
 
-    flock_core::verifier::verify_claims_ligerito_with_config(
+    let pd = packed_direct(challenger);
+    let pd_refs: Vec<pcs::PackedDirectClaimRef<'_>> = pd
+        .iter()
+        .map(|(point, value)| pcs::PackedDirectClaimRef {
+            point: point.as_slice(),
+            value: *value,
+        })
+        .collect();
+    flock_core::verifier::verify_claims_ligerito_with_config_pd(
         commitment,
         &[ab, c],
+        &pd_refs,
         &proof.pcs_open,
         pcs_params,
         lig_v,
