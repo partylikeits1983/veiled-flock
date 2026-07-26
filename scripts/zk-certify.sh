@@ -57,6 +57,27 @@ else
   echo "  ^ REGRESSION: this certificate passes at the recorded fixture" >> "$MANIFEST"
 fi
 
+# --- Real-statement certificate: KNOWN FAILING, recorded rather than skipped
+# This is the certificate that does not yet pass: one F128 direction escapes
+# on `zerocheck.round1_c` (see docs/round1c-mask-channel.md). It is run here
+# on purpose — a certification script that exercises only what passes reports
+# a state the repo is not in. It is deliberately NOT in the ZkCertificate
+# evidence list, because a failing certificate is not evidence; the manifest
+# records its status without it counting toward any claim. The per-class rows
+# are what localize the gap, so all three are recorded.
+for classes in lincheck zerocheck piop; do
+  echo "=== flock-prover :: zk_blake3_certificate :: mask_image [ZK_BLAKE3_CLASSES=$classes] ==="
+  t0=$SECONDS
+  if ZK_BLAKE3_CLASSES=$classes cargo test --release -p flock-prover --features zk \
+       --test zk_blake3_certificate blake3_witness_difference_lies_in_the_mask_image \
+       -- --ignored --exact --nocapture; then
+    echo "blake3_witness_difference_lies_in_the_mask_image[$classes] ok $((SECONDS - t0))s" >> "$MANIFEST"
+  else
+    echo "blake3_witness_difference_lies_in_the_mask_image[$classes] KNOWN-FAILING $((SECONDS - t0))s" >> "$MANIFEST"
+  fi
+done
+run flock-prover zk_blake3_certificate control_same_procedure_on_the_passing_fixture
+
 # --- Simulator: existence and constructive translation exactness -----------
 run flock-prover zk_simulator simulator_translation_exact_transcript_equality
 run flock-prover zk_simulator simulator_produces_accepting_proof_without_a_witness
