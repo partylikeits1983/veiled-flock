@@ -121,15 +121,25 @@ simulator programs nothing and rewinds nothing, which makes a QROM
 zero-knowledge statement plausible, but we do not write the theorem and do not
 rely on it.
 
-\paragraph{Status.} \textbf{Experimental candidate with a proven partial core.}
-Several load-bearing steps are discharged by exact computation rather than
-closed-form proof, one composition hypothesis is measured rather than derived,
-and there has been no independent review. Most importantly, the coverage
-certificate on a \emph{real} BLAKE3 statement still fails by one $\Fbig$
-direction on \texttt{zerocheck.round1\_c} (\S\ref{sec:limitations}). We do not
-label this production zero-knowledge, and the label does not move because one
-of the two measured gaps was closed: amendment~A2 removed the lincheck from
-that residual, which is progress on the open item, not its resolution.
+\paragraph{Status.} \textbf{The narrow claim above is supported by completed
+evidence.} Every certificate the argument depends on passes, including the one
+that was failing: on a real BLAKE3 statement, over the PIOP classes, no
+claim-preserving witness direction escapes the joint mask image. Getting there
+required two amendments (A2, A3) that measurement forced and that are part of
+the construction described here.
+
+What that does \emph{not} mean, stated plainly because the distinction is the
+whole point of this note. Several load-bearing steps are discharged by exact
+computation on the real prover rather than by closed-form proof; two
+hypotheses --- the composition hypotheses and the eq-table $\Ftwo$-span --- are
+\emph{measured}, not derived; certificates are computed at sampled challenge
+tuples; the complete transcript is certified at a reduced-size fixture with
+structural transfer to production size, while the real-statement certificate
+covers the PIOP classes; sibling hiding is a computational assumption; and
+there has been \textbf{no independent cryptographic review}. We do not call
+this production zero-knowledge. The claim is the narrow one in this section,
+with the assumptions of \S\ref{sec:assumptions} and the limits of
+\S\ref{sec:limitations}, and it should be read as exactly that and no wider.
 
 \section{The relation, and what zero-knowledge means here}\label{sec:relation}
 

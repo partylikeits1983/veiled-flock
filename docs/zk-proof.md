@@ -87,16 +87,22 @@ what is not yet done.
   Schwartz–Zippel over `{0,1}` is vacuous at these degrees. See §8 for the
   replacement. The Merkle-sibling hiding argument (§7) is closed-form but not
   machine-checked; per-parameter certificate gating is not yet wired.
-- **The real-statement certificate does NOT pass.** On a real BLAKE3 batch
-  statement (m=20, 64 blocks) one F₂¹²⁸ direction of claim-preserving witness
-  difference still escapes the mask image, attributed to `zerocheck.round1_c`.
-  Amendment A2 (§5b) closed the lincheck half of this — those classes went
-  from 9,728/10,240 bits with 128 escaping to 10,240/10,240 with nothing
-  escaping — but the round-1 C-side half is open, and running on
-  `zerocheck.*` alone reproduces the failure exactly, so it is not a
-  cross-layer artefact. Repair specified in `docs/round1c-mask-channel.md`,
-  not made. Until it closes, the whole-transcript claim on the production
-  statement family rests on the fixture certificate plus structural transfer.
+- **The real-statement certificate PASSES.** On a real BLAKE3 batch statement
+  (m=20, 64 blocks, all PIOP classes = 30,464 bits, claims saturated at 640
+  bits over 768 witness pairs): joint mask image 30,464/30,464 and
+  rank[residual | dclaim] = 640 = rank(dclaim). Two amendments were required
+  and both were forced by measurement: A2 (§5b) took the lincheck classes from
+  9,728/10,240 with 128 bits escaping to 10,240/10,240 with none, and A3 (§5c)
+  took the zerocheck classes from 12,032/20,224 to 20,224/20,224.
+
+  Two methodological findings outlast the fix. The escape was **joint, not
+  marginal** — `round1_c` passed in isolation at 8,192/8,192 the entire time —
+  so per-class coverage never composed into joint coverage. And the assumption
+  that broke was never written down as an assumption: the randomizer rows were
+  *believed* to cover the affine classes, which is true on the synthetic
+  fixture (~81% randomizer rows) and false on a real witness (~5.5%). A
+  certificate run only on the vehicle would have reported success
+  indefinitely.
 - Out of scope entirely: SHA-256/Keccak encoders, the hash-chain statement,
   QROM *soundness*, side-channel resistance, and independent cryptographic
   review.

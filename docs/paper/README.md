@@ -3,59 +3,31 @@
 A candidate zero-knowledge mode for BLAKE3 batch statements in Flock, a
 hash-based SNARK for batch R1CS over F₂.
 
-**Decision label: B — experimental candidate with a proven partial core.**
-Not production zero-knowledge, and not independently reviewed. The
-complete-transcript coverage certificate now **passes** at the certified
-fixture — over all 548 witness-dependent coordinates, at three challenge
-tuples, conditioned on the complete mask-only leakage set and on every public
-claim the verifier learns, no claim-preserving witness direction escapes the
-joint mask image. Measured *at* the production configuration (m=22): the degree-2 channel spans
-the round-pair block in full (4096/4096 bits), a degenerate Q spans exactly
-half, the per-proof coverage self-check passes with no resampling and its
-proof verifies, and the randomizer margin binding `s_hat_v` is 12× the
-requirement versus 3× at the fixture. What keeps this at label B: run directly on a *real* BLAKE3 statement
-(m=20, PIOP classes), one F128 direction of claim-preserving witness
-difference is still unaccounted for — a specific measured lead, not a proven
-leak. Plus the ROM assumption and the absence of independent review.
+**Decision label: A — the narrow claim is supported by completed evidence.**
+Every certificate the argument depends on passes, including the one that was
+failing. On a real BLAKE3 batch statement (m=20, all PIOP classes = 30,464
+bits, claims saturated at 640 bits over 768 witness pairs) the joint mask
+image is **30,464 / 30,464** and `rank[resid | Δclaim] = 640 = rank(Δclaim)`:
+no claim-preserving witness direction escapes. The complete-transcript
+certificate passes at the certified fixture over all 548 witness-dependent
+coordinates, at three challenge tuples, conditioned on the complete mask-only
+leakage set (983 F128) and on every public claim the verifier learns. Measured
+*at* the production configuration (m=22): the degree-2 channel spans the
+round-pair block in full (4096/4096 bits), a degenerate Q spans exactly half,
+the per-proof coverage self-check passes with no resampling and its proof
+verifies, and the randomizer margin binding `s_hat_v` is 12× the requirement
+versus 3× at the fixture.
 
-**What changed in v5.2 — amendment A3, and the real-statement certificate now
-passes.** Unrestricted, on a real BLAKE3 batch statement (m=20, 64 blocks, all
-PIOP classes = 30,464 bits, claims saturated at 640 bits over 768 witness
-pairs): joint mask image **30,464 / 30,464** and
-`rank[resid | Δclaim] = 640 = rank(Δclaim)`. No claim-preserving witness
-direction escapes. Before A2/A3 this was 22,272/30,464 with 768 against 640.
-
-A3 masks the zerocheck's round 1, which A1′ deliberately skipped because the
-verifier reconstructs the AB claim from the identity `P^AB + P^C = 0` on a
-domain S and any mask must vanish there. The fix is a *pair*: `M_c` on the C
-side and `M_c + V_S·h` on the AB side, so the combined polynomial gains a
-multiple of S's vanishing polynomial — zero on S, reconstruction intact —
-while the two sides move independently. That independence was necessary, not
-decorative: the measured escaping direction was supported on `round1_c` and
-not on `round1_ab`, so a diagonal mask provably could not reach it.
-
-Two methodological points outlast the fix. The escape was **joint, not
-marginal** — `round1_c` passed in isolation at 8,192/8,192 the whole time, so
-per-class coverage never composed into joint coverage. And the assumption that
-broke was never written down as an assumption: the randomizer rows were
-*believed* to cover the affine classes, and on the synthetic fixture (~81%
-randomizer rows against a real witness's ~5.5%) they do. A certificate run
-only on the fixture would have reported success indefinitely.
-
-**What changed in v5.1 — amendment A2.** v5 stated the lincheck's transcript
-classes were covered by the randomizer witness rows. Measurement refuted that,
-so the construction gained a second mask channel: a committed additive shift
-`z ↦ z + γ_lc·S` for the lincheck. It is a different kind of channel from the
-zerocheck's on purpose — the zerocheck masks a *product* of witness-dependent
-multilinears and needs a degree-2 mask, while the lincheck's multiplier is
-*public* and its z-slot *linear*, so an additive shift makes that layer's
-transcript equal to the honest transcript of a shifted witness. Measured: the
-lincheck classes go from 9,728/10,240 bits with 128 escaping to 10,240/10,240
-with nothing escaping.
-
-With A2 in, the residual on the unrestricted real-statement run was attributed
-to **one** class, `zerocheck.round1_c` — down from three. A3 closed that one;
-see above.
+**Read the label narrowly.** It does *not* mean production zero-knowledge. It
+means the claim stated below, with its assumptions, is backed. Several
+load-bearing steps are discharged by exact computation on the real prover
+rather than closed-form proof; two hypotheses (the composition hypotheses and
+the eq-table F₂-span) are **measured, not derived**; certificates are computed
+at sampled challenge tuples; the complete transcript is certified at a
+reduced-size fixture with structural transfer to production size, while the
+real-statement certificate covers the PIOP classes; sibling hiding is a
+computational (ROM) assumption; and there has been **no independent
+cryptographic review**.
 
 ## The claim, exactly
 
