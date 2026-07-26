@@ -175,6 +175,31 @@ fn xor(a: &[u64], b: &[u64]) -> Vec<u64> {
     a.iter().zip(b).map(|(x, y)| x ^ y).collect()
 }
 
+
+/// The 128 F₂-basis elements of F₂¹²⁸ (x⁰ … x¹²⁷).
+fn f128_basis() -> Vec<F128> {
+    (0..128)
+        .map(|j| {
+            if j < 64 {
+                F128 { lo: 1u64 << j, hi: 0 }
+            } else {
+                F128 { lo: 0, hi: 1u64 << (j - 64) }
+            }
+        })
+        .collect()
+}
+
+/// Scale a flattened F128 vector by a field element (coordinate-wise).
+fn scale_flat(v: &[u64], lambda: F128) -> Vec<u64> {
+    let mut out = Vec::with_capacity(v.len());
+    for c in v.chunks_exact(2) {
+        let p = F128 { lo: c[0], hi: c[1] } * lambda;
+        out.push(p.lo);
+        out.push(p.hi);
+    }
+    out
+}
+
 // ---------------------------------------------------------------------------
 // The probed map: masks → complete algebraic transcript
 // ---------------------------------------------------------------------------
@@ -255,6 +280,10 @@ struct Split {
     /// CI smoke run conditions on this subset and the offline certificate
     /// conditions on all of `l_idx`.
     l_zc_idx: Vec<usize>,
+    /// `(schema path, range within the R-vector)` for every witness-dependent
+    /// field, so a coverage failure can be attributed to a coordinate class
+    /// instead of reported as a bare rank number.
+    r_paths: Vec<(&'static str, std::ops::Range<usize>)>,
 }
 
 fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
@@ -330,13 +359,22 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
     let mut round_block: Vec<usize> = rp.clone().map(pos_in_r).collect();
     round_block.push(pos_in_r(fa.start));
     round_block.push(pos_in_r(fb.start));
+    let mut r_paths = Vec::new();
+    {
+        let mut off = 0usize;
+        for (path, range) in idx.ranges_by_class(&flat, LeakageClass::WitnessDependent) {
+            let n = range.len();
+            r_paths.push((path, off..off + n));
+            off += n;
+        }
+    }
     let mut l_zc_idx = Vec::new();
     for (path, range) in idx.ranges_by_class(&flat, LeakageClass::MaskOnly) {
         if path.starts_with("zerocheck.") {
             l_zc_idx.extend(range);
         }
     }
-    (Split { r_idx, l_idx, round_block, l_zc_idx }, total)
+    (Split { r_idx, l_idx, round_block, l_zc_idx, r_paths }, total)
 }
 
 /// F128s of mask material one hiding commitment consumes: `commit_zk` draws
@@ -585,19 +623,63 @@ fn certify_tuple(
         n_probes += 1;
         i += bud.ua_stride;
     }
-    // (c) μ/g of the witness commitment, and (d) of the P commitment.
+    // (c),(d) μ/g of the witness and P commitments.
+    //
+    // These masks are F₂¹²⁸-VALUED, so each of the `3·2^{m−7}` slots carries
+    // 128 F₂ directions, not one. Probing a single bit per slot samples
+    // 1/128 of the channel — an earlier revision did exactly that and
+    // reported a coverage failure that was an artefact of it.
+    //
+    // The transcript is F₂¹²⁸-linear in these slots (the encoding, the
+    // folds, and the blinder combination all are), so the other 127
+    // directions of a slot are field multiples of the one probed:
+    // `T(λ·δ) = λ·T(δ)`. That is *verified* below before being used — an
+    // unverified expansion could inject directions the real map does not
+    // have and manufacture coverage.
+    let basis = f128_basis();
+    let mut linearity_checked = 0usize;
     for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
-        let mut cwp = cw.clone();
-        cwp[s] += F128::ONE;
-        let (t, _) = go(&payload0, &u_a0, &u_b0, &p0, &cwp, &cp);
-        let l = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, &cwp, &cp), &base_l);
-        absorb(l, xor(&t, &base), &mut l_basis, &mut l_piv, &mut rkerl);
-        let mut cpp = cp.clone();
-        cpp[s] += F128::ONE;
-        let (t2, _) = go(&payload0, &u_a0, &u_b0, &p0, &cw, &cpp);
-        let l2 = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, &cw, &cpp), &base_l);
-        absorb(l2, xor(&t2, &base), &mut l_basis, &mut l_piv, &mut rkerl);
-        n_probes += 2;
+        for (which, base_vec) in [0usize, 1].into_iter().zip([&cw, &cp]) {
+            let mut bumped = base_vec.clone();
+            bumped[s] += F128::ONE;
+            let (cw_p, cp_p) = if which == 0 { (&bumped, &cp) } else { (&cw, &bumped) };
+            let (t, _) = go(&payload0, &u_a0, &u_b0, &p0, cw_p, cp_p);
+            let l = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, cw_p, cp_p), &base_l);
+            let r = xor(&t, &base);
+            n_probes += 1;
+
+            // Verify F₂¹²⁸-linearity on the first few slots, against a real
+            // probe at a nontrivial field element.
+            if linearity_checked < 4 {
+                let lambda = basis[7] + basis[19] + F128::ONE;
+                let mut scaled = base_vec.clone();
+                scaled[s] += lambda;
+                let (cw_s, cp_s) = if which == 0 { (&scaled, &cp) } else { (&cw, &scaled) };
+                let (ts, _) = go(&payload0, &u_a0, &u_b0, &p0, cw_s, cp_s);
+                let ls = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, cw_s, cp_s), &base_l);
+                let rs = xor(&ts, &base);
+                assert_eq!(
+                    rs,
+                    scale_flat(&r, lambda),
+                    "the transcript is NOT F₂¹²⁸-linear in mask slot {s}; the \
+                     basis expansion below would be unsound"
+                );
+                assert_eq!(ls, scale_flat(&l, lambda), "leakage coords not F₂¹²⁸-linear in slot {s}");
+                linearity_checked += 1;
+                n_probes += 1;
+            }
+
+            // Expand: all 128 F₂ directions of this slot.
+            for lam in &basis {
+                absorb(
+                    scale_flat(&l, *lam),
+                    scale_flat(&r, *lam),
+                    &mut l_basis,
+                    &mut l_piv,
+                    &mut rkerl,
+                );
+            }
+        }
     }
     let inner_rank = rkerl.rank();
 
@@ -654,6 +736,29 @@ fn certify_tuple(
         );
     }
 
+    // Attribute any residual to a coordinate class: for each
+    // witness-dependent field, how many independent residual directions have
+    // nonzero bits inside that field's range. A clean run prints nothing.
+    if verbose && resid_and_claim.rank() > claim_space.rank() {
+        println!("  residual attribution (coordinate classes still uncovered):");
+        let full = coords.len() == split.r_idx.len();
+        for (path, range) in &split.r_paths {
+            if !full {
+                continue;
+            }
+            let mut hits = 0usize;
+            for row in &resid_and_claim.rows {
+                let nz = (range.start..range.end)
+                    .any(|c| row.get(c * 2).is_some_and(|w| *w != 0) || row.get(c * 2 + 1).is_some_and(|w| *w != 0));
+                if nz {
+                    hits += 1;
+                }
+            }
+            if hits > 0 {
+                println!("    {path}: {hits} residual direction(s) touch this class ({} F128 coords)", range.len());
+            }
+        }
+    }
     assert_claim_saturated(claim_space.rank(), bud.witness_dirs);
     // Randomizer budget of this fixture versus the coordinate set under
     // test. The documented sizing rule is ~128 randomizer bits per revealed
@@ -871,13 +976,24 @@ fn coverage_passes(
     }
     // μ/g probes (skipped for no-μ / no-g).
     {
+        // Same F₂¹²⁸ basis expansion as `certify_tuple`: these slots are
+        // field-valued, so one bit per slot samples 1/128 of the channel.
+        let basis = f128_basis();
         for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
             let mut cwp = cw.clone();
             cwp[s] += F128::ONE;
             let (t, _pr, _) = do_run(&p0, &u_a0, &cwp, &payload0);
             let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
             let r = xor(&augment(&t, &payload0), &base_r);
-            absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
+            for lam in &basis {
+                absorb(
+                    scale_flat(&l, *lam),
+                    scale_flat(&r, *lam),
+                    &mut l_basis,
+                    &mut l_piv,
+                    &mut rkerl,
+                );
+            }
         }
     }
 
