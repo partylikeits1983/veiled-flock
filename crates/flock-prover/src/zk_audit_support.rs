@@ -207,7 +207,14 @@ pub struct FixtureA1M15 {
 }
 
 impl FixtureA1M15 {
-    pub const M: usize = 15;
+    /// m = 16 rather than 15 so the fixture carries 16 blocks. The
+    /// `s_hat_v` bit-slices are the binding constraint on randomizer sizing:
+    /// slice `r` sees only witness bits at positions ≡ r (mod 128), so the
+    /// requirement is `blocks × A-chunks-per-block ≥ 128` *with margin*. At 8
+    /// blocks that ratio is 192/128 = 1.5×, and the complete-transcript
+    /// certificate's residual concentrated in exactly that class; 16 blocks
+    /// puts it at 3×. (Production BLAKE3 runs at ~12×.)
+    pub const M: usize = 16;
     pub const K_LOG: usize = 12;
     pub const K_SKIP: usize = 6;
     pub const BLOCKS: usize = 1 << (Self::M - Self::K_LOG);

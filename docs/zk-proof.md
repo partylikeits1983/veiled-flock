@@ -33,31 +33,38 @@ what is not yet done.
   rejected (`prove_verify_r1cs_zk_a1_roundtrip`). This is a self-contained
   reference path; the optimized fused prover is a differential-tested
   follow-up (the shipped `prove_fast_zk` still runs the un-amended zerocheck).
-- **Complete-transcript coverage.** The joint conditional certificate runs the
-  COMPLETE A1' pipeline on the real prover with every coordinate located
-  through the canonical transcript schema. Established for the zerocheck
-  round-pair class: H1 (the inner mask image is the same subspace at different
-  witnesses, and the degree-2 channel is what makes it so -- without `P` the
-  spans differ); an inner-image deficit of exactly one F128 direction, which is
-  exactly `final_b`, supplied by the outer (`u_B`) stage (2432/2560 ->
-  2560/2560); and no claim-preserving witness direction escaping, with the
-  claim space saturated at 128 bits.
+- **Complete-transcript coverage: ESTABLISHED at the certified fixture.**
+  The joint conditional certificate runs the COMPLETE A1' pipeline on the real
+  prover, with every coordinate located through the canonical transcript
+  schema, the complete mask-only leakage set conditioned on, every public
+  claim the verifier learns conditioned on, and a genuinely linear
+  witness-difference family. Measured over three challenge tuples at the
+  16-block fixture (121,861 probes each): 548 witness-dependent coordinates,
+  394 mask-only, field-channel subspace rank 124, inner image 52,864 bits,
+  joint image 53,024, claim space saturated at 384 bits, and
+  rank[residual | dclaim] = 384 = rank(dclaim) at every tuple - no
+  claim-preserving witness direction escapes the joint image.
 
-  The complete-transcript certificate previously reported a coverage failure,
-  and the diagnosis offered for it ("the fixture is 2.8x under-budgeted") was
-  WRONG. It counted only the witness randomizer bits (26,624) and ignored that
-  the PCS masks mu and g are FIELD-valued: their 3*2^(m-7) slots carry 128 F2
-  directions each, i.e. 98,304 further mask dimensions. Counted correctly the
-  fixture has 157,696 mask dimensions against a 75,008-bit coordinate space --
-  2.1x OVER-budgeted, not under.
-  
-  The real cause was a probing gap in the certificate harness itself: it bumped
-  one bit per mask slot, sampling 768 of those 98,304 directions. The harness now
-  expands each slot to its full 128 F2 directions using the transcript's
-  F2^128-linearity in those slots, verified at runtime against real probes before
-  being relied on.
+  Supporting results on the round-pair class: H1 (the inner mask image is the
+  same subspace at different witnesses) holds with the degree-2 channel and
+  fails without it (384 of 2560 bits); the inner-stage deficit is exactly one
+  F128 direction and it is exactly `final_b`, supplied by the outer (u_B)
+  stage; a constant Q collapses the channel image from 2305 to 1153 bits,
+  delimiting the bad-mask set. The negative controls fire, including a canary
+  that appends a raw witness functional.
 
-  See SS8 and the paper for the current status of the corrected run.
+  Four corrections were needed to get an interpretable verdict, each of which
+  had made earlier results uninterpretable rather than wrong-in-the-safe-
+  direction: (i) the coverage criterion is capped by the number of sampled
+  witness directions, so below the claim dimension it passes for free - the
+  earlier certificate used 40 against a 128-bit claim; (ii) the witness family
+  must be genuinely linear; (iii) mu and g are FIELD-valued, so probing one
+  bit per slot samples 1/128 of that channel (an earlier "the fixture is 2.8x
+  under-budgeted" diagnosis was a consequence of this and is RETRACTED -
+  counted correctly the fixture is over-budgeted); (iv) `s_hat_v` binds the
+  randomizer sizing at `blocks x A-chunks >= 128` per bit-residue WITH MARGIN,
+  and the residual concentrated in exactly that class at 1.5x margin and
+  vanished at 3x. Production BLAKE3 runs at ~12x.
 - The earlier joint conditional coverage was verified at
   the zerocheck layer only (`full_conditional_coverage_zk_zerocheck`,
   `L={P(ρ),σ_z}`, at a **single fixed `Q`** — so conditioning on `Q(ρ)` in that

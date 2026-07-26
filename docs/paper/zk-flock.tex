@@ -18,6 +18,7 @@
 \newcommand{\Ftwo}{\F_2}
 \newcommand{\Fbig}{\F_{2^{128}}}
 \newcommand{\Img}{\mathrm{Im}}
+\newcommand{\shatv}{\hat{s}_v}
 % Statistical distance, kept distinct from the witness-difference vector d.
 \newcommand{\Dsd}{\Delta_{\mathrm{SD}}}
 \newcommand{\erank}{\varepsilon_{\mathrm{rank}}}
@@ -56,14 +57,12 @@ computational.
 the optimized prover is \emph{not} amended and is excluded from the claim.
 \textbf{Evidence.} The reduction to witness-indistinguishability is proved; the
 masking, triangular-composition and bad-set mixture theorems are machine-checked
-in Lean~4; the composition hypotheses are discharged by exact $\Ftwo$
-image-coverage certificates computed on the real prover for the zerocheck
-round-pair class --- the class the amendment exists for. The corresponding
-certificate over the \emph{complete} transcript does not yet pass at the
-available fixture, for a diagnosed and quantified budget reason
-(\S\ref{sec:certificates}); that is the principal open item, and the
-full-transcript claim is conditional on it. Per-item status is tabulated in
-Table~\ref{tab:claims} and \S\ref{sec:roadmap}.
+in Lean~4; and the composition hypotheses are discharged by exact $\Ftwo$
+image-coverage certificates computed on the real prover --- including a
+complete-transcript joint conditional certificate at the certified fixture, in
+which no claim-preserving witness direction escapes the joint mask image.
+Per-item status is tabulated in Table~\ref{tab:claims} and
+\S\ref{sec:roadmap}.
 \textbf{Assumptions and limits.} A random-oracle (or hash-pseudorandomness)
 assumption for sibling hiding; certificates are computed at sampled challenge
 tuples; the full-transcript certificate is established at a reduced-size fixture
@@ -189,7 +188,7 @@ evidence supports. Extending the binding is future work, not a corollary.
 \midrule
 Completeness & reference prover, certified configs & telescoping identity; roundtrip tests & proved; tested \\
 Zerocheck soundness ($\gamma$ batching) & amended zerocheck, any config & Lemma~\ref{lem:gamma}; adversarial suite & proved; constructively checked \\
-Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & round-pair class established; complete transcript \textbf{open} \\
+Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & established at the certified fixture \\
 Merkle sibling hiding & all hiding openings & $\kmin$-min-entropy leaves, ROM & assumed (computational) \\
 ZK after Fiat--Shamir & BLAKE3 batch, certified configs & Lemma~\ref{lem:reduction} + rows above & conditional on those rows \\
 QROM (ZK or soundness) & --- & --- & not claimed \\
@@ -443,20 +442,25 @@ public claim the verifier learns --- the ab-claim, the reduced evaluation
 $v=\hat z(r)$ that the opening proves, and the $\hat c$ claim, a 384-bit claim
 space that the witness-difference family saturates --- the residual of every
 tested difference modulo the joint image is determined by the claim.
-\item \textbf{Two harness defects were found by running this, and both had
-made verdicts uninterpretable rather than wrong in the safe direction.} First,
-the criterion compares $\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]$
-with $\mathrm{rank}(\Delta\text{claim})$, and both are capped by the number of
-sampled witness directions --- so below the claim dimension it can hold merely
-because no claim-preserving combination exists among the samples. Second, the
-PCS masks are \emph{field}-valued, so probing one bit per slot samples $1/128$
-of that channel; the earlier reported coverage failure, and the fixture-budget
-diagnosis offered for it, were both artefacts of that gap. Counting the field
-dimensions correctly, the fixture carries 157{,}696 mask dimensions against a
-75{,}008-bit coordinate space. The certificate now saturates the claim space
-before recording any verdict, and expands each mask slot to its full 128
-directions using the transcript's $\Fbig$-linearity in those slots, verified
-against real probes before being relied on.
+\item \textbf{The complete transcript is covered.} Over all 548
+witness-dependent coordinates of the complete A1$'$ transcript, at three
+challenge tuples, with the complete mask-only leakage set and every public
+claim conditioned on and the claim space saturated,
+$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
+= \mathrm{rank}(\Delta\text{claim})$: no claim-preserving witness direction
+escapes the joint image.
+\item \textbf{Four corrections were needed to get an interpretable verdict},
+and each had made earlier results uninterpretable rather than wrong in the
+safe direction. The criterion is capped by the number of sampled witness
+directions, so below the claim dimension it passes for free. The witness
+family must be genuinely linear. The PCS masks are \emph{field}-valued, so
+probing one bit per slot samples $1/128$ of that channel --- representing its
+image as an $\Fbig$-subspace instead is also what makes the certificate
+affordable. And $\shatv$ binds the randomizer sizing: slice $r$ sees only
+witness bits at positions $\equiv r \pmod{128}$, so the requirement is
+blocks $\times$ chunks $\ge 128$ \emph{with margin}; the residual
+concentrated in exactly that class at $1.5\times$ margin and vanished at
+$3\times$. Production BLAKE3 runs at $\sim\!12\times$.
 \item \textbf{The bad set is nonempty and delimited.} At a constant $Q$ the
 channel's image collapses from 2305 to 1153 bits --- it reaches the $G(1)$ half
 but not the degree-2 $G(\infty)$ half, which is precisely its reason for
@@ -633,10 +637,10 @@ Masking (Thm.~\ref{thm:mask}) & affine classes & Lean~4, machine-checked \\
 Triangular composition (Thm.~\ref{thm:tri}) & joint WI & Lean~4, machine-checked \\
 Bad-set mixture (Thm.~\ref{thm:badset}) & $\erank$ accounting & Lean~4, machine-checked \\
 H1 / conditional coverage & hypotheses of Thm.~\ref{thm:tri} & exact certificate (measured) \\
-Full-transcript WI & Lemma~\ref{lem:reduction} & \textbf{open} --- theorem available, certificate not yet established \\
+Full-transcript WI & Lemma~\ref{lem:reduction} & theorem + checked certificate, per Table~\ref{tab:configs} \\
 Self-generated-witness simulation & classical-ROM ZK & proved here (Lemma~\ref{lem:reduction}) \\
 Sibling hiding & classical-ROM ZK & assumed \\
-Classical-ROM ZK & the headline claim & proved, conditional on the above (hence conditional on an open item) \\
+Classical-ROM ZK & the headline claim & proved, conditional on the rows above \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -656,19 +660,13 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The complete-transcript certificate is open.} What is
-established is the zerocheck round-pair class --- the class the degree-2
-channel exists for --- jointly, conditioned on the complete mask-only leakage
-set and on every public claim the verifier learns. The whole-transcript
-version is not established: two harness defects that made its verdict
-uninterpretable have been found and fixed (\S\ref{sec:certificates}), and the
-corrected run has not yet terminated at any probe budget we can afford, since
-its cost is dominated by an $\Ftwo$ elimination over a transcript-width
-codomain. Note the asymmetry that makes partial results usable: under-probing
-a mask channel can only produce a false \emph{failure}, never a false pass, so
-a pass at any probe budget is a valid certificate. Everything this paper says
-about full-transcript witness-indistinguishability is conditional on that
-certificate.
+\item \textbf{The certificate is per-fixture, and the fixture is not the
+production shape.} The complete-transcript certificate is checked at a
+reduced fixture ($m=16$, small query counts) chosen so exact probing is
+feasible. Transfer to the production configuration rests on the maps being
+structurally identical and on the randomizer margin being larger there
+($\sim\!12\times$ versus $3\times$), not on a production-size full-support
+probe. That is the principal remaining gap in the certified chain.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.

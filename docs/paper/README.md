@@ -5,10 +5,13 @@ hash-based SNARK for batch R1CS over F₂.
 
 **Decision label: B — experimental candidate with a proven partial core.**
 Not production zero-knowledge, and not independently reviewed. The
-complete-transcript coverage certificate is the principal open item. It is
-established for the zerocheck round-pair class — jointly, conditioned on the
-complete mask-only leakage set and on every public claim the verifier learns —
-and is not established over the whole transcript.
+complete-transcript coverage certificate now **passes** at the certified
+fixture — over all 548 witness-dependent coordinates, at three challenge
+tuples, conditioned on the complete mask-only leakage set and on every public
+claim the verifier learns, no claim-preserving witness direction escapes the
+joint mask image. What keeps this at label B is that the certificate is
+per-fixture: transfer to the production shape rests on structural identity of
+the maps, and the ROM assumption and independent review remain.
 
 ## The claim, exactly
 
@@ -16,9 +19,7 @@ For an explicitly enumerated set of certified BLAKE3 *batch* configurations
 that bind no externally supplied message, chaining value, or hash output:
 
 > the algebraic transcript of the **reference** amended prover is statistically
-> witness-indistinguishable up to an explicit rank-failure term ε_rank — *this
-> is the target claim, established for the zerocheck round-pair class and open
-> over the complete transcript* — and the
+> witness-indistinguishable up to an explicit rank-failure term ε_rank, and the
 > complete protocol is **computational** zero-knowledge in the classical
 > random-oracle model — because hiding of unopened Merkle siblings is
 > computational, not statistical.
@@ -33,7 +34,7 @@ the un-amended zerocheck).
 |---|---|---|---|
 | Completeness | reference prover, certified configs | telescoping identity; roundtrip tests | proved; tested |
 | Zerocheck soundness (γ batching) | amended zerocheck | Lemma L6 + adversarial suite | proved; constructively checked |
-| Algebraic-transcript WI | certified configs | Lean + exact certificates | round-pair class established; **complete transcript open** |
+| Algebraic-transcript WI | certified configs | Lean + exact certificates | **established at the certified fixture** |
 | Merkle sibling hiding | all hiding openings | k_min-min-entropy leaves, ROM | assumed (computational) |
 | ZK after Fiat–Shamir | BLAKE3 batch, certified configs | reduction + rows above | conditional on those rows |
 | QROM | — | — | not claimed |

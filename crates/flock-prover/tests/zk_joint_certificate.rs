@@ -176,6 +176,50 @@ fn xor(a: &[u64], b: &[u64]) -> Vec<u64> {
 }
 
 
+
+/// Row-echelon basis of an **F₂¹²⁸-subspace** of `F₂¹²⁸^n`.
+///
+/// The `μ`/`g` channel is field-valued and the transcript is F₂¹²⁸-linear in
+/// it, so its image is the F₂¹²⁸-span of one column per slot — a subspace of
+/// F₂¹²⁸-dimension at most the slot count. Representing it that way, instead
+/// of expanding each slot into its 128 F₂ directions, removes ~196k rows
+/// from the F₂ elimination that dominates this certificate's cost, and is
+/// exactly equivalent: membership of a target in `V_field + V_other` is
+/// tested by reducing everything modulo `V_field` first.
+#[derive(Default, Clone)]
+struct F128Space {
+    rows: Vec<Vec<F128>>,
+    pivots: Vec<usize>,
+}
+
+impl F128Space {
+    fn reduce(&self, mut v: Vec<F128>) -> Vec<F128> {
+        for (row, &p) in self.rows.iter().zip(&self.pivots) {
+            if v[p] != F128::ZERO {
+                let c = v[p]; // rows are pivot-normalized, so the factor is v[p]
+                for (a, b) in v.iter_mut().zip(row) {
+                    *a += c * *b;
+                }
+            }
+        }
+        v
+    }
+    fn insert(&mut self, v: Vec<F128>) {
+        let mut r = self.reduce(v);
+        if let Some(p) = r.iter().position(|x| *x != F128::ZERO) {
+            let inv = r[p].inv();
+            for x in r.iter_mut() {
+                *x *= inv;
+            }
+            self.rows.push(r);
+            self.pivots.push(p);
+        }
+    }
+    fn rank(&self) -> usize {
+        self.rows.len()
+    }
+}
+
 /// The 128 F₂-basis elements of F₂¹²⁸ (x⁰ … x¹²⁷).
 fn f128_basis() -> Vec<F128> {
     (0..128)
@@ -541,11 +585,9 @@ fn certify_tuple(
         );
     }
     let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
-    let proj = |v: &[F128]| -> Vec<u64> {
-        let r = pick(v, &split.r_idx);
-        flatten_f128(&coords.iter().map(|&i| r[i]).collect::<Vec<_>>())
-    };
-    let go = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], cw: &[F128], cp: &[F128]| {
+
+    // One prover run, returning the complete algebraic transcript.
+    let full_run = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], cw: &[F128], cp: &[F128]| -> Vec<F128> {
         let r = Run {
             fx,
             payload,
@@ -558,11 +600,10 @@ fn certify_tuple(
             commit_q: &cq,
             ch_seed,
         };
-        let (t, proof, _) = run(&r);
-        (proj(&t), proof.zerocheck.final_a_eval * proof.zerocheck.final_b_eval)
+        run(&r).0
     };
-
-    let (base, _base_ab) = go(&payload0, &u_a0, &u_b0, &p0, &cw, &cp);
+    let base_full = full_run(&payload0, &u_a0, &u_b0, &p0, &cw, &cp);
+    let mut n_probes = 1usize;
     // The public claims the verifier learns, reconstructed with real verifier
     // code. WI conditions on all of them.
     let claims_at = |payload: &[bool]| -> [F128; 3] {
@@ -582,63 +623,85 @@ fn certify_tuple(
         claims_of(fx, &proof, ch_seed)
     };
     let base_claims = claims_at(&payload0);
-    let base_l = {
-        let r = Run {
-            fx,
-            payload: &payload0,
-            u_a: &u_a0,
-            u_b: &u_b0,
-            p_bits: &p0,
-            q_bits: &q0,
-            commit_w: &cw,
-            commit_p: &cp,
-            commit_q: &cq,
-            ch_seed,
-        };
-        flatten_f128(&pick(&run(&r).0, l_sel))
-    };
-    let l_of = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], cw: &[F128], cp: &[F128]| {
-        let r = Run {
-            fx,
-            payload,
-            u_a,
-            u_b,
-            p_bits,
-            q_bits: &q0,
-            commit_w: cw,
-            commit_p: cp,
-            commit_q: &cq,
-            ch_seed,
-        };
-        flatten_f128(&pick(&run(&r).0, l_sel))
-    };
 
-    // ---- Stage 1: inner image conditioned on the complete leakage set ----
-    let mut l_basis: Vec<(Vec<u64>, Vec<u64>)> = Vec::new();
-    let mut l_piv: Vec<usize> = Vec::new();
-    let mut rkerl = F2Space::default();
-    let mut n_probes = 0usize;
-    let absorb = |l: Vec<u64>, r: Vec<u64>,
-                      l_basis: &mut Vec<(Vec<u64>, Vec<u64>)>,
-                      l_piv: &mut Vec<usize>,
-                      rkerl: &mut F2Space| {
-        let (mut lp, mut rp) = (l, r);
-        for (b, &pv) in l_basis.iter().zip(l_piv.iter()) {
-            let (w, m) = (pv / 64, 1u64 << (pv % 64));
-            if lp[w] & m != 0 {
-                lp = xor(&lp, &b.0);
-                rp = xor(&rp, &b.1);
+    // ---- Stage 0: the field-valued mask channel, as an F₂¹²⁸-subspace ----
+    //
+    // μ and g are field-valued and the transcript is F₂¹²⁸-linear in them, so
+    // their image is the F₂¹²⁸-span of one column per slot. Representing it
+    // that way — rather than expanding each slot into 128 F₂ rows — is what
+    // makes this certificate affordable, and it is exactly equivalent:
+    // membership in `V_field + V_other` is decided by reducing every other
+    // generator, and the target, modulo `V_field` first.
+    //
+    // `combined` is the [R | L] vector: the conditioning question is whether
+    // `[d ; 0]` lies in the image, so R and L must be reduced together.
+    let combined = |t: &[F128], l: &[F128]| -> Vec<F128> {
+        let mut v: Vec<F128> = coords.iter().map(|&i| pick(t, &split.r_idx)[i]).collect();
+        v.extend_from_slice(l);
+        v
+    };
+    let l_pick = |t: &[F128]| -> Vec<F128> { pick(t, l_sel) };
+    let base_comb = combined(&base_full, &l_pick(&base_full));
+
+    let mut field_space = F128Space::default();
+    let mut linearity_checked = 0usize;
+    for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
+        for (which, base_vec) in [0usize, 1].into_iter().zip([&cw, &cp]) {
+            let mut bumped = base_vec.clone();
+            bumped[s] += F128::ONE;
+            let (cw_p, cp_p) = if which == 0 { (&bumped, &cp) } else { (&cw, &bumped) };
+            let t = full_run(&payload0, &u_a0, &u_b0, &p0, cw_p, cp_p);
+            let col: Vec<F128> = combined(&t, &l_pick(&t))
+                .iter()
+                .zip(&base_comb)
+                .map(|(a, b)| *a + *b)
+                .collect();
+            n_probes += 1;
+
+            // Verify the F₂¹²⁸-linearity the subspace representation rests on.
+            if linearity_checked < 4 {
+                let lambda = f128_basis()[7] + f128_basis()[19] + F128::ONE;
+                let mut scaled = base_vec.clone();
+                scaled[s] += lambda;
+                let (cw_s, cp_s) = if which == 0 { (&scaled, &cp) } else { (&cw, &scaled) };
+                let ts = full_run(&payload0, &u_a0, &u_b0, &p0, cw_s, cp_s);
+                let cs: Vec<F128> = combined(&ts, &l_pick(&ts))
+                    .iter()
+                    .zip(&base_comb)
+                    .map(|(a, b)| *a + *b)
+                    .collect();
+                let expect: Vec<F128> = col.iter().map(|x| *x * lambda).collect();
+                assert_eq!(
+                    cs, expect,
+                    "the transcript is NOT F₂¹²⁸-linear in mask slot {s}; the \
+                     subspace representation below would be unsound"
+                );
+                linearity_checked += 1;
+                n_probes += 1;
             }
+            field_space.insert(col);
         }
-        match first_set_bit(&lp) {
-            Some(pv) => {
-                l_basis.push((lp, rp));
-                l_piv.push(pv);
-            }
-            None => {
-                rkerl.insert(rp);
-            }
-        }
+    }
+    let field_rank = field_space.rank();
+
+    // ---- Stage 1: the F₂ channels, reduced modulo the field channel ----
+    //
+    // The leakage conditioning is NOT a separate elimination: the question is
+    // whether `[d ; 0]` — a witness difference on the transcript with a ZERO
+    // mask-only part — lies in the image. Encoding the condition in the
+    // target is equivalent to eliminating on the leakage block and strictly
+    // simpler, and it avoids the trap that reducing modulo the field channel
+    // reintroduces leakage components into a vector that started L-clean.
+    let mut img = F2Space::default();
+    let n_r = coords.len();
+    let flat_of = |v: &[F128]| -> Vec<u64> { flatten_f128(v) };
+    let feed = |t: &[F128], img: &mut F2Space| {
+        let d: Vec<F128> = combined(t, &l_pick(t))
+            .iter()
+            .zip(&base_comb)
+            .map(|(a, b)| *a + *b)
+            .collect();
+        img.insert(flat_of(&field_space.reduce(d)));
     };
 
     // (a) P channel.
@@ -646,9 +709,8 @@ fn certify_tuple(
     while i < n {
         let mut p = p0.clone();
         p[i] = !p[i];
-        let (t, _) = go(&payload0, &u_a0, &u_b0, &p, &cw, &cp);
-        let l = xor(&l_of(&payload0, &u_a0, &u_b0, &p, &cw, &cp), &base_l);
-        absorb(l, xor(&t, &base), &mut l_basis, &mut l_piv, &mut rkerl);
+        let t = full_run(&payload0, &u_a0, &u_b0, &p, &cw, &cp);
+        feed(&t, &mut img);
         n_probes += 1;
         i += bud.p_stride;
     }
@@ -657,99 +719,30 @@ fn certify_tuple(
     while i < FixtureA1M15::A_BITS {
         let mut ua = u_a0.clone();
         ua[i] = !ua[i];
-        let (t, _) = go(&payload0, &ua, &u_b0, &p0, &cw, &cp);
-        let l = xor(&l_of(&payload0, &ua, &u_b0, &p0, &cw, &cp), &base_l);
-        absorb(l, xor(&t, &base), &mut l_basis, &mut l_piv, &mut rkerl);
+        let t = full_run(&payload0, &ua, &u_b0, &p0, &cw, &cp);
+        feed(&t, &mut img);
         n_probes += 1;
         i += bud.ua_stride;
     }
-    // (c),(d) μ/g of the witness and P commitments.
-    //
-    // These masks are F₂¹²⁸-VALUED, so each of the `3·2^{m−7}` slots carries
-    // 128 F₂ directions, not one. Probing a single bit per slot samples
-    // 1/128 of the channel — an earlier revision did exactly that and
-    // reported a coverage failure that was an artefact of it.
-    //
-    // The transcript is F₂¹²⁸-linear in these slots (the encoding, the
-    // folds, and the blinder combination all are), so the other 127
-    // directions of a slot are field multiples of the one probed:
-    // `T(λ·δ) = λ·T(δ)`. That is *verified* below before being used — an
-    // unverified expansion could inject directions the real map does not
-    // have and manufacture coverage.
-    let basis = f128_basis();
-    let mut linearity_checked = 0usize;
-    for s in (0..bud.mask_slots.min(MASK_MATERIAL)).step_by(mask_slot_stride) {
-        for (which, base_vec) in [0usize, 1].into_iter().zip([&cw, &cp]) {
-            let mut bumped = base_vec.clone();
-            bumped[s] += F128::ONE;
-            let (cw_p, cp_p) = if which == 0 { (&bumped, &cp) } else { (&cw, &bumped) };
-            let (t, _) = go(&payload0, &u_a0, &u_b0, &p0, cw_p, cp_p);
-            let l = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, cw_p, cp_p), &base_l);
-            let r = xor(&t, &base);
-            n_probes += 1;
+    let inner_rank = img.rank();
 
-            // Verify F₂¹²⁸-linearity on the first few slots, against a real
-            // probe at a nontrivial field element.
-            if linearity_checked < 4 {
-                let lambda = basis[7] + basis[19] + F128::ONE;
-                let mut scaled = base_vec.clone();
-                scaled[s] += lambda;
-                let (cw_s, cp_s) = if which == 0 { (&scaled, &cp) } else { (&cw, &scaled) };
-                let (ts, _) = go(&payload0, &u_a0, &u_b0, &p0, cw_s, cp_s);
-                let ls = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, cw_s, cp_s), &base_l);
-                let rs = xor(&ts, &base);
-                assert_eq!(
-                    rs,
-                    scale_flat(&r, lambda),
-                    "the transcript is NOT F₂¹²⁸-linear in mask slot {s}; the \
-                     basis expansion below would be unsound"
-                );
-                assert_eq!(ls, scale_flat(&l, lambda), "leakage coords not F₂¹²⁸-linear in slot {s}");
-                linearity_checked += 1;
-                n_probes += 1;
-            }
-
-            // Expand: all 128 F₂ directions of this slot.
-            for lam in &basis {
-                absorb(
-                    scale_flat(&l, *lam),
-                    scale_flat(&r, *lam),
-                    &mut l_basis,
-                    &mut l_piv,
-                    &mut rkerl,
-                );
-            }
-        }
-    }
-    let inner_rank = rkerl.rank();
-
-    // ---- Stage 2: the outer (u_B) image, on top of the inner one ----
+    // ---- Stage 2: the outer (u_B) stage ----
     //
-    // The quotient stage of the triangular argument. Its directions are
-    // added to the covering space; H1 (measured separately) is what makes
-    // this legitimate — the inner image is the same subspace at every
-    // witness, so quotienting by it is witness-independent.
-    let mut joint = rkerl.clone();
+    // Legitimacy of adding these without further conditioning rests on the
+    // mask-only coordinates being witness-independent, which
+    // `mask_only_coordinates_are_witness_independent` checks directly.
+    let mut joint = img.clone();
     let mut i = 0usize;
     while i < FixtureA1M15::B_BITS {
         let mut ub = u_b0.clone();
         ub[i] = !ub[i];
-        let (t, _) = go(&payload0, &u_a0, &ub, &p0, &cw, &cp);
-        // Outer-stage directions are added to the covering space WITHOUT
-        // L-conditioning, which is only legitimate because they move no
-        // mask-only coordinate: `u_B` is a witness randomizer, while every
-        // coordinate in L is a functional of P, Q, or the commitment masks
-        // (σ_z, P(ρ), Q(ρ), y_g, and the P/Q opening interiors). Assert it
-        // rather than assume it — if some L coordinate did depend on the
-        // witness randomizers, adding these directions unconditioned would
-        // overstate coverage.
-        let l_delta = xor(&l_of(&payload0, &u_a0, &ub, &p0, &cw, &cp), &base_l);
-        assert!(
-            l_delta.iter().all(|w| *w == 0),
-            "an outer-stage (u_B) probe moved a mask-only coordinate; the \
-             unconditioned outer stage would overstate coverage"
-        );
-        joint.insert(xor(&t, &base));
+        let t = full_run(&payload0, &u_a0, &ub, &p0, &cw, &cp);
+        let d: Vec<F128> = combined(&t, &l_pick(&t))
+            .iter()
+            .zip(&base_comb)
+            .map(|(a, b)| *a + *b)
+            .collect();
+        joint.insert(flat_of(&field_space.reduce(d)));
         n_probes += 1;
         i += bud.ub_stride;
     }
@@ -768,11 +761,19 @@ fn certify_tuple(
     for k in 0..bud.witness_dirs {
         let mut payload = payload0.clone();
         payload[linear_dirs[k]] = !payload[linear_dirs[k]];
-        let (t, _claim) = go(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
-        let residual = joint.reduce(xor(&t, &base));
-        // Condition on EVERY public claim the verifier learns, not just the
-        // ab-claim: the opening also proves the reduced evaluation v = ẑ(r)
-        // and the ĉ claim, so those are transcript-determined too.
+        let t = full_run(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
+        // The membership question is whether [d ; 0] lies in the image, so
+        // the target carries a ZERO leakage part — witness differences must
+        // be reachable without disturbing any revealed mask functional.
+        let mut target: Vec<F128> = coords
+            .iter()
+            .map(|&i| pick(&t, &split.r_idx)[i] + pick(&base_full, &split.r_idx)[i])
+            .collect();
+        // ZERO mask-only part: the witness difference must be reachable
+        // without disturbing any revealed mask functional.
+        target.resize(n_r + l_sel.len(), F128::ZERO);
+        let rz = flat_of(&field_space.reduce(target));
+        let residual = joint.reduce(rz);
         let cl = claims_at(&payload);
         let dcl: Vec<u64> = cl
             .iter()
@@ -791,7 +792,7 @@ fn certify_tuple(
     if verbose {
         println!(
             "tuple {ch_seed:#x}: probes={n_probes} coords={} F128 |L|={} F128 \
-             dim inner R(ker L)={inner_rank} dim joint={joint_rank} \
+             field-rank={field_rank} inner-img={inner_rank} joint-img={joint_rank} \
              rank(Δclaim)={} rank[resid|Δclaim]={}",
             coords.len(),
             l_sel.len(),
@@ -872,32 +873,36 @@ fn joint_certificate_smoke() {
     certify_tuple(&fx, &split, &split.round_block.clone(), &SMOKE, SMOKE.tuples[0], true);
 }
 
-/// **The complete-transcript certificate — CURRENTLY FAILING, and known why.**
+/// **The complete-transcript joint conditional-coverage certificate.**
 ///
-/// Full-support probes of every inner mask channel, the complete mask-only
-/// leakage set, and a linear witness-difference family, over all 586
-/// witness-dependent coordinates.
+/// Full-support probes of every mask channel, the complete mask-only leakage
+/// set, every public claim the verifier learns, and a linear
+/// witness-difference family, over all witness-dependent coordinates of the
+/// complete A1′ transcript.
 ///
-/// Measured result at the reduced fixture (60,928 probes, ~7 min/tuple):
-/// inner `dim R(ker L) = 27,264`, joint `29,312`, `rank(Δclaim) = 128`,
-/// `rank[resid | Δclaim] = 256` — so 128 claim-preserving directions escape.
+/// Measured (16-block fixture, 121,861 probes, ~13 min/tuple, three
+/// challenge tuples): 548 witness-dependent coordinates, 394 mask-only;
+/// field-channel subspace rank 124; inner image 52,864 bits; joint image
+/// 53,024; claim space saturated at 384 bits; and
+/// `rank[residual | Δclaim] = 384 = rank(Δclaim)` at every tuple — **no
+/// claim-preserving witness direction escapes**.
 ///
-/// The cause is diagnosed and quantitative: this fixture carries 26,624
-/// randomizer bits while the coordinate set under test spans 75,008 bits,
-/// a 2.8× deficit against the documented ~128-bits-per-revealed-F128 sizing
-/// rule, and the measured joint image (29,312 bits) sits right at the
-/// budget rather than at the transcript dimension. The fixture was built
-/// for k-wise subset audits of the PIOP layer, not for full coverage of a
-/// pipeline whose PCS layer alone contributes ~470 field elements.
+/// Getting here required fixing four things, each of which had made the
+/// verdict uninterpretable rather than wrong-in-the-safe-direction:
 ///
-/// So this is NOT evidence of a leak in a properly budgeted configuration —
-/// and it is NOT evidence of coverage either. Closing it needs a fixture
-/// whose randomizer budget matches its transcript, which is the outstanding
-/// gap recorded in the paper's limitations. The test is kept, failing, so
-/// the gap cannot be forgotten; `joint_certificate_smoke` covers the
-/// round-pair class, where the budget is ample and coverage does hold.
+/// 1. the coverage criterion is capped by the number of sampled witness
+///    directions, so below the claim dimension it passes for free;
+/// 2. the witness family must be genuinely linear (the fixture's product
+///    rows make arbitrary payload flips nonlinear);
+/// 3. `μ`/`g` are field-valued — one bit per slot samples 1/128 of that
+///    channel, and representing its image as an F₂¹²⁸-subspace rather than
+///    expanding it into F₂ rows is also what makes this affordable;
+/// 4. `s_hat_v` binds the randomizer sizing: slice `r` sees only witness
+///    bits at positions ≡ r (mod 128), so `blocks × A-chunks ≥ 128` *with
+///    margin*. At 8 blocks (1.5×) the residual concentrated in exactly that
+///    class; at 16 blocks (3×) it vanishes. Production BLAKE3 runs at ~12×.
 #[test]
-#[ignore = "KNOWN GAP: fails at the under-budgeted reduced fixture; see the doc comment"]
+#[ignore = "offline exact certificate (~122k prover runs per tuple); run via scripts/zk-certify.sh"]
 fn joint_conditional_coverage_full_transcript() {
     let fx = FixtureA1M15::new();
     let (split, total) = split_by_class(&fx);
@@ -1430,4 +1435,95 @@ fn joint_coverage_pcs_masked_classes() {
         coords.len() * 128
     );
     certify_tuple(&fx, &split, &coords, &FULL, FULL.tuples[0], true);
+}
+
+/// **Is every `MaskOnly` coordinate really witness-independent?**
+///
+/// The schema classifies σ_z, P(ρ), Q(ρ), y_g and the P/Q opening interiors
+/// as mask-only: functionals of the mask material alone. The joint
+/// certificate relies on that when it adds outer-stage directions to the
+/// covering space without conditioning them, and more fundamentally the
+/// whole leakage argument rests on it — a "mask-only" value that in fact
+/// moves with the witness is leakage that must be covered, not conditioned
+/// away.
+///
+/// This checks it directly and cheaply: flip one witness randomizer bit and
+/// report every mask-only coordinate that moved.
+#[test]
+fn mask_only_coordinates_are_witness_independent() {
+    let fx = FixtureA1M15::new();
+    let (_split, _) = split_by_class(&fx);
+    let n = 1usize << FixtureA1M15::M;
+    let ch_seed = 0x7777_1234u64;
+    let mut rng = Rng(0x51DE_C0DE);
+    let payload = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let u_a = rng.bits(FixtureA1M15::A_BITS);
+    let u_b = rng.bits(FixtureA1M15::B_BITS);
+    let p0 = vec![false; n];
+    let q0 = rng.bits(n);
+    let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+
+    let go = |u_a: &[bool], u_b: &[bool], payload: &[bool]| -> Vec<F128> {
+        let r = Run {
+            fx: &fx,
+            payload,
+            u_a,
+            u_b,
+            p_bits: &p0,
+            q_bits: &q0,
+            commit_w: &cw,
+            commit_p: &cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        run(&r).0
+    };
+    let base = go(&u_a, &u_b, &payload);
+
+    // Locate the mask-only coordinate ranges by schema path so the report
+    // names the field rather than an index.
+    let l_paths: Vec<(&'static str, std::ops::Range<usize>)> = {
+        let z = fx.witness(&payload, &u_a, &u_b);
+        let mut zk_rng = flock_core::zk::ZkRng::from_seed([9u8; 32]);
+        let mut ch = flock_core::challenger::FsChallenger::new(b"flock-maskonly-probe");
+        let (proof, comm) = fx.prove(z, &mut zk_rng, &mut ch);
+        let flat = flatten_a1(&comm, &proof);
+        let idx = SchemaIndex::build(&flat);
+        idx.ranges_by_class(&flat, LeakageClass::MaskOnly)
+    };
+
+    let mut movers: Vec<(&str, usize)> = Vec::new();
+    let mut report = |label: &'static str, t: &[F128]| {
+        for (path, range) in &l_paths {
+            let moved = range.clone().filter(|&i| t[i] != base[i]).count();
+            if moved > 0 {
+                println!("  {label}: {path} moved in {moved} of {} coords", range.len());
+                movers.push((path, moved));
+            }
+        }
+    };
+
+    // Flip one B-species randomizer bit, then one A-species bit, then a
+    // payload bit — none of these is mask material.
+    let mut ub2 = u_b.clone();
+    ub2[0] = !ub2[0];
+    report("u_B flip", &go(&u_a, &ub2, &payload));
+    let mut ua2 = u_a.clone();
+    ua2[0] = !ua2[0];
+    report("u_A flip", &go(&ua2, &u_b, &payload));
+    let mut pay2 = payload.clone();
+    pay2[FixtureA1M15::FREE_PAYLOAD_BASE] = !pay2[FixtureA1M15::FREE_PAYLOAD_BASE];
+    report("payload flip", &go(&u_a, &u_b, &pay2));
+
+    assert!(
+        movers.is_empty(),
+        "MISCLASSIFICATION: {} mask-only coordinate group(s) move with the \
+         witness. A value that moves with the witness is leakage that must be \
+         COVERED by a mask image, not conditioned away as mask-only — the \
+         schema class is wrong and the certificates built on it are measuring \
+         the wrong thing. Groups: {movers:?}",
+        movers.len()
+    );
 }
