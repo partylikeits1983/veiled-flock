@@ -122,7 +122,7 @@ impl PcsParams {
 }
 
 /// Public commitment (Merkle root + params).
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Commitment {
     pub root: Hash,
     pub params: PcsParams,

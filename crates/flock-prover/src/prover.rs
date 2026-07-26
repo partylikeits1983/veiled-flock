@@ -749,14 +749,20 @@ pub fn prove_fast_ligerito_timed<Ch: Challenger>(
 // ===========================================================================
 
 /// The A1′ end-to-end proof: the masked zerocheck, lincheck, the witness PCS
-/// opening (`ab`,`c` claims), and the two hiding `P,Q` openings at ρ.
+/// opening (for the `ab`,`c` claims, which the verifier recomputes itself),
+/// and the two hiding `P,Q` openings at ρ.
+///
+/// Deliberately carries **no** claim values: the verifier derives the `ab`/`c`
+/// claims from the transcript, so shipping copies in the proof would be
+/// unchecked malleable bytes. Every field of this struct is classified in
+/// [`crate::transcript_schema`]; changing the shape here requires updating the
+/// flattener there (a compile error enforces it) and bumping the schema.
 #[cfg(feature = "zk")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct R1csProofZkA1 {
     pub zerocheck: zerocheck::ZkZerocheckProof,
     pub lincheck: lincheck::LincheckProof,
     pub pcs_open: pcs::BatchOpeningProofLigerito,
-    pub ab: ZClaim,
-    pub c: ZClaim,
     pub open_p: pcs::BatchOpeningProofLigerito,
     pub open_q: pcs::BatchOpeningProofLigerito,
     pub comm_p: Commitment,
@@ -777,6 +783,13 @@ fn sample_mask_bits(rng: &mut flock_core::zk::ZkRng, m: usize) -> Vec<F128> {
 
 /// End-to-end A1′ prover. `zk_rng` is forked into independent streams for the
 /// witness mask, the two mask polynomials, and their commitments.
+///
+/// Uses the production Ligerito config ladder for the statement's shape and
+/// asserts the statement carries a zk randomizer layout (`r1cs.zk`): without
+/// randomizer rows the affine transcript classes are unmasked and the proof
+/// is NOT hiding. Audit fixtures with hand-rolled randomizer rows use
+/// [`prove_r1cs_zk_a1_with_config`], which leaves layout responsibility to
+/// the caller.
 #[cfg(feature = "zk")]
 #[allow(clippy::too_many_arguments)]
 pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
@@ -790,12 +803,49 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
     zk_rng: &mut flock_core::zk::ZkRng,
     challenger: &mut Ch,
 ) -> (R1csProofZkA1, Commitment) {
-    assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
-    let m = r1cs.m;
+    assert!(
+        r1cs.zk.is_some(),
+        "A1′ prove requires a zk randomizer layout (r1cs.zk); a statement \
+         without randomizer rows yields a non-hiding transcript"
+    );
     let log_n = pcs_params.log_msg_len();
     let lig_config =
         pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito config");
+    prove_r1cs_zk_a1_with_config(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        &lig_config,
+        zk_rng,
+        challenger,
+    )
+}
+
+/// [`prove_r1cs_zk_a1`] with an explicit Ligerito prover config, for audit
+/// fixtures at shapes outside the production config ladder (e.g. the m=15
+/// certificate fixture). Does NOT check `r1cs.zk` — the caller owns the
+/// randomizer-layout correctness of the statement.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_config: &pcs::ligerito::ProverConfig,
+    zk_rng: &mut flock_core::zk::ZkRng,
+    challenger: &mut Ch,
+) -> (R1csProofZkA1, Commitment) {
+    assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
+    let m = r1cs.m;
     let padding = r1cs.padding_spec();
     let cast = |v: &[F128]| -> &[u8] {
         unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
@@ -859,27 +909,27 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
     let mut ch_p = challenger.clone();
     ch_p.observe_label(b"flock-a1-open-P");
     let open_p = pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v(
-        p_f128, &pd_p, &comm_p, &[x_point.as_slice()], &[], &[], &padding, &lig_config, &mut ch_p,
+        p_f128, &pd_p, &comm_p, &[x_point.as_slice()], &[], &[], &padding, lig_config, &mut ch_p,
     );
     let mut ch_q = challenger.clone();
     ch_q.observe_label(b"flock-a1-open-Q");
     let open_q = pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v(
-        q_f128, &pd_q, &comm_q, &[x_point.as_slice()], &[], &[], &padding, &lig_config, &mut ch_q,
+        q_f128, &pd_q, &comm_q, &[x_point.as_slice()], &[], &[], &padding, lig_config, &mut ch_q,
     );
 
     let pcs_open = open_claims_with_precomputed_ligerito(
         z_packed,
         &prover_data,
         &commitment,
-        &[ab.clone(), c.clone()],
+        &[ab, c],
         &[None, None],
         &padding,
-        &lig_config,
+        lig_config,
         challenger,
     );
 
     (
-        R1csProofZkA1 { zerocheck: zk_zc, lincheck: lc_proof, pcs_open, ab, c, open_p, open_q, comm_p, comm_q },
+        R1csProofZkA1 { zerocheck: zk_zc, lincheck: lc_proof, pcs_open, open_p, open_q, comm_p, comm_q },
         commitment,
     )
 }
@@ -894,12 +944,27 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
-    use flock_core::verifier::VerifyError;
-    let m = r1cs.m;
     let log_n = pcs_params.log_msg_len();
     let lig_v =
         pcs::ligerito::verifier_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito verifier config");
+    verify_r1cs_zk_a1_with_config(r1cs, pcs_params, proof, commitment, lincheck_circuit, &lig_v, challenger)
+}
+
+/// [`verify_r1cs_zk_a1`] with an explicit Ligerito verifier config, for audit
+/// fixtures at shapes outside the production config ladder.
+#[cfg(feature = "zk")]
+pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_v: &pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+) -> Result<(), flock_core::verifier::VerifyError> {
+    use flock_core::verifier::VerifyError;
+    let m = r1cs.m;
 
     bind_statement(challenger, r1cs, commitment);
     challenger.observe_bytes(&proof.comm_p.root);
@@ -941,7 +1006,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         &[x_point.as_slice()],
         &[],
         &proof.open_p,
-        &lig_v,
+        lig_v,
         &mut ch_p,
     )
     .is_err()
@@ -957,7 +1022,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         &[x_point.as_slice()],
         &[],
         &proof.open_q,
-        &lig_v,
+        lig_v,
         &mut ch_q,
     )
     .is_err()
@@ -965,11 +1030,12 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         return Err(VerifyError::PcsAb(pcs::VerifyError::Ligerito));
     }
 
-    flock_core::verifier::verify_claims_ligerito(
+    flock_core::verifier::verify_claims_ligerito_with_config(
         commitment,
         &[ab, c],
         &proof.pcs_open,
         pcs_params,
+        lig_v,
         challenger,
     )
     .map_err(VerifyError::PcsAb)?;

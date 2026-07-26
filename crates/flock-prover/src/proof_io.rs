@@ -84,6 +84,11 @@ impl HashKind {
 /// reserved: they were the legacy BaseFold R1cs/Chain flavors.
 const FLAVOR_R1CS_LIGERITO: u8 = 2;
 const FLAVOR_CHAIN_LIGERITO: u8 = 3;
+/// A1′ reference zk proof bundle ([`R1csProofBundleZkA1`]).
+const FLAVOR_R1CS_ZK_A1: u8 = 4;
+
+/// All flavor bytes this build understands (for the unknown-flavor check).
+const KNOWN_FLAVORS: [u8; 3] = [FLAVOR_R1CS_LIGERITO, FLAVOR_CHAIN_LIGERITO, FLAVOR_R1CS_ZK_A1];
 
 /// Header size = 5-byte magic + 1-byte version + 1-byte flavor.
 const HEADER_LEN: usize = 7;
@@ -169,6 +174,34 @@ impl R1csProofBundleLigerito {
     }
 }
 
+/// Bundles an A1′ reference zk proof with its witness commitment. The
+/// verifier additionally needs the (public) statement setup and PCS params;
+/// `proof.comm_p` / `proof.comm_q` travel inside the proof itself.
+///
+/// The canonical field classification of everything in this bundle lives in
+/// [`crate::transcript_schema`]; `from_bytes` + `transcript_schema::flatten_a1`
+/// form the independent transcript parser.
+#[cfg(feature = "zk")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct R1csProofBundleZkA1 {
+    pub commitment: Commitment,
+    pub proof: crate::prover::R1csProofZkA1,
+}
+
+#[cfg(feature = "zk")]
+impl R1csProofBundleZkA1 {
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(HEADER_LEN + 1024);
+        write_header(&mut out, FLAVOR_R1CS_ZK_A1);
+        bincode::serialize_into(&mut out, self).expect("bincode serialize R1csProofBundleZkA1");
+        out
+    }
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
+        let payload = parse_header(bytes, FLAVOR_R1CS_ZK_A1)?;
+        Ok(bincode::deserialize(payload)?)
+    }
+}
+
 impl ChainProofBundleLigerito {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
@@ -205,7 +238,7 @@ fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeE
         return Err(DeserializeError::UnsupportedVersion(v));
     }
     let flavor = bytes[6];
-    if flavor != FLAVOR_R1CS_LIGERITO && flavor != FLAVOR_CHAIN_LIGERITO {
+    if !KNOWN_FLAVORS.contains(&flavor) {
         return Err(DeserializeError::UnknownFlavor(flavor));
     }
     if flavor != expected_flavor {

@@ -2450,17 +2450,7 @@ mod tests {
 
         // Tamper rejection.
         for t in 0..3 {
-            let mut bad = crate::prover::R1csProofZkA1 {
-                zerocheck: proof.zerocheck.clone(),
-                lincheck: proof.lincheck.clone(),
-                pcs_open: proof.pcs_open.clone(),
-                ab: proof.ab.clone(),
-                c: proof.c.clone(),
-                open_p: proof.open_p.clone(),
-                open_q: proof.open_q.clone(),
-                comm_p: proof.comm_p.clone(),
-                comm_q: proof.comm_q.clone(),
-            };
+            let mut bad = proof.clone();
             match t {
                 0 => bad.zerocheck.final_p_eval.lo ^= 1,
                 1 => bad.zerocheck.mask_init.lo ^= 1,

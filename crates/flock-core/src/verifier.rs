@@ -90,7 +90,31 @@ pub fn verify_claims_ligerito<Ch: Challenger>(
 ) -> Result<(), pcs::VerifyError> {
     // Verification is single-threaded; run the body on the dedicated 1-thread pool.
     verifier_pool().install(move || {
-        verify_claims_ligerito_inner(commitment, claims, pcs_open, pcs_params, challenger)
+        verify_claims_ligerito_inner(commitment, claims, pcs_open, pcs_params, None, challenger)
+    })
+}
+
+/// [`verify_claims_ligerito`] with an explicit Ligerito verifier config, for
+/// audit fixtures at shapes outside the production config ladder (the A1′
+/// m=15 certificate fixture). Production callers use
+/// [`verify_claims_ligerito`], which derives the config from `pcs_params`.
+pub fn verify_claims_ligerito_with_config<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    pcs_open: &pcs::BatchOpeningProofLigerito,
+    pcs_params: &crate::pcs::PcsParams,
+    lig_v_config: &crate::pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+) -> Result<(), pcs::VerifyError> {
+    verifier_pool().install(move || {
+        verify_claims_ligerito_inner(
+            commitment,
+            claims,
+            pcs_open,
+            pcs_params,
+            Some(lig_v_config),
+            challenger,
+        )
     })
 }
 
@@ -99,6 +123,7 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
     claims: &[ZClaim],
     pcs_open: &pcs::BatchOpeningProofLigerito,
     pcs_params: &crate::pcs::PcsParams,
+    lig_v_config: Option<&crate::pcs::ligerito::VerifierConfig>,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
     // The commitment carries a params copy for shape bookkeeping, but the
@@ -121,13 +146,20 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
     let x_refs: Vec<&[F128]> = x_fulls.iter().map(|v| v.as_slice()).collect();
     // zk mode commits one extra dimension (mask half) — key the ladder on
     // the committed length.
-    let log_n = pcs_params.log_msg_len();
-    let lig_v_config = crate::pcs::ligerito::verifier_config_for(
-        log_n,
-        pcs_params.log_batch_size,
-        pcs_params.profile,
-    )
-    .expect("Ligerito default verifier config");
+    let derived;
+    let lig_v_config = match lig_v_config {
+        Some(cfg) => cfg,
+        None => {
+            let log_n = pcs_params.log_msg_len();
+            derived = crate::pcs::ligerito::verifier_config_for(
+                log_n,
+                pcs_params.log_batch_size,
+                pcs_params.profile,
+            )
+            .expect("Ligerito default verifier config");
+            &derived
+        }
+    };
     pcs::verify_opening_batch_ligerito_mixed(
         commitment,
         &values,
@@ -135,7 +167,7 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
         &x_refs,
         &[],
         pcs_open,
-        &lig_v_config,
+        lig_v_config,
         challenger,
     )
 }
