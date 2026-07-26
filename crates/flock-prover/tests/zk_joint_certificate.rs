@@ -1389,3 +1389,45 @@ fn p_channel_image_requires_nondegenerate_q() {
         good.rank()
     );
 }
+
+/// **Coverage restricted to the PCS-masked coordinate classes.**
+///
+/// The whole-transcript run's per-class attribution put every escaping
+/// direction in the classes the PCS masks cover — `s_hat_v`, the opened
+/// codeword rows, and the opening's sumcheck transcript. This test asks the
+/// same conditional-coverage question of exactly those classes, with the
+/// `μ`/`g` channel probed in full.
+///
+/// The point is cost: the certificate's expense is an F₂ elimination whose
+/// width is the codomain, so restricting to the classes under suspicion
+/// makes the question answerable in minutes instead of hours. It is a
+/// weaker statement than whole-transcript coverage — coverage of a
+/// projection does not imply coverage of the join — but it localizes what
+/// the mask channel does and does not reach.
+#[test]
+#[ignore = "offline: full μ/g probing over the PCS-masked classes"]
+fn joint_coverage_pcs_masked_classes() {
+    let fx = FixtureA1M15::new();
+    let (split, _) = split_by_class(&fx);
+    let wanted = [
+        "pcs_open.ring_switches.s_hat_v",
+        "pcs_open.ligerito.initial_proof.opened_rows",
+        "pcs_open.ligerito.sumcheck_transcript",
+        "pcs_open.ligerito.final_proof.yr",
+        "pcs_open.ligerito.recursive_proofs.opened_rows",
+        "pcs_open.ligerito.final_proof.opened_rows",
+    ];
+    let mut coords: Vec<usize> = Vec::new();
+    for (path, range) in &split.r_paths {
+        if wanted.contains(path) {
+            coords.extend(range.clone());
+        }
+    }
+    assert!(!coords.is_empty(), "no PCS-masked coordinates found in the schema");
+    println!(
+        "PCS-masked classes under test: {} F128 coordinates ({} bits)",
+        coords.len(),
+        coords.len() * 128
+    );
+    certify_tuple(&fx, &split, &coords, &FULL, FULL.tuples[0], true);
+}
