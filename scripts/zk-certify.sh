@@ -66,6 +66,7 @@ run flock-prover zk_production_config production_mask_channel_covers_round_block
 run flock-prover zk_production_config production_s_hat_v_randomizer_margin
 run flock-prover zk_production_config production_checked_prove_verifies
 run flock-prover zk_production_config blake3_witness_has_no_linear_difference_family
+run flock-prover zk_production_config l3_round1_region_alignment_holds
 
 # --- End-to-end A1' reference path on real 256-block BLAKE3 (m=22) ----------
 run flock-prover --lib prove_verify_r1cs_zk_a1_roundtrip

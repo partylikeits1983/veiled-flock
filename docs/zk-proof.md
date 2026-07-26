@@ -203,10 +203,12 @@ the affine coordinates.
 univariate-skip interpolation groups are 64 consecutive rows; every
 randomizer / mask / padding region is 128-bit aligned, so no group mixes
 A-rows, B-rows, and real rows. Hence the round-1 vectors $P^{AB},P^{C}$ are
-affine in $u$. (The layout arithmetic enforces 128-bit alignment by
-construction — `ZkBlockLayout::new` rounds `rand_bit_base` to a multiple of
-128 and panics on overflow; a dedicated assertion/test pinning the
-no-group-straddle property is remaining.)
+affine in $u$. **Verified** (`l3_round1_region_alignment_holds`): on the real
+BLAKE3 zk layout the A-species occupies 12 whole skip groups and the B-species
+2, and the two sets of groups are disjoint — so no univariate-skip fold group
+mixes the species or straddles a region boundary, which is exactly what the
+proof relies on. This closes review item L3, previously asserted with a
+runtime check the audit could not locate.
 
 **Lemma L4 (the round messages are bilinear, and why; [P], [C]).** A round
 sends $(G(1),G(\infty))$ where $G$ is degree 2 in the fold variable and

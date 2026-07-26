@@ -213,3 +213,59 @@ fn blake3_witness_has_no_linear_difference_family() {
          would contradict it being a hash trace — re-examine the fixture"
     );
 }
+
+/// **Lemma L3 (round-1 region alignment), verified.**
+///
+/// Round-1 is deliberately left unmasked by the degree-2 channel; its
+/// hiding rests on the univariate-skip fold groups being 64 consecutive rows
+/// that never mix A-species randomizer rows, B-species rows and real rows.
+/// The proof document asserted this ("a runtime layout assertion enforces
+/// the alignment the proof relies on") but the audit could not find such an
+/// assertion. This is it: every randomizer region boundary in the real
+/// BLAKE3 zk layout must be a multiple of the skip-group size, so no group
+/// straddles a boundary.
+#[test]
+fn l3_round1_region_alignment_holds() {
+    const SKIP_GROUP: usize = 64; // 2^k_skip rows per univariate-skip group
+    let setup = Blake3Setup::with_zk(256);
+    let layout = setup.r1cs.zk.expect("zk layout");
+
+    let a: Vec<usize> = layout.a_bits().collect();
+    let b: Vec<usize> = layout.b_bits().collect();
+    assert!(!a.is_empty() && !b.is_empty());
+
+    // Each species must occupy whole skip groups: the set of groups touched
+    // by one species must not be touched by the other, and every touched
+    // group must be entirely within that species.
+    let groups_of = |bits: &[usize]| -> std::collections::BTreeSet<usize> {
+        bits.iter().map(|b| b / SKIP_GROUP).collect()
+    };
+    let ga = groups_of(&a);
+    let gb = groups_of(&b);
+    assert!(
+        ga.is_disjoint(&gb),
+        "a skip group contains both A-species and B-species randomizer rows; \
+         the round-1 message would then be bilinear in the mask species and \
+         lemma L3 would not hold"
+    );
+    for (name, bits, groups) in [("A", &a, &ga), ("B", &b, &gb)] {
+        let set: std::collections::BTreeSet<usize> = bits.iter().copied().collect();
+        for g in groups {
+            for r in (g * SKIP_GROUP)..((g + 1) * SKIP_GROUP) {
+                assert!(
+                    set.contains(&r),
+                    "skip group {g} mixes {name}-species randomizer rows with \
+                     other rows (row {r} is outside the species), so a fold \
+                     group straddles a region boundary"
+                );
+            }
+        }
+    }
+    println!(
+        "L3 verified: {} A-rows in {} whole skip groups, {} B-rows in {} whole groups, disjoint",
+        a.len(),
+        ga.len(),
+        b.len(),
+        gb.len()
+    );
+}
