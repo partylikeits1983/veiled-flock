@@ -47,6 +47,65 @@ fn honest(seed: u64, mask_seed: [u8; 32]) -> (FixtureA1M15, R1csProofZkA1, Commi
     (fx, proof, comm)
 }
 
+/// A false statement stays rejected through the complete amended pipeline.
+///
+/// A2 adds a batched claim (`target + γ_lc·σ_lc`) to the lincheck, which is a
+/// new place a defect could be cancelled: a prover that could choose
+/// `σ_lc` *after* `γ_lc` would absorb one. The Fiat–Shamir ordering denies
+/// that, but the property worth testing is the end-to-end one, on the real
+/// prover, over many corruptions — not the ordering in isolation.
+///
+/// The witness is corrupted after construction, so `Az ∘ Bz = z` genuinely
+/// fails; the prover is then run honestly on it.
+#[test]
+fn a1_false_statement_rejected_end_to_end() {
+    let fx = FixtureA1M15::new();
+    let mut rng = Rng(0x5EED_F0);
+    let payload = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let u_a = rng.bits(FixtureA1M15::A_BITS);
+    let u_b = rng.bits(FixtureA1M15::B_BITS);
+
+    // A bit flip does not automatically make the statement false: the
+    // randomizer rows are `u·1 = u` and `1·u = u`, so flipping a bit there
+    // yields a *different valid witness*. Only trials where `Az ∘ Bz = z`
+    // genuinely fails are assertions about soundness; the rest are skipped
+    // and the test insists that enough real ones were reached.
+    let broken = |z: &[F128]| -> bool {
+        let a = fx.r1cs.apply_a_packed(z);
+        let b = fx.r1cs.apply_b_packed(z);
+        a.iter()
+            .zip(&b)
+            .zip(z)
+            .any(|((x, y), zz)| (x.lo & y.lo) != zz.lo || (x.hi & y.hi) != zz.hi)
+    };
+
+    let mut tested = 0usize;
+    for trial in 0..64u64 {
+        let mut z = fx.witness(&payload, &u_a, &u_b);
+        let slot = (rng.next_u64() as usize) % z.len();
+        let bit = rng.next_u64() % 64;
+        z[slot].lo ^= 1u64 << bit;
+        if !broken(&z) {
+            continue;
+        }
+        tested += 1;
+
+        let mut zk_rng = ZkRng::from_seed([trial as u8; 32]);
+        let mut ch = FsChallenger::new(DOMAIN);
+        let (proof, comm) = fx.prove(z, &mut zk_rng, &mut ch);
+        let mut chv = FsChallenger::new(DOMAIN);
+        assert!(
+            fx.verify(&proof, &comm, &mut chv).is_err(),
+            "trial {trial}: a proof of a FALSE statement was accepted"
+        );
+    }
+    assert!(
+        tested >= 8,
+        "only {tested} of 64 corruptions actually falsified the statement — \
+         too few for this to say anything"
+    );
+}
+
 #[test]
 fn a1_honest_roundtrip_and_fresh_masks() {
     let (fx, proof, comm) = honest(0x5EED_01, [0x11; 32]);
