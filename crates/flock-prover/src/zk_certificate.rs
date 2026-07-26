@@ -23,8 +23,11 @@
 use flock_core::pcs::PcsParams;
 use flock_core::r1cs::BlockR1cs;
 
-/// Wire/protocol version of the A1′ reference construction.
-pub const PROTOCOL_VERSION: &str = "flock-zk-a1-v1";
+/// Wire/protocol version of the reference construction. Bumped for A2 (the
+/// lincheck mask channel): the wire format gained `comm_s`, `open_s`,
+/// `sigma_lc` and `s_eval`, and the lincheck transcript changed meaning, so
+/// an A1′-only certificate must not certify this protocol.
+pub const PROTOCOL_VERSION: &str = "flock-zk-a1a2-v1";
 
 /// Field representation the certificates were computed over.
 pub const FIELD_REPR: &str = "gf2_128_ghash";

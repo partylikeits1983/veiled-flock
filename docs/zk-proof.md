@@ -319,6 +319,85 @@ composition with the affine classes is the **triangular** argument of §4
 
 ---
 
+## 5b. The amendment A2: a committed mask channel for the lincheck
+
+A1′ masks the zerocheck's round messages. It does not touch the lincheck,
+which is covered only by the randomizer witness rows — and on a real BLAKE3
+statement those rows are ~5.5% of the witness, against ~81% on the synthetic
+fixture. Measurement (`tests/zk_blake3_certificate.rs`) localized a
+claim-preserving witness direction escaping on `lincheck.rounds` and
+`lincheck.z_partial`, and six candidate explanations were eliminated
+experimentally before the construction was changed; the record is in
+`docs/lincheck-mask-channel.md`.
+
+**The construction.** The lincheck proves $\sum_i \mathrm{comb}(i)\,z(i)=T$
+by a product sumcheck in which $\mathrm{comb}$ is **public** and the $z$-slot
+enters **linearly**. That is a stronger structure than the zerocheck's, and
+it admits a strictly simpler repair than the degree-2 $S\cdot T$ channel A1′
+needed: mask the $z$-slot additively.
+
+1. Draw a witness-free cube $S$ from the prover DRBG (fork `a2-S`), zero its
+   padding rows, and commit it hidingly (`commit_zk`). Its root is bound with
+   $P$'s and $Q$'s, before any challenge of the run.
+2. After $\alpha$ and the const-pin $\beta$ fix `comb`, absorb
+   $\sigma_{lc}=\sum_i \mathrm{comb}(i)\,S_{\mathrm{vec}}(i)$, then draw
+   $\gamma_{lc}$.
+3. Run the sumcheck on $z+\gamma_{lc}S$ with initial claim
+   $T+\gamma_{lc}\sigma_{lc}$.
+4. Recover the output claim as $w = w_{\text{sent}} + \gamma_{lc}\hat S(\rho)$
+   (char 2), with $\hat S(\rho)$ opened against $S$'s commitment at the
+   lincheck's own output point.
+
+**Why it hides.** Every message of the layer — the round pairs and
+`z_partial` — is a deterministic function of the shifted table
+$z+\gamma_{lc}S$ at fixed public `comb` and fixed challenges. So the masked
+transcript is *exactly the honest transcript of a shifted witness*. This is a
+different and stronger situation than A1′'s: there the mask had to cover a
+witness-difference direction inside a quadratic form, and coverage was a
+rank condition to be certified. Here the shift acts on the layer's input.
+The remaining question is only how much of $\mathbb{F}_{2^{128}}^k$ the
+reachable shifts $\gamma_{lc}\cdot\mathrm{fold}_{x_{\text{outer}}}(S)$ span,
+since $S$ is a **Boolean** cube: $\mathrm{fold}(S)[i]=\sum_j
+\mathrm{eq}_j S[j,i]$ ranges over the $\mathbb{F}_2$-span of the eq-table
+entries, one independent draw per $i$. That span is full whenever the eq
+table $\mathbb{F}_2$-spans $\mathbb{F}_{2^{128}}$ — a property of the
+challenges, so it is **measured, not assumed**, by the same joint coverage
+certificate that covers the rest of the transcript.
+
+**Completeness.** Structural: the masked run *is* an honest run of the
+existing prover on $z+\gamma_{lc}S$ with the initial claim shifted by
+$\gamma_{lc}\sigma_{lc}$. Pinned end-to-end by
+`masked_roundtrip_recovers_the_unmasked_claim`, which also checks that
+$\hat S(\rho)$ carries exactly the PCS's evaluation semantics — the
+statement the opening will be asked to certify.
+
+**Soundness of the batching (Lemma L6, transplanted).** Let
+$\delta = \sum\mathrm{comb}\cdot z - T$ and
+$\delta' = \sigma_{lc} - \sum\mathrm{comb}\cdot S$. Both are fixed before
+$\gamma_{lc}$ is drawn ($z$ and $S$ by their commitments, $\sigma_{lc}$ by
+absorption). The combined initial claim is correct iff
+$\delta+\gamma_{lc}\delta'=0$, so a prover with $(\delta,\delta')\neq(0,0)$
+succeeds for at most one $\gamma_{lc}$: probability $2^{-128}$, and the
+Fiat–Shamir ordering denies the choice. Constructive check:
+`masked_verify_rejects_sigma_tamper`.
+
+**Why $\hat S(\rho)$ must be opened, not merely claimed.** This is the step
+the amendment's own spec flagged as most likely to go wrong, and it is a real
+attack rather than a formality. The verifier reconstructs
+$w = w_{\text{sent}}+\gamma_{lc}\hat S(\rho)$. If $\hat S(\rho)$ were an
+unbound scalar, a prover could pick it *after* $\rho$ is known and set it to
+$w_{\text{sent}} - \hat z(\rho)$ for whatever $\hat z(\rho)$ the witness
+commitment forces — absorbing an arbitrary defect and leaving the output
+claim unconstrained. Binding it to $S$'s commitment removes the freedom.
+`a1_tamper_matrix_rejected` covers `lincheck.s_eval`, `lincheck.sigma_lc`,
+`comm_s.root`, and the open_s/comm_s substitutions.
+
+**Knowledge soundness is unchanged.** $S$ enters no R1CS constraint; it is a
+term added to a claim, and the extractor still recovers $z$ from the witness
+commitment, whose opening is checked at the un-shifted claim $w$.
+
+---
+
 ## 6. Completeness and knowledge preservation (item #18, [P]+[C])
 
 **Completeness [P].** The mask rows (randomizer + $P,Q$ columns) are

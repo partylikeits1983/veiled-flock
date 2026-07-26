@@ -85,6 +85,21 @@ fn a1_tamper_matrix_rejected() {
         ("lincheck.z_partial[0]", Box::new(move |p| p.lincheck.z_partial[0] += bump)),
         ("comm_p.root", Box::new(|p| p.comm_p.root[0] ^= 1)),
         ("comm_q.root", Box::new(|p| p.comm_q.root[0] ^= 1)),
+        ("comm_s.root", Box::new(|p| p.comm_s.root[0] ^= 1)),
+        // A2: `sigma_lc` is bound only by Fiat–Shamir ordering and `s_eval`
+        // only by S's commitment — the two places the amendment could go
+        // wrong, so both get an explicit case.
+        ("lincheck.sigma_lc", Box::new(move |p| p.sigma_lc += bump)),
+        ("lincheck.s_eval", Box::new(move |p| p.s_eval += bump)),
+        (
+            "swap open_s/open_p",
+            Box::new(|p| std::mem::swap(&mut p.open_s, &mut p.open_p)),
+        ),
+        (
+            "swap comm_s/comm_q",
+            Box::new(|p| std::mem::swap(&mut p.comm_s, &mut p.comm_q)),
+        ),
+        ("open_s strip zk_blind", Box::new(|p| p.open_s.zk_blind = None)),
         ("comm_p.params.zk", Box::new(|p| p.comm_p.params.zk = false)),
         ("comm_q.params.m", Box::new(|p| p.comm_q.params.m += 1)),
         ("comm_p.params.log_inv_rate", Box::new(|p| p.comm_p.params.log_inv_rate += 1)),
