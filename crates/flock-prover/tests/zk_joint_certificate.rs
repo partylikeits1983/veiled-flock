@@ -660,6 +660,14 @@ fn certify_tuple(
     let p0 = vec![false; n];
     let q0 = rng.bits(n);
     let s0 = rng.bits(n);
+    // A3's round-1 mask cubes are held FIXED rather than probed. That is
+    // deliberate and it is the conservative direction: their mask-only
+    // coordinates (`mc_at_z`, `h_at_z`, and everything inside `open_s_c` /
+    // `open_s_h`) are still in the conditioning set `L`, so the certificate
+    // pays their leakage without crediting their coverage. Probing them could
+    // only enlarge the image and make the criterion easier to satisfy — so a
+    // pass here remains sound, and is in fact a stronger statement than the
+    // protocol needs.
     let sc0 = rng.bits(n);
     let sh0 = rng.bits(n);
     let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();

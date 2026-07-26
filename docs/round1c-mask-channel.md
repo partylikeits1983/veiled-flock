@@ -156,6 +156,19 @@ diagonal / full) exists so that this class of confusion is caught in one run
 next time: the zero stage pins that the masked path reduces *exactly* to the
 unmasked one.
 
+## What the fixture certificate does and does not probe
+
+The complete-transcript fixture certificate holds `S_c` and `S_h` **fixed**
+rather than probing them, while still conditioning on every mask-only
+coordinate they produce (`mc_at_z`, `h_at_z`, and all of `open_s_c` /
+`open_s_h`). That is the conservative direction: the certificate pays A3's
+leakage without crediting A3's coverage, so it is strictly harder to satisfy
+than the protocol requires and a pass remains sound. Probing those channels
+would only enlarge the image.
+
+The real-statement certificate (`zk_blake3_certificate.rs`) *does* probe them,
+as inner channels alongside `P` and `S`.
+
 ## How to tell it worked
 
 1. `cargo test --release --workspace --features zk` — completeness, the tamper
