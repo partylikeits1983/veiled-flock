@@ -40,14 +40,22 @@ Paper: `docs/paper/zk-flock.tex` §1–§2. Proof document: `docs/zk-proof.md`.
 §5. The two ordering invariants a reviewer should check first, because
 everything else rests on them:
 
-1. All four hiding commitments (witness, `P`, `Q`, `S`) and the mask sum `σ_z`
-   are absorbed into the Fiat–Shamir transcript **before** `γ` is sampled.
+1. All six hiding commitments (witness, `P`, `Q`, `S`, `S_c`, `S_h`) and the
+   mask sum `σ_z` are absorbed into the Fiat–Shamir transcript **before** `γ`
+   is sampled.
 2. Amendment A2: `σ_lc` is absorbed after the const-pin `β` fixes `comb` and
    **before** `γ_lc` is sampled; and `Ŝ(ρ)` is checked against `S`'s
    commitment rather than taken on the prover's word. The second is
    load-bearing — an unbound `Ŝ(ρ)` can be chosen after `ρ` and absorb an
    arbitrary defect into the lincheck's output claim.
-3. Inside the PCS opening, `y_g` is observed and the proof-of-work is priced
+3. Amendment A3: the round-1 mask pair must satisfy `M_ab + M_c = V_S·h`, so
+   the *combined* polynomial still vanishes on `S`. That is the load-bearing
+   condition — it is what preserves the zerocheck assumption the AB
+   reconstruction (and hence soundness) rests on. `M_c(z)` and `h(z)` are
+   bound by openings at the c-claim point; unbound they could be chosen after
+   `z`. Note A3 needs no batching challenge, because it adds no
+   prover-claimed sum.
+4. Inside the PCS opening, `y_g` is observed and the proof-of-work is priced
    **before** the blinder-combination challenge `c` is sampled.
 
 Canonical transcript definition: `crates/flock-prover/src/transcript_schema.rs`
@@ -67,6 +75,8 @@ Canonical transcript definition: `crates/flock-prover/src/transcript_schema.rs`
 | γ_lc-batching soundness (A2) | lincheck amendment soundness | paper proof + constructive test | `lincheck.rs` (`masked_verify_rejects_sigma_tamper`) |
 | A2 output-claim recovery | PCS binding to ẑ survives the mask | test | `lincheck.rs` (`masked_roundtrip_recovers_the_unmasked_claim`) |
 | eq-table F₂-span (A2) | Boolean mask reaches all of F₂¹²⁸ per slot | **measured, not derived** | `tests/zk_blake3_certificate.rs` |
+| A3 round-1 mask pair | round1_c coverage without breaking the zerocheck assumption | paper proof + staged test | `zerocheck.rs` (`prove_verify_zk_round1_mask_roundtrip`) |
+| A3 un-shift correctness | C-claim and AB running claim recovered exactly | proved; tested end to end | `zerocheck.rs` |
 | No-public-input reduction (L1) | simulator validity | paper proof + code inspection | `docs/zk-proof.md` §2 |
 | Sibling hiding | ε_hash | **assumed** | `docs/zk-proof.md` §7 |
 | Classical-ROM ZK | headline claim | proved conditional on the above | `docs/zk-proof.md` §9 |
