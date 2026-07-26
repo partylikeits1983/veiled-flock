@@ -395,7 +395,7 @@ const FULL: Budget = Budget {
     ua_stride: 1,
     ub_stride: 1,
     mask_slots: MASK_MATERIAL,
-    witness_dirs: 512,
+    witness_dirs: 256,
     tuples: &[0x7777_1234, 0x1111_0001, 0x2222_0002],
     l_full: true,
 };
@@ -447,7 +447,24 @@ fn certify_tuple(
 ) {
     let n = 1usize << FixtureA1M15::M;
     let mut rng = Rng(0xA11CE ^ ch_seed);
-    let payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    // Witness base chosen so the witness-difference family is LINEAR.
+    //
+    // The fixture's product rows are z[PROD+i] = payload[2i]·payload[2i+1],
+    // a nonlinear function of the payload, so arbitrary payload flips give a
+    // family whose linear combinations need not correspond to any real
+    // witness pair — and the coverage criterion, which reasons about
+    // claim-preserving *combinations*, would then be testing fictitious
+    // directions. Zeroing the odd payload positions makes every product zero
+    // and keeps it zero under flips of even positions, so those flips act
+    // linearly on the witness and their span is a genuine space of
+    // witness differences.
+    let mut payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    for (i, b) in payload0.iter_mut().enumerate() {
+        if i % 2 == 1 {
+            *b = false;
+        }
+    }
+    let linear_dirs: Vec<usize> = (0..payload0.len()).filter(|i| i % 2 == 0).collect();
     let u_a0 = rng.bits(FixtureA1M15::A_BITS);
     let u_b0 = rng.bits(FixtureA1M15::B_BITS);
     let p0 = vec![false; n];
@@ -605,16 +622,16 @@ fn certify_tuple(
     // ---- Witness-difference directions, modulo the joint image ----
     let mut resid_and_claim = F2Space::default();
     let mut claim_space = F2Space::default();
-    let n_payload = FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS;
+    assert!(
+        bud.witness_dirs <= linear_dirs.len(),
+        "the linear witness family has {} directions; asking for {} would \
+         fall back to nonlinear draws and make the verdict uninterpretable",
+        linear_dirs.len(),
+        bud.witness_dirs
+    );
     for k in 0..bud.witness_dirs {
         let mut payload = payload0.clone();
-        if k < n_payload {
-            payload[k] = !payload[k]; // structured single-bit basis directions
-        } else {
-            for b in payload.iter_mut() {
-                *b = rng.next_u64() & 1 == 1;
-            }
-        }
+        payload[linear_dirs[k]] = !payload[linear_dirs[k]];
         let (t, claim) = go(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
         let residual = joint.reduce(xor(&t, &base));
         let dv = claim + base_claim;
@@ -688,10 +705,26 @@ fn joint_conditional_coverage_full_transcript() {
 
 /// Run the coverage check and report whether it PASSED (rather than
 /// asserting), so negative controls can require failure.
-fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64, ctl: Control) -> bool {
+fn coverage_passes(
+    fx: &FixtureA1M15,
+    split: &Split,
+    coords: &[usize],
+    bud: &Budget,
+    ch_seed: u64,
+    ctl: Control,
+) -> bool {
     let n = 1usize << FixtureA1M15::M;
     let mut rng = Rng(0xDEAD ^ ch_seed);
-    let payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    // Same linear witness family as `certify_tuple` (see the comment there):
+    // odd payload positions zeroed so the product rows stay zero and flips of
+    // even positions act linearly on the witness.
+    let mut payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    for (i, b) in payload0.iter_mut().enumerate() {
+        if i % 2 == 1 {
+            *b = false;
+        }
+    }
+    let linear_dirs: Vec<usize> = (0..payload0.len()).filter(|i| i % 2 == 0).collect();
     let u_a0 = rng.bits(FixtureA1M15::A_BITS);
     let u_b0 = rng.bits(FixtureA1M15::B_BITS);
     let p0 = vec![false; n];
@@ -721,19 +754,31 @@ fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64,
     };
 
     let (base, base_proof, _) = do_run(&p0, &u_a0, &cw, &payload0);
-    // The added-leakage control appends a raw witness functional (the
-    // lincheck claim `w`) to the transcript vector as an EXTRA coordinate
-    // that no mask can move — it must break coverage.
-    let augment = |v: &[F128], proof: &R1csProofZkA1| -> Vec<u64> {
-        let mut out = flatten_f128(&pick(v, &split.r_idx));
+    // The added-leakage control appends a RAW WITNESS FUNCTIONAL to the
+    // transcript vector: the first 64 payload bits, packed. No mask can
+    // move it and every witness difference does, so a certificate that
+    // still reports coverage is not detecting leakage at all.
+    //
+    // (A previous version appended `z_partial[0]`, which is not a canary:
+    // that value is itself randomizer-masked, so adding it adds no
+    // uncoverable direction — and the control duly passed, which is what
+    // exposed the mistake.)
+    let augment = |v: &[F128], payload: &[bool]| -> Vec<u64> {
+        let r = pick(v, &split.r_idx);
+        let mut out = flatten_f128(&coords.iter().map(|&i| r[i]).collect::<Vec<_>>());
         if matches!(ctl, Control::AddedLeakage) {
-            let leak = proof.lincheck.z_partial[0];
-            out.push(leak.lo);
-            out.push(leak.hi);
+            let mut w = 0u64;
+            for (i, b) in payload.iter().take(64).enumerate() {
+                if *b {
+                    w |= 1u64 << i;
+                }
+            }
+            out.push(w);
+            out.push(0);
         }
         out
     };
-    let base_r = augment(&base, &base_proof);
+    let base_r = augment(&base, &payload0);
     let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
     let base_l = flatten_f128(&pick(&base, l_sel));
 
@@ -768,9 +813,9 @@ fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64,
         while i < n {
             let mut p = p0.clone();
             p[i] = !p[i];
-            let (t, pr, _) = do_run(&p, &u_a0, &cw, &payload0);
+            let (t, _pr, _) = do_run(&p, &u_a0, &cw, &payload0);
             let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
-            let r = xor(&augment(&t, &pr), &base_r);
+            let r = xor(&augment(&t, &payload0), &base_r);
             absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
             i += bud.p_stride;
         }
@@ -780,9 +825,9 @@ fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64,
     while i < FixtureA1M15::A_BITS {
         let mut ua = u_a0.clone();
         ua[i] = !ua[i];
-        let (t, pr, _) = do_run(&p0, &ua, &cw, &payload0);
+        let (t, _pr, _) = do_run(&p0, &ua, &cw, &payload0);
         let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
-        let r = xor(&augment(&t, &pr), &base_r);
+        let r = xor(&augment(&t, &payload0), &base_r);
         absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
         i += bud.ua_stride;
     }
@@ -791,9 +836,9 @@ fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64,
         for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
             let mut cwp = cw.clone();
             cwp[s] += F128::ONE;
-            let (t, pr, _) = do_run(&p0, &u_a0, &cwp, &payload0);
+            let (t, _pr, _) = do_run(&p0, &u_a0, &cwp, &payload0);
             let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
-            let r = xor(&augment(&t, &pr), &base_r);
+            let r = xor(&augment(&t, &payload0), &base_r);
             absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
         }
     }
@@ -802,11 +847,11 @@ fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64,
     let base_claim = base_proof.zerocheck.final_a_eval * base_proof.zerocheck.final_b_eval;
     let mut resid_and_claim = F2Space::default();
     let mut claim_space = F2Space::default();
-    for k in 0..bud.witness_dirs {
+    for k in 0..bud.witness_dirs.min(linear_dirs.len()) {
         let mut payload = payload0.clone();
-        payload[k % (FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS)] ^= true;
+        payload[linear_dirs[k]] ^= true;
         let (t, proof, _) = do_run(&p0, &u_a0, &cw, &payload);
-        let d = xor(&augment(&t, &proof), &base_r);
+        let d = xor(&augment(&t, &payload), &base_r);
         let residual = rkerl.reduce(d);
         let dv = proof.zerocheck.final_a_eval * proof.zerocheck.final_b_eval + base_claim;
         claim_space.insert(vec![dv.lo, dv.hi]);
@@ -1018,7 +1063,7 @@ fn joint_certificate_negative_controls() {
     let seed = 0x7777_1234;
 
     assert!(
-        coverage_passes(&fx, &split, &SMOKE, seed, Control::None),
+        coverage_passes(&fx, &split, &split.round_block, &SMOKE, seed, Control::None),
         "honest configuration must PASS (control baseline)"
     );
     // NOTE: "disable P" is deliberately NOT a control for *coverage*. At a
@@ -1031,9 +1076,15 @@ fn joint_certificate_negative_controls() {
     // Likewise "constant Q" degrades the P-channel IMAGE (it reaches the
     // G(1) half but not the degree-2 G(∞) half), not slice coverage; its
     // control is `p_channel_image_requires_nondegenerate_q` below.
-    for ctl in [Control::NoMu, Control::AddedLeakage] {
+    //
+    // And "no μ/g" is not a control for THIS coordinate set: the PCS masks
+    // do not reach the zerocheck round-pair block at all, so disabling them
+    // cannot break its coverage. The PCS layer's own negative control is
+    // `pcs::zk_audit::pcs_rank_audit_negative_control_without_g` in
+    // flock-core, which withholds the blinder and fails as it must.
+    for ctl in [Control::AddedLeakage] {
         assert!(
-            !coverage_passes(&fx, &split, &SMOKE, seed, ctl),
+            !coverage_passes(&fx, &split, &split.round_block, &SMOKE, seed, ctl),
             "negative control {ctl:?} PASSED — the certificate would not detect \
              this failure mode, so it certifies nothing"
         );
