@@ -1,4 +1,4 @@
-# Making Flock Zero-Knowledge — research note (v5.1)
+# Making Flock Zero-Knowledge — research note (v5.2)
 
 A candidate zero-knowledge mode for BLAKE3 batch statements in Flock, a
 hash-based SNARK for batch R1CS over F₂.
@@ -18,6 +18,30 @@ requirement versus 3× at the fixture. What keeps this at label B: run directly 
 difference is still unaccounted for — a specific measured lead, not a proven
 leak. Plus the ROM assumption and the absence of independent review.
 
+**What changed in v5.2 — amendment A3, and the real-statement certificate now
+passes.** Unrestricted, on a real BLAKE3 batch statement (m=20, 64 blocks, all
+PIOP classes = 30,464 bits, claims saturated at 640 bits over 768 witness
+pairs): joint mask image **30,464 / 30,464** and
+`rank[resid | Δclaim] = 640 = rank(Δclaim)`. No claim-preserving witness
+direction escapes. Before A2/A3 this was 22,272/30,464 with 768 against 640.
+
+A3 masks the zerocheck's round 1, which A1′ deliberately skipped because the
+verifier reconstructs the AB claim from the identity `P^AB + P^C = 0` on a
+domain S and any mask must vanish there. The fix is a *pair*: `M_c` on the C
+side and `M_c + V_S·h` on the AB side, so the combined polynomial gains a
+multiple of S's vanishing polynomial — zero on S, reconstruction intact —
+while the two sides move independently. That independence was necessary, not
+decorative: the measured escaping direction was supported on `round1_c` and
+not on `round1_ab`, so a diagonal mask provably could not reach it.
+
+Two methodological points outlast the fix. The escape was **joint, not
+marginal** — `round1_c` passed in isolation at 8,192/8,192 the whole time, so
+per-class coverage never composed into joint coverage. And the assumption that
+broke was never written down as an assumption: the randomizer rows were
+*believed* to cover the affine classes, and on the synthetic fixture (~81%
+randomizer rows against a real witness's ~5.5%) they do. A certificate run
+only on the fixture would have reported success indefinitely.
+
 **What changed in v5.1 — amendment A2.** v5 stated the lincheck's transcript
 classes were covered by the randomizer witness rows. Measurement refuted that,
 so the construction gained a second mask channel: a committed additive shift
@@ -29,17 +53,9 @@ transcript equal to the honest transcript of a shifted witness. Measured: the
 lincheck classes go from 9,728/10,240 bits with 128 escaping to 10,240/10,240
 with nothing escaping.
 
-With A2 in, the residual on the unrestricted real-statement run is attributed
-to **one** class, `zerocheck.round1_c` — down from three. That class is the
-univariate-skip C-side message, linear in the witness, sitting outside the
-degree-2 channel by design (a mask there would not vanish on the constraint
-domain and would break the zerocheck assumption). The escape there is *joint,
-not marginal*: `round1_c` passes in isolation at 8,192/8,192, and only fails
-when it must be covered simultaneously with everything else. The repair is
-specified in `docs/round1c-mask-channel.md` and not made.
-
-The label does not move on partial progress: one of the two measured gaps is
-closed with a built, tested, soundness-argued amendment; the other is open.
+With A2 in, the residual on the unrestricted real-statement run was attributed
+to **one** class, `zerocheck.round1_c` — down from three. A3 closed that one;
+see above.
 
 ## The claim, exactly
 
@@ -82,15 +98,17 @@ fail-closed API. Full list in `CHANGES.md`.
 
 Two pipelines, not comparable. Optimized (no ZK claim): 2.24/3.16/3.95× prove,
 0.98–1.03× verify, 1.65–1.82× proof size versus non-zk, at batches 2¹⁰/2¹²/2¹⁴.
-Reference amended prover at 2⁸ compressions (m=22): 22.8 ms prove, 4.5 ms
-verify, versus 3.8 ms for the non-zk fused prover — a reference-implementation
+Reference amended prover at 2⁸ compressions (m=22): 34.4 ms prove, 6.0 ms
+verify, versus 3.9 ms for the non-zk fused prover — a reference-implementation
 artefact, not a cost of zero-knowledge.
 
-Amendment A2 costs 20.0 → 22.8 ms proving and 4.3 → 4.5 ms verification: one
-more full-size commitment and opening. That is more than the channel needs —
-`S` only masks the length-2^k_log folded table (4,096 entries here, against
-2²²), so a commitment over that domain would be some three orders of magnitude
-smaller. Left unoptimized on purpose: correctness first, cost second.
+The amendments account for the growth: 20.0 → 22.8 (A2) → 34.4 ms proving and
+4.3 → 4.5 → 6.0 ms verification, three more full-size commitments and
+openings. All three are larger than their channels need: `S` masks only the
+length-2^k_log folded table (4,096 entries against 2²²), and `S_c`,`S_h` enter
+only through their round-1 messages (64 field elements each). Committing over
+those domains would cut the added cost by orders of magnitude. Left
+unoptimized on purpose: correctness first, cost second.
 
 ## Building the paper
 

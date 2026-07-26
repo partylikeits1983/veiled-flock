@@ -1,4 +1,4 @@
-# Paper change summary (v4 → v5, and v5 → v5.1)
+# Paper change summary (v4 → v5, v5 → v5.1, v5.1 → v5.2)
 
 A reader who knows v4 can read this instead of diffing. Weakenings are listed
 before strengthenings on purpose.
@@ -66,10 +66,49 @@ before strengthenings on purpose.
     paper had a two-dimensional example of exactly this; it now points at the
     instance in the protocol.
 
-11. **Status is unchanged: experimental candidate with a proven partial core.**
-    One of the two measured gaps is closed with a built, tested, soundness-
-    argued amendment. The other is open. The label does not move on partial
-    progress.
+11. **A2 closed one of two measured gaps.** The other stayed open until A3.
+
+## v5.1 → v5.2: amendment A3, and the certificate that was failing now passes
+
+12. **The zerocheck's round 1 gained a mask channel.** A1′ skipped it for a
+    structural reason: the verifier reconstructs the AB running claim from the
+    identity `P^AB + P^C = 0` on a domain S, so any mask must vanish there,
+    and `γ·P·Q` does not. A3 masks it with a *pair* — `M_c` on the C side,
+    `M_c + V_S·h` on the AB side — whose sum is a multiple of S's vanishing
+    polynomial. The combined polynomial is therefore unchanged on S, the
+    reconstruction and the soundness argument resting on it are untouched, and
+    the two sides still move independently.
+
+    The independence was necessary rather than elegant: the measured escaping
+    direction was supported on `round1_c` and *not* on `round1_ab`, so a
+    diagonal mask provably could not reach it. That was settled from
+    attribution output already in hand, before the construction was chosen.
+
+13. **The real-statement certificate passes.** Unrestricted, m=20, 64 blocks,
+    all PIOP classes (30,464 bits), claims saturated at 640 bits over 768 real
+    witness pairs: joint image 30,464/30,464 and
+    `rank[resid | Δclaim] = 640 = rank(Δclaim)`. Before A2/A3: 22,272/30,464
+    with 768 against 640. It is no longer `#[ignore]`d for failing — it is
+    `#[ignore]`d for cost, runs in `scripts/zk-certify.sh` at all three class
+    scopes, and is registered in the `ZkCertificate` evidence set.
+
+14. **Two methodological findings outlast the fix**, and are stated in the
+    limitations because they generalize:
+    - The escape was **joint, not marginal**. `round1_c` passed in isolation
+      at 8,192/8,192 throughout. Full projection onto a class only means every
+      target on that class is matched by *some* image vector, which is free to
+      be wrong elsewhere. Per-class certificates do not compose into a joint
+      one.
+    - The assumption that broke was never written down as an assumption. The
+      randomizer rows were *believed* to cover the affine classes, and on the
+      synthetic fixture (~81% randomizer rows against a real witness's ~5.5%)
+      they do. A certificate run only on the vehicle would have reported
+      success indefinitely.
+
+15. **A3 needs no batching challenge**, unlike A1′ and A2. Those add a
+    prover-*claimed* sum the verifier cannot recompute, so a challenge must
+    batch it; A3 adds only committed evaluations, which the openings bind
+    directly.
 
 ## Claims weakened
 
