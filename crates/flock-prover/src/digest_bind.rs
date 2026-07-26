@@ -178,7 +178,7 @@ impl DigestStatement {
                     byte = 0;
                 }
             }
-            if bits.len() % 8 != 0 {
+            if !bits.len().is_multiple_of(8) {
                 h.update(&[byte]);
             }
         };

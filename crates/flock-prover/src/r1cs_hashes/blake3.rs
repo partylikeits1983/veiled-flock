@@ -602,10 +602,6 @@ struct PinnedParams {
     flags: u32,
 }
 
-fn build_matrices_rows() -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
-    build_matrices_rows_pinned(ParamPinning::Free)
-}
-
 fn build_matrices_rows_pinned(pinning: ParamPinning) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let mut a_rows: Vec<Vec<usize>> = vec![Vec::new(); K];
     let mut b_rows: Vec<Vec<usize>> = vec![Vec::new(); K];
