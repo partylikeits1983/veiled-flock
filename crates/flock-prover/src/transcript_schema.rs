@@ -38,7 +38,7 @@ use flock_core::zerocheck::ZkZerocheckProof;
 use crate::prover::R1csProofZkA1;
 
 /// Version of the schema itself; bump on any reclassification or reshape.
-pub const A1_SCHEMA_VERSION: u32 = 2;
+pub const A1_SCHEMA_VERSION: u32 = 3;
 
 /// Security classification of a transcript field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -486,6 +486,28 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
         false,
         Bytes(params_bytes(params)),
     );
+    for (c, root_path, params_path) in [
+        (comm_s_c, "comm_s_c.root", "comm_s_c.params"),
+        (comm_s_h, "comm_s_h.root", "comm_s_h.params"),
+    ] {
+        let Commitment { root, params } = c;
+        push(
+            &mut out,
+            root_path,
+            0,
+            LeakageClass::HiddenHash,
+            true,
+            Bytes(root.to_vec()),
+        );
+        push(
+            &mut out,
+            params_path,
+            0,
+            LeakageClass::Metadata,
+            false,
+            Bytes(params_bytes(params)),
+        );
+    }
 
     let ZkZerocheckProof {
         round1_ab,
@@ -571,6 +593,25 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
         LeakageClass::MaskOnly,
         true,
         F128s(vec![*final_q_eval]),
+    );
+    // A3: witness-free, and NOT absorbed — bound by their commitments, and
+    // consumed by the verifier to un-shift the C-claim and the AB running
+    // claim.
+    push(
+        &mut out,
+        "zerocheck.mc_at_z",
+        0,
+        LeakageClass::MaskOnly,
+        false,
+        F128s(vec![*mc_at_z]),
+    );
+    push(
+        &mut out,
+        "zerocheck.h_at_z",
+        0,
+        LeakageClass::MaskOnly,
+        false,
+        F128s(vec![*h_at_z]),
     );
 
     // A2: σ_lc is absorbed inside the lincheck, between the const-pin β and
@@ -865,6 +906,10 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("comm_q.params", Metadata, false),
         ("comm_s.root", HiddenHash, true),
         ("comm_s.params", Metadata, false),
+        ("comm_s_c.root", HiddenHash, true),
+        ("comm_s_c.params", Metadata, false),
+        ("comm_s_h.root", HiddenHash, true),
+        ("comm_s_h.params", Metadata, false),
         ("zerocheck.round1_ab", WitnessDependent, true),
         ("zerocheck.round1_c", WitnessDependent, true),
         ("zerocheck.mask_init", MaskOnly, true),
@@ -874,6 +919,8 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("zerocheck.final_c_eval", Derived, false),
         ("zerocheck.final_p_eval", MaskOnly, true),
         ("zerocheck.final_q_eval", MaskOnly, true),
+        ("zerocheck.mc_at_z", MaskOnly, false),
+        ("zerocheck.h_at_z", MaskOnly, false),
         ("lincheck.sigma_lc", MaskOnly, true),
         ("lincheck.rounds", WitnessDependent, true),
         ("lincheck.z_partial", WitnessDependent, true),
@@ -974,6 +1021,78 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("open_s.ligerito.fold_grinding_nonces", Metadata, false),
         ("open_s.zk_blind.y_g", MaskOnly, true),
         ("open_s.zk_blind.c_grind_nonce", Metadata, false),
+        ("open_s_c.ring_switches.s_hat_v", MaskOnly, true),
+        ("open_s_c.ligerito.initial_root", HiddenHash, false),
+        (
+            "open_s_c.ligerito.initial_proof.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_s_c.ligerito.initial_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        ("open_s_c.ligerito.recursive_roots", HiddenHash, true),
+        (
+            "open_s_c.ligerito.recursive_proofs.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_s_c.ligerito.recursive_proofs.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        ("open_s_c.ligerito.final_proof.yr", MaskOnly, true),
+        ("open_s_c.ligerito.final_proof.opened_rows", MaskOnly, false),
+        (
+            "open_s_c.ligerito.final_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        ("open_s_c.ligerito.sumcheck_transcript", MaskOnly, true),
+        ("open_s_c.ligerito.grinding_nonces", Metadata, false),
+        ("open_s_c.ligerito.ood_values", MaskOnly, true),
+        ("open_s_c.ligerito.fold_grinding_nonces", Metadata, false),
+        ("open_s_c.zk_blind.y_g", MaskOnly, true),
+        ("open_s_c.zk_blind.c_grind_nonce", Metadata, false),
+        ("open_s_h.ring_switches.s_hat_v", MaskOnly, true),
+        ("open_s_h.ligerito.initial_root", HiddenHash, false),
+        (
+            "open_s_h.ligerito.initial_proof.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_s_h.ligerito.initial_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        ("open_s_h.ligerito.recursive_roots", HiddenHash, true),
+        (
+            "open_s_h.ligerito.recursive_proofs.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_s_h.ligerito.recursive_proofs.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        ("open_s_h.ligerito.final_proof.yr", MaskOnly, true),
+        ("open_s_h.ligerito.final_proof.opened_rows", MaskOnly, false),
+        (
+            "open_s_h.ligerito.final_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        ("open_s_h.ligerito.sumcheck_transcript", MaskOnly, true),
+        ("open_s_h.ligerito.grinding_nonces", Metadata, false),
+        ("open_s_h.ligerito.ood_values", MaskOnly, true),
+        ("open_s_h.ligerito.fold_grinding_nonces", Metadata, false),
+        ("open_s_h.zk_blind.y_g", MaskOnly, true),
+        ("open_s_h.zk_blind.c_grind_nonce", Metadata, false),
         ("pcs_open.ring_switches.s_hat_v", WitnessDependent, true),
         ("pcs_open.ligerito.initial_root", HiddenHash, false),
         (

@@ -107,7 +107,7 @@ fn a1_schema_manifest_and_bijectivity() {
     //    the constant (printed below).
     let h = schema_hash(&flat);
     let hex: String = h.iter().map(|b| format!("{b:02x}")).collect();
-    const PINNED_M15: &str = "f428753320283fdb2019adf7ec357a7d43e462f74c75fe93ebda99f79c9bdd96";
+    const PINNED_M15: &str = "bc5a5134b7a88568d53e3d66b5faf880df365785906326aae564e7a90a2e8f23";
     assert_eq!(
         hex, PINNED_M15,
         "schema hash changed for the m=15 fixture shape"
@@ -217,9 +217,9 @@ fn a1_schema_matches_wire_order() {
     );
     assert_eq!(
         extras.len(),
-        4,
+        6,
         "expected exactly 4 derived absorptions (one combined Ligerito target \
-         per opening: witness, P, Q, and A2's S); anything else is an \
+         per opening: witness, P, Q, A2's S, and A3's S_c/S_h); anything else is an \
          unclassified absorption: {extras:?}"
     );
     // No extra may be a proof value: collect EVERY F128 in the proof

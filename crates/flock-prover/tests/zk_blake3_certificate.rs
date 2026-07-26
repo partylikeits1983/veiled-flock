@@ -151,10 +151,14 @@ fn run(
     p_words: &[u64],
     q_words: &[u64],
     s_words: &[u64],
+    sc_words: &[u64],
+    sh_words: &[u64],
     cw: &[F128],
     cp: &[F128],
     cq: &[F128],
     cs: &[F128],
+    csc: &[F128],
+    csh: &[F128],
 ) -> Vec<F128> {
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
@@ -173,6 +177,10 @@ fn run(
     let mut s_cq = VecSampler::from_f128(cq);
     let mut s_s = VecSampler::from_words(s_words.to_vec());
     let mut s_cs = VecSampler::from_f128(cs);
+    let mut s_sc = VecSampler::from_words(sc_words.to_vec());
+    let mut s_sh = VecSampler::from_words(sh_words.to_vec());
+    let mut s_csc = VecSampler::from_f128(csc);
+    let mut s_csh = VecSampler::from_f128(csh);
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
@@ -181,6 +189,10 @@ fn run(
         commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
+        s_c: &mut s_sc,
+        s_h: &mut s_sh,
+        commit_s_c: &mut s_csc,
+        commit_s_h: &mut s_csh,
     };
     let mut ch = RandomChallenger::new(CH_SEED);
     let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -213,10 +225,14 @@ fn coords_and_paths(
     p: &[u64],
     q: &[u64],
     s: &[u64],
+    sc: &[u64],
+    sh: &[u64],
     cw: &[F128],
     cp: &[F128],
     cq: &[F128],
     cs: &[F128],
+    csc: &[F128],
+    csh: &[F128],
 ) -> (Vec<usize>, Vec<(&'static str, std::ops::Range<usize>)>) {
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
@@ -234,6 +250,10 @@ fn coords_and_paths(
     let mut s_cq = VecSampler::from_f128(cq);
     let mut s_s = VecSampler::from_words(s.to_vec());
     let mut s_cs = VecSampler::from_f128(cs);
+    let mut s_sc = VecSampler::from_words(sc.to_vec());
+    let mut s_sh = VecSampler::from_words(sh.to_vec());
+    let mut s_csc = VecSampler::from_f128(csc);
+    let mut s_csh = VecSampler::from_f128(csh);
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
@@ -242,6 +262,10 @@ fn coords_and_paths(
         commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
+        s_c: &mut s_sc,
+        s_h: &mut s_sh,
+        commit_s_c: &mut s_csc,
+        commit_s_h: &mut s_csh,
     };
     let mut ch = RandomChallenger::new(CH_SEED);
     let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -352,6 +376,8 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     let p_words = rng.words(n_cube_words);
     let q_words = rng.words(n_cube_words);
     let s_words = rng.words(n_cube_words);
+    let sc_words = rng.words(n_cube_words);
+    let sh_words = rng.words(n_cube_words);
     let cw: Vec<F128> = (0..n_mask_f128)
         .map(|_| F128 {
             lo: rng.next_u64(),
@@ -376,14 +402,31 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
             hi: rng.next_u64(),
         })
         .collect();
+    let csc: Vec<F128> = (0..n_mask_f128)
+        .map(|_| F128 {
+            lo: rng.next_u64(),
+            hi: rng.next_u64(),
+        })
+        .collect();
+    let csh: Vec<F128> = (0..n_mask_f128)
+        .map(|_| F128 {
+            lo: rng.next_u64(),
+            hi: rng.next_u64(),
+        })
+        .collect();
 
     let blocks_a = blocks_from(0xAAAA, N_BLOCKS);
+    #[allow(clippy::too_many_arguments)]
     let go = |rand: &[u64],
               p: &[u64],
               s: &[u64],
+              sc: &[u64],
+              sh: &[u64],
               cw: &[F128],
               cp: &[F128],
               cs: &[F128],
+              csc: &[F128],
+              csh: &[F128],
               blocks: &[Compression]| {
         run(
             &setup,
@@ -394,10 +437,14 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
             p,
             q_words.as_slice(),
             s,
+            sc,
+            sh,
             cw,
             cp,
             &cq,
             cs,
+            csc,
+            csh,
         )
     };
 
@@ -421,15 +468,19 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         &p_words,
         &q_words,
         &s_words,
+        &sc_words,
+        &sh_words,
         &cw,
         &cp,
         &cq,
         &cs,
+        &csc,
+        &csh,
     );
     let proj =
         |v: &[F128]| -> Vec<u64> { flatten(&coords.iter().map(|&i| v[i]).collect::<Vec<_>>()) };
     let base = proj(&go(
-        &base_rand, &p_words, &s_words, &cw, &cp, &cs, &blocks_a,
+        &base_rand, &p_words, &s_words, &sc_words, &sh_words, &cw, &cp, &cs, &csc, &csh, &blocks_a,
     ));
     let dim = base.len() * 64;
     println!(
@@ -478,9 +529,21 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         for w in s.iter_mut() {
             *w ^= prng.next_u64() & prng.next_u64() & prng.next_u64();
         }
+        // A3's round-1 mask pair. Both are inner channels: at fixed
+        // challenges the masked round-1 message is affine in each cube.
+        let mut sc = sc_words.to_vec();
+        for w in sc.iter_mut() {
+            *w ^= prng.next_u64() & prng.next_u64() & prng.next_u64();
+        }
+        let mut sh = sh_words.to_vec();
+        for w in sh.iter_mut() {
+            *w ^= prng.next_u64() & prng.next_u64() & prng.next_u64();
+        }
         let mut cwp = cw.clone();
         let mut cpp = cp.clone();
         let mut csp = cs.clone();
+        let mut cscp = csc.clone();
+        let mut cshp = csh.clone();
         for _ in 0..8 {
             let i = (prng.next_u64() as usize) % n_mask_f128;
             cwp[i] += F128 {
@@ -497,8 +560,20 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
                 lo: prng.next_u64(),
                 hi: prng.next_u64(),
             };
+            let n1 = (prng.next_u64() as usize) % n_mask_f128;
+            cscp[n1] += F128 {
+                lo: prng.next_u64(),
+                hi: prng.next_u64(),
+            };
+            let n2 = (prng.next_u64() as usize) % n_mask_f128;
+            cshp[n2] += F128 {
+                lo: prng.next_u64(),
+                hi: prng.next_u64(),
+            };
         }
-        let t = proj(&go(&rand, &p, &s, &cwp, &cpp, &csp, &blocks_a));
+        let t = proj(&go(
+            &rand, &p, &s, &sc, &sh, &cwp, &cpp, &csp, &cscp, &cshp, &blocks_a,
+        ));
         img.insert(xor(&t, &base));
     }
     println!(
@@ -514,7 +589,9 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
                 *slot ^= prng.next_u64() & prng.next_u64();
             }
         }
-        let t = proj(&go(&rand, &p_words, &s_words, &cw, &cp, &cs, &blocks_a));
+        let t = proj(&go(
+            &rand, &p_words, &s_words, &sc_words, &sh_words, &cw, &cp, &cs, &csc, &csh, &blocks_a,
+        ));
         img.insert(xor(&t, &base));
     }
     println!(
@@ -537,20 +614,21 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     // forced to exist and the criterion can bite.
     let n_pairs = 768usize;
     let base_claims = claims_of(
-        &setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &s_words, &cw, &cp, &cq,
-        &cs,
+        &setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &s_words, &sc_words,
+        &sh_words, &cw, &cp, &cq, &cs, &csc, &csh,
     );
     let mut claim_space = F2Space::default();
     let mut resid_and_claim = F2Space::default();
     for k in 0..n_pairs as u64 {
         let blocks_b = blocks_from(0xBBBB + k, N_BLOCKS);
         let t = proj(&go(
-            &base_rand, &p_words, &s_words, &cw, &cp, &cs, &blocks_b,
+            &base_rand, &p_words, &s_words, &sc_words, &sh_words, &cw, &cp, &cs, &csc, &csh,
+            &blocks_b,
         ));
         let residual = img.reduce(xor(&t, &base));
         let cl = claims_of(
-            &setup, &params, &lig, &blocks_b, &base_rand, &p_words, &q_words, &s_words, &cw, &cp,
-            &cq, &cs,
+            &setup, &params, &lig, &blocks_b, &base_rand, &p_words, &q_words, &s_words, &sc_words,
+            &sh_words, &cw, &cp, &cq, &cs, &csc, &csh,
         );
         let dcl: Vec<u64> = cl
             .iter()
@@ -614,10 +692,14 @@ fn claims_of(
     p: &[u64],
     q: &[u64],
     s: &[u64],
+    sc: &[u64],
+    sh: &[u64],
     cw: &[F128],
     cp: &[F128],
     cq: &[F128],
     cs: &[F128],
+    csc: &[F128],
+    csh: &[F128],
 ) -> [F128; 5] {
     use flock_core::{lincheck, zerocheck};
     let layout = setup.r1cs.zk.expect("zk layout");
@@ -636,6 +718,10 @@ fn claims_of(
     let mut s_cq = VecSampler::from_f128(cq);
     let mut s_s = VecSampler::from_words(s.to_vec());
     let mut s_cs = VecSampler::from_f128(cs);
+    let mut s_sc = VecSampler::from_words(sc.to_vec());
+    let mut s_sh = VecSampler::from_words(sh.to_vec());
+    let mut s_csc = VecSampler::from_f128(csc);
+    let mut s_csh = VecSampler::from_f128(csh);
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
@@ -644,6 +730,10 @@ fn claims_of(
         commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
+        s_c: &mut s_sc,
+        s_h: &mut s_sh,
+        commit_s_c: &mut s_csc,
+        commit_s_h: &mut s_csh,
     };
     let mut ch = RandomChallenger::new(CH_SEED);
     let (proof, _comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -660,7 +750,13 @@ fn claims_of(
         &mut ch,
     );
     let mut chv = RandomChallenger::new(CH_SEED);
-    let zc = zerocheck::verify_zk(setup.m(), &proof.zerocheck, &mut chv).expect("honest");
+    let zc = zerocheck::verify_zk_masked(
+        setup.m(),
+        &proof.zerocheck,
+        Some((proof.mc_at_z, proof.h_at_z)),
+        &mut chv,
+    )
+    .expect("honest");
     let x_ab = setup.r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
     let lc = lincheck::verify_masked(
         setup.m(),
@@ -751,6 +847,18 @@ fn control_same_procedure_on_the_passing_fixture() {
             hi: rng.next_u64(),
         })
         .collect();
+    let csc: Vec<F128> = (0..n_mask_f128)
+        .map(|_| F128 {
+            lo: rng.next_u64(),
+            hi: rng.next_u64(),
+        })
+        .collect();
+    let csh: Vec<F128> = (0..n_mask_f128)
+        .map(|_| F128 {
+            lo: rng.next_u64(),
+            hi: rng.next_u64(),
+        })
+        .collect();
 
     let go = |payload: &[bool],
               ua: &[bool],
@@ -772,6 +880,10 @@ fn control_same_procedure_on_the_passing_fixture() {
         let mut s_cq = VecSampler::from_f128(&cq);
         let mut s_s = VecSampler::from_words(bits_to_words(sb));
         let mut s_cs = VecSampler::from_f128(cs_a);
+        let mut s_sc = VecSampler::from_words(bits_to_words(sb));
+        let mut s_sh = VecSampler::from_words(bits_to_words(p));
+        let mut s_csc = VecSampler::from_f128(cs_a);
+        let mut s_csh = VecSampler::from_f128(cs_a);
         let masks = A1MaskSources {
             witness_commit: &mut s_w,
             p: &mut s_p,
@@ -780,6 +892,10 @@ fn control_same_procedure_on_the_passing_fixture() {
             commit_q: &mut s_cq,
             s: &mut s_s,
             commit_s: &mut s_cs,
+            s_c: &mut s_sc,
+            s_h: &mut s_sh,
+            commit_s_c: &mut s_csc,
+            commit_s_h: &mut s_csh,
         };
         let mut ch = RandomChallenger::new(CH_SEED);
         let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -834,6 +950,8 @@ fn control_same_procedure_on_the_passing_fixture() {
         let mut cwp = cw.clone();
         let mut cpp = cp.clone();
         let mut csp = cs.clone();
+        let mut cscp = csc.clone();
+        let mut cshp = csh.clone();
         for _ in 0..8 {
             let i = (prng.next_u64() as usize) % n_mask_f128;
             cwp[i] += F128 {
@@ -847,6 +965,16 @@ fn control_same_procedure_on_the_passing_fixture() {
             };
             let l = (prng.next_u64() as usize) % n_mask_f128;
             csp[l] += F128 {
+                lo: prng.next_u64(),
+                hi: prng.next_u64(),
+            };
+            let n1 = (prng.next_u64() as usize) % n_mask_f128;
+            cscp[n1] += F128 {
+                lo: prng.next_u64(),
+                hi: prng.next_u64(),
+            };
+            let n2 = (prng.next_u64() as usize) % n_mask_f128;
+            cshp[n2] += F128 {
                 lo: prng.next_u64(),
                 hi: prng.next_u64(),
             };

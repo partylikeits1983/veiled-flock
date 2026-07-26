@@ -379,8 +379,13 @@ impl FixtureA1M15 {
         challenger: &mut Ch,
     ) -> [F128; 3] {
         use flock_core::{lincheck, zerocheck};
-        let zc = zerocheck::verify_zk(Self::M, &proof.zerocheck, challenger)
-            .expect("fixture proofs are honest");
+        let zc = zerocheck::verify_zk_masked(
+            Self::M,
+            &proof.zerocheck,
+            Some((proof.mc_at_z, proof.h_at_z)),
+            challenger,
+        )
+        .expect("fixture proofs are honest");
         let x_ab = self.r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
         let circuit = self.r1cs.sparse_lincheck_circuit();
         let lc = lincheck::verify_masked(
