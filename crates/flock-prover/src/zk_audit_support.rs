@@ -191,9 +191,10 @@ pub fn tiny_zk_configs_for(log_n: usize) -> (ProverConfig, VerifierConfig) {
 /// (hiding commits, masked zerocheck, lincheck, hiding witness/P/Q
 /// openings) rather than the zerocheck layer alone.
 ///
-/// Layout per 2^12-slot block: slot 0 = constant one; 64 payload bits;
-/// 16 product rows (`payload[2i]·payload[2i+1]`); 24×128 A-type randomizer
-/// bits (`u·1 = u`); 2×128 B-type randomizer bits (`1·u = u`). 8 blocks.
+/// Layout per 2^12-slot block: slot 0 = constant one; 128 payload bits (the
+/// first 32 feed the 16 product rows `payload[2i]·payload[2i+1]`, the other
+/// 96 are free); 24×128 A-type randomizer bits (`u·1 = u`); 2×128 B-type
+/// randomizer bits (`1·u = u`). 8 blocks.
 pub struct FixtureA1M15 {
     pub r1cs: BlockR1cs,
     pub pcs_params: PcsParams,
@@ -207,7 +208,14 @@ impl FixtureA1M15 {
     pub const K_SKIP: usize = 6;
     pub const BLOCKS: usize = 1 << (Self::M - Self::K_LOG);
     pub const PAYLOAD_BASE: usize = 1;
-    pub const N_PAYLOAD: usize = 64;
+    /// Payload bits per block. Only the first `2·N_PROD` feed the product
+    /// rows; the remainder are unconstrained, which is what gives the
+    /// certificates a large family of *linear* witness-difference directions
+    /// (flipping a free bit changes no product, so the span of such flips is
+    /// a genuine space of witness differences).
+    pub const N_PAYLOAD: usize = 128;
+    /// First payload bit that feeds no product row.
+    pub const FREE_PAYLOAD_BASE: usize = 2 * Self::N_PROD;
     pub const PROD_BASE: usize = Self::PAYLOAD_BASE + Self::N_PAYLOAD;
     pub const N_PROD: usize = 16;
     pub const A_RAND_BASE: usize = 128;
@@ -321,6 +329,39 @@ impl FixtureA1M15 {
             zk_rng,
             challenger,
         )
+    }
+
+    /// The public claim values the verifier learns, reconstructed with the
+    /// REAL verifier code: the ab-claim `â(ρ)·b̂(ρ)`, the reduced evaluation
+    /// claim `v = ẑ(r)` that the PCS opening proves, and `ĉ`'s claim value.
+    ///
+    /// Witness-indistinguishability is conditioned on these: the opening
+    /// proves them, so the transcript determines them and no mask can (or
+    /// should) hide them. A certificate that conditions on only some of them
+    /// will report the others as uncovered leakage.
+    pub fn public_claims<Ch: Challenger + Clone>(
+        &self,
+        proof: &R1csProofZkA1,
+        challenger: &mut Ch,
+    ) -> [F128; 3] {
+        use flock_core::{lincheck, zerocheck};
+        let zc = zerocheck::verify_zk(Self::M, &proof.zerocheck, challenger)
+            .expect("fixture proofs are honest");
+        let x_ab = self.r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
+        let circuit = self.r1cs.sparse_lincheck_circuit();
+        let lc = lincheck::verify(
+            Self::M,
+            Self::K_LOG,
+            Self::K_SKIP,
+            &circuit,
+            &x_ab,
+            zc.a_eval,
+            zc.b_eval,
+            &proof.lincheck,
+            challenger,
+        )
+        .expect("fixture proofs are honest");
+        [zc.a_eval * zc.b_eval, lc.w, zc.c_eval]
     }
 
     /// Verify a proof from [`Self::prove`].

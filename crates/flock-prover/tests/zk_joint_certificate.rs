@@ -261,6 +261,12 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
     (algebraic_vector(&flat), proof, comm)
 }
 
+/// The three public claim values for a run, via the real verifier.
+fn claims_of(fx: &FixtureA1M15, proof: &R1csProofZkA1, ch_seed: u64) -> [F128; 3] {
+    let mut ch = RandomChallenger::new(ch_seed);
+    fx.public_claims(proof, &mut ch)
+}
+
 /// Split the algebraic transcript into the R-part (coordinates that must be
 /// covered: `WitnessDependent`) and the L-part (mask-only leakage that must
 /// stay FIXED while covering: `MaskOnly`), by schema class.
@@ -423,7 +429,7 @@ const SMOKE: Budget = Budget {
     ua_stride: 8,
     ub_stride: 4,
     mask_slots: 96,
-    witness_dirs: 192,
+    witness_dirs: 512,
     tuples: &[0x7777_1234],
     l_full: false,
 };
@@ -433,7 +439,7 @@ const FULL: Budget = Budget {
     ua_stride: 1,
     ub_stride: 1,
     mask_slots: MASK_MATERIAL,
-    witness_dirs: 256,
+    witness_dirs: 640,
     tuples: &[0x7777_1234, 0x1111_0001, 0x2222_0002],
     l_full: true,
 };
@@ -448,12 +454,13 @@ const FULL: Budget = Budget {
 /// certifies nothing. The claim space must therefore be saturated at 128
 /// before the verdict means anything.
 fn assert_claim_saturated(claim_rank: usize, n_dirs: usize) {
+    const CLAIM_BITS: usize = 3 * 128; // ab-claim, v = ẑ(r), and the ĉ claim
     assert_eq!(
-        claim_rank, 128,
-        "VACUOUS CERTIFICATE: the Δclaim space reached rank {claim_rank} < 128 \
-         from {n_dirs} witness directions, so no claim-preserving combination \
-         is forced to exist and the coverage criterion cannot bite. Increase \
-         witness_dirs."
+        claim_rank, CLAIM_BITS,
+        "VACUOUS CERTIFICATE: the Δclaim space reached rank {claim_rank} < \
+         {CLAIM_BITS} from {n_dirs} witness directions, so no claim-preserving \
+         combination is forced to exist and the coverage criterion cannot \
+         bite. Increase witness_dirs."
     );
 }
 
@@ -497,12 +504,16 @@ fn certify_tuple(
     // linearly on the witness and their span is a genuine space of
     // witness differences.
     let mut payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    // Zero the payload bits that feed product rows; flips of the remaining
+    // (free) bits change no product, so the span of such flips is a genuine
+    // space of witness differences.
+    let free = |i: usize| i % FixtureA1M15::N_PAYLOAD >= FixtureA1M15::FREE_PAYLOAD_BASE;
     for (i, b) in payload0.iter_mut().enumerate() {
-        if i % 2 == 1 {
+        if !free(i) {
             *b = false;
         }
     }
-    let linear_dirs: Vec<usize> = (0..payload0.len()).filter(|i| i % 2 == 0).collect();
+    let linear_dirs: Vec<usize> = (0..payload0.len()).filter(|i| free(*i)).collect();
     let u_a0 = rng.bits(FixtureA1M15::A_BITS);
     let u_b0 = rng.bits(FixtureA1M15::B_BITS);
     let p0 = vec![false; n];
@@ -551,7 +562,26 @@ fn certify_tuple(
         (proj(&t), proof.zerocheck.final_a_eval * proof.zerocheck.final_b_eval)
     };
 
-    let (base, base_claim) = go(&payload0, &u_a0, &u_b0, &p0, &cw, &cp);
+    let (base, _base_ab) = go(&payload0, &u_a0, &u_b0, &p0, &cw, &cp);
+    // The public claims the verifier learns, reconstructed with real verifier
+    // code. WI conditions on all of them.
+    let claims_at = |payload: &[bool]| -> [F128; 3] {
+        let r = Run {
+            fx,
+            payload,
+            u_a: &u_a0,
+            u_b: &u_b0,
+            p_bits: &p0,
+            q_bits: &q0,
+            commit_w: &cw,
+            commit_p: &cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        let (_, proof, _) = run(&r);
+        claims_of(fx, &proof, ch_seed)
+    };
+    let base_claims = claims_at(&payload0);
     let base_l = {
         let r = Run {
             fx,
@@ -738,13 +768,23 @@ fn certify_tuple(
     for k in 0..bud.witness_dirs {
         let mut payload = payload0.clone();
         payload[linear_dirs[k]] = !payload[linear_dirs[k]];
-        let (t, claim) = go(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
+        let (t, _claim) = go(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
         let residual = joint.reduce(xor(&t, &base));
-        let dv = claim + base_claim;
-        claim_space.insert(vec![dv.lo, dv.hi]);
+        // Condition on EVERY public claim the verifier learns, not just the
+        // ab-claim: the opening also proves the reduced evaluation v = ẑ(r)
+        // and the ĉ claim, so those are transcript-determined too.
+        let cl = claims_at(&payload);
+        let dcl: Vec<u64> = cl
+            .iter()
+            .zip(&base_claims)
+            .flat_map(|(a, b)| {
+                let d = *a + *b;
+                [d.lo, d.hi]
+            })
+            .collect();
+        claim_space.insert(dcl.clone());
         let mut both = residual;
-        both.push(dv.lo);
-        both.push(dv.hi);
+        both.extend_from_slice(&dcl);
         resid_and_claim.insert(both);
     }
 
@@ -888,12 +928,16 @@ fn coverage_passes(
     // odd payload positions zeroed so the product rows stay zero and flips of
     // even positions act linearly on the witness.
     let mut payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    // Zero the payload bits that feed product rows; flips of the remaining
+    // (free) bits change no product, so the span of such flips is a genuine
+    // space of witness differences.
+    let free = |i: usize| i % FixtureA1M15::N_PAYLOAD >= FixtureA1M15::FREE_PAYLOAD_BASE;
     for (i, b) in payload0.iter_mut().enumerate() {
-        if i % 2 == 1 {
+        if !free(i) {
             *b = false;
         }
     }
-    let linear_dirs: Vec<usize> = (0..payload0.len()).filter(|i| i % 2 == 0).collect();
+    let linear_dirs: Vec<usize> = (0..payload0.len()).filter(|i| free(*i)).collect();
     let u_a0 = rng.bits(FixtureA1M15::A_BITS);
     let u_b0 = rng.bits(FixtureA1M15::B_BITS);
     let p0 = vec![false; n];
@@ -1022,7 +1066,7 @@ fn coverage_passes(
     }
 
     // Witness directions.
-    let base_claim = base_proof.zerocheck.final_a_eval * base_proof.zerocheck.final_b_eval;
+    let base_claims = claims_of(fx, &base_proof, ch_seed);
     let mut resid_and_claim = F2Space::default();
     let mut claim_space = F2Space::default();
     for k in 0..bud.witness_dirs.min(linear_dirs.len()) {
@@ -1031,15 +1075,22 @@ fn coverage_passes(
         let (t, proof, _) = do_run(&p0, &u_a0, &cw, &payload);
         let d = xor(&augment(&t, &payload), &base_r);
         let residual = rkerl.reduce(d);
-        let dv = proof.zerocheck.final_a_eval * proof.zerocheck.final_b_eval + base_claim;
-        claim_space.insert(vec![dv.lo, dv.hi]);
+        let cl = claims_of(fx, &proof, ch_seed);
+        let dcl: Vec<u64> = cl
+            .iter()
+            .zip(&base_claims)
+            .flat_map(|(a, b)| {
+                let dd = *a + *b;
+                [dd.lo, dd.hi]
+            })
+            .collect();
+        claim_space.insert(dcl.clone());
         let mut both = residual;
-        both.push(dv.lo);
-        both.push(dv.hi);
+        both.extend_from_slice(&dcl);
         resid_and_claim.insert(both);
     }
     // A vacuous run (claim space unsaturated) must not count as a PASS.
-    claim_space.rank() == 128 && resid_and_claim.rank() == claim_space.rank()
+    claim_space.rank() == 3 * 128 && resid_and_claim.rank() == claim_space.rank()
 }
 
 #[derive(Clone, Copy, Debug)]
