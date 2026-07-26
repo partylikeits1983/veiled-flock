@@ -656,12 +656,19 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The complete-transcript certificate is open.} It is established
-for the round-pair class --- the class the amendment exists for --- and the two
-harness defects that made the whole-transcript verdict uninterpretable have
-been fixed (\S\ref{sec:certificates}), but the corrected whole-transcript run
-is not yet reported here. Everything this paper says about full-transcript
-witness-indistinguishability is conditional on that run.
+\item \textbf{The complete-transcript certificate is open.} What is
+established is the zerocheck round-pair class --- the class the degree-2
+channel exists for --- jointly, conditioned on the complete mask-only leakage
+set and on every public claim the verifier learns. The whole-transcript
+version is not established: two harness defects that made its verdict
+uninterpretable have been found and fixed (\S\ref{sec:certificates}), and the
+corrected run has not yet terminated at any probe budget we can afford, since
+its cost is dominated by an $\Ftwo$ elimination over a transcript-width
+codomain. Note the asymmetry that makes partial results usable: under-probing
+a mask channel can only produce a false \emph{failure}, never a false pass, so
+a pass at any probe budget is a valid certificate. Everything this paper says
+about full-transcript witness-indistinguishability is conditional on that
+certificate.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.

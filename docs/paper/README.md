@@ -5,10 +5,10 @@ hash-based SNARK for batch R1CS over F₂.
 
 **Decision label: B — experimental candidate with a proven partial core.**
 Not production zero-knowledge, and not independently reviewed. The
-complete-transcript coverage certificate is the principal open item: it is
-established for the zerocheck round-pair class, and does not yet pass over the
-whole transcript at the available fixture (diagnosed cause: that fixture's
-randomizer budget is 2.8x below its transcript size).
+complete-transcript coverage certificate is the principal open item. It is
+established for the zerocheck round-pair class — jointly, conditioned on the
+complete mask-only leakage set and on every public claim the verifier learns —
+and is not established over the whole transcript.
 
 ## The claim, exactly
 
