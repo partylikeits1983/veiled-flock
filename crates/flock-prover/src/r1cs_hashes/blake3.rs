@@ -478,7 +478,17 @@ pub fn build_matrices() -> (SparseBinaryMatrix, SparseBinaryMatrix) {
 pub fn build_matrices_zk(
     zk: Option<&flock_core::zk::ZkBlockLayout>,
 ) -> (SparseBinaryMatrix, SparseBinaryMatrix) {
-    let (mut a_rows, mut b_rows) = build_matrices_rows();
+    build_matrices_zk_pinned(zk, ParamPinning::Free)
+}
+
+/// [`build_matrices_zk`] with a compression-parameter [`ParamPinning`]. The
+/// pinning changes `A_0`/`B_0` and hence the statement digest, so it is part
+/// of the relation, not a prover option.
+pub fn build_matrices_zk_pinned(
+    zk: Option<&flock_core::zk::ZkBlockLayout>,
+    pinning: ParamPinning,
+) -> (SparseBinaryMatrix, SparseBinaryMatrix) {
+    let (mut a_rows, mut b_rows) = build_matrices_rows_pinned(pinning);
     if let Some(layout) = zk {
         for s in layout.a_bits() {
             debug_assert!(a_rows[s].is_empty() && b_rows[s].is_empty());
@@ -499,7 +509,104 @@ pub fn build_matrices_zk(
     (to_mat(a_rows), to_mat(b_rows))
 }
 
+/// Which compression parameters the circuit **pins to constants**.
+///
+/// The plain batch circuit leaves `cv`, `counter`, `block_len` and `flags`
+/// free — a satisfying assignment is any valid compression, which is why the
+/// batch statement asserts nothing about *which* hash was computed.
+///
+/// [`ParamPinning::RootHash64`] pins them so that a single compression **is**
+/// the complete BLAKE3 hash of a 64-byte message: `cv = IV`, `counter = 0`,
+/// `block_len = 64`, `flags = CHUNK_START|CHUNK_END|ROOT`. Combined with the
+/// public-digest binding of [`crate::digest_bind`], the relation becomes
+/// "`out_lo` is the BLAKE3 digest of the (private) message words `m`".
+///
+/// Pinning is per-bit row surgery, not a new mechanism: `C = I` means row `i`
+/// asserts `(A·z)_i·(B·z)_i = z_i`, so a slot is forced to 1 by
+/// `1·1 = z_s` and to 0 by `0·0 = z_s`. The choice is baked into `A_0`/`B_0`
+/// and therefore into `statement_digest` — a verifier for one pinning cannot
+/// accept a proof built for another.
+///
+/// Note the pinned values must hold in **every** block including padding, since
+/// the per-block matrices are shared across the batch. That is what makes the
+/// padding instances' digests publicly predictable (see
+/// [`crate::digest_bind::PaddingDigest`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum ParamPinning {
+    /// Leave every compression parameter free (the historical batch circuit).
+    #[default]
+    Free,
+    /// Pin to the root-hash configuration for a 64-byte message.
+    RootHash64,
+}
+
+/// The BLAKE3 flag bits (see the reference implementation).
+pub const FLAG_CHUNK_START: u32 = 1 << 0;
+pub const FLAG_CHUNK_END: u32 = 1 << 1;
+pub const FLAG_ROOT: u32 = 1 << 3;
+
+/// Flags for a single-block root hash: the block is simultaneously the start
+/// and end of its chunk, and the chunk is the root node.
+pub const FLAGS_ROOT_HASH: u32 = FLAG_CHUNK_START | FLAG_CHUNK_END | FLAG_ROOT;
+
+/// Message bytes covered by one compression under [`ParamPinning::RootHash64`].
+pub const ROOT_HASH_BLOCK_LEN: u32 = 64;
+
+impl ParamPinning {
+    /// The pinned compression parameters, or `None` when free.
+    fn pinned(self) -> Option<PinnedParams> {
+        match self {
+            Self::Free => None,
+            Self::RootHash64 => Some(PinnedParams {
+                cv: BLAKE3_IV,
+                counter: 0,
+                block_len: ROOT_HASH_BLOCK_LEN,
+                flags: FLAGS_ROOT_HASH,
+            }),
+        }
+    }
+
+    /// The compression used to fill padding block slots.
+    ///
+    /// Padding slots are not free: the constant-wire pin requires every block
+    /// — padding included — to carry a *valid* compression, and under a
+    /// pinning they must additionally satisfy the pinned parameter rows.
+    /// So the padding slot holds the hash of the all-zero message under the
+    /// pinned parameters, and its output region is therefore a publicly
+    /// computable constant rather than zero. That constant is what the
+    /// digest statement's padding rule must declare
+    /// ([`Self::padding_digest_words`]).
+    pub fn padding_compression(self) -> Compression {
+        match self.pinned() {
+            None => ([0u32; 8], [0u32; 16], 0u64, 0u32, 0u32),
+            Some(p) => (p.cv, [0u32; 16], p.counter, p.block_len, p.flags),
+        }
+    }
+
+    /// The 8 output words a padding slot carries — `out_lo` of
+    /// [`Self::padding_compression`]. For [`Self::RootHash64`] this is
+    /// `BLAKE3(0u8 × 64)`.
+    pub fn padding_digest_words(self) -> [u32; 8] {
+        let (cv, m, t, bl, fl) = self.padding_compression();
+        let state = blake3_compress(&cv, &m, t, bl, fl);
+        std::array::from_fn(|w| state[w])
+    }
+}
+
+/// Concrete constants a pinning imposes.
+#[derive(Clone, Copy, Debug)]
+struct PinnedParams {
+    cv: [u32; 8],
+    counter: u64,
+    block_len: u32,
+    flags: u32,
+}
+
 fn build_matrices_rows() -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
+    build_matrices_rows_pinned(ParamPinning::Free)
+}
+
+fn build_matrices_rows_pinned(pinning: ParamPinning) -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
     let mut a_rows: Vec<Vec<usize>> = vec![Vec::new(); K];
     let mut b_rows: Vec<Vec<usize>> = vec![Vec::new(); K];
 
@@ -515,12 +622,44 @@ fn build_matrices_rows() -> (Vec<Vec<usize>>, Vec<Vec<usize>>) {
             b_rows[s] = vec![Z_CONST_POS];
         }
     };
-    input_emit(CV_BASE, 8 * WORD_BITS);
+    // The message words are the private preimage and stay free under every
+    // pinning; the compression parameters are pinned or free per `pinning`.
     input_emit(M_BASE, 16 * WORD_BITS);
-    input_emit(T_LO_BASE, WORD_BITS);
-    input_emit(T_HI_BASE, WORD_BITS);
-    input_emit(BLEN_BASE, WORD_BITS);
-    input_emit(FLAGS_BASE, WORD_BITS);
+    match pinning.pinned() {
+        None => {
+            input_emit(CV_BASE, 8 * WORD_BITS);
+            input_emit(T_LO_BASE, WORD_BITS);
+            input_emit(T_HI_BASE, WORD_BITS);
+            input_emit(BLEN_BASE, WORD_BITS);
+            input_emit(FLAGS_BASE, WORD_BITS);
+        }
+        Some(p) => {
+            // Force `z_s = bit`: `1·1 = z_s` for a set bit, `0·0 = z_s` for a
+            // clear one. Both are unconditional — no free assignment satisfies
+            // the row with the other value.
+            let mut pin_bit = |s: usize, bit: bool| {
+                if bit {
+                    a_rows[s] = vec![Z_CONST_POS];
+                    b_rows[s] = vec![Z_CONST_POS];
+                } else {
+                    a_rows[s] = Vec::new();
+                    b_rows[s] = Vec::new();
+                }
+            };
+            let pin_word = |base: usize, value: u32, pin: &mut dyn FnMut(usize, bool)| {
+                for b in 0..WORD_BITS {
+                    pin(base + b, (value >> b) & 1 == 1);
+                }
+            };
+            for (w, iv) in p.cv.iter().enumerate() {
+                pin_word(CV_BASE + WORD_BITS * w, *iv, &mut pin_bit);
+            }
+            pin_word(T_LO_BASE, p.counter as u32, &mut pin_bit);
+            pin_word(T_HI_BASE, (p.counter >> 32) as u32, &mut pin_bit);
+            pin_word(BLEN_BASE, p.block_len, &mut pin_bit);
+            pin_word(FLAGS_BASE, p.flags, &mut pin_bit);
+        }
+    }
 
     let msg_idx = per_round_msg_idx();
     let mut state: [Word; 16] = initial_lane_words();
@@ -686,8 +825,16 @@ pub fn zk_layout() -> flock_core::zk::ZkBlockLayout {
 /// the randomizer sections (they are real witness rows — the padded kernels
 /// must not skip them).
 pub fn build_block_r1cs_zk(n_blocks_log: usize) -> BlockR1cs {
+    build_block_r1cs_zk_pinned(n_blocks_log, ParamPinning::Free)
+}
+
+/// [`build_block_r1cs_zk`] under a compression-parameter [`ParamPinning`].
+/// With [`ParamPinning::RootHash64`] the circuit says "`out_lo` is the BLAKE3
+/// digest of the 64-byte message `m`" — the relation the fixed-digest
+/// statement binds public digests to.
+pub fn build_block_r1cs_zk_pinned(n_blocks_log: usize, pinning: ParamPinning) -> BlockR1cs {
     let layout = zk_layout();
-    let (a_0, b_0) = build_matrices_zk(Some(&layout));
+    let (a_0, b_0) = build_matrices_zk_pinned(Some(&layout), pinning);
     let mut r1cs = super::common::build_block_r1cs_with_matrices(
         n_blocks_log,
         K_LOG,
@@ -699,6 +846,21 @@ pub fn build_block_r1cs_zk(n_blocks_log: usize) -> BlockR1cs {
     );
     r1cs.zk = Some(layout);
     r1cs
+}
+
+/// Non-zk [`build_block_r1cs`] under a [`ParamPinning`] (used by the
+/// completeness/soundness tests that do not need the masking layer).
+pub fn build_block_r1cs_pinned(n_blocks_log: usize, pinning: ParamPinning) -> BlockR1cs {
+    let (a_0, b_0) = build_matrices_zk_pinned(None, pinning);
+    super::common::build_block_r1cs_with_matrices(
+        n_blocks_log,
+        K_LOG,
+        K_SKIP,
+        USEFUL_BITS,
+        a_0,
+        b_0,
+        Some(Z_CONST_POS),
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -1299,11 +1461,29 @@ pub fn generate_witness_with_ab_packed_and_lincheck(
     Vec<flock_core::field::F128>,
     Vec<u8>,
 ) {
+    generate_witness_with_ab_packed_and_lincheck_pinned(blocks, n_blocks_log, ParamPinning::Free)
+}
+
+/// [`generate_witness_with_ab_packed_and_lincheck`] under a [`ParamPinning`].
+/// The pinning only changes which compression fills the padding slots — the
+/// real blocks are the caller's — but that choice is load-bearing: under a
+/// pinning the historical all-zero-parameter padding no longer satisfies the
+/// pinned rows.
+pub fn generate_witness_with_ab_packed_and_lincheck_pinned(
+    blocks: &[Compression],
+    n_blocks_log: usize,
+    pinning: ParamPinning,
+) -> (
+    Vec<flock_core::field::F128>,
+    Vec<flock_core::field::F128>,
+    Vec<flock_core::field::F128>,
+    Vec<u8>,
+) {
     // Constant-wire pin (docs/const-wire-pin.md): fill padding blocks with a
-    // valid compression (of the all-zero input) so the constant cell is 1 in
-    // every block. (The chain forbids padding, so this only affects the
-    // standalone batch setup.)
-    let padding: Compression = ([0u32; 8], [0u32; 16], 0u64, 0u32, 0u32);
+    // valid compression so the constant cell is 1 in every block, and — under
+    // a pinning — so the pinned parameter rows hold there too. (The chain
+    // forbids padding, so this only affects the standalone batch setup.)
+    let padding: Compression = pinning.padding_compression();
     super::common::drive_witness_packed_and_lincheck(
         blocks,
         Some(&padding),
@@ -2830,6 +3010,168 @@ mod tests {
             assert_eq!(setup.m(), K_LOG + expected_n_log);
             assert!(setup.n_block_slots() >= n_blocks);
         }
+    }
+    // -----------------------------------------------------------------------
+    // Fixed-digest relation: the pinned circuit computes a real BLAKE3 hash
+    // -----------------------------------------------------------------------
+
+    /// The pinning constants ARE BLAKE3's single-block root-hash
+    /// configuration: compressing a 64-byte message under them reproduces the
+    /// `blake3` crate's digest of those bytes. This is what licenses reading
+    /// `out_lo` as "the BLAKE3 hash of the message".
+    #[test]
+    fn root_hash_pinning_matches_the_blake3_crate() {
+        let mut rng = Rng::new(0x9E37_79B9);
+        let mut bytes = [0u8; 64];
+        for b in bytes.iter_mut() {
+            *b = (rng.next_u32() & 0xFF) as u8;
+        }
+        let mut m = [0u32; 16];
+        for (i, w) in m.iter_mut().enumerate() {
+            *w = u32::from_le_bytes(bytes[i * 4..i * 4 + 4].try_into().unwrap());
+        }
+        let p = ParamPinning::RootHash64.pinned().expect("pinned params");
+        assert_eq!(p.cv, BLAKE3_IV);
+        assert_eq!(p.counter, 0);
+        assert_eq!(p.block_len, 64);
+        assert_eq!(p.flags, CHUNK_START | CHUNK_END | ROOT);
+
+        let state = blake3_compress(&p.cv, &m, p.counter, p.block_len, p.flags);
+        let mut got = [0u8; 32];
+        for w in 0..8 {
+            got[w * 4..w * 4 + 4].copy_from_slice(&state[w].to_le_bytes());
+        }
+        assert_eq!(got, *::blake3::hash(&bytes).as_bytes());
+    }
+
+    /// An honest preimage witness satisfies the pinned R1CS, and its `out_lo`
+    /// region carries exactly the real BLAKE3 digest of the message.
+    #[test]
+    fn pinned_witness_satisfies_and_carries_the_digest() {
+        let mut rng = Rng::new(0x5EED_1234);
+        let n_log = 3usize;
+        let r1cs = build_block_r1cs_pinned(n_log, ParamPinning::RootHash64);
+        let n_blocks = 5usize;
+        let msgs: Vec<[u32; 16]> = (0..n_blocks)
+            .map(|_| std::array::from_fn(|_| rng.next_u32()))
+            .collect();
+        let blocks: Vec<Compression> = msgs
+            .iter()
+            .map(|m| (BLAKE3_IV, *m, 0u64, ROOT_HASH_BLOCK_LEN, FLAGS_ROOT_HASH))
+            .collect();
+        // Padding slots must carry the pinning's padding compression, or the
+        // pinned rows fail there.
+        let mut all = blocks.clone();
+        all.resize(
+            1usize << n_log,
+            ParamPinning::RootHash64.padding_compression(),
+        );
+        let z = generate_witness(&all, n_log);
+        assert!(
+            r1cs.satisfies(&z),
+            "honest preimage witness must satisfy the pinned R1CS"
+        );
+
+        // out_lo of each real block is the BLAKE3 digest of its message.
+        for (i, m) in msgs.iter().enumerate() {
+            let mut bytes = [0u8; 64];
+            for (j, w) in m.iter().enumerate() {
+                bytes[j * 4..j * 4 + 4].copy_from_slice(&w.to_le_bytes());
+            }
+            let expected = *::blake3::hash(&bytes).as_bytes();
+            let mut got = [0u8; 32];
+            for w in 0..8 {
+                let mut word = 0u32;
+                for b in 0..WORD_BITS {
+                    if z[i * K + out_lo_bit(w, b)] {
+                        word |= 1 << b;
+                    }
+                }
+                got[w * 4..w * 4 + 4].copy_from_slice(&word.to_le_bytes());
+            }
+            assert_eq!(got, expected, "block {i}: out_lo is not BLAKE3(message)");
+        }
+    }
+
+    /// The pinning is enforced, not merely conventional: a witness that uses
+    /// a different chaining value, counter, length or flag word — even though
+    /// it is a perfectly valid *compression* — violates the pinned rows.
+    #[test]
+    fn pinned_rows_reject_off_parameter_compressions() {
+        let mut rng = Rng::new(0xABCD_0042);
+        let n_log = 3usize;
+        let r1cs = build_block_r1cs_pinned(n_log, ParamPinning::RootHash64);
+        let m: [u32; 16] = std::array::from_fn(|_| rng.next_u32());
+        let pad = ParamPinning::RootHash64.padding_compression();
+
+        let cases: [(&str, Compression); 4] = [
+            (
+                "wrong cv",
+                ([7u32; 8], m, 0, ROOT_HASH_BLOCK_LEN, FLAGS_ROOT_HASH),
+            ),
+            (
+                "wrong counter",
+                (BLAKE3_IV, m, 1, ROOT_HASH_BLOCK_LEN, FLAGS_ROOT_HASH),
+            ),
+            ("wrong block_len", (BLAKE3_IV, m, 0, 32, FLAGS_ROOT_HASH)),
+            (
+                "wrong flags",
+                (BLAKE3_IV, m, 0, ROOT_HASH_BLOCK_LEN, CHUNK_START),
+            ),
+        ];
+        for (name, block) in cases {
+            let mut all = vec![block];
+            all.resize(1usize << n_log, pad);
+            let z = generate_witness(&all, n_log);
+            assert!(
+                !r1cs.satisfies(&z),
+                "{name}: a valid compression outside the pinned parameters must \
+                 NOT satisfy the fixed-digest circuit"
+            );
+        }
+
+        // Control: the on-parameter compression does satisfy it.
+        let mut all = vec![(BLAKE3_IV, m, 0u64, ROOT_HASH_BLOCK_LEN, FLAGS_ROOT_HASH)];
+        all.resize(1usize << n_log, pad);
+        assert!(r1cs.satisfies(&generate_witness(&all, n_log)));
+    }
+
+    /// The padding slot's digest is a publicly computable constant —
+    /// BLAKE3 of the all-zero 64-byte message — NOT zero. A digest statement
+    /// that assumed zero padding would compute the wrong target.
+    #[test]
+    fn padding_digest_is_the_hash_of_zeros_not_zero() {
+        let words = ParamPinning::RootHash64.padding_digest_words();
+        let mut got = [0u8; 32];
+        for w in 0..8 {
+            got[w * 4..w * 4 + 4].copy_from_slice(&words[w].to_le_bytes());
+        }
+        assert_eq!(got, *::blake3::hash(&[0u8; 64]).as_bytes());
+        assert_ne!(words, [0u32; 8], "padding digest must not be zero");
+
+        // And it is what the witness actually carries in a padding slot.
+        let n_log = 2usize;
+        let pad = ParamPinning::RootHash64.padding_compression();
+        let all = vec![pad; 1usize << n_log];
+        let z = generate_witness(&all, n_log);
+        for w in 0..8 {
+            let mut word = 0u32;
+            for b in 0..WORD_BITS {
+                if z[K + out_lo_bit(w, b)] {
+                    word |= 1 << b;
+                }
+            }
+            assert_eq!(word, words[w], "padding slot out_lo[{w}] mismatch");
+        }
+    }
+
+    /// Pinning changes the statement digest, so a proof for the free circuit
+    /// can never be read as a proof for the fixed-digest one.
+    #[test]
+    fn pinning_changes_the_statement_digest() {
+        let free = build_block_r1cs_pinned(3, ParamPinning::Free);
+        let pinned = build_block_r1cs_pinned(3, ParamPinning::RootHash64);
+        assert_ne!(free.statement_digest(), pinned.statement_digest());
     }
 }
 
