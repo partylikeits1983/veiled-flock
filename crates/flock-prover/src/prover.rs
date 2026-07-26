@@ -772,8 +772,7 @@ pub struct R1csProofZkA1 {
 /// Fill a length-`2^m` boolean cube from a mask sampler (one bit per entry),
 /// returned in F128-packed form (as the commit + zerocheck both consume).
 #[cfg(feature = "zk")]
-fn sample_mask_bits(rng: &mut flock_core::zk::ZkRng, m: usize) -> Vec<F128> {
-    use flock_core::zk::MaskSampler;
+fn sample_mask_bits(rng: &mut dyn flock_core::zk::MaskSampler, m: usize) -> Vec<F128> {
     let n = 1usize << m;
     let mut words = vec![0u64; n.div_ceil(64)];
     rng.fill_u64s(&mut words);
@@ -826,6 +825,62 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
     )
 }
 
+/// The five independent mask streams the A1′ prover consumes. Production
+/// builds these by domain-separated forks of one per-proof DRBG (see
+/// [`A1MaskSources::from_rng`]); the leakage certificates substitute
+/// playback samplers to unit-probe one channel at a time, which is how the
+/// mask→transcript maps are extracted from the **real** prover rather than
+/// from a re-implementation.
+#[cfg(feature = "zk")]
+pub struct A1MaskSources<'a> {
+    /// Low-half mask μ and blinder g of the witness commitment.
+    pub witness_commit: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the mask polynomial `P`.
+    pub p: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the mask polynomial `Q`.
+    pub q: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `P` commitment.
+    pub commit_p: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `Q` commitment.
+    pub commit_q: &'a mut dyn flock_core::zk::MaskSampler,
+}
+
+/// Owning form of [`A1MaskSources`] for the DRBG case (the forks must
+/// outlive the borrow).
+#[cfg(feature = "zk")]
+pub struct A1MaskForks {
+    pub witness_commit: flock_core::zk::ZkRng,
+    pub p: flock_core::zk::ZkRng,
+    pub q: flock_core::zk::ZkRng,
+    pub commit_p: flock_core::zk::ZkRng,
+    pub commit_q: flock_core::zk::ZkRng,
+}
+
+#[cfg(feature = "zk")]
+impl A1MaskForks {
+    /// Derive the five streams from one per-proof DRBG. The labels are part
+    /// of the protocol: they make the channels independent, which is a
+    /// hypothesis of the composition argument.
+    pub fn from_rng(zk_rng: &mut flock_core::zk::ZkRng) -> Self {
+        Self {
+            witness_commit: zk_rng.fork(b"a1-witness-mask"),
+            p: zk_rng.fork(b"a1-P"),
+            q: zk_rng.fork(b"a1-Q"),
+            commit_p: zk_rng.fork(b"a1-commit-P"),
+            commit_q: zk_rng.fork(b"a1-commit-Q"),
+        }
+    }
+    pub fn sources(&mut self) -> A1MaskSources<'_> {
+        A1MaskSources {
+            witness_commit: &mut self.witness_commit,
+            p: &mut self.p,
+            q: &mut self.q,
+            commit_p: &mut self.commit_p,
+            commit_q: &mut self.commit_q,
+        }
+    }
+}
+
 /// [`prove_r1cs_zk_a1`] with an explicit Ligerito prover config, for audit
 /// fixtures at shapes outside the production config ladder (e.g. the m=15
 /// certificate fixture). Does NOT check `r1cs.zk` — the caller owns the
@@ -844,6 +899,37 @@ pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     zk_rng: &mut flock_core::zk::ZkRng,
     challenger: &mut Ch,
 ) -> (R1csProofZkA1, Commitment) {
+    let mut forks = A1MaskForks::from_rng(zk_rng);
+    prove_r1cs_zk_a1_with_masks(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        lig_config,
+        forks.sources(),
+        challenger,
+    )
+}
+
+/// The A1′ prover with every mask channel supplied explicitly. This is the
+/// map the leakage certificates probe.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_config: &pcs::ligerito::ProverConfig,
+    masks: A1MaskSources<'_>,
+    challenger: &mut Ch,
+) -> (R1csProofZkA1, Commitment) {
     assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
     let m = r1cs.m;
     let padding = r1cs.padding_spec();
@@ -851,18 +937,14 @@ pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
         unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
     };
 
-    let mut wit_rng = zk_rng.fork(b"a1-witness-mask");
-    let mut p_rng = zk_rng.fork(b"a1-P");
-    let mut q_rng = zk_rng.fork(b"a1-Q");
-    let mut cp_rng = zk_rng.fork(b"a1-commit-P");
-    let mut cq_rng = zk_rng.fork(b"a1-commit-Q");
+    let A1MaskSources { witness_commit, p, q, commit_p, commit_q } = masks;
 
-    let p_f128 = sample_mask_bits(&mut p_rng, m);
-    let q_f128 = sample_mask_bits(&mut q_rng, m);
+    let p_f128 = sample_mask_bits(p, m);
+    let q_f128 = sample_mask_bits(q, m);
 
-    let (commitment, prover_data) = pcs::commit::commit_zk(&z_packed, pcs_params, &mut wit_rng);
-    let (comm_p, pd_p) = pcs::commit::commit_zk(&p_f128, pcs_params, &mut cp_rng);
-    let (comm_q, pd_q) = pcs::commit::commit_zk(&q_f128, pcs_params, &mut cq_rng);
+    let (commitment, prover_data) = pcs::commit::commit_zk(&z_packed, pcs_params, witness_commit);
+    let (comm_p, pd_p) = pcs::commit::commit_zk(&p_f128, pcs_params, commit_p);
+    let (comm_q, pd_q) = pcs::commit::commit_zk(&q_f128, pcs_params, commit_q);
 
     bind_statement(challenger, r1cs, &commitment);
     challenger.observe_bytes(&comm_p.root);
