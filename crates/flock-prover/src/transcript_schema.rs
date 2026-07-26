@@ -389,6 +389,8 @@ const PCS_OPEN_PATHS: OpeningPaths = opening_paths!("pcs_open");
 const OPEN_P_PATHS: OpeningPaths = opening_paths!("open_p");
 const OPEN_Q_PATHS: OpeningPaths = opening_paths!("open_q");
 const OPEN_S_PATHS: OpeningPaths = opening_paths!("open_s");
+const OPEN_SC_PATHS: OpeningPaths = opening_paths!("open_s_c");
+const OPEN_SH_PATHS: OpeningPaths = opening_paths!("open_s_h");
 
 /// Flatten the complete A1′ proof (plus witness commitment) into classified
 /// fields, in prover message order (commitments → zerocheck → lincheck →
@@ -403,11 +405,17 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
         open_p,
         open_q,
         open_s,
+        open_s_c,
+        open_s_h,
         comm_p,
         comm_q,
         comm_s,
+        comm_s_c,
+        comm_s_h,
         sigma_lc,
         s_eval,
+        mc_at_z,
+        h_at_z,
     } = proof;
 
     let Commitment { root, params } = commitment;
@@ -613,6 +621,8 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
     flatten_opening(&mut out, &OPEN_P_PATHS, LeakageClass::MaskOnly, open_p);
     flatten_opening(&mut out, &OPEN_Q_PATHS, LeakageClass::MaskOnly, open_q);
     flatten_opening(&mut out, &OPEN_S_PATHS, LeakageClass::MaskOnly, open_s);
+    flatten_opening(&mut out, &OPEN_SC_PATHS, LeakageClass::MaskOnly, open_s_c);
+    flatten_opening(&mut out, &OPEN_SH_PATHS, LeakageClass::MaskOnly, open_s_h);
     flatten_opening(
         &mut out,
         &PCS_OPEN_PATHS,
@@ -783,6 +793,8 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
     let comm_p = unflatten_commitment(&mut cur, "comm_p.root", "comm_p.params");
     let comm_q = unflatten_commitment(&mut cur, "comm_q.root", "comm_q.params");
     let comm_s = unflatten_commitment(&mut cur, "comm_s.root", "comm_s.params");
+    let comm_s_c = unflatten_commitment(&mut cur, "comm_s_c.root", "comm_s_c.params");
+    let comm_s_h = unflatten_commitment(&mut cur, "comm_s_h.root", "comm_s_h.params");
 
     let zerocheck = ZkZerocheckProof {
         round1_ab: cur.f128s("zerocheck.round1_ab"),
@@ -795,6 +807,8 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
         final_p_eval: cur.one_f128("zerocheck.final_p_eval"),
         final_q_eval: cur.one_f128("zerocheck.final_q_eval"),
     };
+    let mc_at_z = cur.one_f128("zerocheck.mc_at_z");
+    let h_at_z = cur.one_f128("zerocheck.h_at_z");
     let sigma_lc = cur.one_f128("lincheck.sigma_lc");
     let lincheck = LincheckProof {
         rounds: f128_pairs(cur.f128s("lincheck.rounds")),
@@ -804,6 +818,8 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
     let open_p = unflatten_opening(&mut cur, &OPEN_P_PATHS);
     let open_q = unflatten_opening(&mut cur, &OPEN_Q_PATHS);
     let open_s = unflatten_opening(&mut cur, &OPEN_S_PATHS);
+    let open_s_c = unflatten_opening(&mut cur, &OPEN_SC_PATHS);
+    let open_s_h = unflatten_opening(&mut cur, &OPEN_SH_PATHS);
     let pcs_open = unflatten_opening(&mut cur, &PCS_OPEN_PATHS);
     assert_eq!(cur.pos, flat.len(), "unflatten did not consume every field");
     (
@@ -815,11 +831,17 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
             open_p,
             open_q,
             open_s,
+            open_s_c,
+            open_s_h,
             comm_p,
             comm_q,
             comm_s,
+            comm_s_c,
+            comm_s_h,
             sigma_lc,
             s_eval,
+            mc_at_z,
+            h_at_z,
         },
     )
 }

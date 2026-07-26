@@ -154,6 +154,34 @@ pub fn interpolate_at_z_on_lambda(values: &[F128], k_skip: usize, z: F128) -> F1
     acc
 }
 
+/// The vanishing polynomial of the S-domain, `V_S(X) = Π_{s∈S}(X + s)`,
+/// evaluated at `z`. Degree `2^k_skip`, zero exactly on S.
+///
+/// Amendment A3 uses this to build a round-1 mask pair whose *sum* still
+/// vanishes on S, which is what keeps the verifier's combined reconstruction
+/// (and with it the zerocheck assumption) intact while the AB and C sides
+/// move independently.
+pub fn vanishing_s_at(k_skip: usize, z: F128) -> F128 {
+    let ell = 1usize << k_skip;
+    assert!(2 * ell <= 256, "Λ ∪ S must fit in F_8 (need k_skip ≤ 7)");
+    let mut acc = F128::ONE;
+    for j in 0..ell {
+        acc *= z + PHI_8_TABLE[j];
+    }
+    acc
+}
+
+/// `V_S` evaluated on every node of Λ. No entry is zero (Λ and S are
+/// disjoint), so multiplying a Λ-vector by this is a bijection — which is why
+/// the A3 mask pair is unconstrained despite the vanishing condition.
+pub fn vanishing_s_on_lambda(k_skip: usize) -> Vec<F128> {
+    let ell = 1usize << k_skip;
+    assert!(2 * ell <= 256, "Λ ∪ S must fit in F_8 (need k_skip ≤ 7)");
+    (0..ell)
+        .map(|i| vanishing_s_at(k_skip, PHI_8_TABLE[ell + i]))
+        .collect()
+}
+
 /// Interpolate a degree-`< 2·2^k_skip` polynomial at z, given its `2^k_skip`
 /// evaluations on Λ and the assumption that it equals **zero on S**.
 ///

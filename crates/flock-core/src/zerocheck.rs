@@ -29,7 +29,7 @@ pub mod univariate_skip_optimized;
 use multilinear::{
     UniSkipFoldTable, fold_and_compute_round_pair_into, fold_in_place_pair,
     interpolate_at_z_combined, interpolate_at_z_on_lambda, round_pair_naive,
-    uni_skip_fold_and_round_pair_optimized_packed_padded,
+    uni_skip_fold_and_round_pair_optimized_packed_padded, vanishing_s_at, vanishing_s_on_lambda,
 };
 use univariate_skip_optimized::{
     c_s_f128, medium_challenges_ghash, round1_shift_reduce_extract_c_packed_padded,
@@ -678,6 +678,44 @@ pub struct ZkZerocheckProof {
 /// LSB-first bit-packed mask cubes (same layout as `a_packed`), full support
 /// (dense). They MUST already be committed and their commitment bound into the
 /// transcript before this call (so `γ` cannot depend on a later mask choice).
+/// Amendment A3 — the round-1 mask channel.
+///
+/// Round 1 is the one PIOP class the degree-2 `γ·P·Q` channel cannot touch:
+/// the verifier reconstructs the AB running claim from the **zerocheck
+/// assumption** `P^AB + P^C = 0` on `S`, and a mask that does not vanish
+/// there destroys that reconstruction. `P·Q` does not vanish on `S`, which is
+/// why A1′ starts at round 2.
+///
+/// A3 masks it with a *pair* whose sum does vanish on `S`. With `M_c` the
+/// C-side mask and `M_ab = M_c + V_S·h` the AB-side one, the combined
+/// polynomial gains `M_ab + M_c = V_S·h`, which is zero on `S` — so the
+/// reconstruction is untouched — while the two sides move independently.
+/// That independence is the point: the measured escaping direction is
+/// supported on `round1_c` and *not* on `round1_ab`, so a diagonal mask
+/// (`M_ab = M_c`) provably cannot reach it.
+///
+/// Both cubes are witness-free and committed before any challenge; `V_S` has
+/// no zero on `Λ`, so the reachable pair `(M_c|_Λ, M_ab|_Λ)` is unconstrained.
+pub struct Round1Mask<'a> {
+    /// Witness-free cube supplying the C-side mask `M_c`.
+    pub s_c_packed: &'a [u8],
+    /// Witness-free cube supplying `h`, the off-diagonal generator.
+    pub s_h_packed: &'a [u8],
+}
+
+/// The two scalars the verifier needs to undo an A3 mask. Both are
+/// witness-free and both must be opened against their commitments — the
+/// verifier consumes them to recover the C-claim and the AB running claim, so
+/// an unbound value would leave both unconstrained.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Round1MaskTranscript {
+    /// `M_c(z) = Ŝ_c(z, r_rest)` — an evaluation of the committed cube at
+    /// exactly the c-claim point.
+    pub mc_at_z: F128,
+    /// `h(z) = Ŝ_h(z, r_rest)`, at the same point.
+    pub h_at_z: F128,
+}
+
 pub fn prove_packed_padded_zk<C: Challenger>(
     a_packed: &[u8],
     b_packed: &[u8],
@@ -688,6 +726,33 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut C,
 ) -> (ZkZerocheckProof, ZerocheckClaim) {
+    let (proof, claim, _) = prove_packed_padded_zk_masked(
+        a_packed, b_packed, c_packed, p_packed, q_packed, m, padding, None, challenger,
+    );
+    (proof, claim)
+}
+
+/// [`prove_packed_padded_zk`] with the amendment-A3 round-1 mask channel.
+///
+/// The returned [`ZerocheckClaim`] carries the **un-shifted** `c_eval`, so
+/// downstream claim handling is unchanged; the proof's `final_c_eval` carries
+/// the masked value the verifier recomputes from `round1_c`.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_packed_padded_zk_masked<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    p_packed: &[u8],
+    q_packed: &[u8],
+    m: usize,
+    padding: &PaddingSpec,
+    mask: Option<Round1Mask<'_>>,
+    challenger: &mut C,
+) -> (
+    ZkZerocheckProof,
+    ZerocheckClaim,
+    Option<Round1MaskTranscript>,
+) {
     let k_skip = K_SKIP;
     const N_INNER: usize = 7;
     assert!(
@@ -725,12 +790,67 @@ pub fn prove_packed_padded_zk<C: Challenger>(
         a_packed, b_packed, c_packed, m, k_skip, &r, &inv_table, padding,
     );
     let c_s = c_s_f128();
-    let round1_ab: Vec<F128> = round1_ab_opt.iter().map(|x| c_s * *x).collect();
-    let round1_c: Vec<F128> = round1_c_opt.iter().map(|x| c_s * *x).collect();
+    let mut round1_ab: Vec<F128> = round1_ab_opt.iter().map(|x| c_s * *x).collect();
+    let mut round1_c: Vec<F128> = round1_c_opt.iter().map(|x| c_s * *x).collect();
+
+    // ---- A3: the round-1 mask pair ----
+    //
+    // `M_c` masks the C side; the AB side gets `M_c + V_S·h`, so the combined
+    // polynomial gains `V_S·h`, which vanishes on S — leaving the verifier's
+    // reconstruction (and the zerocheck assumption behind it) exactly as it
+    // was, while the two sides move independently. The mask cubes are folded
+    // over their FULL support (`dense`), because the value the verifier will
+    // open, `Ŝ_c(z, r_rest)`, sums over the whole cube.
+    let mask_lambda: Option<(Vec<F128>, Vec<F128>)> = mask.map(|mk| {
+        assert_eq!(mk.s_c_packed.len(), expected_bytes);
+        assert_eq!(mk.s_h_packed.len(), expected_bytes);
+        let zeros = vec![0u8; expected_bytes];
+        let (_, mc_opt) = round1_shift_reduce_extract_c_packed_padded(
+            &zeros,
+            &zeros,
+            mk.s_c_packed,
+            m,
+            k_skip,
+            &r,
+            &inv_table,
+            &dense,
+        );
+        let (_, mh_opt) = round1_shift_reduce_extract_c_packed_padded(
+            &zeros,
+            &zeros,
+            mk.s_h_packed,
+            m,
+            k_skip,
+            &r,
+            &inv_table,
+            &dense,
+        );
+        let mc: Vec<F128> = mc_opt.iter().map(|x| c_s * *x).collect();
+        let mh: Vec<F128> = mh_opt.iter().map(|x| c_s * *x).collect();
+        let vs = vanishing_s_on_lambda(k_skip);
+        for i in 0..round1_c.len() {
+            round1_ab[i] += mc[i] + vs[i] * mh[i];
+            round1_c[i] += mc[i];
+        }
+        (mc, mh)
+    });
+
     challenger.observe_f128_slice(&round1_ab);
     challenger.observe_f128_slice(&round1_c);
     let z = challenger.sample_f128();
+    // The proof field is the MASKED value: the verifier recomputes exactly
+    // this from `round1_c` and compares, so that check is unchanged.
     let final_c_eval = interpolate_at_z_on_lambda(&round1_c, k_skip, z);
+    let mask_transcript = mask_lambda.map(|(mc, mh)| Round1MaskTranscript {
+        mc_at_z: interpolate_at_z_on_lambda(&mc, k_skip, z),
+        h_at_z: interpolate_at_z_on_lambda(&mh, k_skip, z),
+    });
+    // The CLAIM carries the un-shifted ĉ(z, r_rest): the PCS binds ẑ, not the
+    // masked message.
+    let claim_c_eval = match &mask_transcript {
+        Some(mt) => final_c_eval + mt.mc_at_z,
+        None => final_c_eval,
+    };
 
     // ---- round 2 fold (both â·b̂ and P·Q) at z ----
     let fold_table = UniSkipFoldTable::new(k_skip, z);
@@ -825,9 +945,9 @@ pub fn prove_packed_padded_zk<C: Challenger>(
         r_rest,
         a_eval: final_a_eval,
         b_eval: final_b_eval,
-        c_eval: final_c_eval,
+        c_eval: claim_c_eval,
     };
-    (proof, claim)
+    (proof, claim, mask_transcript)
 }
 
 /// The degree-2 mask channel's contribution to the round messages, in
@@ -907,6 +1027,22 @@ pub fn verify_zk<C: Challenger>(
     proof: &ZkZerocheckProof,
     challenger: &mut C,
 ) -> Result<ZerocheckClaim, VerifyError> {
+    verify_zk_masked(log_n, proof, None, challenger)
+}
+
+/// [`verify_zk`] with the amendment-A3 round-1 mask engaged.
+///
+/// `mask` is `(M_c(z), h(z))` taken from the proof. **Both are unchecked
+/// here**: this function only uses them to un-shift the AB running claim and
+/// the C-claim. The caller MUST verify each against its commitment at the
+/// c-claim point, or a prover picks them after `z` and both derived values
+/// are unconstrained.
+pub fn verify_zk_masked<C: Challenger>(
+    log_n: usize,
+    proof: &ZkZerocheckProof,
+    mask: Option<(F128, F128)>,
+    challenger: &mut C,
+) -> Result<ZerocheckClaim, VerifyError> {
     let m = log_n;
     let k_skip = K_SKIP;
     const N_INNER: usize = 7;
@@ -959,7 +1095,16 @@ pub fn verify_zk<C: Challenger>(
         .collect();
     let combined_at_z = interpolate_at_z_combined(&combined_at_lambda, k_skip, z);
     let p_c_at_z = interpolate_at_z_on_lambda(&proof.round1_c, k_skip, z);
-    let ab_init = combined_at_z + p_c_at_z;
+    // A3: the masked C side carries `P^C + M_c`, and the masked combined
+    // polynomial carries `combined + V_S·h` — the latter still zero on S, so
+    // the reconstruction above is valid. What comes out is therefore
+    // `P^AB(z) + M_ab(z)`; un-shift by `M_ab(z) = M_c(z) + V_S(z)·h(z)`.
+    let ab_init = match mask {
+        Some((mc_at_z, h_at_z)) => {
+            combined_at_z + p_c_at_z + mc_at_z + vanishing_s_at(k_skip, z) * h_at_z
+        }
+        None => combined_at_z + p_c_at_z,
+    };
 
     // Observe σ_z, sample γ — mirrors the prover; γ is bound to (root, σ_z).
     challenger.observe_f128(proof.mask_init);
@@ -1001,7 +1146,11 @@ pub fn verify_zk<C: Challenger>(
         r_rest: r[k_skip..].to_vec(),
         a_eval: proof.final_a_eval,
         b_eval: proof.final_b_eval,
-        c_eval: proof.final_c_eval,
+        // A3: the PCS binds ẑ, so hand on the UN-shifted claim.
+        c_eval: match mask {
+            Some((mc_at_z, _)) => proof.final_c_eval + mc_at_z,
+            None => proof.final_c_eval,
+        },
     })
 }
 
@@ -1127,6 +1276,120 @@ mod tests {
                 .unwrap_or_else(|e| panic!("verify_zk rejected honest proof at m={m}: {e:?}"));
             assert_eq!(claim_p, claim_v, "zk claim mismatch at m={m}");
         }
+    }
+
+    /// **A3 round-1 mask: prove→verify roundtrip, staged.** Three mask
+    /// configurations, so a completeness break localizes itself:
+    /// zero cubes (must reduce exactly to the unmasked protocol), diagonal
+    /// only (`S_h = 0`, so the combined polynomial is untouched), and the
+    /// full off-diagonal pair.
+    #[test]
+    fn prove_verify_zk_round1_mask_roundtrip() {
+        for &m in &[13usize, 14] {
+            for stage in ["zero", "diagonal", "full"] {
+                let mut rng = Rng::new(3000 + m as u64);
+                let a = rng.bits(1 << m);
+                let b = rng.bits(1 << m);
+                let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
+                let p = rng.bits(1 << m);
+                let q = rng.bits(1 << m);
+                let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
+                let (p_p, q_p, _) = pack_abc(&p, &q, &q);
+
+                let zeros = vec![false; 1 << m];
+                let sc_bits = if stage == "zero" {
+                    zeros.clone()
+                } else {
+                    rng.bits(1 << m)
+                };
+                let sh_bits = if stage == "full" {
+                    rng.bits(1 << m)
+                } else {
+                    zeros.clone()
+                };
+                let (sc_p, sh_p, _) = pack_abc(&sc_bits, &sh_bits, &zeros);
+
+                let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
+                let (proof, claim_p, mt) = prove_packed_padded_zk_masked(
+                    &a_p,
+                    &b_p,
+                    &c_p,
+                    &p_p,
+                    &q_p,
+                    m,
+                    &PaddingSpec::dense(m),
+                    Some(Round1Mask {
+                        s_c_packed: &sc_p,
+                        s_h_packed: &sh_p,
+                    }),
+                    &mut ch_prove,
+                );
+                let mt = mt.expect("mask transcript");
+
+                let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
+                let claim_v =
+                    verify_zk_masked(m, &proof, Some((mt.mc_at_z, mt.h_at_z)), &mut ch_verify)
+                        .unwrap_or_else(|e| {
+                            panic!("A3 [{stage}] verify rejected honest proof at m={m}: {e:?}")
+                        });
+                assert_eq!(claim_p, claim_v, "A3 [{stage}] claim mismatch at m={m}");
+
+                // The un-shifted c-claim must be the true ĉ(z, r_rest), i.e.
+                // exactly what the unmasked protocol would have claimed.
+                let mut ch_ref = FsChallenger::new(b"flock-zk-test-v0");
+                let (_, claim_ref) = prove_packed_padded_zk(
+                    &a_p,
+                    &b_p,
+                    &c_p,
+                    &p_p,
+                    &q_p,
+                    m,
+                    &PaddingSpec::dense(m),
+                    &mut ch_ref,
+                );
+                if stage == "zero" {
+                    assert_eq!(
+                        claim_ref, claim_v,
+                        "zero masks must reproduce the unmasked protocol at m={m}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Does the round-1 C-side output depend on `a`,`b`? A3 computes a mask's
+    /// C-side message by calling the round-1 routine with zero `a`,`b`, which
+    /// is only valid if the C output is a function of `c_packed` alone.
+    #[test]
+    fn round1_c_output_is_independent_of_ab() {
+        use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
+        let m = 13usize;
+        let k_skip = K_SKIP;
+        let mut rng = Rng::new(24601);
+        let a = rng.bits(1 << m);
+        let b = rng.bits(1 << m);
+        let cc = rng.bits(1 << m);
+        let zeros = vec![false; 1 << m];
+        let (a_p, b_p, c_p) = pack_abc(&a, &b, &cc);
+        let (z_p, _, _) = pack_abc(&zeros, &zeros, &zeros);
+        let r: Vec<F128> = (0..m)
+            .map(|_| F128::new(rng.next_u64(), rng.next_u64()))
+            .collect();
+        let ntt_s = AdditiveNttGf8::new(k_skip, F8::ZERO);
+        let ntt_l = AdditiveNttGf8::new(k_skip, F8(1u8 << k_skip));
+        let inv_table = InvNttTableByteSingleGf8::new(&ntt_s, &ntt_l);
+        let pad = PaddingSpec::dense(m);
+        let (_, c_with_ab) = round1_shift_reduce_extract_c_packed_padded(
+            &a_p, &b_p, &c_p, m, k_skip, &r, &inv_table, &pad,
+        );
+        let (_, c_without_ab) = round1_shift_reduce_extract_c_packed_padded(
+            &z_p, &z_p, &c_p, m, k_skip, &r, &inv_table, &pad,
+        );
+        assert_eq!(
+            c_with_ab, c_without_ab,
+            "the round-1 C output DEPENDS on a,b — A3 cannot derive a mask's \
+             C-side message by zeroing them"
+        );
     }
 
     /// **A1′ soundness spot-checks.** Tampering the mask sum `σ_z`, either

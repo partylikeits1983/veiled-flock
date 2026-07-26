@@ -772,13 +772,21 @@ pub struct R1csProofZkA1 {
     pub open_p: pcs::BatchOpeningProofLigerito,
     pub open_q: pcs::BatchOpeningProofLigerito,
     pub open_s: pcs::BatchOpeningProofLigerito,
+    pub open_s_c: pcs::BatchOpeningProofLigerito,
+    pub open_s_h: pcs::BatchOpeningProofLigerito,
     pub comm_p: Commitment,
     pub comm_q: Commitment,
     pub comm_s: Commitment,
+    pub comm_s_c: Commitment,
+    pub comm_s_h: Commitment,
     /// A2: `Σ_i comb[i]·S_vec[i]`, absorbed before `γ_lc` is drawn.
     pub sigma_lc: F128,
     /// A2: `Ŝ(ρ_lc)`, checked against `comm_s` at the lincheck output point.
     pub s_eval: F128,
+    /// A3: `M_c(z) = Ŝ_c(z, r_rest)`, checked against `comm_s_c`.
+    pub mc_at_z: F128,
+    /// A3: `h(z) = Ŝ_h(z, r_rest)`, checked against `comm_s_h`.
+    pub h_at_z: F128,
 }
 
 /// Fill a length-`2^m` boolean cube from a mask sampler (one bit per entry),
@@ -861,6 +869,14 @@ pub struct A1MaskSources<'a> {
     pub s: &'a mut dyn flock_core::zk::MaskSampler,
     /// μ and g of the `S` commitment.
     pub commit_s: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the round-1 C-side mask cube `S_c` (amendment A3).
+    pub s_c: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the round-1 off-diagonal generator cube `S_h` (amendment A3).
+    pub s_h: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `S_c` commitment.
+    pub commit_s_c: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `S_h` commitment.
+    pub commit_s_h: &'a mut dyn flock_core::zk::MaskSampler,
 }
 
 /// Owning form of [`A1MaskSources`] for the DRBG case (the forks must
@@ -874,6 +890,10 @@ pub struct A1MaskForks {
     pub commit_q: flock_core::zk::ZkRng,
     pub s: flock_core::zk::ZkRng,
     pub commit_s: flock_core::zk::ZkRng,
+    pub s_c: flock_core::zk::ZkRng,
+    pub s_h: flock_core::zk::ZkRng,
+    pub commit_s_c: flock_core::zk::ZkRng,
+    pub commit_s_h: flock_core::zk::ZkRng,
 }
 
 #[cfg(feature = "zk")]
@@ -890,6 +910,10 @@ impl A1MaskForks {
             commit_q: zk_rng.fork(b"a1-commit-Q"),
             s: zk_rng.fork(b"a2-S"),
             commit_s: zk_rng.fork(b"a2-commit-S"),
+            s_c: zk_rng.fork(b"a3-Sc"),
+            s_h: zk_rng.fork(b"a3-Sh"),
+            commit_s_c: zk_rng.fork(b"a3-commit-Sc"),
+            commit_s_h: zk_rng.fork(b"a3-commit-Sh"),
         }
     }
     pub fn sources(&mut self) -> A1MaskSources<'_> {
@@ -901,6 +925,10 @@ impl A1MaskForks {
             commit_q: &mut self.commit_q,
             s: &mut self.s,
             commit_s: &mut self.commit_s,
+            s_c: &mut self.s_c,
+            s_h: &mut self.s_h,
+            commit_s_c: &mut self.commit_s_c,
+            commit_s_h: &mut self.commit_s_h,
         }
     }
 }
@@ -976,6 +1004,10 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         commit_q,
         s,
         commit_s,
+        s_c,
+        s_h,
+        commit_s_c,
+        commit_s_h,
     } = masks;
 
     let p_f128 = sample_mask_bits(p, m);
@@ -993,6 +1025,12 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     let (comm_p, pd_p) = pcs::commit::commit_zk(&p_f128, pcs_params, commit_p);
     let (comm_q, pd_q) = pcs::commit::commit_zk(&q_f128, pcs_params, commit_q);
     let (comm_s, pd_s) = pcs::commit::commit_zk(&s_f128, pcs_params, commit_s);
+    // A3: the round-1 mask pair. Both are full-support witness-free cubes;
+    // the round-1 fold reads their whole support, so no padding surgery.
+    let s_c_f128 = sample_mask_bits(s_c, m);
+    let s_h_f128 = sample_mask_bits(s_h, m);
+    let (comm_s_c, pd_s_c) = pcs::commit::commit_zk(&s_c_f128, pcs_params, commit_s_c);
+    let (comm_s_h, pd_s_h) = pcs::commit::commit_zk(&s_h_f128, pcs_params, commit_s_h);
 
     bind_statement(challenger, r1cs, &commitment);
     challenger.observe_bytes(&comm_p.root);
@@ -1000,6 +1038,8 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     // Bound here, before every challenge of the run: the A2 batching argument
     // needs `S` fixed before `γ_lc`, and this is the earliest safe point.
     challenger.observe_bytes(&comm_s.root);
+    challenger.observe_bytes(&comm_s_c.root);
+    challenger.observe_bytes(&comm_s_h.root);
 
     // Per-proof mask-coverage self-check (ε_rank): the challenger is now at
     // exactly the position `prove_packed_padded_zk` starts from, so a clone
@@ -1014,7 +1054,7 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         Some(Err(failed)) => Some(failed.report),
     };
 
-    let (zk_zc, zc_claim) = zerocheck::prove_packed_padded_zk(
+    let (zk_zc, zc_claim, zc_mask) = zerocheck::prove_packed_padded_zk_masked(
         cast(&a_packed_f128),
         cast(&b_packed_f128),
         cast(&z_packed),
@@ -1022,8 +1062,13 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         cast(&q_f128),
         m,
         &padding,
+        Some(zerocheck::Round1Mask {
+            s_c_packed: cast(&s_c_f128),
+            s_h_packed: cast(&s_h_f128),
+        }),
         challenger,
     );
+    let zc_mask = zc_mask.expect("mask=Some must produce a round-1 mask transcript");
     flock_core::scratch::give_f128(a_packed_f128);
     flock_core::scratch::give_f128(b_packed_f128);
 
@@ -1083,6 +1128,41 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         &mut ch_q,
     );
 
+    // A3: open both round-1 mask cubes at the c-claim point — the same point
+    // and shape as the C-claim, because that is where the un-shift happens.
+    let s_c_claim = ZClaim {
+        point: c.point.clone(),
+        value: zc_mask.mc_at_z,
+    };
+    let s_h_claim = ZClaim {
+        point: c.point.clone(),
+        value: zc_mask.h_at_z,
+    };
+    let mut ch_sc = challenger.clone();
+    ch_sc.observe_label(b"flock-a3-open-Sc");
+    let open_s_c = open_claims_with_precomputed_ligerito(
+        s_c_f128,
+        &pd_s_c,
+        &comm_s_c,
+        &[s_c_claim],
+        &[None],
+        &padding,
+        lig_config,
+        &mut ch_sc,
+    );
+    let mut ch_sh = challenger.clone();
+    ch_sh.observe_label(b"flock-a3-open-Sh");
+    let open_s_h = open_claims_with_precomputed_ligerito(
+        s_h_f128,
+        &pd_s_h,
+        &comm_s_h,
+        &[s_h_claim],
+        &[None],
+        &padding,
+        lig_config,
+        &mut ch_sh,
+    );
+
     // A2: open S hidingly at the lincheck's output point — the same point and
     // the same quirky shape as the `ab` claim, because `s_eval` un-shifts
     // exactly that claim. Without this opening `s_eval` would be a free
@@ -1123,11 +1203,17 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
             open_p,
             open_q,
             open_s,
+            open_s_c,
+            open_s_h,
             comm_p,
             comm_q,
             comm_s,
+            comm_s_c,
+            comm_s_h,
             sigma_lc: lc_mask.sigma_lc,
             s_eval: lc_mask.s_eval,
+            mc_at_z: zc_mask.mc_at_z,
+            h_at_z: zc_mask.h_at_z,
         },
         commitment,
         coverage,
@@ -1181,6 +1267,8 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     if proof.comm_p.params != *pcs_params
         || proof.comm_q.params != *pcs_params
         || proof.comm_s.params != *pcs_params
+        || proof.comm_s_c.params != *pcs_params
+        || proof.comm_s_h.params != *pcs_params
     {
         return Err(VerifyError::PcsAb(pcs::VerifyError::Ligerito));
     }
@@ -1189,9 +1277,18 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     challenger.observe_bytes(&proof.comm_p.root);
     challenger.observe_bytes(&proof.comm_q.root);
     challenger.observe_bytes(&proof.comm_s.root);
+    challenger.observe_bytes(&proof.comm_s_c.root);
+    challenger.observe_bytes(&proof.comm_s_h.root);
 
-    let zc_claim =
-        zerocheck::verify_zk(m, &proof.zerocheck, challenger).map_err(VerifyError::Zerocheck)?;
+    // A3: `mc_at_z`/`h_at_z` are unchecked here — they only un-shift the
+    // C-claim and the AB running claim. The openings below bind them.
+    let zc_claim = zerocheck::verify_zk_masked(
+        m,
+        &proof.zerocheck,
+        Some((proof.mc_at_z, proof.h_at_z)),
+        challenger,
+    )
+    .map_err(VerifyError::Zerocheck)?;
 
     let x_ab = r1cs.x_ab_from_mlv(zc_claim.z, &zc_claim.mlv_challenges);
     // A2: `s_eval` is still unchecked at this point — it only un-shifts the
@@ -1257,6 +1354,38 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     // so a wrong `s_eval` yields a wrong `ab` claim — but that would only be
     // caught by the witness opening below if the two errors failed to cancel.
     // Checking S's own opening removes the freedom outright.
+    // A3: bind the two round-1 mask evaluations at the c-claim point.
+    for (label, comm, opening, value) in [
+        (
+            &b"flock-a3-open-Sc"[..],
+            &proof.comm_s_c,
+            &proof.open_s_c,
+            proof.mc_at_z,
+        ),
+        (
+            &b"flock-a3-open-Sh"[..],
+            &proof.comm_s_h,
+            &proof.open_s_h,
+            proof.h_at_z,
+        ),
+    ] {
+        let claim = ZClaim {
+            point: c.point.clone(),
+            value,
+        };
+        let mut ch = challenger.clone();
+        ch.observe_label(label);
+        flock_core::verifier::verify_claims_ligerito_with_config(
+            comm,
+            &[claim],
+            opening,
+            pcs_params,
+            lig_v,
+            &mut ch,
+        )
+        .map_err(VerifyError::PcsAb)?;
+    }
+
     let s_claim = ZClaim {
         point: ab.point.clone(),
         value: proof.s_eval,
