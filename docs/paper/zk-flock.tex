@@ -41,18 +41,21 @@ zerocheck + lincheck PIOP compiled with a ring-switched Ligerito commitment and
 Fiat--Shamir. It is succinct but not zero-knowledge: every prover message is a
 deterministic function of the witness.
 \textbf{Construction.} We give a candidate honest-verifier zero-knowledge mode
-for BLAKE3 batch statements from four ingredients: randomizer witness rows that
+for BLAKE3 batch statements from five ingredients: randomizer witness rows that
 blind the affine transcript classes; a hiding Ligerito opening (a low-half mask
-plus a full-support blinder folded into the recursion); a degree-2 committed
-mask channel $\gamma\cdot P\cdot Q$ for the zerocheck round messages, whose
-leading coefficient no degree-1 mask can reach in characteristic~2; and a
-committed additive channel $z\mapsto z+\gamma_{lc}S$ for the lincheck, which
-the randomizer rows were assumed to cover and measurably do not on real
-statements. The two mask channels are deliberately different in kind: the
-zerocheck masks a product of witness-dependent multilinears and needs a
-degree-2 mask, while the lincheck's multiplier is public and its $z$-slot
-linear, so an additive shift leaves that layer's transcript equal to the
-honest transcript of a shifted witness.
+plus a full-support blinder folded into the recursion); and three committed
+mask channels, one per transcript layer the randomizer rows do not cover.
+The three are deliberately different in kind, because the layers are. The
+zerocheck's multilinear rounds mask a \emph{product} of witness-dependent
+multilinears, so the mask must be degree-2: $\gamma\cdot P\cdot Q$. The
+lincheck's multiplier is \emph{public} and its $z$-slot \emph{linear}, so an
+additive shift $z\mapsto z+\gamma_{lc}S$ suffices and makes that layer's
+transcript equal to the honest transcript of a shifted witness. The
+zerocheck's round~1 admits neither, because the verifier reconstructs from the
+identity $P^{AB}+P^{C}=0$ on a domain $S$ and any mask must vanish there; it
+is masked instead by a \emph{pair} $(M_c,\ M_c+V_S h)$ whose sum is a multiple
+of $S$'s vanishing polynomial, which leaves the reconstruction intact while
+letting the two sides move independently.
 \textbf{Claim.} For the enumerated certified configurations of
 Table~\ref{tab:configs}, the \emph{algebraic} transcript of the reference prover
 is statistically witness-indistinguishable up to an explicit rank-failure term
@@ -205,6 +208,7 @@ Completeness & reference prover, certified configs & telescoping identity; round
 Zerocheck soundness ($\gamma$ batching) & amended zerocheck, any config & Lemma~\ref{lem:gamma}; adversarial suite & proved; constructively checked \\
 Lincheck soundness ($\gamma_{lc}$ batching, A2) & amended lincheck, any config & Lemma~\ref{lem:gamma} transplanted; tamper suite & proved; constructively checked \\
 A2 output-claim recovery & amended lincheck & $\hat S(\rho)$ bound by $S$'s commitment & proved; tested end to end \\
+Round-1 soundness preserved (A3) & amended zerocheck & mask pair sums to a multiple of $V_S$ & proved; tested end to end \\
 Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & established at the certified fixture \\
 Merkle sibling hiding & all hiding openings & $\kmin$-min-entropy leaves, ROM & assumed (computational) \\
 ZK after Fiat--Shamir & BLAKE3 batch, certified configs & Lemma~\ref{lem:reduction} + rows above & conditional on those rows \\
@@ -234,18 +238,25 @@ statements: the lincheck --- which is why step~7 exists --- and
 \item \textbf{Commit the witness hidingly}, with a low-half mask $\mu$ and a
 full-support blinder $g$. \emph{Purpose:} hide the opened codeword rows and
 everything downstream of them in the recursion.
-\item \textbf{Commit three fresh witness-free multilinears $P,Q,S$ hidingly.}
-\emph{Purpose:} $P,Q$ supply the zerocheck's degree-2 mask channel (A1$'$) and
-$S$ the lincheck's additive one (A2); committing first is what stops the prover
-from choosing any of them after seeing the challenge that batches them.
+\item \textbf{Commit five fresh witness-free multilinears
+$P,Q,S,S_c,S_h$ hidingly.} \emph{Purpose:} $P,Q$ supply the zerocheck's
+degree-2 mask channel (A1$'$), $S$ the lincheck's additive one (A2), and
+$S_c,S_h$ the round-1 pair (A3); committing first is what stops the prover
+from choosing any of them after seeing the challenges.
 \item \textbf{Bind $\sigma_z=\sum_x \mathrm{eq}(r,x)P(x)Q(x)$} into the
 transcript. \emph{Purpose:} fix the mask channel's contribution before the
 batching challenge exists.
 \item \textbf{Derive $\gamma$} by Fiat--Shamir, after the commitments and
 $\sigma_z$. \emph{Purpose:} soundness of the batching (Lemma~\ref{lem:gamma}).
-\item \textbf{Run the masked zerocheck} on $\hat a\hat b + \gamma PQ$.
-\emph{Purpose:} the round messages, the one class no degree-1 mask reaches, are
-now covered by a witness-free channel.
+\item \textbf{Run the masked zerocheck} on $\hat a\hat b + \gamma PQ$, with
+round~1 additionally carrying the A3 pair: $P^{C}\mapsto P^{C}+M_c$ and
+$P^{AB}\mapsto P^{AB}+M_c+V_S h$, where $M_c,h$ are the round-1 C-side
+messages of $S_c,S_h$. \emph{Purpose:} the multilinear round messages are the
+one class no degree-1 mask reaches; round~1 is linear in the witness but is
+covered only by randomizer rows, which measurably does not suffice on real
+statements. The $V_S$ factor is what lets round~1 be masked at all --- the
+combined polynomial still vanishes on $S$, so the verifier's reconstruction,
+and the soundness argument resting on it, are untouched.
 \item \textbf{Run the masked lincheck} on $z + \gamma_{lc}S$: once $\alpha$ and
 the constant-wire pin $\beta$ fix the public vector $\mathrm{comb}$, bind
 $\sigma_{lc}=\sum_i \mathrm{comb}(i)S_{\mathrm{vec}}(i)$, derive $\gamma_{lc}$,
@@ -255,7 +266,7 @@ and run the existing sumcheck on the shifted table.
 Because $\mathrm{comb}$ is public and the sumcheck's $z$-slot is linear, the
 shift leaves the degree structure untouched and every message of the layer
 becomes the honest transcript of a shifted witness.
-\item \textbf{Open the witness, $P,Q$ and $S$ hidingly, then check
+\item \textbf{Open the witness, $P,Q$, $S$, $S_c$ and $S_h$ hidingly, then check
 $\hat a(\rho)\hat b(\rho)+\gamma P(\rho)Q(\rho)$ and recover the lincheck's
 output claim as $w = w_{\text{sent}} + \gamma_{lc}\hat S(\rho)$.}
 \emph{Purpose:} the hiding openings keep the leakage down to the evaluations
@@ -263,6 +274,12 @@ themselves; a plain opening would additionally reveal opened rows of $P$,
 enlarging the conditioning set (\S\ref{sec:channel}). $\hat S(\rho)$ must come
 from $S$'s commitment rather than be claimed: an unbound $\hat S(\rho)$ could
 be chosen after $\rho$ and absorb an arbitrary defect into the output claim.
+The same is true of A3's $M_c(z)=\hat S_c(z,r_{rest})$ and
+$h(z)=\hat S_h(z,r_{rest})$, which are opened at the $\hat c$-claim point ---
+exactly where the un-shift happens. Note that A3, unlike A1$'$ and A2, needs
+no batching challenge: those add a prover-\emph{claimed} sum the verifier
+cannot recompute, whereas A3 adds only committed evaluations, which the
+openings bind directly.
 \end{enumerate}
 
 \begin{figure}[t]
