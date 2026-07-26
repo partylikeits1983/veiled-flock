@@ -1,10 +1,13 @@
 # Amendment A3: masking the zerocheck's round-1 C-side
 
-**Status: specified, not implemented.** This is the single remaining gap
-between the current state and a covered algebraic transcript on real BLAKE3
-batch statements. Written so the work can start without re-deriving the
-diagnosis, and — like the A2 spec — written to be falsified cheaply before
-anything in the construction is touched.
+**Status: implemented.** The security argument is in `docs/zk-proof.md` §5c;
+this file is the diagnostic record and the design rationale.
+
+**Measured outcome.** On the real BLAKE3 statement, restricted to the
+zerocheck classes (m=20, 64 blocks, claims saturated at 640 bits), the joint
+mask image went from **12,032 of 20,224 bits with 128 escaping** to
+**20,224 of 20,224 with `rank[resid | Δclaim] = 640 = rank(Δclaim)`** —
+nothing escapes.
 
 ## Why it is needed
 
@@ -88,6 +91,7 @@ challenge tuples. That tells you the shape the mask has to reach.
 ## Two candidate constructions
 
 ### (a) The diagonal mask — cheap, and RULED OUT by the measurement above
+### (NOT the design that was built; kept as the record of a dead end)
 
 Add the **same** witness-free mask `γ_c·M` to both `round1_ab` and
 `round1_c`. In characteristic 2 the combined vector `round1_ab + round1_c` is
@@ -102,7 +106,7 @@ residual is measurably off-diagonal (see above). It would add image rank,
 change the measured numbers, and not close the criterion — the most expensive
 kind of wrong answer, because it looks like progress.
 
-### (b) Independent masks with a vanishing constraint — the real design
+### (b) Independent masks with a vanishing constraint — THE IMPLEMENTED DESIGN
 
 Use different masks `M_ab`, `M_c`, subject to `M_ab + M_c ≡ 0` on `S` so the
 zerocheck assumption still holds. Since `P^C` has degree `< ell` and the
@@ -111,33 +115,54 @@ is any multiple of the vanishing polynomial of `S` of degree `< 2·ell` — an
 `ell`-dimensional space. That is enough freedom to move `round1_c`
 independently of `round1_ab`.
 
-The work this needs, and it is not small:
+How each of the anticipated difficulties actually resolved:
 
-- **Where the masks come from.** They must be round-1 messages of *committed*
-  witness-free objects, or the verifier cannot bind them. Deriving a pair
-  satisfying the vanishing constraint from committed cubes is the crux.
-- **The two interpolation conventions.** Round 1 mixes the naive convention
-  (`round1_c`, restored `C_s` factor) with the combined-polynomial
-  convention used for `interpolate_at_z_combined`. A mask must be expressed
-  correctly in both.
+- **Where the masks come from.** Two witness-free cubes `S_c`, `S_h`,
+  committed hidingly before any challenge. Their masks are the *round-1
+  C-side message* of each cube — the same computation `round1_c` is, applied
+  to a mask instead of the witness. That is what makes the two values the
+  verifier needs, `M_c(z)` and `h(z)`, equal to `Ŝ_c(z, r_rest)` and
+  `Ŝ_h(z, r_rest)`: ordinary PCS evaluations at exactly the c-claim point,
+  bound by ordinary openings. (Pinned by
+  `round1_c_output_is_independent_of_ab`, since the mask messages are
+  obtained by calling the round-1 routine with zero `a`,`b`.)
+- **The vanishing constraint imposes nothing.** `M_ab = M_c + V_S·h` and
+  `V_S` has no zero on `Λ`, so as `M_c|_Λ` and `h|_Λ` range freely the pair
+  `(M_c|_Λ, M_ab|_Λ)` ranges over everything. The constraint that looked
+  like the obstacle costs no freedom at all — it only forces the *shape* of
+  the pair.
+- **The two interpolation conventions.** Both masks are built by the same
+  code path as `round1_c`, including the `C_s` restoration, so they are in
+  the same convention by construction rather than by argument.
 - **Soundness.** The vanishing constraint is exactly what a cheating prover
-  would want to relax: the assumption `P^AB + P^C = 0` on `S` is what forces
-  an honest witness. Any masking that gives the prover freedom on `S` is a
-  soundness break, not a privacy improvement. This needs its own argument,
-  not an analogy to A2's.
+  would want to relax, and A3 does not relax it: the *combined* polynomial
+  still vanishes on `S`, because the masks were chosen so their sum is a
+  multiple of `V_S`. The prover gains no freedom on `S`; the two scalars it
+  supplies are bound by commitments, and the verifier's derived claims are
+  un-shifted exactly. What the prover controls is what it controlled before.
+
+## A note on how the completeness break was found
+
+The first end-to-end run failed with `SumcheckFinalFailed`, and the algebra
+above said it should not. Rather than adjust the algebra until the test
+passed, the un-shift was bisected over its terms (`none` / `mc` / `V_S·h` /
+both) — and *every* variant failed identically, which no error in the
+un-shift can produce. That pointed at the code rather than the derivation:
+the un-shift edit had never been applied, having been lost when the script
+that wrote it aborted midway. The derivation was right the whole time.
+
+The staged completeness test (`prove_verify_zk_round1_mask_roundtrip`, zero /
+diagonal / full) exists so that this class of confusion is caught in one run
+next time: the zero stage pins that the masked path reduces *exactly* to the
+unmasked one.
 
 ## How to tell it worked
 
 1. `cargo test --release --workspace --features zk` — completeness, the tamper
    matrix, the γ-ordering tests, the schema tripwires.
-2. `ZK_BLAKE3_CLASSES=round1_c`, then `=zerocheck`, then unrestricted, on
-   `blake3_witness_difference_lies_in_the_mask_image` — the last of these is
-   the one that has to go from 768/640 to 640/640.
+2. `ZK_BLAKE3_CLASSES=zerocheck`, then unrestricted, on
+   `blake3_witness_difference_lies_in_the_mask_image`.
 3. `scripts/zk-certify.sh` — the fixture certificate and every negative
    control still hold; the added-leakage canary still breaks coverage.
-4. An explicit false-statement test through the amended round 1
-   (`a1_false_statement_rejected_end_to_end` extended), because (b) touches
-   the constraint-domain assumption that makes the zerocheck sound.
-
-If (2) closes but (1), (3) or (4) regresses, the amendment is unsound —
-prefer reverting to shipping it.
+4. `a1_false_statement_rejected_end_to_end`, because A3 touches the
+   constraint-domain assumption that makes the zerocheck sound.

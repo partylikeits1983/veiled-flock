@@ -430,6 +430,72 @@ written. Repair specified in `docs/round1c-mask-channel.md`, not made.
 
 ---
 
+## 5c. The amendment A3: masking the zerocheck's round 1
+
+A1′ masks the zerocheck's *multilinear* rounds and deliberately leaves round 1
+alone. The reason is structural, and it constrains the repair: the verifier
+reconstructs the AB running claim from the **zerocheck assumption**
+$P^{AB}(\lambda)+P^{C}(\lambda)=0$ for $\lambda\in S$, using the prover's
+$\ell$ evaluations on $\Lambda$ plus $\ell$ assumed zeros on $S$. A mask that
+does not vanish on $S$ destroys that reconstruction, and $\gamma\cdot P\cdot Q$
+does not vanish there.
+
+Measurement said the exclusion was not free: with the lincheck closed by A2,
+one $\mathbb{F}_{2^{128}}$ direction of claim-preserving witness difference
+still escaped, attributed to `zerocheck.round1_c` — the C-side message
+$P^C(\lambda)=\sum_x \mathrm{eq}(r_{rest},x)\hat z(\lambda,x)$, linear in the
+witness, of which one scalar ($c_{eval}$) is a public claim and the other 63
+field elements were covered by randomizer rows alone.
+
+**The construction.** Mask round 1 with a *pair* whose sum vanishes on $S$:
+
+$$P^{C}\ \mapsto\ P^{C}+M_c,\qquad P^{AB}\ \mapsto\ P^{AB}+M_c+V_S\cdot h,$$
+
+where $V_S=\prod_{s\in S}(X+s)$, and $M_c$, $h$ are the round-1 C-side
+messages of two witness-free cubes $S_c$, $S_h$ committed hidingly before any
+challenge. The combined polynomial then gains exactly $V_S\cdot h$, which is
+zero on $S$ and has degree $<2\ell$ — so the verifier's reconstruction is
+untouched.
+
+**Why the pair, and not a single mask.** A single mask added to both sides
+(the "diagonal") leaves the combined polynomial fixed too, and is much
+simpler. It is also provably insufficient here: the measured residual is
+supported on `round1_c` and *not* on `round1_ab`, and a diagonal mask moves
+both by the same amount, so it cannot produce a direction supported on one
+alone. This was settled from the existing attribution output before the
+construction was chosen, not after it failed.
+
+**The vanishing constraint costs no freedom.** $\Lambda$ and $S$ are disjoint,
+so $V_S$ has no zero on $\Lambda$; as $M_c|_\Lambda$ and $h|_\Lambda$ range
+over $\mathbb{F}^{\ell}$ the reachable pair
+$(M_c|_\Lambda,\ M_{ab}|_\Lambda)$ ranges over all of
+$\mathbb{F}^{\ell}\times\mathbb{F}^{\ell}$. The condition that looked like the
+obstacle only fixes the *shape* of the mask pair.
+
+**Completeness.** The verifier recovers
+$P^{AB}(z)$ by subtracting $M_{ab}(z)=M_c(z)+V_S(z)h(z)$, and the C-claim by
+subtracting $M_c(z)$. Staged test (`prove_verify_zk_round1_mask_roundtrip`):
+zero cubes reproduce the unmasked protocol exactly, diagonal, and the full
+pair.
+
+**Soundness.** A3 does not relax the zerocheck assumption — that is the whole
+point of the $V_S$ factor. The combined polynomial still vanishes on $S$, so
+a dishonest witness still fails the reconstruction exactly as before. The two
+scalars the prover supplies, $M_c(z)=\hat S_c(z,r_{rest})$ and
+$h(z)=\hat S_h(z,r_{rest})$, are evaluations at the c-claim point and are
+**bound by openings against their commitments**; unbound, they could be chosen
+after $z$ and would leave both the C-claim and the AB running claim
+unconstrained. Knowledge soundness is unchanged: $S_c,S_h$ enter no
+constraint.
+
+**Note on the ordering.** Unlike A1′ and A2, A3 needs *no* batching challenge.
+Those amendments add a prover-*claimed* sum ($\sigma_z$, $\sigma_{lc}$) that
+the verifier cannot recompute, so a challenge must batch it. A3 adds only
+committed evaluations, which the openings bind directly — there is no free
+scalar to batch away.
+
+---
+
 ## 6. Completeness and knowledge preservation (item #18, [P]+[C])
 
 **Completeness [P].** The mask rows (randomizer + $P,Q$ columns) are
