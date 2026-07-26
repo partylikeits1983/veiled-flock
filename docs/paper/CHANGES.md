@@ -1,4 +1,4 @@
-# Paper change summary (v4 → v5)
+# Paper change summary (v4 → v5, and v5 → v5.1)
 
 A reader who knows v4 can read this instead of diffing. Weakenings are listed
 before strengthenings on purpose.
@@ -32,6 +32,44 @@ before strengthenings on purpose.
    cannot reach is an internal claim direction carried by the outer stage, not a
    public value; it is never relabelled public to make a theorem pass.
 7. **Certified configurations are enumerated and the API fails closed.**
+
+## v5 → v5.1: amendment A2
+
+8. **The construction gained a second mask channel.** v5 stated that the
+   lincheck's transcript classes were covered by the randomizer witness rows.
+   Measurement on a real BLAKE3 statement refuted that: 128 bits of
+   claim-preserving witness difference escaped there, and six candidate
+   explanations were eliminated experimentally — two of them by making the
+   change, measuring no improvement, and reverting. Amendment A2 adds a
+   committed additive channel `z ↦ z + γ_lc·S` to the lincheck.
+
+   The two channels are deliberately different in kind, and the paper now says
+   why: the zerocheck masks a *product* of witness-dependent multilinears, so
+   its mask must be degree-2 and coverage is a rank condition to certify; the
+   lincheck's multiplier is *public* and its z-slot *linear*, so an additive
+   shift leaves the layer's transcript equal to the honest transcript of a
+   shifted witness. Measured: the lincheck classes go from 9,728/10,240 bits
+   with 128 escaping to 10,240/10,240 with nothing escaping.
+
+9. **The principal open item narrowed from three classes to one.** With A2 in,
+   the residual attribution on the unrestricted run names only
+   `zerocheck.round1_c` — the univariate-skip C-side message, linear in the
+   witness, of which one scalar is a public claim. Round 1 is outside the
+   degree-2 channel by design, because a mask there would not vanish on the
+   constraint domain and would break the zerocheck assumption the AB
+   reconstruction rests on. Repair specified in
+   `docs/round1c-mask-channel.md`, not made.
+
+10. **The escape is now correctly described as joint rather than marginal.**
+    `round1_c` passes in isolation (8,192/8,192). The failure appears only
+    when it must be covered simultaneously with every other coordinate. The
+    paper had a two-dimensional example of exactly this; it now points at the
+    instance in the protocol.
+
+11. **Status is unchanged: experimental candidate with a proven partial core.**
+    One of the two measured gaps is closed with a built, tested, soundness-
+    argued amendment. The other is open. The label does not move on partial
+    progress.
 
 ## Claims weakened
 

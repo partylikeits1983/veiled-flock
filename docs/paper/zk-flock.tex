@@ -29,8 +29,8 @@
 \title{Making Flock Zero-Knowledge:\\
 \large A candidate construction for BLAKE3 batch statements}
 \author{Alexander Lee}
-\date{v5, July 2026 --- research note\\
-\small source revision \texttt{a758a73b3fbb}}
+\date{v5.1, July 2026 --- research note\\
+\small source revision \texttt{0fbd9f538c54}}
 
 \begin{document}
 \maketitle
@@ -66,7 +66,12 @@ masking, triangular-composition and bad-set mixture theorems are machine-checked
 in Lean~4; and the composition hypotheses are discharged by exact $\Ftwo$
 image-coverage certificates computed on the real prover --- including a
 complete-transcript joint conditional certificate at the certified fixture, in
-which no claim-preserving witness direction escapes the joint mask image.
+which no claim-preserving witness direction escapes the joint mask image. Run
+on a \emph{real} BLAKE3 statement the same certificate still leaves one
+$\Fbig$ direction unaccounted for, now in a single named class
+(\texttt{zerocheck.round1\_c}): amendment~A2 removed the lincheck from that
+residual, and what remains is reported as the principal open item rather than
+argued away.
 Per-item status is tabulated in Table~\ref{tab:claims} and
 \S\ref{sec:roadmap}.
 \textbf{Assumptions and limits.} A random-oracle (or hash-pseudorandomness)
@@ -726,70 +731,71 @@ Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
 \item \textbf{The certificate passes on the synthetic vehicle but not yet on
-a real BLAKE3 statement, and the gap is now a specific measured direction.}
-The criterion is usable on the hash statement family --- a \emph{pass} is
-sound even without a linear witness sub-family, since every genuine
-claim-equal pair is among the combinations it quantifies over --- so this was
-run directly on a real BLAKE3 batch statement ($m=20$, 64 blocks, the same
-$3\times$ randomizer margin the fixture certificate needed), restricted to the
-PIOP coordinate classes so the image could be saturated. The triangular
-structure reproduces: the inner stage spans 21{,}504 of 30{,}464 bits and the
-outer species adds exactly 128 more, the single direction the fixture showed
-it is responsible for. But with the claim space saturated at 384 bits,
-$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 512$: \emph{one}
+a real BLAKE3 statement, and the gap is now one measured direction in one
+named class.} The criterion is usable on the hash statement family --- a
+\emph{pass} is sound even without a linear witness sub-family, since every
+genuine claim-equal pair is among the combinations it quantifies over --- so
+it was run directly on a real BLAKE3 batch statement ($m=20$, 64 blocks),
+restricted to the PIOP coordinate classes so the image could be saturated.
+With the claim space saturated at 640 bits,
+$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 768$: \emph{one}
 $\Fbig$ direction of claim-preserving witness difference is unaccounted for.
-That is a lead, not a proven leak --- the codomain is restricted, probing is
-random rather than exhaustive, and the criterion's failure direction is the
-conservative one. A methodological control settles what the difference is attributable to: the
-same procedure applied to the synthetic fixture gives
+
+Amendment A2 changed what that direction is. Before it, the residual was
+carried by three classes --- \texttt{zerocheck.round1\_c},
+\texttt{lincheck.rounds} and \texttt{lincheck.z\_partial}. After it, the
+attribution names \textbf{only} \texttt{zerocheck.round1\_c}: the lincheck
+classes go from an image of 9{,}728 of 10{,}240 bits with 128 escaping to
+10{,}240 of 10{,}240 with nothing escaping. One of the two gaps is closed;
+what remains was previously entangled with it.
+
+What remains is \texttt{round1\_c}: the univariate-skip C-side message
+$P^C(\lambda)=\sum_x \mathrm{eq}(r_{\text{rest}},x)\hat z(\lambda,x)$, 64
+field elements, linear in the witness, of which exactly one scalar
+($c_{\mathrm{eval}}$) is a public claim. Round~1 sits outside the degree-2
+channel by design, and the reason constrains the repair: the verifier
+reconstructs the AB running claim from the zerocheck assumption
+$P^{AB}+P^{C}=0$ on $S$, and a mask that does not vanish there destroys that
+reconstruction. So \texttt{round1\_c} is covered by the randomizer rows alone
+--- exactly the situation the lincheck was in before A2, and on a real BLAKE3
+witness those rows are about $5.5\%$ of the assignment against the fixture's
+$81\%$.
+
+The escape is \emph{joint, not marginal}, and this is the sharpest thing to
+say about it. Isolated, \texttt{round1\_c} passes: its image is the full
+8{,}192 bits. Full projection onto a class only means every target on that
+class is matched by \emph{some} image vector --- which is free to be wrong on
+every other class. The failure appears only when \texttt{round1\_c} must be
+covered simultaneously with everything else held. That is precisely the
+two-dimensional example of \S\ref{sec:channel} occurring in the protocol, and
+it is why a per-class certificate is not a substitute for the joint one.
+
+That direction is a lead, not a proven leak: the codomain is restricted,
+probing is random rather than exhaustive, and the criterion fails
+conservatively. A methodological control settles attribution --- the same
+procedure on the synthetic fixture gives
 $\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
 = \mathrm{rank}(\Delta\text{claim})$, so the procedure is sound and the
-outcome differs because the \emph{statement} differs. Two candidate
-explanations are excluded: region alignment (lemma L3 is verified on the real
-layout) and the constant-wire pin (it shifts the lincheck target by a
-challenge identically for every valid witness, inducing no
-witness-difference direction). It is \emph{localized to the lincheck layer}: isolating classes shows
-\texttt{zerocheck.round1\_c} alone is fully covered (image 8192 of 8192
-bits, criterion passes), while the lincheck classes alone reproduce the
-failure (image 9728 of 10240, same 128 bits escaping). So the degree-2
-amendment does its job on the classes it targets, and the uncovered direction
-lies in the lincheck --- which no mask channel touches, being covered only by
-the randomizer rows. On the synthetic fixture the witness is some $81\%$
-randomizer and that suffices; on a real BLAKE3 statement the randomizer rows
-are about $5.5\%$ of the witness and it does not. That is a coverage
-constraint on the lincheck layer, distinct from the $\shatv$
-per-bit-residue rule and not previously documented. Two candidate explanations have since been eliminated by measurement. The
-conditioning one: the zerocheck's $\hat a(\rho)$ and $\hat b(\rho)$ are
-transcript values the verifier consumes to form the lincheck's target, so
-adding both to the claim set (saturating at $5\times128$ bits over 768 real
-witness pairs) tests whether the escape is simply an unconditioned public
-value --- it left the result unchanged. And of the two candidate repairs, the
-sizing one is \emph{ruled out}:
-reallocating the block's randomizer budget to $2.3\times$ the entropy in the
-covering species (4 A-chunks and 3 B-chunks in place of $2+1$, spending the
-chain-mask reservation batch statements do not use) left the measured image
-rank identical at 9728 of 10240 bits, with the same 128 bits escaping and the
-deficit constant at 512 bits. Entropy is not the binding constraint; the
-lincheck image is rank-limited by the map's structure. That leaves extending
-a committed mask channel to the lincheck sumcheck --- running it on
-$\mathrm{comb}\cdot z + \gamma_{\mathrm{lc}} S T$ for fresh witness-free
-$S,T$ committed before $\gamma_{\mathrm{lc}}$, with $S(\rho),T(\rho)$ opened
-hidingly, exactly as A1$'$ treats the zerocheck rounds. That is a change to
-the construction with its own telescoping and soundness argument to derive,
-and it is specified here rather than made. Residual attribution also
-places it
-on the C-side and lincheck coordinates (\texttt{round1\_c}, the lincheck
-rounds, \texttt{z\_partial}) and not on the round pairs or final evaluations,
-which the degree-2 channel and the outer stage do cover. Since $c_{\mathrm{eval}}$
---- one of the three conditioned claims --- is itself an interpolation of
-\texttt{round1\_c}, a single conditioned scalar sits on a 64-element class
-there, and determining what else the verifier learns about that class is the
-concrete next step. Until it is resolved, the whole-transcript claim rests on the fixture
-certificate plus structural transfer. This is the principal open item, and it
-points away from the property holding on the production statement family
-rather than toward it: either a fourth transcript-determined public value
-has not been identified, or a genuine claim-preserving witness direction is
-uncovered there.
+outcome differs because the \emph{statement} differs. Six candidate
+explanations have been eliminated by measurement rather than by argument: the
+harness (that control), the zerocheck's other classes, region alignment
+(lemma L3, verified on the real layout), the constant-wire pin (a
+witness-independent target shift), the randomizer budget ($2.3\times$ the
+entropy in the covering species left the image rank identical --- built,
+measured, reverted), and the conditioning hypothesis (adding
+$\hat a(\rho),\hat b(\rho)$ to the claim set changed nothing).
+
+The repair is specified and not made, in \texttt{docs/round1c-mask-channel.md},
+together with the cheap falsifiable check that should precede it. It is a
+harder amendment than A2: round~1 carries two interpolation conventions and a
+constraint-domain vanishing condition tying \texttt{round1\_ab} to
+\texttt{round1\_c}, and the obvious diagonal mask --- the same shift added to
+both, which leaves the zerocheck assumption untouched --- contributes only
+diagonal directions, while the measured residual appears to be off-diagonal.
+Until it is resolved the whole-transcript claim on the production statement
+family rests on the fixture certificate plus structural transfer. This is the
+principal open item, and it points away from the property holding there rather
+than toward it.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.
