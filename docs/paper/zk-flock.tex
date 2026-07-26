@@ -683,11 +683,16 @@ $\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 512$: \emph{one}
 $\Fbig$ direction of claim-preserving witness difference is unaccounted for.
 That is a lead, not a proven leak --- the codomain is restricted, probing is
 random rather than exhaustive, and the criterion's failure direction is the
-conservative one --- and by analogy with the fixture, where the residual
-closed once every transcript-determined public value was conditioned on, the
-first hypothesis is a fourth such value. Until it is resolved, the
-whole-transcript claim rests on the fixture certificate plus structural
-transfer, and this is the principal open item.
+conservative one. It is also \emph{localized}: residual attribution places it
+on the C-side and lincheck coordinates (\texttt{round1\_c}, the lincheck
+rounds, \texttt{z\_partial}) and not on the round pairs or final evaluations,
+which the degree-2 channel and the outer stage do cover. Since $c_{\mathrm{eval}}$
+--- one of the three conditioned claims --- is itself an interpolation of
+\texttt{round1\_c}, a single conditioned scalar sits on a 64-element class
+there, and determining what else the verifier learns about that class is the
+concrete next step. Until it is resolved, the whole-transcript claim rests on
+the fixture certificate plus structural transfer, and this is the principal
+open item.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.

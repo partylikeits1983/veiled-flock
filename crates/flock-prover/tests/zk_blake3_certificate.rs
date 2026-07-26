@@ -187,7 +187,7 @@ fn run(
 /// lincheck classes — the PIOP layer. Restricting to them keeps the image
 /// saturable at this size: membership is decided against a *spanned* space,
 /// which is what makes a negative result meaningful.
-fn piop_coords(setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::ligerito::ProverConfig, blocks: &[Compression], rand: &[u64], p: &[u64], q: &[u64], cw: &[F128], cp: &[F128], cq: &[F128]) -> Vec<usize> {
+fn piop_coords_and_paths(setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::ligerito::ProverConfig, blocks: &[Compression], rand: &[u64], p: &[u64], q: &[u64], cw: &[F128], cp: &[F128], cq: &[F128]) -> (Vec<usize>, Vec<(&'static str, std::ops::Range<usize>)>) {
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
         flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk(
@@ -210,12 +210,15 @@ fn piop_coords(setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::l
     let flat = flatten_a1(&comm, &proof);
     let idx = SchemaIndex::build(&flat);
     let mut out = Vec::new();
+    let mut paths = Vec::new();
     for (path, range) in idx.ranges_by_class(&flat, LeakageClass::WitnessDependent) {
         if path.starts_with("zerocheck.") || path.starts_with("lincheck.") {
+            let start = out.len();
             out.extend(range);
+            paths.push((path, start..out.len()));
         }
     }
-    out
+    (out, paths)
 }
 
 /// **The certificate.** On a real BLAKE3 batch statement, the transcript
@@ -239,6 +242,16 @@ fn piop_coords(setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::l
 /// fixture — where the residual closed once *every* transcript-determined
 /// public value was conditioned on — is that a fourth such value exists here
 /// and is not yet in the conditioning set.
+///
+/// The escaping direction is **localized**: residual attribution puts it on
+/// `zerocheck.round1_c`, `lincheck.rounds` and `lincheck.z_partial` — the
+/// C-side/witness-side coordinates — and not on the round pairs or the final
+/// evaluations, which the degree-2 channel and the outer stage do cover. Note
+/// that `c_eval`, one of the three conditioned claims, is itself an
+/// interpolation of `round1_c`, so a single conditioned scalar sits on a
+/// 64-element class here; the natural next step is to determine what else
+/// about that class the verifier learns, and whether the fixture differs
+/// because its statement has no pinned constant wire.
 ///
 /// It is kept, failing and documented, because it is the sharpest statement
 /// available about the real statement family and it should not be forgotten.
@@ -268,7 +281,7 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         run(&setup, &params, &lig, blocks, rand, p, q_words.as_slice(), cw, cp, &cq)
     };
 
-    let coords = piop_coords(&setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
+    let (coords, coord_paths) = piop_coords_and_paths(&setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
     let proj = |v: &[F128]| -> Vec<u64> { flatten(&coords.iter().map(|&i| v[i]).collect::<Vec<_>>()) };
     let base = proj(&go(&base_rand, &p_words, &cw, &cp, &blocks_a));
     let dim = base.len() * 64;
@@ -381,6 +394,24 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         "VACUOUS: the Δclaim space did not saturate, so no claim-preserving \
          combination is forced to exist and the criterion cannot bite"
     );
+    if resid_and_claim.rank() > claim_space.rank() {
+        println!("  residual attribution — which coordinate classes carry it:");
+        for (path, range) in &coord_paths {
+            let hits = resid_and_claim
+                .rows
+                .iter()
+                .filter(|row| {
+                    range.clone().any(|c| {
+                        row.get(c * 2).is_some_and(|w| *w != 0)
+                            || row.get(c * 2 + 1).is_some_and(|w| *w != 0)
+                    })
+                })
+                .count();
+            if hits > 0 {
+                println!("    {path}: {hits} row(s) touch it ({} F128)", range.len());
+            }
+        }
+    }
     assert_eq!(
         resid_and_claim.rank(),
         claim_space.rank(),
