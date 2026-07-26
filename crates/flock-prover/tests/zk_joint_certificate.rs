@@ -337,9 +337,16 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
     (Split { r_idx, l_idx, round_block, l_zc_idx }, total)
 }
 
-/// How many F128s of μ/g material one commitment consumes at this fixture
-/// (generous upper bound; the sampler pads with zeros beyond the stream).
-const MASK_MATERIAL: usize = 1 << 10;
+/// F128s of mask material one hiding commitment consumes: `commit_zk` draws
+/// the low-half mask `μ` (length `2^{m−7}`) followed by the full-support
+/// blinder `g` (length `2·2^{m−7}`), so `3·2^{m−7}` in total.
+///
+/// This matters for probe budgeting: probing only the first `2^{m−7}` slots
+/// reaches `μ` alone and never touches `g` — and `g` is what masks every
+/// recursive row, internal sumcheck message and residual of the opening. An
+/// earlier revision of this certificate probed 256 of the 768 slots and
+/// reported a coverage failure that was an artefact of exactly that gap.
+const MASK_MATERIAL: usize = 3 << (FixtureA1M15::M - 7);
 
 fn pick(v: &[F128], idx: &[usize]) -> Vec<F128> {
     idx.iter().map(|&i| v[i]).collect()
@@ -375,7 +382,7 @@ const SMOKE: Budget = Budget {
     p_stride: 8,
     ua_stride: 8,
     ub_stride: 4,
-    mask_slots: 16,
+    mask_slots: 96,
     witness_dirs: 192,
     tuples: &[0x7777_1234],
     l_full: false,
@@ -385,7 +392,7 @@ const FULL: Budget = Budget {
     p_stride: 1,
     ua_stride: 1,
     ub_stride: 1,
-    mask_slots: 256,
+    mask_slots: MASK_MATERIAL,
     witness_dirs: 512,
     tuples: &[0x7777_1234, 0x1111_0001, 0x2222_0002],
     l_full: true,
@@ -447,6 +454,14 @@ fn certify_tuple(
     let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
 
+    if bud.l_full {
+        assert_eq!(
+            bud.mask_slots, MASK_MATERIAL,
+            "the full certificate must probe every mask slot (μ AND the \
+             blinder g); probing a prefix silently omits the channel that \
+             masks the opening's recursive rows"
+        );
+    }
     let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
     let proj = |v: &[F128]| -> Vec<u64> {
         let r = pick(v, &split.r_idx);
