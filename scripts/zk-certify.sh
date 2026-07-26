@@ -44,6 +44,7 @@ run flock-prover zk_joint_certificate h1_inner_image_witness_independent_on_roun
 run flock-prover zk_joint_certificate p_channel_image_requires_nondegenerate_q
 run flock-prover zk_joint_certificate joint_certificate_smoke
 run flock-prover zk_joint_certificate joint_certificate_negative_controls
+run flock-prover zk_joint_certificate mask_only_coordinates_are_witness_independent
 
 # --- Complete-transcript joint certificate (the heavy one) -----------------
 echo "=== flock-prover :: zk_joint_certificate :: joint_conditional_coverage_full_transcript ==="
@@ -53,7 +54,7 @@ if cargo test --release -p flock-prover --features zk --test zk_joint_certificat
   echo "flock-prover::zk_joint_certificate::joint_conditional_coverage_full_transcript ok $((SECONDS - t0))s" >> "$MANIFEST"
 else
   echo "flock-prover::zk_joint_certificate::joint_conditional_coverage_full_transcript FAILED $((SECONDS - t0))s" >> "$MANIFEST"
-  echo "  ^ recorded as a KNOWN GAP; see the test's doc comment" >> "$MANIFEST"
+  echo "  ^ REGRESSION: this certificate passes at the recorded fixture" >> "$MANIFEST"
 fi
 
 # --- Simulator: existence and constructive translation exactness -----------

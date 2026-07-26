@@ -121,6 +121,8 @@ const EVIDENCE_V1: &[&str] = &[
     "joint_certificate_smoke",
     "joint_certificate_negative_controls",
     "simulator_translation_exact_transcript_equality",
+    "joint_conditional_coverage_full_transcript",
+    "mask_only_coordinates_are_witness_independent",
 ];
 
 /// The certified configurations. **One entry today**: the 256-block BLAKE3
