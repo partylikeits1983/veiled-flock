@@ -60,27 +60,34 @@ a direction that moves `round1_c` while leaving the other classes fixed (or
 moving them in a way the existing channels can undo). Anything else adds
 image rank without closing the joint condition.
 
-## Check this first (cheapest falsifiable step)
+## Check this first — already answered: the residual is off-diagonal
 
-Before building anything, determine **which** direction escapes and what it
-looks like on the other classes:
+The cheap question is whether the escaping direction lies in the span of the
+*diagonal* directions `(M, M)` on `(round1_ab, round1_c)`, because if it does,
+construction (a) below suffices and nothing hard is needed.
 
-1. Extract the escaping vector explicitly — reduce a claim-preserving witness
-   difference by the joint image and dump the residual by class, not just the
-   rank. The harness already attributes by class (`coord_paths`); extend it to
-   print the residual's support within `round1_c`.
-2. Ask whether that residual is in the span of the *diagonal* directions
-   `(M, M)` on `(round1_ab, round1_c)`. If it is, the cheap construction in
-   the next section suffices. If it is not — and the current attribution,
-   which names `round1_c` and **not** `round1_ab`, suggests it is not — then
-   the diagonal design is ruled out before it is built.
+**It does not.** The harness already reports which coordinate classes the
+excess rows touch, and it lists classes when they apply — in the pre-A2
+unrestricted run it named three. In the current run it names exactly one:
 
-The A2 spec's analogous "check this first" step was run and refuted the cheap
-fix. Doing the same here is what keeps the effort proportionate.
+```
+  residual attribution — which coordinate classes carry it:
+    zerocheck.round1_c: 768 row(s) touch it (64 F128)
+```
+
+`round1_ab` is absent, so the excess rows have zero support there. A diagonal
+mask moves both classes by the same amount and therefore cannot produce a
+direction supported on one of them alone. **Construction (a) is ruled out by
+measurement already in hand**, before it is built.
+
+What would still be worth extracting, if construction (b) is attempted, is the
+escaping vector's support *within* `round1_c` — which of the 64 evaluations it
+occupies, and whether that pattern is stable across witness pairs and
+challenge tuples. That tells you the shape the mask has to reach.
 
 ## Two candidate constructions
 
-### (a) The diagonal mask — cheap, probably insufficient
+### (a) The diagonal mask — cheap, and RULED OUT by the measurement above
 
 Add the **same** witness-free mask `γ_c·M` to both `round1_ab` and
 `round1_c`. In characteristic 2 the combined vector `round1_ab + round1_c` is
@@ -89,9 +96,11 @@ survive untouched. The verifier un-shifts using one scalar `M(z) = Ŝ_c(z,
 r_rest)`, opened against `S_c`'s commitment exactly as A2 opens `Ŝ(ρ)` — and
 the C-claim handed to the PCS is `final_c_eval + γ_c·M(z)`.
 
-This is a genuinely small change. Its weakness is stated above: it only
-contributes diagonal directions, and the measured residual appears to be
-off-diagonal.
+This is a genuinely small change, and it is recorded here only so nobody
+re-derives it and builds it: it contributes diagonal directions only, and the
+residual is measurably off-diagonal (see above). It would add image rank,
+change the measured numbers, and not close the criterion — the most expensive
+kind of wrong answer, because it looks like progress.
 
 ### (b) Independent masks with a vanishing constraint — the real design
 
