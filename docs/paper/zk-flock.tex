@@ -226,7 +226,11 @@ The amended protocol, with the privacy purpose of each step.
 \item \textbf{Extend the witness with randomizer rows.} Two species, on fresh
 witness columns filled with uniform bits: $A$-type rows $u\cdot 1 = u$ and
 $B$-type rows $1\cdot u' = u'$. \emph{Purpose:} blind the affine transcript
-classes (round-1 vectors, lincheck, ring-switch, PCS values).
+classes (round-1 vectors, lincheck, ring-switch, PCS values). They are
+\emph{not} sufficient on their own for two of those classes on real
+statements: the lincheck --- which is why step~7 exists --- and
+\texttt{round1\_c}, which is why the certificate still fails
+(\S\ref{sec:limitations}).
 \item \textbf{Commit the witness hidingly}, with a low-half mask $\mu$ and a
 full-support blinder $g$. \emph{Purpose:} hide the opened codeword rows and
 everything downstream of them in the recursion.
@@ -487,7 +491,10 @@ challenges, and every downstream value is $\Fbig$-linear in the blinded message.
 
 \paragraph{What the certificates establish.} All numbers below are measured on
 the real amended prover at the reduced-size fixture, whose complete algebraic
-transcript is 1061 field elements (586 witness-dependent, 474 mask-only).
+transcript is 1140 field elements (548 witness-dependent, 591 mask-only, one
+derived). Amendment~A2 enlarged the mask-only class: $\sigma_{lc}$,
+$\hat S(\rho)$ and every value inside $S$'s hiding opening are conditioned on,
+so the channel is not credited with coverage it does not have.
 
 \begin{itemize}
 \item \textbf{H1 holds, and the degree-2 channel is what makes it hold.} The
