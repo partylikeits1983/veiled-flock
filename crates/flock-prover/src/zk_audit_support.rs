@@ -360,7 +360,7 @@ impl FixtureA1M15 {
             .expect("fixture proofs are honest");
         let x_ab = self.r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
         let circuit = self.r1cs.sparse_lincheck_circuit();
-        let lc = lincheck::verify(
+        let lc = lincheck::verify_masked(
             Self::M,
             Self::K_LOG,
             Self::K_SKIP,
@@ -369,6 +369,7 @@ impl FixtureA1M15 {
             zc.a_eval,
             zc.b_eval,
             &proof.lincheck,
+            Some((proof.sigma_lc, proof.s_eval)),
             challenger,
         )
         .expect("fixture proofs are honest");

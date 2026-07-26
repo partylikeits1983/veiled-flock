@@ -92,7 +92,7 @@ fn a1_schema_manifest_and_bijectivity() {
     //    the constant (printed below).
     let h = schema_hash(&flat);
     let hex: String = h.iter().map(|b| format!("{b:02x}")).collect();
-    const PINNED_M15: &str = "00f64b6216a072b702ba951c0406f7d941e8f3d7ee6e4455a3fbb8b39b8c4a17";
+    const PINNED_M15: &str = "f428753320283fdb2019adf7ec357a7d43e462f74c75fe93ebda99f79c9bdd96";
     assert_eq!(hex, PINNED_M15, "schema hash changed for the m=15 fixture shape");
 
     // 5. The coordinate index is consistent with the algebraic vector.
@@ -199,9 +199,10 @@ fn a1_schema_matches_wire_order() {
     );
     assert_eq!(
         extras.len(),
-        3,
-        "expected exactly 3 derived absorptions (one combined Ligerito target \
-         per opening); anything else is an unclassified absorption: {extras:?}"
+        4,
+        "expected exactly 4 derived absorptions (one combined Ligerito target \
+         per opening: witness, P, Q, and A2's S); anything else is an \
+         unclassified absorption: {extras:?}"
     );
     // No extra may be a proof value: collect EVERY F128 in the proof
     // (regardless of class or fs flag) and check disjointness.

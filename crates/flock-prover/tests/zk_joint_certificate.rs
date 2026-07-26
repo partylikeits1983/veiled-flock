@@ -259,11 +259,14 @@ struct Run<'a> {
     u_b: &'a [bool],
     p_bits: &'a [bool],
     q_bits: &'a [bool],
-    /// μ/g material for the three commitments (empty ⇒ zeros: the no-μ/no-g
+    /// Amendment A2's lincheck mask cube.
+    s_bits: &'a [bool],
+    /// μ/g material for the four commitments (empty ⇒ zeros: the no-μ/no-g
     /// negative controls).
     commit_w: &'a [F128],
     commit_p: &'a [F128],
     commit_q: &'a [F128],
+    commit_s: &'a [F128],
     ch_seed: u64,
 }
 
@@ -280,12 +283,16 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
     let mut s_q = BitsSampler::from_bits(r.q_bits);
     let mut s_cp = F128Sampler { data: r.commit_p.to_vec(), pos: 0 };
     let mut s_cq = F128Sampler { data: r.commit_q.to_vec(), pos: 0 };
+    let mut s_s = BitsSampler::from_bits(r.s_bits);
+    let mut s_cs = F128Sampler { data: r.commit_s.to_vec(), pos: 0 };
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
         q: &mut s_q,
         commit_p: &mut s_cp,
         commit_q: &mut s_cq,
+        s: &mut s_s,
+        commit_s: &mut s_cs,
     };
     let mut ch = RandomChallenger::new(r.ch_seed);
     let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -353,9 +360,11 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
         u_b: &u_b,
         p_bits: &p,
         q_bits: &q,
+        s_bits: &q,
         commit_w: &mask_material,
         commit_p: &mask_material,
         commit_q: &mask_material,
+        commit_s: &mask_material,
         ch_seed: 1,
     };
     let z = fx.witness(r.payload, r.u_a, r.u_b);
@@ -368,12 +377,16 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
     let mut s_q = BitsSampler::from_bits(&q);
     let mut s_cp = F128Sampler { data: mask_material.clone(), pos: 0 };
     let mut s_cq = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let mut s_s = BitsSampler::from_bits(&q);
+    let mut s_cs = F128Sampler { data: mask_material.clone(), pos: 0 };
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
         q: &mut s_q,
         commit_p: &mut s_cp,
         commit_q: &mut s_cq,
+        s: &mut s_s,
+        commit_s: &mut s_cs,
     };
     let mut ch = RandomChallenger::new(1);
     let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -451,6 +464,8 @@ fn pick(v: &[F128], idx: &[usize]) -> Vec<F128> {
 struct Budget {
     /// Stride over P-bit probes (1 = every bit).
     p_stride: usize,
+    /// Stride over S-bit probes (amendment A2's lincheck mask).
+    s_stride: usize,
     /// Stride over u_A-bit probes.
     ua_stride: usize,
     /// Stride over u_B-bit probes.
@@ -470,6 +485,7 @@ struct Budget {
 
 const SMOKE: Budget = Budget {
     p_stride: 8,
+    s_stride: 8,
     ua_stride: 8,
     ub_stride: 4,
     mask_slots: 96,
@@ -480,6 +496,7 @@ const SMOKE: Budget = Budget {
 
 const FULL: Budget = Budget {
     p_stride: 1,
+    s_stride: 1,
     ua_stride: 1,
     ub_stride: 1,
     mask_slots: MASK_MATERIAL,
@@ -562,9 +579,11 @@ fn certify_tuple(
     let u_b0 = rng.bits(FixtureA1M15::B_BITS);
     let p0 = vec![false; n];
     let q0 = rng.bits(n);
+    let s0 = rng.bits(n);
     let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let csm: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
 
     // Probe budget for the field-valued mask slots. Under-probing this
     // channel is SOUND but conservative: the image computed is a subspace of
@@ -587,7 +606,7 @@ fn certify_tuple(
     let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
 
     // One prover run, returning the complete algebraic transcript.
-    let full_run = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], cw: &[F128], cp: &[F128]| -> Vec<F128> {
+    let full_run = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], s_bits: &[bool], cw: &[F128], cp: &[F128], cs_arg: &[F128]| -> Vec<F128> {
         let r = Run {
             fx,
             payload,
@@ -595,14 +614,16 @@ fn certify_tuple(
             u_b,
             p_bits,
             q_bits: &q0,
+            s_bits,
             commit_w: cw,
             commit_p: cp,
             commit_q: &cq,
+            commit_s: cs_arg,
             ch_seed,
         };
         run(&r).0
     };
-    let base_full = full_run(&payload0, &u_a0, &u_b0, &p0, &cw, &cp);
+    let base_full = full_run(&payload0, &u_a0, &u_b0, &p0, &s0, &cw, &cp, &csm);
     let mut n_probes = 1usize;
     // The public claims the verifier learns, reconstructed with real verifier
     // code. WI conditions on all of them.
@@ -614,9 +635,11 @@ fn certify_tuple(
             u_b: &u_b0,
             p_bits: &p0,
             q_bits: &q0,
+            s_bits: &s0,
             commit_w: &cw,
             commit_p: &cp,
             commit_q: &cq,
+            commit_s: &csm,
             ch_seed,
         };
         let (_, proof, _) = run(&r);
@@ -645,12 +668,21 @@ fn certify_tuple(
 
     let mut field_space = F128Space::default();
     let mut linearity_checked = 0usize;
+    // Three field-valued commitment channels now: the witness's μ/g, P's, and
+    // (amendment A2) S's. Each is bumped one slot at a time.
+    let sel = |which: usize, bumped: &'_ Vec<F128>| -> (Vec<F128>, Vec<F128>, Vec<F128>) {
+        match which {
+            0 => (bumped.clone(), cp.clone(), csm.clone()),
+            1 => (cw.clone(), bumped.clone(), csm.clone()),
+            _ => (cw.clone(), cp.clone(), bumped.clone()),
+        }
+    };
     for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
-        for (which, base_vec) in [0usize, 1].into_iter().zip([&cw, &cp]) {
+        for (which, base_vec) in [0usize, 1, 2].into_iter().zip([&cw, &cp, &csm]) {
             let mut bumped = base_vec.clone();
             bumped[s] += F128::ONE;
-            let (cw_p, cp_p) = if which == 0 { (&bumped, &cp) } else { (&cw, &bumped) };
-            let t = full_run(&payload0, &u_a0, &u_b0, &p0, cw_p, cp_p);
+            let (cw_p, cp_p, cs_p) = sel(which, &bumped);
+            let t = full_run(&payload0, &u_a0, &u_b0, &p0, &s0, &cw_p, &cp_p, &cs_p);
             let col: Vec<F128> = combined(&t, &l_pick(&t))
                 .iter()
                 .zip(&base_comb)
@@ -659,12 +691,12 @@ fn certify_tuple(
             n_probes += 1;
 
             // Verify the F₂¹²⁸-linearity the subspace representation rests on.
-            if linearity_checked < 4 {
+            if linearity_checked < 6 {
                 let lambda = f128_basis()[7] + f128_basis()[19] + F128::ONE;
                 let mut scaled = base_vec.clone();
                 scaled[s] += lambda;
-                let (cw_s, cp_s) = if which == 0 { (&scaled, &cp) } else { (&cw, &scaled) };
-                let ts = full_run(&payload0, &u_a0, &u_b0, &p0, cw_s, cp_s);
+                let (cw_s, cp_s, cs_s) = sel(which, &scaled);
+                let ts = full_run(&payload0, &u_a0, &u_b0, &p0, &s0, &cw_s, &cp_s, &cs_s);
                 let cs: Vec<F128> = combined(&ts, &l_pick(&ts))
                     .iter()
                     .zip(&base_comb)
@@ -709,7 +741,7 @@ fn certify_tuple(
     while i < n {
         let mut p = p0.clone();
         p[i] = !p[i];
-        let t = full_run(&payload0, &u_a0, &u_b0, &p, &cw, &cp);
+        let t = full_run(&payload0, &u_a0, &u_b0, &p, &s0, &cw, &cp, &csm);
         feed(&t, &mut img);
         n_probes += 1;
         i += bud.p_stride;
@@ -719,10 +751,22 @@ fn certify_tuple(
     while i < FixtureA1M15::A_BITS {
         let mut ua = u_a0.clone();
         ua[i] = !ua[i];
-        let t = full_run(&payload0, &ua, &u_b0, &p0, &cw, &cp);
+        let t = full_run(&payload0, &ua, &u_b0, &p0, &s0, &cw, &cp, &csm);
         feed(&t, &mut img);
         n_probes += 1;
         i += bud.ua_stride;
+    }
+    // (c) S channel — amendment A2's lincheck mask. At fixed challenges the
+    //     lincheck runs on `z + γ_lc·S`, so this channel is affine in S and
+    //     belongs to the inner stage exactly as P does.
+    let mut i = 0usize;
+    while i < n {
+        let mut s_bits = s0.clone();
+        s_bits[i] = !s_bits[i];
+        let t = full_run(&payload0, &u_a0, &u_b0, &p0, &s_bits, &cw, &cp, &csm);
+        feed(&t, &mut img);
+        n_probes += 1;
+        i += bud.s_stride;
     }
     let inner_rank = img.rank();
 
@@ -736,7 +780,7 @@ fn certify_tuple(
     while i < FixtureA1M15::B_BITS {
         let mut ub = u_b0.clone();
         ub[i] = !ub[i];
-        let t = full_run(&payload0, &u_a0, &ub, &p0, &cw, &cp);
+        let t = full_run(&payload0, &u_a0, &ub, &p0, &s0, &cw, &cp, &csm);
         let d: Vec<F128> = combined(&t, &l_pick(&t))
             .iter()
             .zip(&base_comb)
@@ -761,7 +805,7 @@ fn certify_tuple(
     for k in 0..bud.witness_dirs {
         let mut payload = payload0.clone();
         payload[linear_dirs[k]] = !payload[linear_dirs[k]];
-        let t = full_run(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
+        let t = full_run(&payload, &u_a0, &u_b0, &p0, &s0, &cw, &cp, &csm);
         // The membership question is whether [d ; 0] lies in the image, so
         // the target carries a ZERO leakage part — witness differences must
         // be reachable without disturbing any revealed mask functional.
@@ -952,6 +996,8 @@ fn coverage_passes(
     let _ = &zero;
     let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let s0 = rng.bits(n);
+    let cs2: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
 
     let do_run = |p_bits: &[bool], u_a: &[bool], cw: &[F128], payload: &[bool]| {
         let r = Run {
@@ -961,9 +1007,11 @@ fn coverage_passes(
             u_b: &u_b0,
             p_bits,
             q_bits: &q0,
+            s_bits: &s0,
             commit_w: cw,
             commit_p: &cp,
             commit_q: &cq,
+            commit_s: &cs2,
             ch_seed,
         };
         run(&r)
@@ -1133,6 +1181,8 @@ fn inner_image_proj(
     let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let s0 = rng.bits(n);
+    let cs2: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let proj = |v: &[F128]| -> Vec<u64> {
         let r = pick(v, &split.r_idx);
         flatten_f128(&coords.iter().map(|&i| r[i]).collect::<Vec<_>>())
@@ -1145,9 +1195,11 @@ fn inner_image_proj(
             u_b: &u_b0,
             p_bits,
             q_bits,
+            s_bits: &s0,
             commit_w: cw,
             commit_p: &cp,
             commit_q: &cq,
+            commit_s: &cs2,
             ch_seed,
         };
         proj(&run(&r).0)
@@ -1464,6 +1516,8 @@ fn mask_only_coordinates_are_witness_independent() {
     let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let s0 = rng.bits(n);
+    let cs2: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
 
     let go = |u_a: &[bool], u_b: &[bool], payload: &[bool]| -> Vec<F128> {
         let r = Run {
@@ -1473,9 +1527,11 @@ fn mask_only_coordinates_are_witness_independent() {
             u_b,
             p_bits: &p0,
             q_bits: &q0,
+            s_bits: &s0,
             commit_w: &cw,
             commit_p: &cp,
             commit_q: &cq,
+            commit_s: &cs2,
             ch_seed,
         };
         run(&r).0

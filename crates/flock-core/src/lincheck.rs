@@ -401,6 +401,78 @@ pub struct LincheckClaim {
     pub w: F128,
 }
 
+/// Amendment A2 — the lincheck's committed mask channel.
+///
+/// `s_packed` is a **witness-free** length-`2^m` cube in the same packing as
+/// the lincheck's `z_packed`, whose commitment root is bound before any
+/// challenge of this layer. The prover runs the product sumcheck on
+/// `z + γ_lc·S` in place of `z`, with `γ_lc` drawn after `σ_lc = Σ_i
+/// comb[i]·S_vec[i]` is bound.
+///
+/// The sumcheck's `z`-slot is linear and `comb` is public, so the masked
+/// transcript is *exactly* the honest transcript of the shifted witness
+/// `z + γ_lc·S`. The output claim is un-shifted by the caller against a
+/// committed opening of `Ŝ` at the same point (see [`LincheckMaskTranscript`]).
+pub struct LincheckMask<'a> {
+    /// Lincheck-packed mask cube; see [`pack_z_lincheck_from_packed`].
+    ///
+    /// Rows `[useful_bits, 2^k_log)` of every block MUST be zero — the same
+    /// honest zero padding the witness has. The partial fold skips them, so a
+    /// mask with live padding rows would produce an `s_vec` that disagrees
+    /// with the `Ŝ` the PCS opens. Use [`zero_lincheck_padding_rows`].
+    pub s_packed: &'a [u8],
+}
+
+/// Zero the rows a padded lincheck fold skips, in the **PCS packing**.
+///
+/// The partial fold reads only inner rows `[0, useful_bits)` of each block,
+/// treating the rest as zero. For the A2 mask that has to be true of the
+/// committed cube as well, or `Ŝ(ρ)` (which sums over everything) will not
+/// match the folded mask the sumcheck used.
+///
+/// Requires `useful_bits` and `2^k_log` to both be multiples of 128 so whole
+/// packed words fall on one side of the boundary; panics otherwise rather
+/// than silently masking part of a word.
+pub fn zero_lincheck_padding_rows(s_packed: &mut [F128], k_log: usize, useful_bits: usize) {
+    let k = 1usize << k_log;
+    if useful_bits == k {
+        return;
+    }
+    assert!(
+        k % 128 == 0 && useful_bits % 128 == 0,
+        "A2 mask padding: 2^k_log ({k}) and useful_bits ({useful_bits}) must \
+         both be multiples of 128"
+    );
+    let words_per_block = k / 128;
+    let useful_words = useful_bits / 128;
+    for (w, slot) in s_packed.iter_mut().enumerate() {
+        if w % words_per_block >= useful_words {
+            *slot = F128::ZERO;
+        }
+    }
+}
+
+/// The three field elements the A2 channel adds to the proof.
+///
+/// `sigma_lc` and `s_eval` are witness-free (they are determined by `S`, the
+/// public `comb`, and the challenges) and both must be carried in the proof:
+/// the verifier absorbs `sigma_lc` to re-derive `gamma_lc`, and needs
+/// `s_eval` — checked against `S`'s commitment — to recover the output claim.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct LincheckMaskTranscript {
+    /// `Σ_i comb[i]·S_vec[i]`, bound *before* `gamma_lc` is drawn. A prover
+    /// that misreports this shifts the initial claim by `γ_lc·δ'`; see the
+    /// γ-batching argument (Lemma L6) in `docs/zk-proof.md`.
+    pub sigma_lc: F128,
+    /// Fiat–Shamir batching challenge, drawn immediately after `sigma_lc`.
+    pub gamma_lc: F128,
+    /// `Ŝ(ρ)` at the lincheck's output point, in the same φ8-quirky sense as
+    /// the output claim `w`. Must be opened against `S`'s commitment — an
+    /// unbound `s_eval` would let a prover pick it *after* `ρ` and absorb an
+    /// arbitrary defect into the output claim.
+    pub s_eval: F128,
+}
+
 /// Reasons the verifier may reject.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerifyError {
@@ -1145,7 +1217,7 @@ pub fn prove_padded<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> (LincheckProof, LincheckClaim) {
-    let (proof, claim, _) = prove_padded_inner(
+    let (proof, claim, _, _) = prove_padded_inner(
         z_packed,
         m,
         k_log,
@@ -1154,6 +1226,7 @@ pub fn prove_padded<Ch: Challenger>(
         circuit,
         x_ab,
         false,
+        None,
         challenger,
     );
     (proof, claim)
@@ -1178,7 +1251,7 @@ pub fn prove_padded_capture_z_vec<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> (LincheckProof, LincheckClaim, Vec<F128>) {
-    let (proof, claim, captured) = prove_padded_inner(
+    let (proof, claim, captured, _) = prove_padded_inner(
         z_packed,
         m,
         k_log,
@@ -1187,12 +1260,53 @@ pub fn prove_padded_capture_z_vec<Ch: Challenger>(
         circuit,
         x_ab,
         true,
+        None,
         challenger,
     );
     (
         proof,
         claim,
         captured.expect("capture=true must produce z_vec"),
+    )
+}
+
+/// [`prove_padded_capture_z_vec`] with the amendment-A2 mask channel engaged.
+///
+/// The returned [`LincheckClaim`] carries the **un-shifted** `w`, so callers
+/// build the same AB-claim they would without the mask. The returned
+/// [`LincheckMaskTranscript`] holds the two field elements the proof must
+/// carry (`sigma_lc`, `s_eval`) plus the derived `gamma_lc`.
+///
+/// The captured `z_vec` is the unmasked fold, as the PCS AB-claim requires.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_padded_masked_capture_z_vec<Ch: Challenger>(
+    z_packed: &[u8],
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    useful_bits: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    mask: LincheckMask<'_>,
+    challenger: &mut Ch,
+) -> (LincheckProof, LincheckClaim, Vec<F128>, LincheckMaskTranscript) {
+    let (proof, claim, captured, mask_transcript) = prove_padded_inner(
+        z_packed,
+        m,
+        k_log,
+        k_skip,
+        useful_bits,
+        circuit,
+        x_ab,
+        true,
+        Some(mask),
+        challenger,
+    );
+    (
+        proof,
+        claim,
+        captured.expect("capture=true must produce z_vec"),
+        mask_transcript.expect("mask=Some must produce a mask transcript"),
     )
 }
 
@@ -1206,8 +1320,14 @@ fn prove_padded_inner<Ch: Challenger>(
     circuit: &dyn LincheckCircuit,
     x_ab: &QuirkyPoint,
     capture_z_vec: bool,
+    mask: Option<LincheckMask<'_>>,
     challenger: &mut Ch,
-) -> (LincheckProof, LincheckClaim, Option<Vec<F128>>) {
+) -> (
+    LincheckProof,
+    LincheckClaim,
+    Option<Vec<F128>>,
+    Option<LincheckMaskTranscript>,
+) {
     let k = 1usize << k_log;
     let n_log = m - k_log;
     assert!(m >= k_log);
@@ -1289,6 +1409,34 @@ fn prove_padded_inner<Ch: Challenger>(
     } else {
         None
     };
+
+    // 4. Amendment A2 — the committed mask channel. `S` is witness-free and
+    //    its commitment root was bound before this layer's first challenge,
+    //    so `σ_lc` is fixed before `γ_lc` is drawn: exactly the ordering the
+    //    γ-batching argument needs. `comb` is public and the sumcheck's
+    //    z-slot is linear, so running it on `z + γ_lc·S` produces precisely
+    //    the honest transcript of that shifted witness — every later message
+    //    of this layer is a function of the shifted table alone.
+    //
+    //    `captured_z_vec` above is deliberately the *unmasked* fold: the
+    //    downstream PCS AB-claim is a claim about the real ẑ.
+    let mut mask_s_vec: Option<Vec<F128>> = None;
+    let mut mask_sigma_gamma: Option<(F128, F128)> = None;
+    if let Some(mask) = mask {
+        // The fold skips rows `[useful_bits, 2^k_log)`, so `S` must be zero
+        // there or `s_vec` and the committed `Ŝ` would disagree. Callers
+        // guarantee it (`zero_lincheck_padding_rows`).
+        let s_vec = partial_fold_packed_z_best(mask.s_packed, m, k_log, useful_bits, &eq_x_outer);
+        let sigma_lc = inner_product(&comb_vec, &s_vec);
+        challenger.observe_f128(sigma_lc);
+        let gamma_lc = challenger.sample_f128();
+        for (z, s) in z_vec.iter_mut().zip(s_vec.iter()) {
+            *z += gamma_lc * *s;
+        }
+        mask_s_vec = Some(s_vec);
+        mask_sigma_gamma = Some((sigma_lc, gamma_lc));
+    }
+
     let t_sumcheck_start = if trace {
         Some(std::time::Instant::now())
     } else {
@@ -1345,7 +1493,29 @@ fn prove_padded_inner<Ch: Challenger>(
     //    Equals ẑ_φ8(z_skip, r_rest, x_outer) when z_partial is honest; the
     //    PCS catches mismatches downstream.
     let lambda = lagrange_weights_naive(k_skip, r_inner_skip);
-    let w = inner_product(&lambda, &z_partial);
+    let w_sent = inner_product(&lambda, &z_partial);
+
+    // 8b. A2: fold the mask through the same challenges to get `Ŝ(ρ)`, then
+    //     un-shift the output claim. `w_sent` is the claim of the *shifted*
+    //     witness, so the real claim is `w_sent − γ_lc·Ŝ(ρ)` (char 2: `+`).
+    //     Callers see the real `w` and the AB-claim path is unchanged; the
+    //     verifier performs the same subtraction with an `s_eval` it checks
+    //     against `S`'s commitment.
+    let mask_transcript = mask_sigma_gamma.map(|(sigma_lc, gamma_lc)| {
+        let mut s_partial = mask_s_vec.take().expect("s_vec present whenever σ/γ are");
+        for &r in &r_rounds {
+            sumcheck_bind_top_in_place_par(&mut s_partial, r);
+        }
+        LincheckMaskTranscript {
+            sigma_lc,
+            gamma_lc,
+            s_eval: inner_product(&lambda, &s_partial),
+        }
+    });
+    let w = match &mask_transcript {
+        Some(mt) => w_sent + mt.gamma_lc * mt.s_eval,
+        None => w_sent,
+    };
 
     // 9. Convert sumcheck challenges to LSB-first `x_inner_rest` order. The
     //    loop binds the TOP bit each round, so r_rounds[0] bound bit
@@ -1361,7 +1531,7 @@ fn prove_padded_inner<Ch: Challenger>(
         r_inner_rest,
         w,
     };
-    (proof, claim, captured_z_vec)
+    (proof, claim, captured_z_vec, mask_transcript)
 }
 
 /// Verify a lincheck proof. Walks the challenger in lockstep with `prove`,
@@ -1376,6 +1546,34 @@ pub fn verify<Ch: Challenger>(
     v_a: F128,
     v_b: F128,
     proof: &LincheckProof,
+    challenger: &mut Ch,
+) -> Result<LincheckClaim, VerifyError> {
+    verify_masked(
+        m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, None, challenger,
+    )
+}
+
+/// [`verify`] with the amendment-A2 mask channel engaged.
+///
+/// `mask` is `(sigma_lc, s_eval)` taken from the proof. `sigma_lc` is
+/// absorbed at the same transcript position the prover wrote it, so `γ_lc` is
+/// re-derived identically; the initial claim gains `γ_lc·σ_lc`.
+///
+/// **`s_eval` is unchecked here.** It is prover-supplied, and this function
+/// only uses it to un-shift the returned claim. The caller *must* verify it
+/// against `S`'s commitment at the returned claim's point — otherwise a
+/// prover picks `s_eval` after `ρ` and the output claim is unconstrained.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_masked<Ch: Challenger>(
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    v_a: F128,
+    v_b: F128,
+    proof: &LincheckProof,
+    mask: Option<(F128, F128)>,
     challenger: &mut Ch,
 ) -> Result<LincheckClaim, VerifyError> {
     let k = 1usize << k_log;
@@ -1472,6 +1670,15 @@ pub fn verify<Ch: Challenger>(
         comb_vec[col] += beta;
         target += beta;
     }
+    // A2 mirror: absorb σ_lc, re-derive γ_lc, and batch the mask's claim into
+    // the initial target. The prover ran the sumcheck on `z + γ_lc·S`, so the
+    // claim it proves is `target + γ_lc·σ_lc`.
+    let mask_gamma = mask.map(|(sigma_lc, _)| {
+        challenger.observe_f128(sigma_lc);
+        let gamma_lc = challenger.sample_f128();
+        target += gamma_lc * sigma_lc;
+        gamma_lc
+    });
     let mut running = target;
     let mut r_rounds = Vec::with_capacity(inner_rest_len);
     for &(e1, einf) in &proof.rounds {
@@ -1516,7 +1723,13 @@ pub fn verify<Ch: Challenger>(
     //    PCS catches mismatches downstream.
     let t = std::time::Instant::now();
     let lambda = lagrange_weights_naive(k_skip, r_inner_skip);
-    let w = inner_product(&lambda, &proof.z_partial);
+    let w_sent = inner_product(&lambda, &proof.z_partial);
+    // A2: `z_partial` is the shifted witness's, so un-shift by γ_lc·Ŝ(ρ).
+    // `s_eval` is checked against S's commitment by the caller.
+    let w = match (mask_gamma, mask) {
+        (Some(gamma_lc), Some((_, s_eval))) => w_sent + gamma_lc * s_eval,
+        _ => w_sent,
+    };
     if trace {
         eprintln!(
             "        [lcv] final consistency + lagrange_weights_naive: {}",
@@ -2084,6 +2297,150 @@ mod tests {
                 mle_eval_bool_quirky(&z, m, k_log, k_skip, &pt),
                 "w wrong at m={m}, k_log={k_log}, k_skip={k_skip}"
             );
+        }
+    }
+
+    /// Amendment A2 round-trip. The masked prover runs the sumcheck on
+    /// `z + γ_lc·S`, so every message of the layer belongs to the *shifted*
+    /// witness — but the output claim it hands on must still be the real
+    /// `ẑ(ρ)`, or the downstream PCS binding to `ẑ` breaks. This pins:
+    ///
+    /// 1. prover and verifier agree on the whole claim;
+    /// 2. the recovered `w` is the true quirky-MLE of the **unmasked** `z`;
+    /// 3. `s_eval` is the true quirky-MLE of `S` at the *same* point — the
+    ///    exact statement the PCS opening of `S`'s commitment will check;
+    /// 4. the mask is not vacuous: `z_partial` actually moved.
+    #[test]
+    fn masked_roundtrip_recovers_the_unmasked_claim() {
+        for &(m, k_log, k_skip) in &[(10usize, 4, 0), (10, 4, 2), (12, 5, 3), (14, 7, 6)] {
+            let k = 1usize << k_log;
+            let mut rng = Rng::new(9090 + (m * 100 + k_log * 10 + k_skip) as u64);
+
+            let a_0 = random_sparse_matrix(k, k * 2, &mut rng);
+            let b_0 = random_sparse_matrix(k, k * 2, &mut rng);
+            let z = rng.bits(1 << m);
+            let a = apply_block_diag(&a_0, &z, k_log);
+            let b = apply_block_diag(&b_0, &z, k_log);
+            let z_packed = pack_z_lincheck(&z, m, k_log);
+
+            // The A2 mask: a witness-free cube of the same shape as z.
+            let s_bits = rng.bits(1 << m);
+            let s_packed = pack_z_lincheck(&s_bits, m, k_log);
+
+            let x_ab = random_quirky_point(m, k_log, k_skip, &mut rng);
+            let v_a = mle_eval_bool_quirky(&a, m, k_log, k_skip, &x_ab);
+            let v_b = mle_eval_bool_quirky(&b, m, k_log, k_skip, &x_ab);
+            let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
+
+            let mut ch_p = FsChallenger::new(b"flock-test-v0");
+            let (proof, claim_p, _z_vec, mt) = prove_padded_masked_capture_z_vec(
+                &z_packed,
+                m,
+                k_log,
+                k_skip,
+                k,
+                &circuit,
+                &x_ab,
+                LincheckMask { s_packed: &s_packed },
+                &mut ch_p,
+            );
+
+            let mut ch_v = FsChallenger::new(b"flock-test-v0");
+            let claim_v = verify_masked(
+                m,
+                k_log,
+                k_skip,
+                &circuit,
+                &x_ab,
+                v_a,
+                v_b,
+                &proof,
+                Some((mt.sigma_lc, mt.s_eval)),
+                &mut ch_v,
+            )
+            .unwrap_or_else(|e| panic!("masked verify rejected honest proof at m={m}: {e:?}"));
+
+            assert_eq!(claim_p, claim_v, "claim mismatch at m={m}");
+
+            let pt = QuirkyPoint {
+                z_skip: claim_v.r_inner_skip,
+                x_inner_rest: claim_v.r_inner_rest.clone(),
+                x_outer: x_ab.x_outer.clone(),
+            };
+            assert_eq!(
+                claim_v.w,
+                mle_eval_bool_quirky(&z, m, k_log, k_skip, &pt),
+                "masked run must still claim the UNMASKED ẑ(ρ) at m={m}"
+            );
+            assert_eq!(
+                mt.s_eval,
+                mle_eval_bool_quirky(&s_bits, m, k_log, k_skip, &pt),
+                "s_eval must be Ŝ(ρ) in the PCS's sense at m={m}"
+            );
+
+            // Non-vacuity: the same statement proved without the channel must
+            // produce a different z_partial. (Challenges diverge once σ_lc is
+            // absorbed, so this only asserts the transcripts are not equal.)
+            let mut ch_u = FsChallenger::new(b"flock-test-v0");
+            let (plain, _) = prove(&z_packed, m, k_log, k_skip, &circuit, &x_ab, &mut ch_u);
+            assert_ne!(
+                plain.z_partial, proof.z_partial,
+                "mask channel left z_partial untouched at m={m}"
+            );
+        }
+    }
+
+    /// σ_lc is bound before γ_lc is drawn, so a prover that misreports it
+    /// shifts the initial claim by `γ_lc·δ'` and the sumcheck's final check
+    /// fails. (The γ-batching argument, at the lincheck layer.)
+    #[test]
+    fn masked_verify_rejects_sigma_tamper() {
+        let (m, k_log, k_skip) = (12usize, 5, 3);
+        let k = 1usize << k_log;
+        let mut rng = Rng::new(4242);
+
+        let a_0 = random_sparse_matrix(k, k * 2, &mut rng);
+        let b_0 = random_sparse_matrix(k, k * 2, &mut rng);
+        let z = rng.bits(1 << m);
+        let a = apply_block_diag(&a_0, &z, k_log);
+        let b = apply_block_diag(&b_0, &z, k_log);
+        let z_packed = pack_z_lincheck(&z, m, k_log);
+        let s_packed = pack_z_lincheck(&rng.bits(1 << m), m, k_log);
+
+        let x_ab = random_quirky_point(m, k_log, k_skip, &mut rng);
+        let v_a = mle_eval_bool_quirky(&a, m, k_log, k_skip, &x_ab);
+        let v_b = mle_eval_bool_quirky(&b, m, k_log, k_skip, &x_ab);
+        let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
+
+        let mut ch_p = FsChallenger::new(b"flock-test-v0");
+        let (proof, _claim, _z, mt) = prove_padded_masked_capture_z_vec(
+            &z_packed,
+            m,
+            k_log,
+            k_skip,
+            k,
+            &circuit,
+            &x_ab,
+            LincheckMask { s_packed: &s_packed },
+            &mut ch_p,
+        );
+
+        for delta in [1u64, 2, 7, 1 << 33] {
+            let bad = mt.sigma_lc + F128::new(delta, 0);
+            let mut ch_v = FsChallenger::new(b"flock-test-v0");
+            let got = verify_masked(
+                m,
+                k_log,
+                k_skip,
+                &circuit,
+                &x_ab,
+                v_a,
+                v_b,
+                &proof,
+                Some((bad, mt.s_eval)),
+                &mut ch_v,
+            );
+            assert!(got.is_err(), "verifier accepted a tampered σ_lc (δ={delta})");
         }
     }
 

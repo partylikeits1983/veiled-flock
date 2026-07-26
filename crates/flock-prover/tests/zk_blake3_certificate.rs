@@ -150,9 +150,11 @@ fn run(
     rand_words: &[u64],
     p_words: &[u64],
     q_words: &[u64],
+    s_words: &[u64],
     cw: &[F128],
     cp: &[F128],
     cq: &[F128],
+    cs: &[F128],
 ) -> Vec<F128> {
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
@@ -169,12 +171,16 @@ fn run(
     let mut s_q = VecSampler::from_words(q_words.to_vec());
     let mut s_cp = VecSampler::from_f128(cp);
     let mut s_cq = VecSampler::from_f128(cq);
+    let mut s_s = VecSampler::from_words(s_words.to_vec());
+    let mut s_cs = VecSampler::from_f128(cs);
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
         q: &mut s_q,
         commit_p: &mut s_cp,
         commit_q: &mut s_cq,
+        s: &mut s_s,
+        commit_s: &mut s_cs,
     };
     let mut ch = RandomChallenger::new(CH_SEED);
     let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -187,7 +193,7 @@ fn run(
 /// lincheck classes — the PIOP layer. Restricting to them keeps the image
 /// saturable at this size: membership is decided against a *spanned* space,
 /// which is what makes a negative result meaningful.
-fn coords_and_paths(class_filter: &dyn Fn(&str) -> bool, setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::ligerito::ProverConfig, blocks: &[Compression], rand: &[u64], p: &[u64], q: &[u64], cw: &[F128], cp: &[F128], cq: &[F128]) -> (Vec<usize>, Vec<(&'static str, std::ops::Range<usize>)>) {
+fn coords_and_paths(class_filter: &dyn Fn(&str) -> bool, setup: &Blake3Setup, params: &PcsParams, lig: &flock_core::pcs::ligerito::ProverConfig, blocks: &[Compression], rand: &[u64], p: &[u64], q: &[u64], s: &[u64], cw: &[F128], cp: &[F128], cq: &[F128], cs: &[F128]) -> (Vec<usize>, Vec<(&'static str, std::ops::Range<usize>)>) {
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
         flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk(
@@ -199,9 +205,12 @@ fn coords_and_paths(class_filter: &dyn Fn(&str) -> bool, setup: &Blake3Setup, pa
     let mut s_q = VecSampler::from_words(q.to_vec());
     let mut s_cp = VecSampler::from_f128(cp);
     let mut s_cq = VecSampler::from_f128(cq);
+    let mut s_s = VecSampler::from_words(s.to_vec());
+    let mut s_cs = VecSampler::from_f128(cs);
     let masks = A1MaskSources {
         witness_commit: &mut s_w, p: &mut s_p, q: &mut s_q,
         commit_p: &mut s_cp, commit_q: &mut s_cq,
+        s: &mut s_s, commit_s: &mut s_cs,
     };
     let mut ch = RandomChallenger::new(CH_SEED);
     let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -323,13 +332,15 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     let base_rand = rng.words(n_rand_words);
     let p_words = rng.words(n_cube_words);
     let q_words = rng.words(n_cube_words);
+    let s_words = rng.words(n_cube_words);
     let cw: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
     let cp: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
     let cq: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
+    let cs: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
 
     let blocks_a = blocks_from(0xAAAA, N_BLOCKS);
-    let go = |rand: &[u64], p: &[u64], cw: &[F128], cp: &[F128], blocks: &[Compression]| {
-        run(&setup, &params, &lig, blocks, rand, p, q_words.as_slice(), cw, cp, &cq)
+    let go = |rand: &[u64], p: &[u64], s: &[u64], cw: &[F128], cp: &[F128], cs: &[F128], blocks: &[Compression]| {
+        run(&setup, &params, &lig, blocks, rand, p, q_words.as_slice(), s, cw, cp, &cq, cs)
     };
 
     // ZK_BLAKE3_CLASSES selects which coordinate classes are under test, so
@@ -341,9 +352,9 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         "lincheck" => path.starts_with("lincheck."),
         _ => path.starts_with("zerocheck.") || path.starts_with("lincheck."),
     };
-    let (coords, coord_paths) = coords_and_paths(&class_filter, &setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
+    let (coords, coord_paths) = coords_and_paths(&class_filter, &setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &s_words, &cw, &cp, &cq, &cs);
     let proj = |v: &[F128]| -> Vec<u64> { flatten(&coords.iter().map(|&i| v[i]).collect::<Vec<_>>()) };
-    let base = proj(&go(&base_rand, &p_words, &cw, &cp, &blocks_a));
+    let base = proj(&go(&base_rand, &p_words, &s_words, &cw, &cp, &cs, &blocks_a));
     let dim = base.len() * 64;
     println!(
         "real BLAKE3 m={m}, {} blocks: PIOP classes {} F128 = {dim} bits",
@@ -384,15 +395,25 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
         for w in p.iter_mut() {
             *w ^= prng.next_u64() & prng.next_u64() & prng.next_u64();
         }
+        // A2's lincheck mask. Under `RandomChallenger` the challenges — γ_lc
+        // included — are fixed across probes, so `z + γ_lc·S` is affine in S
+        // and S is an inner channel exactly as P is.
+        let mut s = s_words.to_vec();
+        for w in s.iter_mut() {
+            *w ^= prng.next_u64() & prng.next_u64() & prng.next_u64();
+        }
         let mut cwp = cw.clone();
         let mut cpp = cp.clone();
+        let mut csp = cs.clone();
         for _ in 0..8 {
             let i = (prng.next_u64() as usize) % n_mask_f128;
             cwp[i] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
             let j = (prng.next_u64() as usize) % n_mask_f128;
             cpp[j] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
+            let l = (prng.next_u64() as usize) % n_mask_f128;
+            csp[l] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
         }
-        let t = proj(&go(&rand, &p, &cwp, &cpp, &blocks_a));
+        let t = proj(&go(&rand, &p, &s, &cwp, &cpp, &csp, &blocks_a));
         img.insert(xor(&t, &base));
     }
     println!("inner image spans {} of {dim} bits from {n_probes} random probes", img.rank());
@@ -405,7 +426,7 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
                 *slot ^= prng.next_u64() & prng.next_u64();
             }
         }
-        let t = proj(&go(&rand, &p_words, &cw, &cp, &blocks_a));
+        let t = proj(&go(&rand, &p_words, &s_words, &cw, &cp, &cs, &blocks_a));
         img.insert(xor(&t, &base));
     }
     println!("joint image (inner + outer stage) spans {} of {dim} bits", img.rank());
@@ -424,14 +445,14 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     // > 5*128 = 640 bits of claim space, so claim-preserving combinations are
     // forced to exist and the criterion can bite.
     let n_pairs = 768usize;
-    let base_claims = claims_of(&setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
+    let base_claims = claims_of(&setup, &params, &lig, &blocks_a, &base_rand, &p_words, &q_words, &s_words, &cw, &cp, &cq, &cs);
     let mut claim_space = F2Space::default();
     let mut resid_and_claim = F2Space::default();
     for k in 0..n_pairs as u64 {
         let blocks_b = blocks_from(0xBBBB + k, N_BLOCKS);
-        let t = proj(&go(&base_rand, &p_words, &cw, &cp, &blocks_b));
+        let t = proj(&go(&base_rand, &p_words, &s_words, &cw, &cp, &cs, &blocks_b));
         let residual = img.reduce(xor(&t, &base));
-        let cl = claims_of(&setup, &params, &lig, &blocks_b, &base_rand, &p_words, &q_words, &cw, &cp, &cq);
+        let cl = claims_of(&setup, &params, &lig, &blocks_b, &base_rand, &p_words, &q_words, &s_words, &cw, &cp, &cq, &cs);
         let dcl: Vec<u64> = cl
             .iter()
             .zip(&base_claims)
@@ -493,9 +514,11 @@ fn claims_of(
     rand: &[u64],
     p: &[u64],
     q: &[u64],
+    s: &[u64],
     cw: &[F128],
     cp: &[F128],
     cq: &[F128],
+    cs: &[F128],
 ) -> [F128; 5] {
     use flock_core::{lincheck, zerocheck};
     let layout = setup.r1cs.zk.expect("zk layout");
@@ -509,9 +532,12 @@ fn claims_of(
     let mut s_q = VecSampler::from_words(q.to_vec());
     let mut s_cp = VecSampler::from_f128(cp);
     let mut s_cq = VecSampler::from_f128(cq);
+    let mut s_s = VecSampler::from_words(s.to_vec());
+    let mut s_cs = VecSampler::from_f128(cs);
     let masks = A1MaskSources {
         witness_commit: &mut s_w, p: &mut s_p, q: &mut s_q,
         commit_p: &mut s_cp, commit_q: &mut s_cq,
+        s: &mut s_s, commit_s: &mut s_cs,
     };
     let mut ch = RandomChallenger::new(CH_SEED);
     let (proof, _comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -520,9 +546,10 @@ fn claims_of(
     let mut chv = RandomChallenger::new(CH_SEED);
     let zc = zerocheck::verify_zk(setup.m(), &proof.zerocheck, &mut chv).expect("honest");
     let x_ab = setup.r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
-    let lc = lincheck::verify(
+    let lc = lincheck::verify_masked(
         setup.m(), setup.r1cs.k_log, setup.r1cs.k_skip, circuit, &x_ab,
-        zc.a_eval, zc.b_eval, &proof.lincheck, &mut chv,
+        zc.a_eval, zc.b_eval, &proof.lincheck,
+        Some((proof.sigma_lc, proof.s_eval)), &mut chv,
     )
     .expect("honest");
     // a_eval and b_eval are transcript values the verifier consumes to form
@@ -575,8 +602,10 @@ fn control_same_procedure_on_the_passing_fixture() {
     let cw: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
     let cp: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
     let cq: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
+    let s_bits0: Vec<bool> = (0..n).map(|_| rng.next_u64() & 1 == 1).collect();
+    let cs: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
 
-    let go = |payload: &[bool], ua: &[bool], ub: &[bool], p: &[bool], cw: &[F128], cp: &[F128]| {
+    let go = |payload: &[bool], ua: &[bool], ub: &[bool], p: &[bool], sb: &[bool], cw: &[F128], cp: &[F128], cs_a: &[F128]| {
         let z = fx.witness(payload, ua, ub);
         let a = fx.r1cs.apply_a_packed(&z);
         let b = fx.r1cs.apply_b_packed(&z);
@@ -587,9 +616,12 @@ fn control_same_procedure_on_the_passing_fixture() {
         let mut s_q = VecSampler::from_words(bits_to_words(&q_bits));
         let mut s_cp = VecSampler::from_f128(cp);
         let mut s_cq = VecSampler::from_f128(&cq);
+        let mut s_s = VecSampler::from_words(bits_to_words(sb));
+        let mut s_cs = VecSampler::from_f128(cs_a);
         let masks = A1MaskSources {
             witness_commit: &mut s_w, p: &mut s_p, q: &mut s_q,
             commit_p: &mut s_cp, commit_q: &mut s_cq,
+            s: &mut s_s, commit_s: &mut s_cs,
         };
         let mut ch = RandomChallenger::new(CH_SEED);
         let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
@@ -610,7 +642,7 @@ fn control_same_procedure_on_the_passing_fixture() {
         (flatten(&v), claims)
     };
 
-    let (base, base_claims) = go(&payload0, &u_a0, &u_b0, &p_bits0, &cw, &cp);
+    let (base, base_claims) = go(&payload0, &u_a0, &u_b0, &p_bits0, &s_bits0, &cw, &cp, &cs);
     let dim = base.len() * 64;
     println!("fixture control: PIOP classes {dim} bits");
 
@@ -621,20 +653,24 @@ fn control_same_procedure_on_the_passing_fixture() {
     for _ in 0..n_probes {
         let ua: Vec<bool> = u_a0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
         let p: Vec<bool> = p_bits0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
+        let sb: Vec<bool> = s_bits0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
         let mut cwp = cw.clone();
         let mut cpp = cp.clone();
+        let mut csp = cs.clone();
         for _ in 0..8 {
             let i = (prng.next_u64() as usize) % n_mask_f128;
             cwp[i] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
             let j = (prng.next_u64() as usize) % n_mask_f128;
             cpp[j] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
+            let l = (prng.next_u64() as usize) % n_mask_f128;
+            csp[l] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
         }
-        let (t, _) = go(&payload0, &ua, &u_b0, &p, &cwp, &cpp);
+        let (t, _) = go(&payload0, &ua, &u_b0, &p, &sb, &cwp, &cpp, &csp);
         img.insert(xor(&t, &base));
     }
     for _ in 0..(dim / 8 + 256) {
         let ub: Vec<bool> = u_b0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
-        let (t, _) = go(&payload0, &u_a0, &ub, &p_bits0, &cw, &cp);
+        let (t, _) = go(&payload0, &u_a0, &ub, &p_bits0, &s_bits0, &cw, &cp, &cs);
         img.insert(xor(&t, &base));
     }
     println!("fixture control: joint image spans {} of {dim} bits", img.rank());
@@ -647,7 +683,7 @@ fn control_same_procedure_on_the_passing_fixture() {
     for k in 0..512.min(free.len()) {
         let mut payload = payload0.clone();
         payload[free[k]] = !payload[free[k]];
-        let (t, cl) = go(&payload, &u_a0, &u_b0, &p_bits0, &cw, &cp);
+        let (t, cl) = go(&payload, &u_a0, &u_b0, &p_bits0, &s_bits0, &cw, &cp, &cs);
         let residual = img.reduce(xor(&t, &base));
         let dcl: Vec<u64> = cl.iter().zip(&base_claims).flat_map(|(a, b)| { let d = *a + *b; [d.lo, d.hi] }).collect();
         claim_space.insert(dcl.clone());

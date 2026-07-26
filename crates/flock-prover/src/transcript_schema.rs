@@ -38,7 +38,7 @@ use flock_core::zerocheck::ZkZerocheckProof;
 use crate::prover::R1csProofZkA1;
 
 /// Version of the schema itself; bump on any reclassification or reshape.
-pub const A1_SCHEMA_VERSION: u32 = 1;
+pub const A1_SCHEMA_VERSION: u32 = 2;
 
 /// Security classification of a transcript field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -296,6 +296,7 @@ macro_rules! opening_paths {
 const PCS_OPEN_PATHS: OpeningPaths = opening_paths!("pcs_open");
 const OPEN_P_PATHS: OpeningPaths = opening_paths!("open_p");
 const OPEN_Q_PATHS: OpeningPaths = opening_paths!("open_q");
+const OPEN_S_PATHS: OpeningPaths = opening_paths!("open_s");
 
 /// Flatten the complete A1′ proof (plus witness commitment) into classified
 /// fields, in prover message order (commitments → zerocheck → lincheck →
@@ -303,7 +304,19 @@ const OPEN_Q_PATHS: OpeningPaths = opening_paths!("open_q");
 pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatField> {
     use FlatValue::*;
     let mut out = Vec::with_capacity(64);
-    let R1csProofZkA1 { zerocheck, lincheck, pcs_open, open_p, open_q, comm_p, comm_q } = proof;
+    let R1csProofZkA1 {
+        zerocheck,
+        lincheck,
+        pcs_open,
+        open_p,
+        open_q,
+        open_s,
+        comm_p,
+        comm_q,
+        comm_s,
+        sigma_lc,
+        s_eval,
+    } = proof;
 
     let Commitment { root, params } = commitment;
     push(&mut out, "commitment.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
@@ -314,6 +327,9 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
     let Commitment { root, params } = comm_q;
     push(&mut out, "comm_q.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
     push(&mut out, "comm_q.params", 0, LeakageClass::Metadata, false, Bytes(params_bytes(params)));
+    let Commitment { root, params } = comm_s;
+    push(&mut out, "comm_s.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
+    push(&mut out, "comm_s.params", 0, LeakageClass::Metadata, false, Bytes(params_bytes(params)));
 
     let ZkZerocheckProof {
         round1_ab,
@@ -345,14 +361,26 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
     push(&mut out, "zerocheck.final_p_eval", 0, LeakageClass::MaskOnly, true, F128s(vec![*final_p_eval]));
     push(&mut out, "zerocheck.final_q_eval", 0, LeakageClass::MaskOnly, true, F128s(vec![*final_q_eval]));
 
+    // A2: σ_lc is absorbed inside the lincheck, between the const-pin β and
+    // the first round message — the position that fixes it before γ_lc.
+    push(&mut out, "lincheck.sigma_lc", 0, LeakageClass::MaskOnly, true, F128s(vec![*sigma_lc]));
+
     let LincheckProof { rounds, z_partial } = lincheck;
+    // Under A2 these two carry the transcript of the *shifted* witness
+    // `z + γ_lc·S`. They stay classified WitnessDependent: the class records
+    // what a coordinate is a function of, not how well it is masked — the
+    // masking is what the joint coverage certificate has to demonstrate.
     push(&mut out, "lincheck.rounds", 0, LeakageClass::WitnessDependent, true, F128s(pairs_f128(rounds)));
     push(&mut out, "lincheck.z_partial", 0, LeakageClass::WitnessDependent, true, F128s(z_partial.clone()));
+    // `s_eval` is witness-free, but it is *not* absorbed: it is bound by S's
+    // commitment, and the verifier consumes it to un-shift the output claim.
+    push(&mut out, "lincheck.s_eval", 0, LeakageClass::MaskOnly, false, F128s(vec![*s_eval]));
 
-    // Prover message order: the P and Q openings run (on domain-separated
+    // Prover message order: the P, Q and S openings run (on domain-separated
     // forked challengers) before the witness opening in `prove_r1cs_zk_a1`.
     flatten_opening(&mut out, &OPEN_P_PATHS, LeakageClass::MaskOnly, open_p);
     flatten_opening(&mut out, &OPEN_Q_PATHS, LeakageClass::MaskOnly, open_q);
+    flatten_opening(&mut out, &OPEN_S_PATHS, LeakageClass::MaskOnly, open_s);
     flatten_opening(&mut out, &PCS_OPEN_PATHS, LeakageClass::WitnessDependent, pcs_open);
     out
 }
@@ -502,6 +530,7 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
     let commitment = unflatten_commitment(&mut cur, "commitment.root", "commitment.params");
     let comm_p = unflatten_commitment(&mut cur, "comm_p.root", "comm_p.params");
     let comm_q = unflatten_commitment(&mut cur, "comm_q.root", "comm_q.params");
+    let comm_s = unflatten_commitment(&mut cur, "comm_s.root", "comm_s.params");
 
     let zerocheck = ZkZerocheckProof {
         round1_ab: cur.f128s("zerocheck.round1_ab"),
@@ -514,15 +543,33 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
         final_p_eval: cur.one_f128("zerocheck.final_p_eval"),
         final_q_eval: cur.one_f128("zerocheck.final_q_eval"),
     };
+    let sigma_lc = cur.one_f128("lincheck.sigma_lc");
     let lincheck = LincheckProof {
         rounds: f128_pairs(cur.f128s("lincheck.rounds")),
         z_partial: cur.f128s("lincheck.z_partial"),
     };
+    let s_eval = cur.one_f128("lincheck.s_eval");
     let open_p = unflatten_opening(&mut cur, &OPEN_P_PATHS);
     let open_q = unflatten_opening(&mut cur, &OPEN_Q_PATHS);
+    let open_s = unflatten_opening(&mut cur, &OPEN_S_PATHS);
     let pcs_open = unflatten_opening(&mut cur, &PCS_OPEN_PATHS);
     assert_eq!(cur.pos, flat.len(), "unflatten did not consume every field");
-    (commitment, R1csProofZkA1 { zerocheck, lincheck, pcs_open, open_p, open_q, comm_p, comm_q })
+    (
+        commitment,
+        R1csProofZkA1 {
+            zerocheck,
+            lincheck,
+            pcs_open,
+            open_p,
+            open_q,
+            open_s,
+            comm_p,
+            comm_q,
+            comm_s,
+            sigma_lc,
+            s_eval,
+        },
+    )
 }
 
 // ---------------------------------------------------------------------------
@@ -542,6 +589,8 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("comm_p.params", Metadata, false),
         ("comm_q.root", HiddenHash, true),
         ("comm_q.params", Metadata, false),
+        ("comm_s.root", HiddenHash, true),
+        ("comm_s.params", Metadata, false),
         ("zerocheck.round1_ab", WitnessDependent, true),
         ("zerocheck.round1_c", WitnessDependent, true),
         ("zerocheck.mask_init", MaskOnly, true),
@@ -551,8 +600,10 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("zerocheck.final_c_eval", Derived, false),
         ("zerocheck.final_p_eval", MaskOnly, true),
         ("zerocheck.final_q_eval", MaskOnly, true),
+        ("lincheck.sigma_lc", MaskOnly, true),
         ("lincheck.rounds", WitnessDependent, true),
         ("lincheck.z_partial", WitnessDependent, true),
+        ("lincheck.s_eval", MaskOnly, false),
         ("open_p.ring_switches.s_hat_v", MaskOnly, true),
         ("open_p.ligerito.initial_root", HiddenHash, false),
         ("open_p.ligerito.initial_proof.opened_rows", MaskOnly, false),
@@ -585,6 +636,22 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("open_q.ligerito.fold_grinding_nonces", Metadata, false),
         ("open_q.zk_blind.y_g", MaskOnly, true),
         ("open_q.zk_blind.c_grind_nonce", Metadata, false),
+        ("open_s.ring_switches.s_hat_v", MaskOnly, true),
+        ("open_s.ligerito.initial_root", HiddenHash, false),
+        ("open_s.ligerito.initial_proof.opened_rows", MaskOnly, false),
+        ("open_s.ligerito.initial_proof.merkle_proof", HiddenHash, false),
+        ("open_s.ligerito.recursive_roots", HiddenHash, true),
+        ("open_s.ligerito.recursive_proofs.opened_rows", MaskOnly, false),
+        ("open_s.ligerito.recursive_proofs.merkle_proof", HiddenHash, false),
+        ("open_s.ligerito.final_proof.yr", MaskOnly, true),
+        ("open_s.ligerito.final_proof.opened_rows", MaskOnly, false),
+        ("open_s.ligerito.final_proof.merkle_proof", HiddenHash, false),
+        ("open_s.ligerito.sumcheck_transcript", MaskOnly, true),
+        ("open_s.ligerito.grinding_nonces", Metadata, false),
+        ("open_s.ligerito.ood_values", MaskOnly, true),
+        ("open_s.ligerito.fold_grinding_nonces", Metadata, false),
+        ("open_s.zk_blind.y_g", MaskOnly, true),
+        ("open_s.zk_blind.c_grind_nonce", Metadata, false),
         ("pcs_open.ring_switches.s_hat_v", WitnessDependent, true),
         ("pcs_open.ligerito.initial_root", HiddenHash, false),
         ("pcs_open.ligerito.initial_proof.opened_rows", WitnessDependent, false),

@@ -145,6 +145,8 @@ fn simulator_translation_exact_transcript_equality() {
     let cw: Vec<F128> = (0..1024).map(|_| rng.f128()).collect();
     let cp: Vec<F128> = (0..1024).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..1024).map(|_| rng.f128()).collect();
+    let s_bits = rng.bits(n);
+    let cs: Vec<F128> = (0..1024).map(|_| rng.f128()).collect();
     let w0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
     let mut w1 = w0.clone();
     w1[5] = !w1[5]; // a different witness of the same statement
@@ -161,12 +163,16 @@ fn simulator_translation_exact_transcript_equality() {
         let mut s_q = VecSampler::bits(&q_bits);
         let mut s_cp = VecSampler::f128(cp.clone());
         let mut s_cq = VecSampler::f128(cq.clone());
+        let mut s_s = VecSampler::bits(&s_bits);
+        let mut s_cs = VecSampler::f128(cs.clone());
         let masks = A1MaskSources {
             witness_commit: &mut s_w,
             p: &mut s_p,
             q: &mut s_q,
             commit_p: &mut s_cp,
             commit_q: &mut s_cq,
+            s: &mut s_s,
+            commit_s: &mut s_cs,
         };
         let mut ch = RandomChallenger::new(ch_seed);
         let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
