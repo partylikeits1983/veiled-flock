@@ -259,3 +259,39 @@ sufficient. The emitted round messages are uniform *by construction* while the
 honest ones are uniform *because of the mask channels*; proving those two laws
 coincide is the remaining theorem, and it needs the coverage certificates
 restated in claim-kernel form.
+
+## 14. The extractor, and the test that separates the two properties (2026-07-27)
+
+A simulator before an extractor is the dangerous order: a protocol that hides
+everything and proves nothing passes every zero-knowledge test. So the
+extractor came next.
+
+`preimage_extractor.rs` reads the message region out of a committed vector and
+verifies it **outside the circuit** with the `blake3` crate. **Why the
+external recheck is the whole design:** three near-misses would each look like
+success — recovering mask columns (the randomizer rows and the five mask cubes
+are committed data too), recovering an assignment untied to the digests, or
+recovering an opening claim instead of the message. A check that touches no
+circuit wire rules out all three at once.
+
+**Why the extractor takes the committed message as input.** In the classical
+ROM extraction is straightline: every committed Merkle leaf is an oracle
+query, so watching the query transcript recovers and decodes the codeword.
+That is the BCS argument and is cited, not re-derived. The system-specific
+half — which coordinates are the message, how they are packed, whether what
+comes out is real — is what is implemented, because that is where a mistake
+would hide.
+
+**The load-bearing test: extraction FAILS on the simulator's commitment.** The
+simulator produces a transcript the verifier accepts and knows no preimage. If
+extraction succeeded there, the extractor would be recovering something other
+than knowledge. This is the single test that separates zero knowledge from
+knowledge soundness — the object that makes a proof reveal nothing must not
+also make it prove nothing. Alongside it: extraction recovers the real
+preimages from an honest commitment, and perturbing the randomizer sections
+changes the commitment without moving one extracted byte.
+
+**Still open:** simulation-extractability (plain ZK + plain AoK do not compose
+in the ROM; the target is the weak form, via divergence at the statement
+absorption), a quantitative extraction bound, and making the ROM observation
+step executable by routing leaf hashing through the recording oracle.
