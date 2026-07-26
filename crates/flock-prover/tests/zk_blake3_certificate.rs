@@ -243,6 +243,23 @@ fn piop_coords_and_paths(setup: &Blake3Setup, params: &PcsParams, lig: &flock_co
 /// public value was conditioned on — is that a fourth such value exists here
 /// and is not yet in the conditioning set.
 ///
+/// **The methodological control passes** (`control_same_procedure_on_the_passing_fixture`):
+/// this exact procedure, applied to the synthetic fixture, gives
+/// `rank[resid | Δclaim] = 384 = rank(Δclaim)`. So the procedure is sound and
+/// the difference in outcome is attributable to the BLAKE3 *statement*, not
+/// to the harness. Alignment is also ruled out — lemma L3 is verified on the
+/// real layout (`l3_round1_region_alignment_holds`) — and so is the constant-
+/// wire pin, which shifts the lincheck target by a challenge β identically
+/// for every valid witness (`lincheck.rs`, `const_pin_col`) and so induces no
+/// witness-difference direction.
+///
+/// That makes this the sharpest open question in the whole development, and
+/// it points *away* from the property holding rather than toward it: either a
+/// fourth transcript-determined public value exists that has not been
+/// identified, or a genuine claim-preserving witness direction is uncovered
+/// on the real statement family — which would be a finding of the form the
+/// task's decision label C describes, not label A.
+///
 /// The escaping direction is **localized**: residual attribution puts it on
 /// `zerocheck.round1_c`, `lincheck.rounds` and `lincheck.z_partial` — the
 /// C-side/witness-side coordinates — and not on the round pairs or the final
@@ -464,4 +481,152 @@ fn claims_of(
     )
     .expect("honest");
     [zc.a_eval * zc.b_eval, lc.w, zc.c_eval]
+}
+
+/// **Methodological control: the same procedure, on the fixture that passes.**
+///
+/// `blake3_witness_difference_lies_in_the_mask_image` leaves one F128
+/// direction unexplained on a real BLAKE3 statement, while the full
+/// certificate passes on the synthetic fixture. Those two runs differ in
+/// *two* ways at once — the statement, and the procedure (this file probes
+/// randomly, conditions on no mask-only coordinate, and restricts to the
+/// PIOP classes; the certificate probes per channel, conditions on the
+/// complete leakage set, and covers every coordinate).
+///
+/// A difference in outcome cannot be attributed to the statement until the
+/// procedure is held fixed. This runs *this file's* procedure on the
+/// fixture. If it passes, the procedure is sound and the BLAKE3 result is
+/// about the statement. If it fails, the procedure — not the statement — is
+/// what the earlier result was measuring.
+#[test]
+#[ignore = "control for the BLAKE3 result; run alongside it"]
+fn control_same_procedure_on_the_passing_fixture() {
+    use flock_prover::zk_audit_support::FixtureA1M15;
+
+    let fx = FixtureA1M15::new();
+    let m = FixtureA1M15::M;
+    let n = 1usize << m;
+    let n_mask_f128 = 3 << (m - 7);
+    let mut rng = Rng(0xC01D_C0);
+
+    let payload0 = {
+        let mut p: Vec<bool> = (0..FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS)
+            .map(|_| rng.next_u64() & 1 == 1)
+            .collect();
+        for (i, b) in p.iter_mut().enumerate() {
+            if i % FixtureA1M15::N_PAYLOAD < FixtureA1M15::FREE_PAYLOAD_BASE {
+                *b = false;
+            }
+        }
+        p
+    };
+    let u_a0: Vec<bool> = (0..FixtureA1M15::A_BITS).map(|_| rng.next_u64() & 1 == 1).collect();
+    let u_b0: Vec<bool> = (0..FixtureA1M15::B_BITS).map(|_| rng.next_u64() & 1 == 1).collect();
+    let q_bits: Vec<bool> = (0..n).map(|_| rng.next_u64() & 1 == 1).collect();
+    let p_bits0: Vec<bool> = vec![false; n];
+    let cw: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
+    let cp: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
+    let cq: Vec<F128> = (0..n_mask_f128).map(|_| F128 { lo: rng.next_u64(), hi: rng.next_u64() }).collect();
+
+    let go = |payload: &[bool], ua: &[bool], ub: &[bool], p: &[bool], cw: &[F128], cp: &[F128]| {
+        let z = fx.witness(payload, ua, ub);
+        let a = fx.r1cs.apply_a_packed(&z);
+        let b = fx.r1cs.apply_b_packed(&z);
+        let stripe = pack_z_lincheck_from_packed(&z, m, FixtureA1M15::K_LOG);
+        let circuit = fx.r1cs.sparse_lincheck_circuit();
+        let mut s_w = VecSampler::from_f128(cw);
+        let mut s_p = VecSampler::from_words(bits_to_words(p));
+        let mut s_q = VecSampler::from_words(bits_to_words(&q_bits));
+        let mut s_cp = VecSampler::from_f128(cp);
+        let mut s_cq = VecSampler::from_f128(&cq);
+        let masks = A1MaskSources {
+            witness_commit: &mut s_w, p: &mut s_p, q: &mut s_q,
+            commit_p: &mut s_cp, commit_q: &mut s_cq,
+        };
+        let mut ch = RandomChallenger::new(CH_SEED);
+        let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
+            &fx.r1cs, &fx.pcs_params, z, a, b, stripe, &circuit, &fx.lig_prover, masks, None, &mut ch,
+        );
+        let flat = flatten_a1(&comm, &proof);
+        let idx = SchemaIndex::build(&flat);
+        let all = algebraic_vector(&flat);
+        let mut coords = Vec::new();
+        for (path, range) in idx.ranges_by_class(&flat, LeakageClass::WitnessDependent) {
+            if path.starts_with("zerocheck.") || path.starts_with("lincheck.") {
+                coords.extend(range);
+            }
+        }
+        let v: Vec<F128> = coords.iter().map(|&i| all[i]).collect();
+        let mut chv = RandomChallenger::new(CH_SEED);
+        let claims = fx.public_claims(&proof, &mut chv);
+        (flatten(&v), claims)
+    };
+
+    let (base, base_claims) = go(&payload0, &u_a0, &u_b0, &p_bits0, &cw, &cp);
+    let dim = base.len() * 64;
+    println!("fixture control: PIOP classes {dim} bits");
+
+    // Same random probing style, same triangular split.
+    let n_probes = dim + dim / 8 + 256;
+    let mut img = F2Space::default();
+    let mut prng = Rng(0x4242_4242);
+    for _ in 0..n_probes {
+        let ua: Vec<bool> = u_a0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
+        let p: Vec<bool> = p_bits0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
+        let mut cwp = cw.clone();
+        let mut cpp = cp.clone();
+        for _ in 0..8 {
+            let i = (prng.next_u64() as usize) % n_mask_f128;
+            cwp[i] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
+            let j = (prng.next_u64() as usize) % n_mask_f128;
+            cpp[j] += F128 { lo: prng.next_u64(), hi: prng.next_u64() };
+        }
+        let (t, _) = go(&payload0, &ua, &u_b0, &p, &cwp, &cpp);
+        img.insert(xor(&t, &base));
+    }
+    for _ in 0..(dim / 8 + 256) {
+        let ub: Vec<bool> = u_b0.iter().map(|b| b ^ (prng.next_u64() & prng.next_u64() & 1 == 1)).collect();
+        let (t, _) = go(&payload0, &u_a0, &ub, &p_bits0, &cw, &cp);
+        img.insert(xor(&t, &base));
+    }
+    println!("fixture control: joint image spans {} of {dim} bits", img.rank());
+
+    let free: Vec<usize> = (0..payload0.len())
+        .filter(|i| i % FixtureA1M15::N_PAYLOAD >= FixtureA1M15::FREE_PAYLOAD_BASE)
+        .collect();
+    let mut claim_space = F2Space::default();
+    let mut resid_and_claim = F2Space::default();
+    for k in 0..512.min(free.len()) {
+        let mut payload = payload0.clone();
+        payload[free[k]] = !payload[free[k]];
+        let (t, cl) = go(&payload, &u_a0, &u_b0, &p_bits0, &cw, &cp);
+        let residual = img.reduce(xor(&t, &base));
+        let dcl: Vec<u64> = cl.iter().zip(&base_claims).flat_map(|(a, b)| { let d = *a + *b; [d.lo, d.hi] }).collect();
+        claim_space.insert(dcl.clone());
+        let mut both = residual;
+        both.extend_from_slice(&dcl);
+        resid_and_claim.insert(both);
+    }
+    println!(
+        "fixture control: rank(Δclaim)={} rank[resid|Δclaim]={}",
+        claim_space.rank(),
+        resid_and_claim.rank()
+    );
+    assert_eq!(
+        resid_and_claim.rank(),
+        claim_space.rank(),
+        "the CONTROL fails on the fixture that the full certificate passes — \
+         so this file's procedure, not the BLAKE3 statement, is what the \
+         earlier result was measuring"
+    );
+}
+
+fn bits_to_words(bits: &[bool]) -> Vec<u64> {
+    let mut w = vec![0u64; bits.len().div_ceil(64)];
+    for (i, b) in bits.iter().enumerate() {
+        if *b {
+            w[i / 64] |= 1u64 << (i % 64);
+        }
+    }
+    w
 }
