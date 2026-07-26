@@ -770,10 +770,8 @@ fn coverage_passes(
     let p0 = vec![false; n];
     let q0 = rng.bits(n);
     let zero = vec![F128::ZERO; MASK_MATERIAL];
-    let cw: Vec<F128> = match ctl {
-        Control::NoMu => zero.clone(),
-        _ => (0..MASK_MATERIAL).map(|_| rng.f128()).collect(),
-    };
+    let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let _ = &zero;
     let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
     let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
 
@@ -872,7 +870,7 @@ fn coverage_passes(
         i += bud.ua_stride;
     }
     // μ/g probes (skipped for no-μ / no-g).
-    if !matches!(ctl, Control::NoMu) {
+    {
         for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
             let mut cwp = cw.clone();
             cwp[s] += F128::ONE;
@@ -907,7 +905,6 @@ fn coverage_passes(
 #[derive(Clone, Copy, Debug)]
 enum Control {
     None,
-    NoMu,
     AddedLeakage,
 }
 
@@ -1122,7 +1119,8 @@ fn joint_certificate_negative_controls() {
     // cannot break its coverage. The PCS layer's own negative control is
     // `pcs::zk_audit::pcs_rank_audit_negative_control_without_g` in
     // flock-core, which withholds the blinder and fails as it must.
-    for ctl in [Control::AddedLeakage] {
+    {
+        let ctl = Control::AddedLeakage;
         assert!(
             !coverage_passes(&fx, &split, &split.round_block, &SMOKE, seed, ctl),
             "negative control {ctl:?} PASSED — the certificate would not detect \
