@@ -116,6 +116,11 @@ const EVIDENCE_V1: &[&str] = &[
     "full_conditional_coverage_zk_zerocheck",
     "conditional_coverage_p_rho",
     "prove_verify_r1cs_zk_a1_roundtrip",
+    "h1_inner_image_witness_independent_on_round_block",
+    "p_channel_image_requires_nondegenerate_q",
+    "joint_certificate_smoke",
+    "joint_certificate_negative_controls",
+    "simulator_translation_exact_transcript_equality",
 ];
 
 /// The certified configurations. **One entry today**: the 256-block BLAKE3

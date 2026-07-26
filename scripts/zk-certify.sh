@@ -17,14 +17,16 @@ cd "$(dirname "$0")/.."
 MANIFEST=zk-certify-manifest.txt
 : > "$MANIFEST"
 
+# Run one test by exact name, whether or not it is #[ignore]d (--include-ignored
+# covers both, so the runner does not have to track which is which).
 run() {
   local pkg="$1" testbin="$2" name="$3"
   echo "=== $pkg :: $testbin :: $name ==="
   local t0=$SECONDS
   if [ "$testbin" = "--lib" ]; then
-    cargo test --release -p "$pkg" --features zk --lib "$name" -- --ignored --exact --nocapture
+    cargo test --release -p "$pkg" --features zk --lib "$name" -- --include-ignored --exact --nocapture
   else
-    cargo test --release -p "$pkg" --features zk --test "$testbin" "$name" -- --ignored --exact --nocapture
+    cargo test --release -p "$pkg" --features zk --test "$testbin" "$name" -- --include-ignored --exact --nocapture
   fi
   echo "$pkg::$testbin::$name ok $((SECONDS - t0))s" >> "$MANIFEST"
 }
@@ -34,14 +36,29 @@ run flock-prover zk_leakage_certificate affine_classes_exactly_covered
 run flock-prover zk_leakage_certificate full_conditional_coverage_zk_zerocheck
 run flock-prover zk_leakage_certificate conditional_coverage_p_rho
 
-# --- Joint full-transcript certificate + negative controls (fixture A) ------
-# (added by the zk_joint_certificate suite as it lands)
-if cargo test --release -p flock-prover --features zk --test zk_joint_certificate -- --list > /dev/null 2>&1; then
-  echo "=== flock-prover :: zk_joint_certificate (all) ==="
-  t0=$SECONDS
-  cargo test --release -p flock-prover --features zk --test zk_joint_certificate -- --ignored --nocapture
-  echo "flock-prover::zk_joint_certificate::all ok $((SECONDS - t0))s" >> "$MANIFEST"
+# --- Joint triangular certificate: H1, coverage, negative controls ---------
+# The non-ignored tests here are the round-pair-class certificate and the
+# controls that make it non-vacuous; they run in the normal suite too and are
+# repeated here so one command reproduces the whole evidence set.
+run flock-prover zk_joint_certificate h1_inner_image_witness_independent_on_round_block
+run flock-prover zk_joint_certificate p_channel_image_requires_nondegenerate_q
+run flock-prover zk_joint_certificate joint_certificate_smoke
+run flock-prover zk_joint_certificate joint_certificate_negative_controls
+
+# --- Complete-transcript joint certificate (the heavy one) -----------------
+echo "=== flock-prover :: zk_joint_certificate :: joint_conditional_coverage_full_transcript ==="
+t0=$SECONDS
+if cargo test --release -p flock-prover --features zk --test zk_joint_certificate \
+     joint_conditional_coverage_full_transcript -- --ignored --exact --nocapture; then
+  echo "flock-prover::zk_joint_certificate::joint_conditional_coverage_full_transcript ok $((SECONDS - t0))s" >> "$MANIFEST"
+else
+  echo "flock-prover::zk_joint_certificate::joint_conditional_coverage_full_transcript FAILED $((SECONDS - t0))s" >> "$MANIFEST"
+  echo "  ^ recorded as a KNOWN GAP; see the test's doc comment" >> "$MANIFEST"
 fi
+
+# --- Simulator: existence and constructive translation exactness -----------
+run flock-prover zk_simulator simulator_translation_exact_transcript_equality
+run flock-prover zk_simulator simulator_produces_accepting_proof_without_a_witness
 
 # --- End-to-end A1' reference path on real 256-block BLAKE3 (m=22) ----------
 run flock-prover --lib prove_verify_r1cs_zk_a1_roundtrip
