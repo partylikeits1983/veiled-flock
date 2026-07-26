@@ -276,11 +276,23 @@ fn coords_and_paths(class_filter: &dyn Fn(&str) -> bool, setup: &Blake3Setup, pa
 /// not. This is an undocumented sizing/coverage constraint on the lincheck
 /// layer, distinct from the `s_hat_v` per-bit-residue rule.
 ///
-/// Proposed repair (not implemented here — it is a change to the
-/// construction): extend a committed mask channel to the lincheck sumcheck,
-/// as A1′ did for the zerocheck round messages, or establish and enforce a
-/// lincheck-layer randomizer sizing rule the way the `s_hat_v` rule is
-/// enforced. Which of the two is right is a design decision.
+/// **The sizing repair is ruled out — the deficit is structural.** The
+/// randomizer allocation was tried at 4 A-chunks + 3 B-chunks in place of
+/// 2 + 1 (spending the 512-bit chain-mask reservation, which batch
+/// statements do not use, on randomizer entropy instead — same 896 bits per
+/// block, same `useful_bits`, 2.3× the entropy in the species that cover the
+/// affine classes). The measured image rank was **identical**: 9728 of 10240
+/// bits, the same 128 bits escaping. Entropy is not the binding constraint;
+/// the lincheck transcript's image is rank-limited by the map's structure,
+/// and the deficit sits at a constant 512 bits (4 F128) across
+/// configurations. The change was reverted, having bought nothing.
+///
+/// That leaves exactly one repair: extend a committed mask channel to the
+/// lincheck sumcheck, as A1′ did for the zerocheck round messages — run it
+/// on `comb·z + γ_lc·S·T` for fresh witness-free `S,T` committed before
+/// `γ_lc`, with `S(ρ),T(ρ)` opened hidingly. It is a change to the
+/// construction with its own telescoping and soundness argument to derive,
+/// so it is specified here rather than made.
 ///
 /// The escaping direction is **localized**: residual attribution puts it on
 /// `zerocheck.round1_c`, `lincheck.rounds` and `lincheck.z_partial` — the

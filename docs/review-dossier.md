@@ -162,30 +162,37 @@ assumption; no independent review; side channels and QROM out of scope.
 1. **Sibling hiding** is assumed (ROM / hash pseudorandomness), not derived.
 2. **Challenge-tuple genericity**: certificates hold at the tuples tested; no
    argument covers all tuples.
-3. **PRINCIPAL OPEN ITEM — the certificate passes on the synthetic vehicle
-   but not yet on a real BLAKE3 statement.** Run directly on a BLAKE3 batch
-   statement (m=20, 64 blocks, PIOP classes, triangular probing, claim space
-   saturated at 384 bits): the inner stage spans 21,504 of 30,464 bits, the
-   outer species adds exactly the 128 further bits the fixture predicted, and
-   `rank[resid | Δclaim] = 512` against 384 — one F128 direction of
-   claim-preserving witness difference is unaccounted for
-   (`blake3_witness_difference_lies_in_the_mask_image`, kept failing and
-   documented). This is a lead, not a proven leak: the codomain is
-   restricted, probing is random, and the criterion's failure direction is
-   conservative. First hypothesis, by analogy with the fixture: a fourth
-   transcript-determined public value missing from the conditioning set. It passes at the
-   reduced fixture (m=16, small query counts) chosen so exact probing is
-   feasible; exhaustive probing at m=22 would need millions of prover runs.
-   Measured *at* the production configuration: channel surjectivity on the
-   round-pair block (4096/4096 bits), its degenerate-Q control (2048/4096),
-   the per-proof self-check (passes, 0 resamples, proof verifies), and the
-   s_hat_v randomizer margin (12x versus the fixture's 3x). Transfer of the
-   whole-transcript statement still rests on structural identity of the maps
-   plus that margin, not on a production-size full-support probe.
-4. **Fixture-to-production transfer**: certificates are computed at the reduced
-   fixture; the argument that the maps are structurally identical at production
-   size is stated, not machine-checked.
-5. **Optimized prover**: no equivalence to the reference path is established.
+3. **PRINCIPAL OPEN ITEM — localized to the lincheck layer.** Run directly
+   on a real BLAKE3 batch statement (m=20, 64 blocks, triangular probing,
+   claim space saturated at 384 bits), `rank[resid | Δclaim] = 512` against
+   384: one F128 direction of claim-preserving witness difference is
+   unaccounted for (`blake3_witness_difference_lies_in_the_mask_image`, kept
+   failing and documented). Three things are established about it:
+
+   - **It is the statement, not the harness.** The identical procedure on the
+     synthetic fixture gives 384 = 384 (`control_same_procedure_on_the_passing_fixture`).
+   - **It is the lincheck.** Class isolation: `zerocheck.round1_c` alone is
+     fully covered (8192/8192, passes); `lincheck.*` alone reproduces the
+     failure (9728/10240, same 128 bits). The A1′ amendment covers the
+     classes it targets; the lincheck is covered only by randomizer rows.
+   - **It is structural, not a budget shortfall.** Reallocating the block's
+     randomizer budget to 2.3× the entropy in the covering species left the
+     image rank identical, deficit constant at 512 bits. Alignment (L3,
+     verified) and the constant-wire pin (a witness-independent target shift)
+     are also excluded.
+
+   Repair: extend a committed mask channel to the lincheck sumcheck —
+   `comb·z + γ_lc·S·T` for fresh witness-free `S,T` committed before `γ_lc`,
+   with `S(ρ),T(ρ)` opened hidingly — exactly as A1′ treats the zerocheck
+   rounds. A construction change with its own telescoping and soundness
+   argument, specified here rather than made.
+
+4. **The fixture certificate.** The complete-transcript certificate passes at
+   the reduced fixture (m=16) chosen so exact probing is feasible. Measured
+   *at* the production configuration: channel surjectivity on the round-pair
+   block (4096/4096), its degenerate-Q control (2048/4096), the per-proof
+   self-check (passes, 0 resamples, proof verifies), and the s_hat_v margin
+   (12× versus the fixture's 3×).
 
 ## 11. Revision hashes
 

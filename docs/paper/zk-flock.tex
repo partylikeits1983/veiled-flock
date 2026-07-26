@@ -701,11 +701,19 @@ the randomizer rows. On the synthetic fixture the witness is some $81\%$
 randomizer and that suffices; on a real BLAKE3 statement the randomizer rows
 are about $5.5\%$ of the witness and it does not. That is a coverage
 constraint on the lincheck layer, distinct from the $\shatv$
-per-bit-residue rule and not previously documented. The repair is a change to
-the construction --- extend a committed mask channel to the lincheck
-sumcheck, as A1$'$ did for the zerocheck round messages, or establish and
-enforce a lincheck-layer sizing rule --- and which is right is a design
-decision, so it is stated here rather than made. Residual attribution also
+per-bit-residue rule and not previously documented. Of the two candidate repairs, the sizing one is \emph{ruled out}:
+reallocating the block's randomizer budget to $2.3\times$ the entropy in the
+covering species (4 A-chunks and 3 B-chunks in place of $2+1$, spending the
+chain-mask reservation batch statements do not use) left the measured image
+rank identical at 9728 of 10240 bits, with the same 128 bits escaping and the
+deficit constant at 512 bits. Entropy is not the binding constraint; the
+lincheck image is rank-limited by the map's structure. That leaves extending
+a committed mask channel to the lincheck sumcheck --- running it on
+$\mathrm{comb}\cdot z + \gamma_{\mathrm{lc}} S T$ for fresh witness-free
+$S,T$ committed before $\gamma_{\mathrm{lc}}$, with $S(\rho),T(\rho)$ opened
+hidingly, exactly as A1$'$ treats the zerocheck rounds. That is a change to
+the construction with its own telescoping and soundness argument to derive,
+and it is specified here rather than made. Residual attribution also
 places it
 on the C-side and lincheck coordinates (\texttt{round1\_c}, the lincheck
 rounds, \texttt{z\_partial}) and not on the round pairs or final evaluations,
