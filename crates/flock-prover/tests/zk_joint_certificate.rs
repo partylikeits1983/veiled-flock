@@ -1,0 +1,1079 @@
+//! **The joint full-transcript coverage certificate** for the A1′ reference
+//! prover (Workstreams D + E).
+//!
+//! What earlier certificates did and why it was not enough:
+//!
+//! * `zk_piop_audit` / `zk_affinity_probe` measured k-wise subsets of the
+//!   *zerocheck+lincheck* values under the un-amended prover. Sampled
+//!   6-value subsets can (and did) miss a coordinate: `final_b_eval` was
+//!   never in a subset, and it is exactly where the flat mixture
+//!   hypothesis fails.
+//! * `zk_leakage_certificate::full_conditional_coverage_zk_zerocheck` used
+//!   the real amended zerocheck but only its 18 round-pair coordinates,
+//!   with the randomizer channels zeroed and a single fixed `Q`.
+//!
+//! This file certifies the **complete** verifier-visible algebraic
+//! transcript of the **complete** A1′ pipeline — hiding commitments, masked
+//! zerocheck, lincheck, hiding witness/`P`/`Q` openings — with every
+//! coordinate located through the canonical transcript schema (never index
+//! arithmetic), and with the full mask-only leakage set conditioned on.
+//!
+//! Structure certified (the hypotheses of `Flockzk.MaskingTriangular`):
+//!
+//! * inner channel = `P` (+ the affine mask channels); outer = `(u_B, Q)`;
+//! * **H1** the inner image is constant across witnesses (and across outer
+//!   draws) — measured, not assumed;
+//! * **conditional coverage** `d ∈ R(ker L)`: witness-difference directions
+//!   must be reachable by inner-mask changes that leave EVERY mask-only
+//!   leakage coordinate fixed. `L` here is the complete `MaskOnly` class:
+//!   `σ_z`, `P(ρ)`, `Q(ρ)`, `y_g`, and every algebraic value inside the two
+//!   hiding `P`/`Q` openings;
+//! * **H3** whatever the inner stage cannot reach is covered by the outer
+//!   (`u_B`) stage, or is the public claim direction itself.
+//!
+//! Negative controls (each must FAIL — they validate the detector):
+//! no-`P`, constant-`Q`, no-`μ`, no-`g`, an added leakage coordinate, and
+//! mask reuse across proofs.
+//!
+//! Cost: unit probes are real prover runs. The full-support probes are
+//! `#[ignore]`d and run by `scripts/zk-certify.sh`; a reduced-probe smoke
+//! version runs in CI so the harness itself cannot rot.
+
+#![cfg(feature = "zk")]
+
+use flock_core::challenger::RandomChallenger;
+use flock_core::field::F128;
+use flock_core::lincheck::pack_z_lincheck_from_packed;
+use flock_core::pcs::Commitment;
+use flock_core::zk::{MaskSampler, PlaybackSampler, ZeroSampler};
+use flock_prover::prover::{A1MaskSources, R1csProofZkA1, prove_r1cs_zk_a1_with_masks};
+use flock_prover::transcript_schema::{
+    LeakageClass, SchemaIndex, algebraic_vector, flatten_a1,
+};
+use flock_prover::zk_audit_support::FixtureA1M15;
+
+// ---------------------------------------------------------------------------
+// Small helpers
+// ---------------------------------------------------------------------------
+
+struct Rng(u64);
+impl Rng {
+    fn next_u64(&mut self) -> u64 {
+        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
+        z ^ (z >> 31)
+    }
+    fn bits(&mut self, n: usize) -> Vec<bool> {
+        (0..n).map(|_| self.next_u64() & 1 == 1).collect()
+    }
+    fn f128(&mut self) -> F128 {
+        F128 { lo: self.next_u64(), hi: self.next_u64() }
+    }
+}
+
+/// A mask sampler that replays a fixed bit pattern (as u64 words), then
+/// repeats zeros. Used to drive P/Q to chosen values.
+struct BitsSampler {
+    words: Vec<u64>,
+    pos: usize,
+}
+impl BitsSampler {
+    fn from_bits(bits: &[bool]) -> Self {
+        let mut words = vec![0u64; bits.len().div_ceil(64)];
+        for (i, b) in bits.iter().enumerate() {
+            if *b {
+                words[i / 64] |= 1u64 << (i % 64);
+            }
+        }
+        Self { words, pos: 0 }
+    }
+}
+impl MaskSampler for BitsSampler {
+    fn fill_u64s(&mut self, out: &mut [u64]) {
+        for slot in out.iter_mut() {
+            *slot = self.words.get(self.pos).copied().unwrap_or(0);
+            self.pos += 1;
+        }
+    }
+}
+
+/// A sampler that emits a fixed F128 stream then zeros (for μ/g probing).
+struct F128Sampler {
+    data: Vec<F128>,
+    pos: usize,
+}
+impl MaskSampler for F128Sampler {
+    fn fill_u64s(&mut self, out: &mut [u64]) {
+        for pair in out.chunks_mut(2) {
+            let v = self.data.get(self.pos).copied().unwrap_or(F128::ZERO);
+            self.pos += 1;
+            pair[0] = v.lo;
+            if pair.len() > 1 {
+                pair[1] = v.hi;
+            }
+        }
+    }
+}
+
+/// F₂ vector space spanned by inserted rows, kept in reduced row-echelon
+/// form. `insert` returns true when the row enlarged the span.
+#[derive(Default, Clone)]
+struct F2Space {
+    rows: Vec<Vec<u64>>,
+    pivots: Vec<usize>,
+}
+
+impl F2Space {
+    fn reduce(&self, mut v: Vec<u64>) -> Vec<u64> {
+        for (row, &p) in self.rows.iter().zip(&self.pivots) {
+            let (w, m) = (p / 64, 1u64 << (p % 64));
+            if v[w] & m != 0 {
+                for (a, b) in v.iter_mut().zip(row) {
+                    *a ^= *b;
+                }
+            }
+        }
+        v
+    }
+    fn insert(&mut self, v: Vec<u64>) -> bool {
+        let r = self.reduce(v);
+        match first_set_bit(&r) {
+            None => false,
+            Some(p) => {
+                self.rows.push(r);
+                self.pivots.push(p);
+                true
+            }
+        }
+    }
+    fn contains(&self, v: Vec<u64>) -> bool {
+        first_set_bit(&self.reduce(v)).is_none()
+    }
+    fn rank(&self) -> usize {
+        self.rows.len()
+    }
+}
+
+fn first_set_bit(v: &[u64]) -> Option<usize> {
+    v.iter()
+        .enumerate()
+        .find_map(|(i, w)| (*w != 0).then(|| i * 64 + w.trailing_zeros() as usize))
+}
+
+fn flatten_f128(v: &[F128]) -> Vec<u64> {
+    let mut out = Vec::with_capacity(v.len() * 2);
+    for x in v {
+        out.push(x.lo);
+        out.push(x.hi);
+    }
+    out
+}
+
+fn xor(a: &[u64], b: &[u64]) -> Vec<u64> {
+    a.iter().zip(b).map(|(x, y)| x ^ y).collect()
+}
+
+// ---------------------------------------------------------------------------
+// The probed map: masks → complete algebraic transcript
+// ---------------------------------------------------------------------------
+
+/// Everything that defines one run of the probed map. Challenges are fixed
+/// by `ch_seed` (see the challenge-tuple discussion in the module docs of
+/// `docs/zk-proof.md` §8): the transcript map is only linear at fixed
+/// challenges, so certificates are per-tuple and replicated across tuples.
+struct Run<'a> {
+    fx: &'a FixtureA1M15,
+    payload: &'a [bool],
+    u_a: &'a [bool],
+    u_b: &'a [bool],
+    p_bits: &'a [bool],
+    q_bits: &'a [bool],
+    /// μ/g material for the three commitments (empty ⇒ zeros: the no-μ/no-g
+    /// negative controls).
+    commit_w: &'a [F128],
+    commit_p: &'a [F128],
+    commit_q: &'a [F128],
+    ch_seed: u64,
+}
+
+/// Run the REAL A1′ prover and return `(complete algebraic transcript, proof)`.
+fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
+    let z = r.fx.witness(r.payload, r.u_a, r.u_b);
+    let a_packed = r.fx.r1cs.apply_a_packed(&z);
+    let b_packed = r.fx.r1cs.apply_b_packed(&z);
+    let stripe = pack_z_lincheck_from_packed(&z, FixtureA1M15::M, FixtureA1M15::K_LOG);
+    let circuit = r.fx.r1cs.sparse_lincheck_circuit();
+
+    let mut s_w = F128Sampler { data: r.commit_w.to_vec(), pos: 0 };
+    let mut s_p = BitsSampler::from_bits(r.p_bits);
+    let mut s_q = BitsSampler::from_bits(r.q_bits);
+    let mut s_cp = F128Sampler { data: r.commit_p.to_vec(), pos: 0 };
+    let mut s_cq = F128Sampler { data: r.commit_q.to_vec(), pos: 0 };
+    let masks = A1MaskSources {
+        witness_commit: &mut s_w,
+        p: &mut s_p,
+        q: &mut s_q,
+        commit_p: &mut s_cp,
+        commit_q: &mut s_cq,
+    };
+    let mut ch = RandomChallenger::new(r.ch_seed);
+    let (proof, comm) = prove_r1cs_zk_a1_with_masks(
+        &r.fx.r1cs,
+        &r.fx.pcs_params,
+        z,
+        a_packed,
+        b_packed,
+        stripe,
+        &circuit,
+        &r.fx.lig_prover,
+        masks,
+        &mut ch,
+    );
+    let flat = flatten_a1(&comm, &proof);
+    (algebraic_vector(&flat), proof, comm)
+}
+
+/// Split the algebraic transcript into the R-part (coordinates that must be
+/// covered: `WitnessDependent`) and the L-part (mask-only leakage that must
+/// stay FIXED while covering: `MaskOnly`), by schema class.
+struct Split {
+    r_idx: Vec<usize>,
+    l_idx: Vec<usize>,
+    /// Indices *within the R-vector* of the zerocheck round-pair block plus
+    /// `final_a_eval` / `final_b_eval` — the coordinate class the degree-2
+    /// `P·Q` channel exists for, and where the flat mixture hypothesis was
+    /// disproved. Used as the H1 projection so the image can be saturated
+    /// at a tractable probe count.
+    round_block: Vec<usize>,
+    /// The zerocheck-level mask-only coordinates (σ_z, P(ρ), Q(ρ)) — a
+    /// SUBSET of `l_idx`. Conditioning on the complete `l_idx` (which
+    /// includes every value inside the two hiding openings, ~60k bits at
+    /// this fixture) needs full-support probing to be non-vacuous, so the
+    /// CI smoke run conditions on this subset and the offline certificate
+    /// conditions on all of `l_idx`.
+    l_zc_idx: Vec<usize>,
+}
+
+fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
+    // One reference run only to learn the shape.
+    let mut rng = Rng(0xC0FFEE);
+    let payload = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let u_a = vec![false; FixtureA1M15::A_BITS];
+    let u_b = vec![false; FixtureA1M15::B_BITS];
+    let n = 1usize << FixtureA1M15::M;
+    let p = vec![false; n];
+    let q = rng.bits(n);
+    let mask_material: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let r = Run {
+        fx,
+        payload: &payload,
+        u_a: &u_a,
+        u_b: &u_b,
+        p_bits: &p,
+        q_bits: &q,
+        commit_w: &mask_material,
+        commit_p: &mask_material,
+        commit_q: &mask_material,
+        ch_seed: 1,
+    };
+    let z = fx.witness(r.payload, r.u_a, r.u_b);
+    let a_packed = fx.r1cs.apply_a_packed(&z);
+    let b_packed = fx.r1cs.apply_b_packed(&z);
+    let stripe = pack_z_lincheck_from_packed(&z, FixtureA1M15::M, FixtureA1M15::K_LOG);
+    let circuit = fx.r1cs.sparse_lincheck_circuit();
+    let mut s_w = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let mut s_p = BitsSampler::from_bits(&p);
+    let mut s_q = BitsSampler::from_bits(&q);
+    let mut s_cp = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let mut s_cq = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let masks = A1MaskSources {
+        witness_commit: &mut s_w,
+        p: &mut s_p,
+        q: &mut s_q,
+        commit_p: &mut s_cp,
+        commit_q: &mut s_cq,
+    };
+    let mut ch = RandomChallenger::new(1);
+    let (proof, comm) = prove_r1cs_zk_a1_with_masks(
+        &fx.r1cs,
+        &fx.pcs_params,
+        z,
+        a_packed,
+        b_packed,
+        stripe,
+        &circuit,
+        &fx.lig_prover,
+        masks,
+        &mut ch,
+    );
+    let flat = flatten_a1(&comm, &proof);
+    let idx = SchemaIndex::build(&flat);
+    let total = idx.total();
+    let mut r_idx = Vec::new();
+    let mut l_idx = Vec::new();
+    for (_, range) in idx.ranges_by_class(&flat, LeakageClass::WitnessDependent) {
+        r_idx.extend(range);
+    }
+    for (_, range) in idx.ranges_by_class(&flat, LeakageClass::MaskOnly) {
+        l_idx.extend(range);
+    }
+    // Position of the zerocheck round-pair block and the two final
+    // evaluations WITHIN the R-vector (r_idx order), for the H1 projection.
+    let pos_in_r = |global: usize| r_idx.iter().position(|&g| g == global).expect("in R");
+    let rp = idx.range("zerocheck.multilinear_rounds");
+    let fa = idx.range("zerocheck.final_a_eval");
+    let fb = idx.range("zerocheck.final_b_eval");
+    let mut round_block: Vec<usize> = rp.clone().map(pos_in_r).collect();
+    round_block.push(pos_in_r(fa.start));
+    round_block.push(pos_in_r(fb.start));
+    let mut l_zc_idx = Vec::new();
+    for (path, range) in idx.ranges_by_class(&flat, LeakageClass::MaskOnly) {
+        if path.starts_with("zerocheck.") {
+            l_zc_idx.extend(range);
+        }
+    }
+    (Split { r_idx, l_idx, round_block, l_zc_idx }, total)
+}
+
+/// How many F128s of μ/g material one commitment consumes at this fixture
+/// (generous upper bound; the sampler pads with zeros beyond the stream).
+const MASK_MATERIAL: usize = 1 << 10;
+
+fn pick(v: &[F128], idx: &[usize]) -> Vec<F128> {
+    idx.iter().map(|&i| v[i]).collect()
+}
+
+// ---------------------------------------------------------------------------
+// The certificate
+// ---------------------------------------------------------------------------
+
+/// Parameters controlling probe counts, so the same harness runs as a fast
+/// CI smoke test and as the full offline certificate.
+struct Budget {
+    /// Stride over P-bit probes (1 = every bit).
+    p_stride: usize,
+    /// Stride over u_A-bit probes.
+    ua_stride: usize,
+    /// Stride over u_B-bit probes.
+    ub_stride: usize,
+    /// Number of μ/g slot probes per commitment.
+    mask_slots: usize,
+    /// Witness-difference directions to test. MUST exceed 128 (the bit
+    /// dimension of the public ab-claim) or the coverage criterion is
+    /// vacuous — see `assert_claim_saturated`.
+    witness_dirs: usize,
+    /// Challenge tuples to replicate over.
+    tuples: &'static [u64],
+    /// Condition on the COMPLETE mask-only class (`true`) or on the
+    /// zerocheck-level subset only (`false`, the smoke run).
+    l_full: bool,
+}
+
+const SMOKE: Budget = Budget {
+    p_stride: 8,
+    ua_stride: 8,
+    ub_stride: 4,
+    mask_slots: 16,
+    witness_dirs: 192,
+    tuples: &[0x7777_1234],
+    l_full: false,
+};
+
+const FULL: Budget = Budget {
+    p_stride: 1,
+    ua_stride: 1,
+    ub_stride: 1,
+    mask_slots: 256,
+    witness_dirs: 512,
+    tuples: &[0x7777_1234, 0x1111_0001, 0x2222_0002],
+    l_full: true,
+};
+
+/// Guard against a vacuous coverage verdict.
+///
+/// The criterion `rank[residual | Δclaim] == rank(Δclaim)` says "every
+/// claim-preserving witness direction has zero residual". With `k` sampled
+/// directions BOTH ranks are capped at `k`, so for `k ≤ 128` (the bit
+/// dimension of the ab-claim) the equality can hold simply because no
+/// claim-preserving combination exists among the samples — the test then
+/// certifies nothing. The claim space must therefore be saturated at 128
+/// before the verdict means anything.
+fn assert_claim_saturated(claim_rank: usize, n_dirs: usize) {
+    assert_eq!(
+        claim_rank, 128,
+        "VACUOUS CERTIFICATE: the Δclaim space reached rank {claim_rank} < 128 \
+         from {n_dirs} witness directions, so no claim-preserving combination \
+         is forced to exist and the coverage criterion cannot bite. Increase \
+         witness_dirs."
+    );
+}
+
+/// Run the joint TRIANGULAR conditional-coverage certificate at one
+/// challenge tuple, over the coordinates `coords` (positions within the
+/// R-vector; the full certificate passes all of them).
+///
+/// The certified statement, matching
+/// `Flockzk.MaskingTriangular.triangular_witness_indep`:
+///
+/// > for two witnesses of the same public claim, the transcript difference
+/// > lies in `R_inner(ker L) + Im(outer) + claim`, where `R_inner(ker L)` is
+/// > the inner-mask image restricted to mask combinations that leave EVERY
+/// > mask-only leakage coordinate fixed, `Im(outer)` is the outer (`u_B`)
+/// > stage's image, and `claim` is the public ab-claim direction the HVZK
+/// > definition conditions on.
+///
+/// The inner stage alone provably cannot suffice: `final_b_eval` has an
+/// identically-zero inner-mask derivative (this is the coordinate that
+/// disproved the flat mixture hypothesis), so the outer stage is not
+/// optional book-keeping — it carries a real direction.
+fn certify_tuple(
+    fx: &FixtureA1M15,
+    split: &Split,
+    coords: &[usize],
+    bud: &Budget,
+    ch_seed: u64,
+    verbose: bool,
+) {
+    let n = 1usize << FixtureA1M15::M;
+    let mut rng = Rng(0xA11CE ^ ch_seed);
+    let payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let u_a0 = rng.bits(FixtureA1M15::A_BITS);
+    let u_b0 = rng.bits(FixtureA1M15::B_BITS);
+    let p0 = vec![false; n];
+    let q0 = rng.bits(n);
+    let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+
+    let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
+    let proj = |v: &[F128]| -> Vec<u64> {
+        let r = pick(v, &split.r_idx);
+        flatten_f128(&coords.iter().map(|&i| r[i]).collect::<Vec<_>>())
+    };
+    let go = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], cw: &[F128], cp: &[F128]| {
+        let r = Run {
+            fx,
+            payload,
+            u_a,
+            u_b,
+            p_bits,
+            q_bits: &q0,
+            commit_w: cw,
+            commit_p: cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        let (t, proof, _) = run(&r);
+        (proj(&t), proof.zerocheck.final_a_eval * proof.zerocheck.final_b_eval)
+    };
+
+    let (base, base_claim) = go(&payload0, &u_a0, &u_b0, &p0, &cw, &cp);
+    let base_l = {
+        let r = Run {
+            fx,
+            payload: &payload0,
+            u_a: &u_a0,
+            u_b: &u_b0,
+            p_bits: &p0,
+            q_bits: &q0,
+            commit_w: &cw,
+            commit_p: &cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        flatten_f128(&pick(&run(&r).0, l_sel))
+    };
+    let l_of = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], cw: &[F128], cp: &[F128]| {
+        let r = Run {
+            fx,
+            payload,
+            u_a,
+            u_b,
+            p_bits,
+            q_bits: &q0,
+            commit_w: cw,
+            commit_p: cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        flatten_f128(&pick(&run(&r).0, l_sel))
+    };
+
+    // ---- Stage 1: inner image conditioned on the complete leakage set ----
+    let mut l_basis: Vec<(Vec<u64>, Vec<u64>)> = Vec::new();
+    let mut l_piv: Vec<usize> = Vec::new();
+    let mut rkerl = F2Space::default();
+    let mut n_probes = 0usize;
+    let absorb = |l: Vec<u64>, r: Vec<u64>,
+                      l_basis: &mut Vec<(Vec<u64>, Vec<u64>)>,
+                      l_piv: &mut Vec<usize>,
+                      rkerl: &mut F2Space| {
+        let (mut lp, mut rp) = (l, r);
+        for (b, &pv) in l_basis.iter().zip(l_piv.iter()) {
+            let (w, m) = (pv / 64, 1u64 << (pv % 64));
+            if lp[w] & m != 0 {
+                lp = xor(&lp, &b.0);
+                rp = xor(&rp, &b.1);
+            }
+        }
+        match first_set_bit(&lp) {
+            Some(pv) => {
+                l_basis.push((lp, rp));
+                l_piv.push(pv);
+            }
+            None => {
+                rkerl.insert(rp);
+            }
+        }
+    };
+
+    // (a) P channel.
+    let mut i = 0usize;
+    while i < n {
+        let mut p = p0.clone();
+        p[i] = !p[i];
+        let (t, _) = go(&payload0, &u_a0, &u_b0, &p, &cw, &cp);
+        let l = xor(&l_of(&payload0, &u_a0, &u_b0, &p, &cw, &cp), &base_l);
+        absorb(l, xor(&t, &base), &mut l_basis, &mut l_piv, &mut rkerl);
+        n_probes += 1;
+        i += bud.p_stride;
+    }
+    // (b) u_A randomizer channel.
+    let mut i = 0usize;
+    while i < FixtureA1M15::A_BITS {
+        let mut ua = u_a0.clone();
+        ua[i] = !ua[i];
+        let (t, _) = go(&payload0, &ua, &u_b0, &p0, &cw, &cp);
+        let l = xor(&l_of(&payload0, &ua, &u_b0, &p0, &cw, &cp), &base_l);
+        absorb(l, xor(&t, &base), &mut l_basis, &mut l_piv, &mut rkerl);
+        n_probes += 1;
+        i += bud.ua_stride;
+    }
+    // (c) μ/g of the witness commitment, and (d) of the P commitment.
+    for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
+        let mut cwp = cw.clone();
+        cwp[s] += F128::ONE;
+        let (t, _) = go(&payload0, &u_a0, &u_b0, &p0, &cwp, &cp);
+        let l = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, &cwp, &cp), &base_l);
+        absorb(l, xor(&t, &base), &mut l_basis, &mut l_piv, &mut rkerl);
+        let mut cpp = cp.clone();
+        cpp[s] += F128::ONE;
+        let (t2, _) = go(&payload0, &u_a0, &u_b0, &p0, &cw, &cpp);
+        let l2 = xor(&l_of(&payload0, &u_a0, &u_b0, &p0, &cw, &cpp), &base_l);
+        absorb(l2, xor(&t2, &base), &mut l_basis, &mut l_piv, &mut rkerl);
+        n_probes += 2;
+    }
+    let inner_rank = rkerl.rank();
+
+    // ---- Stage 2: the outer (u_B) image, on top of the inner one ----
+    //
+    // The quotient stage of the triangular argument. Its directions are
+    // added to the covering space; H1 (measured separately) is what makes
+    // this legitimate — the inner image is the same subspace at every
+    // witness, so quotienting by it is witness-independent.
+    let mut joint = rkerl.clone();
+    let mut i = 0usize;
+    while i < FixtureA1M15::B_BITS {
+        let mut ub = u_b0.clone();
+        ub[i] = !ub[i];
+        let (t, _) = go(&payload0, &u_a0, &ub, &p0, &cw, &cp);
+        joint.insert(xor(&t, &base));
+        n_probes += 1;
+        i += bud.ub_stride;
+    }
+    let joint_rank = joint.rank();
+
+    // ---- Witness-difference directions, modulo the joint image ----
+    let mut resid_and_claim = F2Space::default();
+    let mut claim_space = F2Space::default();
+    let n_payload = FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS;
+    for k in 0..bud.witness_dirs {
+        let mut payload = payload0.clone();
+        if k < n_payload {
+            payload[k] = !payload[k]; // structured single-bit basis directions
+        } else {
+            for b in payload.iter_mut() {
+                *b = rng.next_u64() & 1 == 1;
+            }
+        }
+        let (t, claim) = go(&payload, &u_a0, &u_b0, &p0, &cw, &cp);
+        let residual = joint.reduce(xor(&t, &base));
+        let dv = claim + base_claim;
+        claim_space.insert(vec![dv.lo, dv.hi]);
+        let mut both = residual;
+        both.push(dv.lo);
+        both.push(dv.hi);
+        resid_and_claim.insert(both);
+    }
+
+    if verbose {
+        println!(
+            "tuple {ch_seed:#x}: probes={n_probes} coords={} F128 |L|={} F128 \
+             dim inner R(ker L)={inner_rank} dim joint={joint_rank} \
+             rank(Δclaim)={} rank[resid|Δclaim]={}",
+            coords.len(),
+            l_sel.len(),
+            claim_space.rank(),
+            resid_and_claim.rank()
+        );
+    }
+
+    assert_claim_saturated(claim_space.rank(), bud.witness_dirs);
+    assert_eq!(
+        resid_and_claim.rank(),
+        claim_space.rank(),
+        "LEAK at challenge tuple {ch_seed:#x}: a claim-preserving witness \
+         direction escapes the joint image (inner conditional image on \
+         ker L, plus the outer u_B stage) of the A1′ transcript. L = every \
+         mask-only coordinate: σ_z, P(ρ), Q(ρ), y_g, and all values inside \
+         the hiding P/Q openings."
+    );
+}
+
+/// CI smoke run of the joint certificate harness (reduced probe counts).
+/// Proves the harness works end to end; the certificate itself is the
+/// `#[ignore]`d full run below.
+#[test]
+fn joint_certificate_smoke() {
+    let fx = FixtureA1M15::new();
+    let (split, total) = split_by_class(&fx);
+    println!(
+        "complete algebraic transcript: {total} F128 coordinates \
+         ({} witness-dependent, {} mask-only)",
+        split.r_idx.len(),
+        split.l_idx.len()
+    );
+    assert!(split.r_idx.len() > 100, "R must cover the whole witness-dependent class");
+    assert!(split.l_idx.len() > 100, "L must include the P/Q opening interiors");
+    certify_tuple(&fx, &split, &split.round_block.clone(), &SMOKE, SMOKE.tuples[0], true);
+}
+
+/// **The certificate.** Full-support probes of every inner mask channel,
+/// the complete leakage set, structured witness-difference directions, at
+/// several challenge tuples.
+#[test]
+#[ignore = "offline exact certificate (tens of thousands of prover runs); run via scripts/zk-certify.sh"]
+fn joint_conditional_coverage_full_transcript() {
+    let fx = FixtureA1M15::new();
+    let (split, total) = split_by_class(&fx);
+    println!("complete algebraic transcript: {total} F128 coordinates");
+    for &seed in FULL.tuples {
+        let all: Vec<usize> = (0..split.r_idx.len()).collect();
+        certify_tuple(&fx, &split, &all, &FULL, seed, true);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Negative controls: each must FAIL the certificate
+// ---------------------------------------------------------------------------
+
+/// Run the coverage check and report whether it PASSED (rather than
+/// asserting), so negative controls can require failure.
+fn coverage_passes(fx: &FixtureA1M15, split: &Split, bud: &Budget, ch_seed: u64, ctl: Control) -> bool {
+    let n = 1usize << FixtureA1M15::M;
+    let mut rng = Rng(0xDEAD ^ ch_seed);
+    let payload0 = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let u_a0 = rng.bits(FixtureA1M15::A_BITS);
+    let u_b0 = rng.bits(FixtureA1M15::B_BITS);
+    let p0 = vec![false; n];
+    let q0 = rng.bits(n);
+    let zero = vec![F128::ZERO; MASK_MATERIAL];
+    let cw: Vec<F128> = match ctl {
+        Control::NoMu => zero.clone(),
+        _ => (0..MASK_MATERIAL).map(|_| rng.f128()).collect(),
+    };
+    let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+
+    let do_run = |p_bits: &[bool], u_a: &[bool], cw: &[F128], payload: &[bool]| {
+        let r = Run {
+            fx,
+            payload,
+            u_a,
+            u_b: &u_b0,
+            p_bits,
+            q_bits: &q0,
+            commit_w: cw,
+            commit_p: &cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        run(&r)
+    };
+
+    let (base, base_proof, _) = do_run(&p0, &u_a0, &cw, &payload0);
+    // The added-leakage control appends a raw witness functional (the
+    // lincheck claim `w`) to the transcript vector as an EXTRA coordinate
+    // that no mask can move — it must break coverage.
+    let augment = |v: &[F128], proof: &R1csProofZkA1| -> Vec<u64> {
+        let mut out = flatten_f128(&pick(v, &split.r_idx));
+        if matches!(ctl, Control::AddedLeakage) {
+            let leak = proof.lincheck.z_partial[0];
+            out.push(leak.lo);
+            out.push(leak.hi);
+        }
+        out
+    };
+    let base_r = augment(&base, &base_proof);
+    let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
+    let base_l = flatten_f128(&pick(&base, l_sel));
+
+    let mut l_basis: Vec<(Vec<u64>, Vec<u64>)> = Vec::new();
+    let mut l_piv: Vec<usize> = Vec::new();
+    let mut rkerl = F2Space::default();
+    let absorb = |l: Vec<u64>, r: Vec<u64>,
+                      l_basis: &mut Vec<(Vec<u64>, Vec<u64>)>,
+                      l_piv: &mut Vec<usize>,
+                      rkerl: &mut F2Space| {
+        let (mut lp, mut rp) = (l, r);
+        for (b, &p) in l_basis.iter().zip(l_piv.iter()) {
+            let (w, m) = (p / 64, 1u64 << (p % 64));
+            if lp[w] & m != 0 {
+                lp = xor(&lp, &b.0);
+                rp = xor(&rp, &b.1);
+            }
+        }
+        match first_set_bit(&lp) {
+            Some(p) => {
+                l_basis.push((lp, rp));
+                l_piv.push(p);
+            }
+            None => {
+                rkerl.insert(rp);
+            }
+        }
+    };
+
+    {
+        let mut i = 0usize;
+        while i < n {
+            let mut p = p0.clone();
+            p[i] = !p[i];
+            let (t, pr, _) = do_run(&p, &u_a0, &cw, &payload0);
+            let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
+            let r = xor(&augment(&t, &pr), &base_r);
+            absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
+            i += bud.p_stride;
+        }
+    }
+    // u_A probes.
+    let mut i = 0usize;
+    while i < FixtureA1M15::A_BITS {
+        let mut ua = u_a0.clone();
+        ua[i] = !ua[i];
+        let (t, pr, _) = do_run(&p0, &ua, &cw, &payload0);
+        let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
+        let r = xor(&augment(&t, &pr), &base_r);
+        absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
+        i += bud.ua_stride;
+    }
+    // μ/g probes (skipped for no-μ / no-g).
+    if !matches!(ctl, Control::NoMu) {
+        for s in 0..bud.mask_slots.min(MASK_MATERIAL) {
+            let mut cwp = cw.clone();
+            cwp[s] += F128::ONE;
+            let (t, pr, _) = do_run(&p0, &u_a0, &cwp, &payload0);
+            let l = xor(&flatten_f128(&pick(&t, l_sel)), &base_l);
+            let r = xor(&augment(&t, &pr), &base_r);
+            absorb(l, r, &mut l_basis, &mut l_piv, &mut rkerl);
+        }
+    }
+
+    // Witness directions.
+    let base_claim = base_proof.zerocheck.final_a_eval * base_proof.zerocheck.final_b_eval;
+    let mut resid_and_claim = F2Space::default();
+    let mut claim_space = F2Space::default();
+    for k in 0..bud.witness_dirs {
+        let mut payload = payload0.clone();
+        payload[k % (FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS)] ^= true;
+        let (t, proof, _) = do_run(&p0, &u_a0, &cw, &payload);
+        let d = xor(&augment(&t, &proof), &base_r);
+        let residual = rkerl.reduce(d);
+        let dv = proof.zerocheck.final_a_eval * proof.zerocheck.final_b_eval + base_claim;
+        claim_space.insert(vec![dv.lo, dv.hi]);
+        let mut both = residual;
+        both.push(dv.lo);
+        both.push(dv.hi);
+        resid_and_claim.insert(both);
+    }
+    // A vacuous run (claim space unsaturated) must not count as a PASS.
+    claim_space.rank() == 128 && resid_and_claim.rank() == claim_space.rank()
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Control {
+    None,
+    NoMu,
+    AddedLeakage,
+}
+
+// ---------------------------------------------------------------------------
+// H1: the inner mask image must not depend on the witness
+// ---------------------------------------------------------------------------
+
+/// Extract the inner-channel image **projected onto `coords`** (positions
+/// within the R-vector), at a given witness. Projection is what makes the
+/// image saturable at a tractable probe count: the round-pair block is
+/// 2·(m−k_skip)+2 F128 = 2432 bits at this fixture, so a few thousand
+/// probes span it, whereas the full R-vector would need tens of thousands.
+fn inner_image_proj(
+    fx: &FixtureA1M15,
+    split: &Split,
+    coords: &[usize],
+    p_stride: usize,
+    ua_stride: usize,
+    mask_slots: usize,
+    ch_seed: u64,
+    payload: &[bool],
+    with_p: bool,
+    q_bits: &[bool],
+) -> F2Space {
+    let n = 1usize << FixtureA1M15::M;
+    let mut rng = Rng(0xB0B ^ ch_seed);
+    let u_a0 = rng.bits(FixtureA1M15::A_BITS);
+    let u_b0 = rng.bits(FixtureA1M15::B_BITS);
+    let p0 = vec![false; n];
+    let cw: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cp: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let cq: Vec<F128> = (0..MASK_MATERIAL).map(|_| rng.f128()).collect();
+    let proj = |v: &[F128]| -> Vec<u64> {
+        let r = pick(v, &split.r_idx);
+        flatten_f128(&coords.iter().map(|&i| r[i]).collect::<Vec<_>>())
+    };
+    let go = |p_bits: &[bool], u_a: &[bool], cw: &[F128]| {
+        let r = Run {
+            fx,
+            payload,
+            u_a,
+            u_b: &u_b0,
+            p_bits,
+            q_bits,
+            commit_w: cw,
+            commit_p: &cp,
+            commit_q: &cq,
+            ch_seed,
+        };
+        proj(&run(&r).0)
+    };
+    let base = go(&p0, &u_a0, &cw);
+    let mut img = F2Space::default();
+    if with_p {
+        let mut i = 0usize;
+        while i < n {
+            let mut p = p0.clone();
+            p[i] = !p[i];
+            img.insert(xor(&go(&p, &u_a0, &cw), &base));
+            i += p_stride;
+        }
+    }
+    let mut i = 0usize;
+    while i < FixtureA1M15::A_BITS {
+        let mut ua = u_a0.clone();
+        ua[i] = !ua[i];
+        img.insert(xor(&go(&p0, &ua, &cw), &base));
+        i += ua_stride;
+    }
+    for s in 0..mask_slots.min(MASK_MATERIAL) {
+        let mut cwp = cw.clone();
+        cwp[s] += F128::ONE;
+        img.insert(xor(&go(&p0, &u_a0, &cwp), &base));
+    }
+    img
+}
+
+/// Do two images span the same space? (Mutual containment of bases.)
+fn same_span(a: &F2Space, b: &F2Space) -> bool {
+    if a.rank() != b.rank() {
+        return false;
+    }
+    a.rows.iter().all(|r| b.contains(r.clone())) && b.rows.iter().all(|r| a.contains(r.clone()))
+}
+
+/// **H1 — the inner mask image on the round-pair block is
+/// witness-independent, and the degree-2 `P·Q` channel is what makes it so.**
+///
+/// This is the `hrange` hypothesis of
+/// `Flockzk.MaskingTriangular.triangular_witness_indep`, and the reason the
+/// degree-2 channel exists. The randomizer channel enters the zerocheck
+/// round messages multiplied by *witness-dependent* fold coefficients, so
+/// the subspace it spans moves with the witness; `P` is witness-free, so
+/// its columns do not.
+///
+/// Measured on the round-pair block (plus the two final evaluations) at two
+/// different witnesses of the same shape:
+///
+/// * **with `P`**: the images must span the SAME subspace — and be full, so
+///   the comparison is not probe-count-limited;
+/// * **without `P`** (negative control): they must NOT — otherwise the
+///   degree-2 channel would be unnecessary and this hypothesis vacuous.
+#[test]
+fn h1_inner_image_witness_independent_on_round_block() {
+    let fx = FixtureA1M15::new();
+    let (split, _) = split_by_class(&fx);
+    let seed = 0x7777_1234;
+    let n = 1usize << FixtureA1M15::M;
+    let dim = split.round_block.len() * 128;
+    let mut rng = Rng(0x1234_5678);
+    let q = rng.bits(n);
+    let pa = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let pb = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    // Enough P probes to saturate a `dim`-bit image with margin.
+    let p_stride = (n / (dim + dim / 2)).max(1);
+
+    let img = |payload: &[bool], with_p: bool| {
+        inner_image_proj(&fx, &split, &split.round_block, p_stride, 64, 16, seed, payload, with_p, &q)
+    };
+    let (wa, wb) = (img(&pa, true), img(&pb, true));
+    let (na, nb) = (img(&pa, false), img(&pb, false));
+    println!(
+        "H1 on round block ({dim} bits): with P rank {} / {}; without P rank {} / {}",
+        wa.rank(),
+        wb.rank(),
+        na.rank(),
+        nb.rank()
+    );
+    println!(
+        "same span: with P = {}, without P = {}",
+        same_span(&wa, &wb),
+        same_span(&na, &nb)
+    );
+
+    assert!(
+        same_span(&wa, &wb),
+        "H1 FAILS: the inner mask image on the round-pair block still depends \
+         on the witness with the P channel active — the triangular \
+         composition's constant-image hypothesis does not hold as measured"
+    );
+    assert!(
+        !same_span(&na, &nb),
+        "negative control: without P the image is ALSO witness-independent, \
+         which would make the degree-2 channel unnecessary — check the budget"
+    );
+
+    // Where the inner image falls short, and by how much. The triangular
+    // argument predicts a deficit of exactly one F128 direction, living on
+    // `final_b_eval`: the b̂-side final evaluation has an identically-zero
+    // inner-mask derivative (this is what disproved the flat mixture
+    // hypothesis), so it must be carried by the OUTER (u_B) stage — which
+    // is what `final_b_covered_by_b_stage` measures.
+    let deficit = dim - wa.rank();
+    println!("inner-image deficit on the round block: {deficit} bits");
+    assert_eq!(
+        deficit, 128,
+        "expected exactly one uncovered F128 direction on the round block"
+    );
+    // The uncovered direction is the final_b coordinate: every unit vector
+    // on the round-pair sub-block and on final_a is inside the image, while
+    // final_b's are not.
+    let n_round = split.round_block.len();
+    let unit = |coord: usize, bit: usize| {
+        let mut v = vec![0u64; n_round * 2];
+        v[coord * 2 + bit / 64] |= 1u64 << (bit % 64);
+        v
+    };
+    for c in 0..n_round - 1 {
+        assert!(
+            wa.contains(unit(c, 0)),
+            "round-block coordinate {c} is NOT in the inner image — the \
+             deficit is not confined to final_b"
+        );
+    }
+    assert!(
+        !wa.contains(unit(n_round - 1, 0)),
+        "final_b is inside the inner image — then the deficit lies elsewhere \
+         and the triangular split must be re-derived"
+    );
+    println!(
+        "inner stage covers the round pairs and final_a; the single uncovered \
+         direction is final_b, carried by the outer (u_B) stage"
+    );
+}
+
+/// The detector is not vacuous: disabling a mask channel, degenerating `Q`,
+/// or adding an unmasked leakage coordinate must all BREAK coverage, while
+/// the honest configuration passes.
+#[test]
+fn joint_certificate_negative_controls() {
+    let fx = FixtureA1M15::new();
+    let (split, _) = split_by_class(&fx);
+    let seed = 0x7777_1234;
+
+    assert!(
+        coverage_passes(&fx, &split, &SMOKE, seed, Control::None),
+        "honest configuration must PASS (control baseline)"
+    );
+    // NOTE: "disable P" is deliberately NOT a control for *coverage*. At a
+    // fixed outer mask the randomizer channel is already affine and spans
+    // these directions on its own — which is exactly why the earlier flat
+    // mixture argument looked like it worked. What the P channel is
+    // responsible for is the WITNESS-INDEPENDENCE of that span (hypothesis
+    // H1), and the no-P control for that lives in
+    // `h1_inner_image_witness_independent_on_round_block`.
+    // Likewise "constant Q" degrades the P-channel IMAGE (it reaches the
+    // G(1) half but not the degree-2 G(∞) half), not slice coverage; its
+    // control is `p_channel_image_requires_nondegenerate_q` below.
+    for ctl in [Control::NoMu, Control::AddedLeakage] {
+        assert!(
+            !coverage_passes(&fx, &split, &SMOKE, seed, ctl),
+            "negative control {ctl:?} PASSED — the certificate would not detect \
+             this failure mode, so it certifies nothing"
+        );
+    }
+}
+
+/// The `ZeroSampler` / `PlaybackSampler` plumbing used by the controls is
+/// the same machinery the production prover consumes, so a mistake here
+/// would silently weaken every control. Pin its behaviour.
+#[test]
+fn control_samplers_behave() {
+    let mut z = ZeroSampler;
+    let mut out = [1u64; 4];
+    z.fill_u64s(&mut out);
+    assert_eq!(out, [0u64; 4]);
+    let data = [F128 { lo: 7, hi: 9 }, F128 { lo: 11, hi: 13 }];
+    let mut pb = PlaybackSampler { data: &data, pos: 0 };
+    let mut got = [0u64; 4];
+    pb.fill_u64s(&mut got);
+    assert_eq!(got, [7, 9, 11, 13]);
+}
+
+/// **The `P` channel needs a non-degenerate `Q`.** The degree-2 channel
+/// contributes `γ·M_j(P·Q)`; at a constant `Q` the fold slope `ΔQ` vanishes,
+/// so the channel reaches the `G(1)` half of each round message but not the
+/// degree-2 `G(∞)` half — precisely the coordinate no degree-1 mask can
+/// reach, and the reason the amendment exists. Measured as a strict image
+/// deficit on the round block, which also delimits the bad-`Q` set that the
+/// `ε_rank` term (Lean: `mixture_witness_indep_bad_set`) accounts for.
+#[test]
+fn p_channel_image_requires_nondegenerate_q() {
+    let fx = FixtureA1M15::new();
+    let (split, _) = split_by_class(&fx);
+    let seed = 0x7777_1234;
+    let n = 1usize << FixtureA1M15::M;
+    let dim = split.round_block.len() * 128;
+    let mut rng = Rng(0xB16_0BAD);
+    let payload = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
+    let q_random = rng.bits(n);
+    let q_const = vec![true; n];
+    let p_stride = (n / (dim + dim / 2)).max(1);
+
+    let img = |q: &[bool]| {
+        inner_image_proj(&fx, &split, &split.round_block, p_stride, 1 << 20, 0, seed, &payload, true, q)
+    };
+    let good = img(&q_random);
+    let bad = img(&q_const);
+    println!(
+        "P-channel image on the round block ({dim} bits): random Q rank {}, constant Q rank {}",
+        good.rank(),
+        bad.rank()
+    );
+    assert!(
+        bad.rank() < good.rank(),
+        "a constant Q must give a strictly smaller P-channel image (it cannot \
+         reach the degree-2 G(∞) half); measured {} vs {}",
+        bad.rank(),
+        good.rank()
+    );
+}
