@@ -151,7 +151,11 @@ pub fn tiny_zk_configs_for(log_n: usize) -> (ProverConfig, VerifierConfig) {
     assert!(log_n >= 7, "tiny config needs log_n >= 7");
     let recursive_ks = vec![2usize, 2];
     let log_inv_rates = vec![1usize, 2, 3];
-    let queries = vec![6usize, 4, 4];
+    // Small query counts: the certificate's cost is dominated by the width
+    // of the transcript vector, and opened rows scale with the query count.
+    // Security is not the point of this shape (see above) — being able to
+    // certify the COMPLETE transcript exactly is.
+    let queries = vec![2usize, 2, 2];
     let n_levels = log_inv_rates.len();
     let p = ProverConfig {
         log_inv_rates: log_inv_rates.clone(),
