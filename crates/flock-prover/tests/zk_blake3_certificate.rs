@@ -275,87 +275,59 @@ fn coords_and_paths(
 /// difference between two genuinely different witnesses lies in the mask
 /// image — so a mask shift carries one witness's complete transcript exactly
 /// onto the other's.
-/// **STATUS: currently FAILS by exactly one F128 direction — an open lead,
-/// not a proven leak.** Measured (m=20, 64 blocks, PIOP classes = 238 field
-/// elements): the inner stage spans 21,504 of 30,464 bits, the outer (B-
-/// species) stage adds exactly 128 more — the same single direction the
-/// fixture certificate showed the outer stage is responsible for — the claim
-/// space saturates at 384 bits, and `rank[resid | Δclaim] = 512` against
-/// `rank(Δclaim) = 384`. So 128 bits of claim-preserving witness difference
-/// are unaccounted for on this statement family at this configuration.
 ///
-/// Why this is a lead rather than a verdict: the test restricts the codomain
-/// to the PIOP classes, probes randomly rather than exhaustively, and its
-/// failure direction is the conservative one (a failure can be probe
-/// starvation or a combination corresponding to no real witness pair, while
-/// a pass would be sound). The natural next hypothesis, by analogy with the
-/// fixture — where the residual closed once *every* transcript-determined
-/// public value was conditioned on — is that a fourth such value exists here
-/// and is not yet in the conditioning set.
+/// **STATUS: fails by exactly one F128 direction, now localized to
+/// `zerocheck.round1_c` alone.** Measured at m=20, 64 blocks, PIOP classes =
+/// 238 F128 = 30,464 bits, claim space saturated at 640 bits: the inner stage
+/// spans 22,144 bits, the outer (B-species) stage adds 128 more, and
+/// `rank[resid | Δclaim] = 768` against `rank(Δclaim) = 640`.
+///
+/// **What amendment A2 changed.** Before A2 the residual was carried by three
+/// classes — `zerocheck.round1_c`, `lincheck.rounds` and
+/// `lincheck.z_partial`. After A2 the attribution names **only**
+/// `zerocheck.round1_c`. Run with `ZK_BLAKE3_CLASSES=lincheck`, the layer A2
+/// masks is now covered outright: image 10,240 of 10,240 bits and
+/// `rank[resid | Δclaim] = rank(Δclaim) = 640`, against 9,728/10,240 with 128
+/// bits escaping before. So the lincheck gap is closed and what remains is a
+/// different gap that was previously entangled with it.
+///
+/// **What the remaining escape is.** `round1_c` carries
+/// `Σ_x eq(r_rest,x)·ẑ(λ,x)` — 64 field elements, *linear* in the witness,
+/// deliberately left outside the degree-2 channel (round 1 is excluded by
+/// design: a mask there would not vanish on the constraint domain and the
+/// zerocheck assumption `P^AB + P^C = 0` on S would break). Like the lincheck
+/// before A2, it is covered only by the randomizer rows.
+///
+/// Note the escape is **joint, not marginal**: `ZK_BLAKE3_CLASSES=round1_c`
+/// spans 8,192 of 8,192 bits and passes on its own. A direction reachable on
+/// `round1_c` alone, and reachable on the lincheck alone, need not be
+/// reachable on both at once with every other coordinate held — which is
+/// exactly the phenomenon the two-dimensional example in the paper's
+/// conditional-coverage section is about. A per-class pass is not a joint
+/// pass, and this is the concrete instance of that.
 ///
 /// **The methodological control passes** (`control_same_procedure_on_the_passing_fixture`):
-/// this exact procedure, applied to the synthetic fixture, gives
+/// this exact procedure on the synthetic fixture gives
 /// `rank[resid | Δclaim] = 384 = rank(Δclaim)`. So the procedure is sound and
-/// the difference in outcome is attributable to the BLAKE3 *statement*, not
-/// to the harness. Alignment is also ruled out — lemma L3 is verified on the
-/// real layout (`l3_round1_region_alignment_holds`) — and so is the constant-
-/// wire pin, which shifts the lincheck target by a challenge β identically
-/// for every valid witness (`lincheck.rs`, `const_pin_col`) and so induces no
-/// witness-difference direction.
+/// the outcome differs because the *statement* differs — a real BLAKE3
+/// witness is about 5.5% randomizer rows against the fixture's ~81%.
 ///
-/// That makes this the sharpest open question in the whole development, and
-/// it points *away* from the property holding rather than toward it: either a
-/// fourth transcript-determined public value exists that has not been
-/// identified, or a genuine claim-preserving witness direction is uncovered
-/// on the real statement family — which would be a finding of the form the
-/// task's decision label C describes, not label A.
+/// **Excluded by measurement, not by argument:** the harness (control above);
+/// the zerocheck's other classes; region alignment (lemma L3 is verified on
+/// the real layout); the constant-wire pin (a witness-independent target
+/// shift); the randomizer budget (2.3× the entropy in the covering species
+/// left the image rank identical — built, measured, reverted); and the
+/// conditioning hypothesis (adding `a_eval`,`b_eval` to the claim set changed
+/// nothing).
 ///
-/// **LOCALIZED TO THE LINCHECK LAYER.** Isolating classes
-/// (`ZK_BLAKE3_CLASSES`) settles where it lives:
+/// **The repair is specified, not made:** `docs/round1c-mask-channel.md`. It
+/// is a harder amendment than A2 — round 1 is the univariate-skip message
+/// with two interpolation conventions and a constraint-domain vanishing
+/// condition tying `round1_ab` to `round1_c`, so a mask for it cannot simply
+/// mirror A2.
 ///
-/// * `zerocheck.round1_c` alone — image spans 8192 of 8192 bits, criterion
-///   PASSES. The zerocheck round-1 class is fully covered.
-/// * `lincheck.*` alone — image spans 9728 of 10240 bits and the criterion
-///   FAILS by the same 128 bits, on `lincheck.rounds` and `lincheck.z_partial`.
-///
-/// So the A1′ amendment does its job: the classes it targets are covered.
-/// The uncovered direction is in the **lincheck**, which no mask channel
-/// touches — it is covered only by the randomizer rows. On the synthetic
-/// fixture the witness is ~81% randomizer and that suffices; on a real
-/// BLAKE3 statement the randomizer rows are ~5.5% of the witness and it does
-/// not. This is an undocumented sizing/coverage constraint on the lincheck
-/// layer, distinct from the `s_hat_v` per-bit-residue rule.
-///
-/// **The sizing repair is ruled out — the deficit is structural.** The
-/// randomizer allocation was tried at 4 A-chunks + 3 B-chunks in place of
-/// 2 + 1 (spending the 512-bit chain-mask reservation, which batch
-/// statements do not use, on randomizer entropy instead — same 896 bits per
-/// block, same `useful_bits`, 2.3× the entropy in the species that cover the
-/// affine classes). The measured image rank was **identical**: 9728 of 10240
-/// bits, the same 128 bits escaping. Entropy is not the binding constraint;
-/// the lincheck transcript's image is rank-limited by the map's structure,
-/// and the deficit sits at a constant 512 bits (4 F128) across
-/// configurations. The change was reverted, having bought nothing.
-///
-/// That leaves exactly one repair: extend a committed mask channel to the
-/// lincheck sumcheck, as A1′ did for the zerocheck round messages — run it
-/// on `comb·z + γ_lc·S·T` for fresh witness-free `S,T` committed before
-/// `γ_lc`, with `S(ρ),T(ρ)` opened hidingly. It is a change to the
-/// construction with its own telescoping and soundness argument to derive,
-/// so it is specified here rather than made.
-///
-/// The escaping direction is **localized**: residual attribution puts it on
-/// `zerocheck.round1_c`, `lincheck.rounds` and `lincheck.z_partial` — the
-/// C-side/witness-side coordinates — and not on the round pairs or the final
-/// evaluations, which the degree-2 channel and the outer stage do cover. Note
-/// that `c_eval`, one of the three conditioned claims, is itself an
-/// interpolation of `round1_c`, so a single conditioned scalar sits on a
-/// 64-element class here; the natural next step is to determine what else
-/// about that class the verifier learns, and whether the fixture differs
-/// because its statement has no pinned constant wire.
-///
-/// It is kept, failing and documented, because it is the sharpest statement
-/// available about the real statement family and it should not be forgotten.
+/// Kept failing and documented, because it is the sharpest available
+/// statement about the real statement family and must not be forgotten.
 #[test]
 #[ignore = "OPEN: fails by one F128 direction; see the status note above"]
 fn blake3_witness_difference_lies_in_the_mask_image() {
@@ -435,6 +407,7 @@ fn blake3_witness_difference_lies_in_the_mask_image() {
     let class_filter = move |path: &str| match only.as_str() {
         "round1_c" => path == "zerocheck.round1_c",
         "round1" => path.starts_with("zerocheck.round1"),
+        "zerocheck" => path.starts_with("zerocheck."),
         "lincheck" => path.starts_with("lincheck."),
         _ => path.starts_with("zerocheck.") || path.starts_with("lincheck."),
     };

@@ -41,12 +41,18 @@ zerocheck + lincheck PIOP compiled with a ring-switched Ligerito commitment and
 Fiat--Shamir. It is succinct but not zero-knowledge: every prover message is a
 deterministic function of the witness.
 \textbf{Construction.} We give a candidate honest-verifier zero-knowledge mode
-for BLAKE3 batch statements from three ingredients: randomizer witness rows that
+for BLAKE3 batch statements from four ingredients: randomizer witness rows that
 blind the affine transcript classes; a hiding Ligerito opening (a low-half mask
-plus a full-support blinder folded into the recursion); and a degree-2 committed
-mask channel $\gamma\cdot P\cdot Q$ for the one class the first two miss --- the
-zerocheck round messages, whose leading coefficient no degree-1 mask can reach in
-characteristic~2.
+plus a full-support blinder folded into the recursion); a degree-2 committed
+mask channel $\gamma\cdot P\cdot Q$ for the zerocheck round messages, whose
+leading coefficient no degree-1 mask can reach in characteristic~2; and a
+committed additive channel $z\mapsto z+\gamma_{lc}S$ for the lincheck, which
+the randomizer rows were assumed to cover and measurably do not on real
+statements. The two mask channels are deliberately different in kind: the
+zerocheck masks a product of witness-dependent multilinears and needs a
+degree-2 mask, while the lincheck's multiplier is public and its $z$-slot
+linear, so an additive shift leaves that layer's transcript equal to the
+honest transcript of a shifted witness.
 \textbf{Claim.} For the enumerated certified configurations of
 Table~\ref{tab:configs}, the \emph{algebraic} transcript of the reference prover
 is statistically witness-indistinguishable up to an explicit rank-failure term
@@ -188,6 +194,8 @@ evidence supports. Extending the binding is future work, not a corollary.
 \midrule
 Completeness & reference prover, certified configs & telescoping identity; roundtrip tests & proved; tested \\
 Zerocheck soundness ($\gamma$ batching) & amended zerocheck, any config & Lemma~\ref{lem:gamma}; adversarial suite & proved; constructively checked \\
+Lincheck soundness ($\gamma_{lc}$ batching, A2) & amended lincheck, any config & Lemma~\ref{lem:gamma} transplanted; tamper suite & proved; constructively checked \\
+A2 output-claim recovery & amended lincheck & $\hat S(\rho)$ bound by $S$'s commitment & proved; tested end to end \\
 Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & established at the certified fixture \\
 Merkle sibling hiding & all hiding openings & $\kmin$-min-entropy leaves, ROM & assumed (computational) \\
 ZK after Fiat--Shamir & BLAKE3 batch, certified configs & Lemma~\ref{lem:reduction} + rows above & conditional on those rows \\
