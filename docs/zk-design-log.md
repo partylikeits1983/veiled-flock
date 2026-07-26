@@ -155,3 +155,70 @@ that step must appear as an explicit lemma in the proof document rather than
 as an unstated assumption. (The planned move to field-valued small-domain
 masks would delete the rejection-sampling mechanism and reduce this to the
 same commitment-hiding lemma the FS lift already needs.)
+
+## 11. Fixed-digest re-scope (2026-07-27): the statement becomes useful
+
+The batch statement binds nothing, so every ZK result proved for it is a
+result about "there exist valid compressions". The target became the statement
+applications ask for: **public digests `y_i`, private preimages `x_i`,
+`BLAKE3(x_i) = y_i`**. Three steps, each forced:
+
+**Pin the compression parameters.** BLAKE3 of a ≤64-byte message is one
+compression with `cv = IV`, `counter = 0`, `block_len = 64`,
+`flags = CHUNK_START|CHUNK_END|ROOT`. `ParamPinning::RootHash64` pins those
+rows so the circuit computes a *hash* rather than *a* compression; the message
+words stay free as the witness. **Why per-bit row surgery:** `C = I` already
+gives `(A·z)_i·(B·z)_i = z_i`, so `1·1 = z_s` and `0·1 = z_s` pin without any
+new mechanism, and the choice lands in `statement_digest` automatically.
+
+**Why the zero case keeps the constant wire on the b-side.** `0·0 = z_s` pins
+just as well and satisfies the R1CS. It also breaks every honest proof: the
+witness generator emits `b[s] = 1` for parameter slots, so the Hadamard
+product matched while the `B·z` *vector* did not, and the lincheck — which
+checks the matrix-vector products — rejected. Cost: one debugging cycle.
+Recorded because any future pinning has the same trap.
+
+**Bind the digests with one public-target packed-direct claim.** The verifier
+computes `ŷ(τ)` itself from the public list and demands
+`ẑ_packed(τ, sel=OUT, ι) = ŷ(τ, ι)` inside the *existing* batched opening.
+**Why a random point and not the digest's Boolean indices:** a ring-switched
+claim at a Boolean point publishes `s_hat_v`, whose entries are then the 128
+raw bits of the witness word — the naive binding would leak the witness it is
+supposed to constrain. **Why not a lincheck β-fold:** 256 β's and surgery
+inside the masked lincheck, for no better soundness.
+
+**Padding is not free.** The const-pin already required padding slots to hold
+a valid compression; under a pinning they must satisfy the pinned rows too, so
+their digest is `BLAKE3(0⁶⁴)` rather than zero. A statement assuming
+zero-padding computes the wrong target and rejects honest proofs, so the
+padding rule is part of the statement hash.
+
+**Statement absorption.** The digest list enters the transcript before any
+challenge. This also closes a gap the chain statement still has: its public
+endpoints are checked arithmetically but never absorbed.
+
+## 12. The simulator problem, stated honestly (2026-07-27)
+
+Masking the fixed-digest transcript is nearly free — the digest claim adds only
+a public value — and `Blake3PreimageZkSetup` does it. **That is not zero
+knowledge.** For a fixed digest the preimage is essentially unique, so
+witness-indistinguishability — the property every certificate in this
+repository measures — is *vacuous*, and the batch mode's simulator (the honest
+prover on a self-chosen witness) would have to invert BLAKE3 to run.
+
+What the masking work does provide is the input to a real simulator: the
+witness-dependent coordinates are uniform on an explicit coset given public
+values. The construction that turns that into a simulator is the two-phase
+hybrid in `docs/memos/interactive-simulator-design.md` — sample the PIOP block
+backwards, then run the *honest* PCS code on a claim-consistent pseudo-witness,
+because naively sampling the opening coordinates lands outside the honest
+support (deep-level opened rows satisfy RS code-parity relations the verifier
+never checks but a distinguisher can).
+
+**The ROM game is now executable.** `sim_oracle.rs` gives a programmable oracle
+whose unprogrammed behaviour is byte-identical to Fiat–Shamir — verified by a
+real proof that verifies both through the harness and under `FsChallenger`.
+That control immediately caught the harness absorbing the PoW nonce untagged
+where the real challenger tags it; six unit tests had missed it because none of
+them grind. Acceptance under a programmed oracle will be necessary but not
+sufficient: distribution equality is a separate measurement.
