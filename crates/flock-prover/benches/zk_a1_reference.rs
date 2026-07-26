@@ -5,15 +5,16 @@
 //! optimized `prove_fast_zk` pipeline. That pipeline runs the *un-amended*
 //! zerocheck and carries no zero-knowledge claim; the numbers here are for
 //! `Blake3Setup::prove_zk_a1` / `verify_zk_a1`, which run the masked
-//! (`â·b̂ + γ·P·Q`) zerocheck plus two extra hiding commitments and their
-//! openings. The reference path uses naive round-pair kernels by design —
+//! (`â·b̂ + γ·P·Q`) zerocheck, the A2-masked lincheck (`z + γ_lc·S`), and
+//! three extra hiding commitments with their openings. The reference path
+//! uses naive round-pair kernels by design —
 //! correctness- and certification-oriented, not optimized — so its times
 //! are NOT comparable to the fast path's and must never be reported as if
 //! they were.
 //!
 //! Phases are timed separately so the paper can attribute the overhead:
 //!   witness  — zk witness generation + packing (randomizer rows included)
-//!   prove    — commit ×3, masked zerocheck, lincheck, three hiding opens
+//!   prove    — commit ×4, masked zerocheck, masked lincheck, 4 hiding opens
 //!   verify   — full A1′ verification
 //!
 //! A non-zk `prove_fast` run at the same batch size is included as a

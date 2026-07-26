@@ -213,9 +213,10 @@ classes (round-1 vectors, lincheck, ring-switch, PCS values).
 \item \textbf{Commit the witness hidingly}, with a low-half mask $\mu$ and a
 full-support blinder $g$. \emph{Purpose:} hide the opened codeword rows and
 everything downstream of them in the recursion.
-\item \textbf{Commit two fresh witness-free multilinears $P,Q$ hidingly.}
-\emph{Purpose:} supply a degree-2 mask channel; committing first is what stops
-the prover from choosing them after seeing the challenge that batches them.
+\item \textbf{Commit three fresh witness-free multilinears $P,Q,S$ hidingly.}
+\emph{Purpose:} $P,Q$ supply the zerocheck's degree-2 mask channel (A1$'$) and
+$S$ the lincheck's additive one (A2); committing first is what stops the prover
+from choosing any of them after seeing the challenge that batches them.
 \item \textbf{Bind $\sigma_z=\sum_x \mathrm{eq}(r,x)P(x)Q(x)$} into the
 transcript. \emph{Purpose:} fix the mask channel's contribution before the
 batching challenge exists.
@@ -224,13 +225,23 @@ $\sigma_z$. \emph{Purpose:} soundness of the batching (Lemma~\ref{lem:gamma}).
 \item \textbf{Run the masked zerocheck} on $\hat a\hat b + \gamma PQ$.
 \emph{Purpose:} the round messages, the one class no degree-1 mask reaches, are
 now covered by a witness-free channel.
-\item \textbf{Run lincheck and the ring switch.} \emph{Purpose:} none of their
-own --- these classes are affine and already covered by step~1.
-\item \textbf{Open the witness and $P,Q$ hidingly at $\rho$, then check
-$\hat a(\rho)\hat b(\rho)+\gamma P(\rho)Q(\rho)$.} \emph{Purpose:} the hiding
-openings keep the leakage down to the evaluations themselves; a plain opening
-would additionally reveal opened rows of $P$, enlarging the conditioning set
-(\S\ref{sec:channel}).
+\item \textbf{Run the masked lincheck} on $z + \gamma_{lc}S$: once $\alpha$ and
+the constant-wire pin $\beta$ fix the public vector $\mathrm{comb}$, bind
+$\sigma_{lc}=\sum_i \mathrm{comb}(i)S_{\mathrm{vec}}(i)$, derive $\gamma_{lc}$,
+and run the existing sumcheck on the shifted table.
+\emph{Purpose:} the lincheck's own classes. The randomizer rows of step~1 do
+\emph{not} suffice for them on real statements --- see \S\ref{sec:channel}.
+Because $\mathrm{comb}$ is public and the sumcheck's $z$-slot is linear, the
+shift leaves the degree structure untouched and every message of the layer
+becomes the honest transcript of a shifted witness.
+\item \textbf{Open the witness, $P,Q$ and $S$ hidingly, then check
+$\hat a(\rho)\hat b(\rho)+\gamma P(\rho)Q(\rho)$ and recover the lincheck's
+output claim as $w = w_{\text{sent}} + \gamma_{lc}\hat S(\rho)$.}
+\emph{Purpose:} the hiding openings keep the leakage down to the evaluations
+themselves; a plain opening would additionally reveal opened rows of $P$,
+enlarging the conditioning set (\S\ref{sec:channel}). $\hat S(\rho)$ must come
+from $S$'s commitment rather than be claimed: an unbound $\hat S(\rho)$ could
+be chosen after $\rho$ and absorb an arbitrary defect into the output claim.
 \end{enumerate}
 
 \begin{figure}[t]
@@ -243,13 +254,13 @@ would additionally reveal opened rows of $P$, enlarging the conditioning set
   chal/.style={-{Latex[length=2mm]}, dotted, thick},
 ]
 \node[box] (w) {witness $z$\\+ randomizer rows};
-\node[box, below=8mm of w] (pq) {fresh $P,Q$\\(witness-free)};
+\node[box, below=8mm of w] (pq) {fresh $P,Q,S$\\(witness-free)};
 \node[box, right=of w] (cw) {commit $z$\\($\mu$, $g$)};
-\node[box, right=of pq] (cpq) {commit $P,Q$\\(hiding)};
+\node[box, right=of pq] (cpq) {commit $P,Q,S$\\(hiding)};
 \node[box, right=14mm of cw] (sig) {bind $\sigma_z$};
 \node[box, below=8mm of sig] (gam) {derive $\gamma$};
 \node[box, right=of sig] (zc) {masked\\zerocheck};
-\node[box, below=8mm of zc] (lc) {lincheck +\\ring switch};
+\node[box, below=8mm of zc] (lc) {masked lincheck\\+ ring switch};
 \node[box, right=of zc] (op) {hiding\\openings at $\rho$};
 \node[box, below=8mm of op] (tr) {verifier-visible\\transcript};
 

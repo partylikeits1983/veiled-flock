@@ -431,9 +431,14 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
             off += n;
         }
     }
+    // The PIOP-level mask-only scalars: σ_z, P(ρ), Q(ρ) from the zerocheck,
+    // and A2's σ_lc and Ŝ(ρ) from the lincheck. All are values the verifier
+    // plainly learns, so even the cheap smoke run conditions on all of them;
+    // the offline certificate conditions on the complete `l_idx`, which adds
+    // every value inside the hiding openings.
     let mut l_zc_idx = Vec::new();
     for (path, range) in idx.ranges_by_class(&flat, LeakageClass::MaskOnly) {
-        if path.starts_with("zerocheck.") {
+        if path.starts_with("zerocheck.") || path.starts_with("lincheck.") {
             l_zc_idx.extend(range);
         }
     }
