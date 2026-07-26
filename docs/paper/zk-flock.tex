@@ -468,6 +468,14 @@ existing.
 \item \textbf{The detector is not vacuous.} Disabling the PCS mask, or appending
 an unmasked witness functional to the transcript vector, both break the
 certificate.
+\item \textbf{Measured at the production configuration, not assumed.} At
+$m=22$ the degree-2 channel spans the round-pair block in full (4096 of 4096
+bits, by random-probe spanning through the real fold kernels, which can only
+under-estimate a rank); a degenerate $Q$ spans exactly half, so the
+measurement is not vacuous at that size either; the per-proof coverage
+self-check passes with no resampling and its proof verifies; and the
+randomizer margin that binds the $\shatv$ slices is $12\times$ the
+requirement there, against $3\times$ at the certified fixture.
 \end{itemize}
 
 \paragraph{A vacuity failure mode, and the guard against it.} The coverage
@@ -660,13 +668,17 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The certificate is per-fixture, and the fixture is not the
-production shape.} The complete-transcript certificate is checked at a
-reduced fixture ($m=16$, small query counts) chosen so exact probing is
-feasible. Transfer to the production configuration rests on the maps being
-structurally identical and on the randomizer margin being larger there
-($\sim\!12\times$ versus $3\times$), not on a production-size full-support
-probe. That is the principal remaining gap in the certified chain.
+\item \textbf{The complete-transcript certificate is per-fixture.} It is
+checked at a reduced fixture ($m=16$, small query counts) chosen so exact
+probing is feasible; exhaustive probing at $m=22$ would need millions of
+prover runs. What is measured at the production configuration is narrower:
+channel surjectivity on the round-pair block, its degenerate-$Q$ control, the
+per-proof self-check, and the randomizer margin (\S\ref{sec:certificates}).
+Transfer of the \emph{whole-transcript} statement from the fixture to
+production therefore still rests on the maps being structurally identical and
+the margin being larger there --- measured as $12\times$ versus $3\times$ ---
+rather than on a production-size full-support probe. This is the principal
+remaining gap in the certified chain.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.

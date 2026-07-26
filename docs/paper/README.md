@@ -9,9 +9,15 @@ complete-transcript coverage certificate now **passes** at the certified
 fixture — over all 548 witness-dependent coordinates, at three challenge
 tuples, conditioned on the complete mask-only leakage set and on every public
 claim the verifier learns, no claim-preserving witness direction escapes the
-joint mask image. What keeps this at label B is that the certificate is
-per-fixture: transfer to the production shape rests on structural identity of
-the maps, and the ROM assumption and independent review remain.
+joint mask image. Measured *at* the production configuration (m=22): the degree-2 channel spans
+the round-pair block in full (4096/4096 bits), a degenerate Q spans exactly
+half, the per-proof coverage self-check passes with no resampling and its
+proof verifies, and the randomizer margin binding `s_hat_v` is 12× the
+requirement versus 3× at the fixture. What keeps this at label B: the
+*whole-transcript* certificate is per-fixture, so its transfer to production
+rests on structural identity of the maps plus that margin rather than on a
+production-size probe — and the ROM assumption and independent review
+remain.
 
 ## The claim, exactly
 

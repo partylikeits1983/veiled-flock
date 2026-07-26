@@ -144,6 +144,7 @@ family that binds public I/O.
 | `zk_joint_certificate::joint_certificate_smoke` | triangular coverage on the round block | ~40 s |
 | `zk_joint_certificate::joint_certificate_negative_controls` | detector non-vacuity (no-μ, added leakage) | ~20 s |
 | `zk_joint_certificate::joint_conditional_coverage_full_transcript` | complete-transcript joint coverage — **passes** at 3 tuples | offline, ~13 min/tuple |
+| `zk_production_config.rs` | **at m=22**: channel surjectivity on the round-pair block (4096/4096), degenerate-Q control (2048/4096), per-proof self-check + verify, randomizer margin 12× | ~15 s |
 | `zk_simulator.rs` | simulator on the A1′ path; constructive translation exactness | mixed |
 | `zk_leakage_certificate.rs` | affine-class exact coverage; A1′ round-pair image | offline |
 | `pcs/zk_audit.rs` | PCS-layer image containment; no-g negative control | fast |
@@ -161,11 +162,15 @@ assumption; no independent review; side channels and QROM out of scope.
 1. **Sibling hiding** is assumed (ROM / hash pseudorandomness), not derived.
 2. **Challenge-tuple genericity**: certificates hold at the tuples tested; no
    argument covers all tuples.
-3. **The certificate is per-fixture.** The complete-transcript certificate
-   passes at the reduced fixture (m=16, small query counts) chosen so exact
-   probing is feasible; transfer to the production shape rests on the maps
-   being structurally identical and on the randomizer margin being larger
-   there (~12x versus 3x), not on a production-size full-support probe.
+3. **The complete-transcript certificate is per-fixture.** It passes at the
+   reduced fixture (m=16, small query counts) chosen so exact probing is
+   feasible; exhaustive probing at m=22 would need millions of prover runs.
+   Measured *at* the production configuration: channel surjectivity on the
+   round-pair block (4096/4096 bits), its degenerate-Q control (2048/4096),
+   the per-proof self-check (passes, 0 resamples, proof verifies), and the
+   s_hat_v randomizer margin (12x versus the fixture's 3x). Transfer of the
+   whole-transcript statement still rests on structural identity of the maps
+   plus that margin, not on a production-size full-support probe.
 4. **Fixture-to-production transfer**: certificates are computed at the reduced
    fixture; the argument that the maps are structurally identical at production
    size is stated, not machine-checked.

@@ -123,6 +123,9 @@ const EVIDENCE_V1: &[&str] = &[
     "simulator_translation_exact_transcript_equality",
     "joint_conditional_coverage_full_transcript",
     "mask_only_coordinates_are_witness_independent",
+    "production_mask_channel_covers_round_block",
+    "production_s_hat_v_randomizer_margin",
+    "production_checked_prove_verifies",
 ];
 
 /// The certified configurations. **One entry today**: the 256-block BLAKE3
