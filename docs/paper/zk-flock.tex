@@ -69,12 +69,12 @@ masking, triangular-composition and bad-set mixture theorems are machine-checked
 in Lean~4; and the composition hypotheses are discharged by exact $\Ftwo$
 image-coverage certificates computed on the real prover --- including a
 complete-transcript joint conditional certificate at the certified fixture, in
-which no claim-preserving witness direction escapes the joint mask image. Run
-on a \emph{real} BLAKE3 statement the same certificate still leaves one
-$\Fbig$ direction unaccounted for, now in a single named class
-(\texttt{zerocheck.round1\_c}): amendment~A2 removed the lincheck from that
-residual, and what remains is reported as the principal open item rather than
-argued away.
+which no claim-preserving witness direction escapes the joint mask image. The
+same certificate, run on a \emph{real} BLAKE3 statement over the PIOP classes,
+also passes --- but only after two amendments that measurement forced: it
+initially left one $\Fbig$ direction unaccounted for, and six candidate
+explanations were eliminated experimentally (two of them by making a change,
+measuring no improvement, and reverting) before the construction was touched.
 Per-item status is tabulated in Table~\ref{tab:claims} and
 \S\ref{sec:roadmap}.
 \textbf{Assumptions and limits.} A random-oracle (or hash-pseudorandomness)
@@ -693,26 +693,30 @@ batch & $m$ & base prove & zk prove & prove $\times$ & verify $\times$ & size $\
 \toprule
 batch & $m$ & witness gen & prove & verify & (non-zk \texttt{prove\_fast}) \\
 \midrule
-256 & 22 & 0.5\,ms & 22.8\,ms & 4.5\,ms & 3.8\,ms \\
+256 & 22 & 0.5\,ms & 34.4\,ms & 6.0\,ms & 3.9\,ms \\
 \bottomrule
 \end{tabular}
 \caption{Best of 5 runs after a verified warm-up, 12 threads, Apple silicon,
 at the source revision on the title page. The two panels measure
 \emph{different pipelines} and must not be compared: panel~(b) uses naive
-round-pair kernels and performs four hiding commitments and four hiding
+round-pair kernels and performs six hiding commitments and six hiding
 openings, where panel~(a) uses the fused kernels and one of each. The
-reference path is $6.0\times$ the non-zk fused prover at the same batch size;
+reference path is $8.8\times$ the non-zk fused prover at the same batch size;
 that ratio is an artefact of the reference implementation, not a cost of
-zero-knowledge. Amendment~A2 accounts for $20.0\rightarrow22.8$\,ms of
-proving and $4.3\rightarrow4.5$\,ms of verification --- one more full-size
-commitment and opening. That is more than the channel needs: $S$ only ever
-masks the length-$2^{k_{\log}}$ folded table (4{,}096 entries at this shape,
-against $2^{22}$), so a commitment over that domain would be some three orders
-of magnitude smaller. It is left unoptimized on purpose, per the ordering
-this work follows --- correctness first, cost second. With the per-proof
-mask-coverage check enabled (\S\ref{sec:certificates}) the reference prover
-additionally pays thousands of fold passes per proof, which is why that check
-is opt-in.}
+zero-knowledge. The two amendments account for the growth:
+$20.0\rightarrow22.8$\,ms (A2) $\rightarrow34.4$\,ms (A3) of proving, and
+$4.3\rightarrow4.5\rightarrow6.0$\,ms of verification --- three more
+full-size commitments and openings. All three are larger than their channels
+need. $S$ masks only the length-$2^{k_{\log}}$ folded table (4{,}096 entries
+here, against $2^{22}$), and $S_c,S_h$ enter only through their round-1
+messages, $2^{k_{\mathrm{skip}}}=64$ field elements each. Committing over
+those domains instead of the full cube would cut the added cost by orders of
+magnitude. It is left unoptimized on purpose, per the ordering this work
+follows --- correctness first, cost second --- and the panel reports what the
+reference path actually costs rather than what a tuned one would. With the
+per-proof mask-coverage check enabled (\S\ref{sec:certificates}) the
+reference prover additionally pays thousands of fold passes per proof, which
+is why that check is opt-in.}
 \end{table}
 
 \section{Related work}\label{sec:related}
@@ -745,7 +749,8 @@ H1 / conditional coverage & hypotheses of Thm.~\ref{thm:tri} & exact certificate
 A2 batching soundness & lincheck amendment & Lemma~\ref{lem:gamma} transplanted; tested \\
 A2 output-claim recovery & PCS binding to $\hat z$ & proved; tested end to end \\
 eq-table $\Ftwo$-span (A2) & Boolean mask reaches $\Fbig$ & measured, not derived \\
-\texttt{round1\_c} joint coverage & full-transcript WI on real statements & \textbf{open} (\S\ref{sec:limitations}) \\
+Round-1 soundness preserved (A3) & masked round 1 & mask pair sums to a multiple of $V_S$; tested \\
+Real-statement joint coverage & WI on the production family & exact certificate, PIOP classes (measured) \\
 Full-transcript WI & Lemma~\ref{lem:reduction} & theorem + checked certificate, per Table~\ref{tab:configs} \\
 Self-generated-witness simulation & classical-ROM ZK & proved here (Lemma~\ref{lem:reduction}) \\
 Sibling hiding & classical-ROM ZK & assumed \\
@@ -758,11 +763,11 @@ Reading the table: everything above the ``assumed'' line is either
 machine-checked or computed. Three items are not proved, and they are of
 different kinds. The ROM assumption is a stated cryptographic assumption. The
 composition hypotheses and the eq-table span are \emph{measured at certified
-configurations} rather than derived for all parameters. The
-\texttt{round1\_c} row is neither: it is a certificate that currently
-\emph{fails} on the real statement family, by one $\Fbig$ direction, and it is
-listed here rather than omitted because a roadmap that only lists what passes
-is not a roadmap.
+configurations} rather than derived for all parameters. The real-statement row is a
+certificate over the PIOP classes at a sampled challenge tuple, not a
+closed-form theorem, and the complete transcript at production size is
+covered by the fixture certificate plus structural transfer rather than
+directly.
 
 \section{Limitations}\label{sec:limitations}
 
@@ -774,72 +779,52 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The certificate passes on the synthetic vehicle but not yet on
-a real BLAKE3 statement, and the gap is now one measured direction in one
-named class.} The criterion is usable on the hash statement family --- a
-\emph{pass} is sound even without a linear witness sub-family, since every
-genuine claim-equal pair is among the combinations it quantifies over --- so
-it was run directly on a real BLAKE3 batch statement ($m=20$, 64 blocks),
-restricted to the PIOP coordinate classes so the image could be saturated.
-With the claim space saturated at 640 bits,
-$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 768$: \emph{one}
-$\Fbig$ direction of claim-preserving witness difference is unaccounted for.
-
-Amendment A2 changed what that direction is. Before it, the residual was
-carried by three classes --- \texttt{zerocheck.round1\_c},
-\texttt{lincheck.rounds} and \texttt{lincheck.z\_partial}. After it, the
-attribution names \textbf{only} \texttt{zerocheck.round1\_c}: the lincheck
-classes go from an image of 9{,}728 of 10{,}240 bits with 128 escaping to
-10{,}240 of 10{,}240 with nothing escaping. One of the two gaps is closed;
-what remains was previously entangled with it.
-
-What remains is \texttt{round1\_c}: the univariate-skip C-side message
-$P^C(\lambda)=\sum_x \mathrm{eq}(r_{\text{rest}},x)\hat z(\lambda,x)$, 64
-field elements, linear in the witness, of which exactly one scalar
-($c_{\mathrm{eval}}$) is a public claim. Round~1 sits outside the degree-2
-channel by design, and the reason constrains the repair: the verifier
-reconstructs the AB running claim from the zerocheck assumption
-$P^{AB}+P^{C}=0$ on $S$, and a mask that does not vanish there destroys that
-reconstruction. So \texttt{round1\_c} is covered by the randomizer rows alone
---- exactly the situation the lincheck was in before A2, and on a real BLAKE3
-witness those rows are about $5.5\%$ of the assignment against the fixture's
-$81\%$.
-
-The escape is \emph{joint, not marginal}, and this is the sharpest thing to
-say about it. Isolated, \texttt{round1\_c} passes: its image is the full
-8{,}192 bits. Full projection onto a class only means every target on that
-class is matched by \emph{some} image vector --- which is free to be wrong on
-every other class. The failure appears only when \texttt{round1\_c} must be
-covered simultaneously with everything else held. That is precisely the
-two-dimensional example of \S\ref{sec:channel} occurring in the protocol, and
-it is why a per-class certificate is not a substitute for the joint one.
-
-That direction is a lead, not a proven leak: the codomain is restricted,
-probing is random rather than exhaustive, and the criterion fails
-conservatively. A methodological control settles attribution --- the same
-procedure on the synthetic fixture gives
+\item \textbf{The real-statement certificate passes, after two amendments
+that measurement forced.} The criterion is usable on the hash statement
+family --- a \emph{pass} is sound even without a linear witness sub-family,
+since every genuine claim-equal pair is among the combinations it quantifies
+over --- so it was run directly on a real BLAKE3 batch statement ($m=20$, 64
+blocks), restricted to the PIOP coordinate classes so the image could be
+saturated. Measured: the inner stage spans 30{,}336 of 30{,}464 bits, the
+outer species completes it to $30{,}464/30{,}464$, and with the claim space
+saturated at 640 bits over 768 real witness pairs,
 $\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
-= \mathrm{rank}(\Delta\text{claim})$, so the procedure is sound and the
-outcome differs because the \emph{statement} differs. Six candidate
-explanations have been eliminated by measurement rather than by argument: the
-harness (that control), the zerocheck's other classes, region alignment
-(lemma L3, verified on the real layout), the constant-wire pin (a
-witness-independent target shift), the randomizer budget ($2.3\times$ the
-entropy in the covering species left the image rank identical --- built,
-measured, reverted), and the conditioning hypothesis (adding
-$\hat a(\rho),\hat b(\rho)$ to the claim set changed nothing).
+= \mathrm{rank}(\Delta\text{claim}) = 640$.
 
-The repair is specified and not made, in \texttt{docs/round1c-mask-channel.md},
-together with the cheap falsifiable check that should precede it. It is a
-harder amendment than A2: round~1 carries two interpolation conventions and a
-constraint-domain vanishing condition tying \texttt{round1\_ab} to
-\texttt{round1\_c}, and the obvious diagonal mask --- the same shift added to
-both, which leaves the zerocheck assumption untouched --- contributes only
-diagonal directions, while the measured residual appears to be off-diagonal.
-Until it is resolved the whole-transcript claim on the production statement
-family rests on the fixture certificate plus structural transfer. This is the
-principal open item, and it points away from the property holding there rather
-than toward it.
+It did not start there, and the history is the substance of this item.
+Initially the image spanned 22{,}272 of 30{,}464 bits and
+$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 768$ --- one $\Fbig$
+direction of claim-preserving witness difference unaccounted for, carried by
+\texttt{zerocheck.round1\_c}, \texttt{lincheck.rounds} and
+\texttt{lincheck.z\_partial}. Six candidate explanations were eliminated by
+measurement rather than by argument --- the harness (a methodological control
+on the synthetic fixture), the zerocheck's other classes, region alignment
+(lemma~L3), the constant-wire pin, the randomizer budget ($2.3\times$ the
+entropy in the covering species: built, measured, identical, reverted), and
+the conditioning hypothesis (adding $\hat a(\rho),\hat b(\rho)$ to the claim
+set: no change). Only then was the construction changed. A2 took the lincheck
+classes from $9{,}728/10{,}240$ with 128 bits escaping to $10{,}240/10{,}240$
+with none; A3 took the zerocheck classes from $12{,}032/20{,}224$ to
+$20{,}224/20{,}224$.
+
+Two methodological points survive the fix and are worth more than the result.
+First, the escape was \emph{joint, not marginal}: \texttt{round1\_c} passed in
+isolation at $8{,}192/8{,}192$ the entire time. Full projection onto a class
+only means every target on that class is matched by \emph{some} image vector,
+which is free to be wrong on every other class --- the two-dimensional example
+of \S\ref{sec:channel} occurring in the protocol. Per-class certificates do
+not compose into a joint one, here or anywhere else in this development.
+Second, the assumption that broke was never stated as an assumption: the
+randomizer rows were \emph{believed} to cover the affine classes, and on the
+synthetic fixture (some $81\%$ randomizer rows against a real witness's
+$5.5\%$) they do. A certificate run only on the vehicle would have reported
+success indefinitely.
+
+Probing is random rather than exhaustive and the codomain is restricted to the
+PIOP classes, so what this certifies is membership in a \emph{spanned} image
+over those classes at the sampled challenge tuple. The complete transcript,
+including the PCS-opening coordinates, is certified at the reduced fixture
+(next item), not at production size.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.
