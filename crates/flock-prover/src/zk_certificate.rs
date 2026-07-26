@@ -126,6 +126,7 @@ const EVIDENCE_V1: &[&str] = &[
     "production_mask_channel_covers_round_block",
     "production_s_hat_v_randomizer_margin",
     "production_checked_prove_verifies",
+    "blake3_witness_has_no_linear_difference_family",
 ];
 
 /// The certified configurations. **One entry today**: the 256-block BLAKE3

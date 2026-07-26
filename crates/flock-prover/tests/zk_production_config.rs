@@ -139,3 +139,77 @@ fn production_checked_prove_verifies() {
     setup.verify_zk_a1(&comm, &proof, &mut chv).expect("checked proof must verify");
     let _ = F128::ZERO;
 }
+
+/// **Why the complete-transcript certificate needs a synthetic vehicle.**
+///
+/// The coverage criterion reasons about *claim-preserving combinations* of
+/// witness-difference directions, which requires the sampled differences to
+/// span a genuine space of witness differences — i.e. a linear sub-family of
+/// valid witnesses. The audit fixture supplies one by construction (payload
+/// bits that feed no product row).
+///
+/// A real BLAKE3 statement does not, and this records why: the witness is a
+/// compression trace, so the map from message bits to witness is nonlinear.
+/// Flipping two message bits separately and then together does **not** give
+/// the sum of the two witness differences. Consequently the criterion cannot
+/// be evaluated directly on a BLAKE3 statement, no matter how much compute
+/// is available, and the certificate must be computed on a vehicle that has
+/// a linear family and transferred structurally.
+///
+/// This is a statement about the *methodology*, not about the protocol: it
+/// is why the paper's principal limitation is phrased as transfer, and why
+/// no amount of probing at m=22 would remove it.
+#[test]
+fn blake3_witness_has_no_linear_difference_family() {
+    let setup = Blake3Setup::with_zk(256);
+    let n_log = setup.n_blocks_log();
+    let mk = |bits: (bool, bool)| -> Vec<bool> {
+        let mut rng = Rng(0xB1A_3E7);
+        let blocks: Vec<_> = (0..256)
+            .map(|i| {
+                let cv: [u32; 8] = std::array::from_fn(|_| rng.next_u64() as u32);
+                let mut msg: [u32; 16] = std::array::from_fn(|_| rng.next_u64() as u32);
+                if i == 0 {
+                    // Two independent single-bit perturbations of block 0.
+                    if bits.0 {
+                        msg[0] ^= 1;
+                    }
+                    if bits.1 {
+                        msg[1] ^= 1;
+                    }
+                }
+                (cv, msg, 0u64, 64u32, 11u32)
+            })
+            .collect();
+        let _ = n_log;
+        setup.generate_witness(&blocks)
+    };
+
+    let w00 = mk((false, false));
+    let w10 = mk((true, false));
+    let w01 = mk((false, true));
+    let w11 = mk((true, true));
+
+    // Linearity would mean (w10 ⊕ w00) ⊕ (w01 ⊕ w00) == (w11 ⊕ w00).
+    let mut additive = 0usize;
+    let mut violations = 0usize;
+    for i in 0..w00.len() {
+        let d1 = w10[i] ^ w00[i];
+        let d2 = w01[i] ^ w00[i];
+        let d12 = w11[i] ^ w00[i];
+        if d1 ^ d2 == d12 {
+            additive += 1;
+        } else {
+            violations += 1;
+        }
+    }
+    println!(
+        "BLAKE3 witness additivity over {} bits: {additive} additive, {violations} violating",
+        w00.len()
+    );
+    assert!(
+        violations > 0,
+        "the BLAKE3 witness map appears additive in the message bits, which \
+         would contradict it being a hash trace — re-examine the fixture"
+    );
+}

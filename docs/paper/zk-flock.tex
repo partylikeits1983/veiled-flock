@@ -668,17 +668,23 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The complete-transcript certificate is per-fixture.} It is
-checked at a reduced fixture ($m=16$, small query counts) chosen so exact
-probing is feasible; exhaustive probing at $m=22$ would need millions of
-prover runs. What is measured at the production configuration is narrower:
-channel surjectivity on the round-pair block, its degenerate-$Q$ control, the
-per-proof self-check, and the randomizer margin (\S\ref{sec:certificates}).
-Transfer of the \emph{whole-transcript} statement from the fixture to
-production therefore still rests on the maps being structurally identical and
-the margin being larger there --- measured as $12\times$ versus $3\times$ ---
-rather than on a production-size full-support probe. This is the principal
-remaining gap in the certified chain.
+\item \textbf{The complete-transcript certificate is per-fixture, and this is
+structural rather than a compute limit.} The coverage criterion reasons about
+\emph{claim-preserving combinations} of witness-difference directions, so the
+sampled differences must span a genuine space of witness differences --- a
+linear sub-family of valid witnesses. The audit fixture supplies one by
+construction. A BLAKE3 statement does not: its witness is a compression
+trace, and the map from message bits to witness is nonlinear (measured:
+flipping two message bits separately and together fails additivity on 5{,}952
+of $4.19$M witness bits). So the criterion cannot be evaluated directly on the
+claimed statement family at \emph{any} size, and no amount of probing at
+$m=22$ would change that. What is measured at the production configuration is
+narrower --- channel surjectivity on the round-pair block, its degenerate-$Q$
+control, the per-proof self-check, and the randomizer margin
+(\S\ref{sec:certificates}) --- and transfer of the whole-transcript statement
+rests on the maps being structurally identical plus the larger margin
+($12\times$ versus $3\times$). This is the principal remaining gap, and
+closing it needs a different proof technique, not more compute.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.
