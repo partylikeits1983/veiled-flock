@@ -966,6 +966,14 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     use flock_core::verifier::VerifyError;
     let m = r1cs.m;
 
+    // The P,Q commitments' params are attacker-supplied proof data; the
+    // opening circuits key shapes and the zk branch off them, so they must
+    // equal the verifier-owned params exactly (the witness path gets the
+    // same check inside `verify_claims_ligerito`).
+    if proof.comm_p.params != *pcs_params || proof.comm_q.params != *pcs_params {
+        return Err(VerifyError::PcsAb(pcs::VerifyError::Ligerito));
+    }
+
     bind_statement(challenger, r1cs, commitment);
     challenger.observe_bytes(&proof.comm_p.root);
     challenger.observe_bytes(&proof.comm_q.root);

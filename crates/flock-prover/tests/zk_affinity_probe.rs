@@ -339,7 +339,7 @@ fn affinity_structure_probes() {
 }
 
 /// F₂ row-reduce; returns rank.
-fn rank_f2(rows: &mut Vec<Vec<u64>>, dim: usize) -> usize {
+fn rank_f2(rows: &mut [Vec<u64>], dim: usize) -> usize {
     let mut rank = 0usize;
     for bit in 0..dim {
         let (w, msk) = (bit / 64, 1u64 << (bit % 64));

@@ -23,3 +23,5 @@ pub mod r1cs_hashes;
 pub mod transcript_schema;
 #[cfg(feature = "zk")]
 pub mod zk_audit_support;
+#[cfg(feature = "zk")]
+pub mod zk_certificate;

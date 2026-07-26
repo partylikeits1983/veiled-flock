@@ -295,6 +295,47 @@ from the real prover and verifies
 $\text{running}=\hat a(\rho)\hat b(\rho)+\gamma P(\rho)Q(\rho)$; tampering a
 masked round pair breaks it).
 
+**Lemma L6 (γ-batching: completeness and soundness of the amendment;
+[P]+[C]).** The amendment replaces the zerocheck claim
+$\sum_x \mathrm{eq}\cdot\hat a\hat b = \mathsf{ab\_init}$ by the random
+linear combination
+$\sum_x \mathrm{eq}\cdot(\hat a\hat b + \gamma PQ)
+ = \mathsf{ab\_init} + \gamma\sigma_z$.
+
+*Completeness.* For an honest prover both sides telescope through the same
+round schedule (the round messages are $G_j+\gamma M_j$ and the running
+target carries $\gamma$ times the mask sumcheck's), so the final check
+$\text{running} = \hat a(\rho)\hat b(\rho) + \gamma P(\rho)Q(\rho)$ holds
+identically.
+
+*Soundness.* Fix all prover messages. The verifier's final residual
+$R(\sigma_z) = \text{running} + \hat a(\rho)\hat b(\rho) + \gamma
+P(\rho)Q(\rho)$ is **affine in $\sigma_z$** over $\mathbb{F}_{2^{128}}$,
+with slope $\gamma\cdot\prod_j (1+\rho_j)/(1+r_{\mathrm{eq},j})$. Writing
+$\delta$ for the $\hat a\hat b$-side defect and $\delta'$ for the mask-side
+defect, acceptance requires $\delta + \gamma\delta' = 0$: for
+$(\delta,\delta')\neq(0,0)$ at most **one** $\gamma$ satisfies it, so a
+prover who must fix $(\delta,\delta')$ before seeing $\gamma$ is accepted
+with probability $\le 2^{-128}$, on top of the unchanged sumcheck error.
+The ordering is what supplies "before": the $P,Q$ commitment roots and
+$\sigma_z$ are absorbed into the transcript *before* $\gamma$ is sampled
+(`prove_r1cs_zk_a1` absorbs both roots; `prove_packed_padded_zk` observes
+$\sigma_z$ then samples $\gamma$).
+
+*Constructive check [C]* (`zerocheck.rs::zk_gamma_cancellation_unique_and_fs_ordering`):
+on an invalid witness the test measures the affine response, **solves** for
+the unique $\sigma^\star$ that cancels the defect, and shows (i) the patched
+proof is accepted by the real verifier when challenges are fixed in advance
+— i.e. the ordering attack genuinely works if $\sigma_z$ may be chosen after
+$\gamma$ — and (ii) the same proof is rejected under Fiat–Shamir, and at 100
+further challenge tuples. This exhibits the accept-set in $\gamma$ having
+size exactly one, which is the content of the $2^{-128}$ bound, on the real
+code. A small-field exhaustive port is **descoped**: $\mathbb{F}_{2^{128}}$
+is load-bearing throughout the kernels (GHASH, 128-bit packing, the $\varphi_8$
+skip basis), so a small-field variant would be an idealized duplicate of the
+protocol rather than the shipped one; the constructive test establishes the
+same fact on the real prover (review item #17).
+
 **Knowledge soundness UNCHANGED [P].** Every valid original witness extends to
 a valid randomized witness (fill the mask columns with any bits), and every
 accepting extended witness restricts to a valid original witness (the mask
