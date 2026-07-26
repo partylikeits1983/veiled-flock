@@ -241,3 +241,184 @@ fn f128_inverse_roundtrips() {
     };
     assert_eq!(x * x.inv(), F128::ONE);
 }
+
+// ---------------------------------------------------------------------------
+// Knowledge extraction
+// ---------------------------------------------------------------------------
+
+/// **The extractor recovers real preimages.** Given the committed vector an
+/// honest prover produced — what the straightline ROM observation step yields
+/// — extraction returns byte strings that hash to the public digests, checked
+/// by the `blake3` crate outside the circuit entirely.
+#[test]
+fn extractor_recovers_the_preimages_from_an_honest_commitment() {
+    use flock_core::zk::MaskSampler;
+    use flock_prover::preimage_extractor::extract_preimages;
+    use flock_prover::r1cs_hashes::blake3::{
+        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+    };
+
+    let setup = Blake3PreimageZkSetup::new(N);
+    let secret = msgs(0xE0E0_1111, N);
+    let digests = Blake3PreimageSetup::digests_of(&secret);
+
+    let layout = setup.r1cs.zk.expect("zk layout");
+    let mut zrng = flock_core::zk::ZkRng::from_seed([31u8; 32]);
+    let mut rand_words =
+        vec![
+            0u64;
+            setup.n_block_slots()
+                * flock_prover::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+        ];
+    zrng.fill_u64s(&mut rand_words);
+    let blocks: Vec<_> = secret
+        .iter()
+        .map(flock_prover::r1cs_hashes::blake3_preimage::message_compression)
+        .collect();
+    let (z, _a, _b, _l) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+        &blocks,
+        setup.n_blocks_log(),
+        &layout,
+        &rand_words,
+        ParamPinning::RootHash64,
+    );
+
+    let got = extract_preimages(&z, &digests, setup.n_block_slots())
+        .expect("extraction must succeed on an honest commitment");
+    assert_eq!(got.len(), N);
+    for (i, (g, want)) in got.iter().zip(&secret).enumerate() {
+        assert_eq!(g, want, "extracted message {i} is not the real preimage");
+        assert_eq!(::blake3::hash(g).as_bytes(), &digests[i]);
+    }
+}
+
+/// **The decisive control: extraction FAILS on the simulator's proof.**
+///
+/// The simulator produces a transcript the verifier accepts, and it knows no
+/// preimage. If extraction succeeded on its committed vector, the extractor
+/// would be recovering something other than knowledge — a mask column, an
+/// opening claim, or an assignment untied to the digests — and "argument of
+/// knowledge" would be empty.
+///
+/// This is the test that separates zero knowledge from knowledge soundness:
+/// the same object that makes the proof reveal nothing must not also make it
+/// prove nothing.
+#[test]
+fn extraction_fails_on_the_simulators_commitment() {
+    use flock_core::zk::MaskSampler;
+    use flock_prover::preimage_extractor::{ExtractError, extract_preimages};
+    use flock_prover::r1cs_hashes::blake3::{
+        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+    };
+
+    let setup = Blake3PreimageZkSetup::new(N);
+    // The statement: digests of messages nobody in this test knows a preimage
+    // for except the honest party.
+    let secret = msgs(0xE0E0_2222, N);
+    let digests = Blake3PreimageSetup::digests_of(&secret);
+
+    // The simulator's committed vector: its own messages, output region
+    // overwritten with the public digests.
+    let own = msgs(0xE0E0_3333, N);
+    let layout = setup.r1cs.zk.expect("zk layout");
+    let mut zrng = flock_core::zk::ZkRng::from_seed([32u8; 32]);
+    let mut rand_words =
+        vec![
+            0u64;
+            setup.n_block_slots()
+                * flock_prover::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+        ];
+    zrng.fill_u64s(&mut rand_words);
+    let blocks: Vec<_> = own
+        .iter()
+        .map(flock_prover::r1cs_hashes::blake3_preimage::message_compression)
+        .collect();
+    let (mut z, _a, _b, _l) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+        &blocks,
+        setup.n_blocks_log(),
+        &layout,
+        &rand_words,
+        ParamPinning::RootHash64,
+    );
+    let words_per_block = (1usize << 14) / 128;
+    for (i, d) in digests.iter().enumerate() {
+        for half in 0..2usize {
+            let mut w = F128::ZERO;
+            for b in 0..128usize {
+                let bit = half * 128 + b;
+                if (d[bit / 8] >> (bit % 8)) & 1 == 1 {
+                    if b < 64 {
+                        w.lo |= 1u64 << b;
+                    } else {
+                        w.hi |= 1u64 << (b - 64);
+                    }
+                }
+            }
+            z[i * words_per_block + 2 + half] = w;
+        }
+    }
+
+    match extract_preimages(&z, &digests, setup.n_block_slots()) {
+        Err(ExtractError::NotAPreimage { index }) => {
+            assert_eq!(index, 0, "the first instance already fails");
+        }
+        Err(e) => panic!("unexpected extraction error: {e}"),
+        Ok(_) => panic!(
+            "extraction SUCCEEDED on the simulator's commitment — the extractor              is not recovering knowledge, and the argument-of-knowledge claim              would be empty"
+        ),
+    }
+}
+
+/// **The extractor reads the message region, not a mask column.** Perturbing
+/// the randomizer sections — which live above `useful_bits` and carry the
+/// prover's mask randomness — must not change what is extracted.
+#[test]
+fn extraction_ignores_the_mask_columns() {
+    use flock_core::zk::MaskSampler;
+    use flock_prover::preimage_extractor::message_bytes_at;
+    use flock_prover::r1cs_hashes::blake3::{
+        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+    };
+
+    let setup = Blake3PreimageZkSetup::new(N);
+    let secret = msgs(0xE0E0_4444, 4);
+    let layout = setup.r1cs.zk.expect("zk layout");
+    let build = |seed: u8| {
+        let mut zrng = flock_core::zk::ZkRng::from_seed([seed; 32]);
+        let mut rand_words =
+            vec![
+                0u64;
+                setup.n_block_slots()
+                    * flock_prover::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+            ];
+        zrng.fill_u64s(&mut rand_words);
+        let mut all: Vec<_> = secret
+            .iter()
+            .map(flock_prover::r1cs_hashes::blake3_preimage::message_compression)
+            .collect();
+        all.resize(N, ParamPinning::RootHash64.padding_compression());
+        let (z, _a, _b, _l) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+            &all,
+            setup.n_blocks_log(),
+            &layout,
+            &rand_words,
+            ParamPinning::RootHash64,
+        );
+        z
+    };
+    let z1 = build(51);
+    let z2 = build(52);
+    assert_ne!(
+        z1, z2,
+        "different mask draws must give different commitments"
+    );
+    for i in 0..4usize {
+        assert_eq!(
+            message_bytes_at(&z1, i),
+            message_bytes_at(&z2, i),
+            "extraction at instance {i} moved with the MASKS — it is reading \
+             mask material, not the message"
+        );
+        assert_eq!(message_bytes_at(&z1, i), secret[i]);
+    }
+}

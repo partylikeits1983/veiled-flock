@@ -17,6 +17,7 @@ pub use flock_core::*;
 pub mod chain;
 pub mod digest_bind;
 pub mod merkle_path;
+pub mod preimage_extractor;
 #[cfg(feature = "zk")]
 pub mod preimage_simulator;
 pub mod proof_io;
