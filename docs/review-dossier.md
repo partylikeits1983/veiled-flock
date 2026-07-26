@@ -181,7 +181,8 @@ assumption; no independent review; side channels and QROM out of scope.
      verified) and the constant-wire pin (a witness-independent target shift)
      are also excluded.
 
-   Repair: extend a committed mask channel to the lincheck sumcheck —
+   Repair specified in full in `docs/lincheck-mask-channel.md`: extend a
+   committed mask channel to the lincheck sumcheck —
    `comb·z + γ_lc·S·T` for fresh witness-free `S,T` committed before `γ_lc`,
    with `S(ρ),T(ρ)` opened hidingly — exactly as A1′ treats the zerocheck
    rounds. A construction change with its own telescoping and soundness
