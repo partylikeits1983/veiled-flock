@@ -38,9 +38,7 @@ use flock_core::lincheck::pack_z_lincheck_from_packed;
 use flock_core::zk::{MaskSampler, ZkRng};
 use flock_prover::prover::{A1MaskSources, prove_r1cs_zk_a1_with_masks};
 use flock_prover::r1cs_hashes::blake3::{Blake3Setup, Compression};
-use flock_prover::transcript_schema::{
-    LeakageClass, SchemaIndex, algebraic_vector, flatten_a1,
-};
+use flock_prover::transcript_schema::{LeakageClass, SchemaIndex, algebraic_vector, flatten_a1};
 use flock_prover::zk_audit_support::FixtureA1M15;
 
 /// Deterministic PRNG so the test is reproducible; in production the
@@ -61,7 +59,10 @@ impl Rng {
         (0..n).map(|_| self.next_u64() & 1 == 1).collect()
     }
     fn f128(&mut self) -> F128 {
-        F128 { lo: self.next_u64(), hi: self.next_u64() }
+        F128 {
+            lo: self.next_u64(),
+            hi: self.next_u64(),
+        }
     }
 }
 
@@ -72,7 +73,11 @@ impl Rng {
 fn simulate(
     n: usize,
     rng: &mut Rng,
-) -> (Blake3Setup, flock_prover::prover::R1csProofZkA1, flock_core::pcs::Commitment) {
+) -> (
+    Blake3Setup,
+    flock_prover::prover::R1csProofZkA1,
+    flock_core::pcs::Commitment,
+) {
     let setup = Blake3Setup::with_zk(n);
     let blocks: Vec<Compression> = (0..n)
         .map(|_| {
@@ -108,7 +113,9 @@ fn simulator_produces_accepting_proof_without_a_witness() {
     let mut rng2 = Rng(0x0B_AD_C0_DE);
     let (setup2, proof2, commitment2) = simulate(n, &mut rng2);
     let mut vch2 = FsChallenger::new(b"flock-zk-sim-a1");
-    setup2.verify_zk_a1(&commitment2, &proof2, &mut vch2).expect("second run verifies");
+    setup2
+        .verify_zk_a1(&commitment2, &proof2, &mut vch2)
+        .expect("second run verifies");
     assert_ne!(
         commitment.root, commitment2.root,
         "independent simulator runs must differ (fresh masks/witness)"
@@ -191,7 +198,9 @@ fn simulator_translation_exact_transcript_equality() {
         let flat = flatten_a1(&comm, &proof);
         let idx = SchemaIndex::build(&flat);
         let all = algebraic_vector(&flat);
-        idx.range("zerocheck.multilinear_rounds").map(|i| all[i]).collect()
+        idx.range("zerocheck.multilinear_rounds")
+            .map(|i| all[i])
+            .collect()
     };
 
     let p0 = vec![false; n];
@@ -220,7 +229,12 @@ fn simulator_translation_exact_transcript_equality() {
         let mut p = p0.clone();
         p[i] = true;
         let col = run(&w0, &p);
-        let mut row = flatten(&col.iter().zip(&t0).map(|(a, b)| *a + *b).collect::<Vec<_>>());
+        let mut row = flatten(
+            &col.iter()
+                .zip(&t0)
+                .map(|(a, b)| *a + *b)
+                .collect::<Vec<_>>(),
+        );
         let mut prov = vec![0u64; prov_words];
         prov[slot / 64] |= 1u64 << (slot % 64);
         for (b, &pv) in basis.iter().zip(&pivots) {

@@ -130,7 +130,13 @@ fn push(
     fs_absorbed: bool,
     value: FlatValue,
 ) {
-    out.push(FlatField { path, group, class, fs_absorbed, value });
+    out.push(FlatField {
+        path,
+        group,
+        class,
+        fs_absorbed,
+        value,
+    });
 }
 
 fn hashes_bytes(hashes: &[Hash]) -> Vec<u8> {
@@ -170,10 +176,21 @@ fn flatten_opening(
     opening: &BatchOpeningProofLigerito,
 ) {
     use FlatValue::*;
-    let BatchOpeningProofLigerito { ring_switches, ligerito, zk_blind } = opening;
+    let BatchOpeningProofLigerito {
+        ring_switches,
+        ligerito,
+        zk_blind,
+    } = opening;
     for (i, rs) in ring_switches.iter().enumerate() {
         let RingSwitchProof { s_hat_v } = rs;
-        push(out, paths.s_hat_v, i, algebraic, true, F128s(s_hat_v.clone()));
+        push(
+            out,
+            paths.s_hat_v,
+            i,
+            algebraic,
+            true,
+            F128s(s_hat_v.clone()),
+        );
     }
     let LigeritoProof {
         initial_root,
@@ -186,10 +203,27 @@ fn flatten_opening(
         ood_values,
         fold_grinding_nonces,
     } = ligerito;
-    push(out, paths.initial_root, 0, LeakageClass::HiddenHash, false, Bytes(initial_root.to_vec()));
+    push(
+        out,
+        paths.initial_root,
+        0,
+        LeakageClass::HiddenHash,
+        false,
+        Bytes(initial_root.to_vec()),
+    );
     {
-        let RecursiveProof { opened_rows, merkle_proof } = initial_proof;
-        push(out, paths.initial_rows, 0, algebraic, false, F128Rows(opened_rows.clone()));
+        let RecursiveProof {
+            opened_rows,
+            merkle_proof,
+        } = initial_proof;
+        push(
+            out,
+            paths.initial_rows,
+            0,
+            algebraic,
+            false,
+            F128Rows(opened_rows.clone()),
+        );
         push(
             out,
             paths.initial_merkle,
@@ -208,8 +242,18 @@ fn flatten_opening(
         Bytes(hashes_bytes(recursive_roots)),
     );
     for (l, rp) in recursive_proofs.iter().enumerate() {
-        let RecursiveProof { opened_rows, merkle_proof } = rp;
-        push(out, paths.recursive_rows, l, algebraic, false, F128Rows(opened_rows.clone()));
+        let RecursiveProof {
+            opened_rows,
+            merkle_proof,
+        } = rp;
+        push(
+            out,
+            paths.recursive_rows,
+            l,
+            algebraic,
+            false,
+            F128Rows(opened_rows.clone()),
+        );
         push(
             out,
             paths.recursive_merkle,
@@ -220,9 +264,20 @@ fn flatten_opening(
         );
     }
     {
-        let FinalProof { yr, opened_rows, merkle_proof } = final_proof;
+        let FinalProof {
+            yr,
+            opened_rows,
+            merkle_proof,
+        } = final_proof;
         push(out, paths.final_yr, 0, algebraic, true, F128s(yr.clone()));
-        push(out, paths.final_rows, 0, algebraic, false, F128Rows(opened_rows.clone()));
+        push(
+            out,
+            paths.final_rows,
+            0,
+            algebraic,
+            false,
+            F128Rows(opened_rows.clone()),
+        );
         push(
             out,
             paths.final_merkle,
@@ -232,9 +287,30 @@ fn flatten_opening(
             Bytes(hashes_bytes(merkle_proof)),
         );
     }
-    push(out, paths.sumcheck, 0, algebraic, true, F128s(sumcheck_f128(sumcheck_transcript)));
-    push(out, paths.grinding_nonces, 0, LeakageClass::Metadata, false, U64s(grinding_nonces.clone()));
-    push(out, paths.ood_values, 0, algebraic, true, F128s(ood_values.clone()));
+    push(
+        out,
+        paths.sumcheck,
+        0,
+        algebraic,
+        true,
+        F128s(sumcheck_f128(sumcheck_transcript)),
+    );
+    push(
+        out,
+        paths.grinding_nonces,
+        0,
+        LeakageClass::Metadata,
+        false,
+        U64s(grinding_nonces.clone()),
+    );
+    push(
+        out,
+        paths.ood_values,
+        0,
+        algebraic,
+        true,
+        F128s(ood_values.clone()),
+    );
     push(
         out,
         paths.fold_grinding_nonces,
@@ -243,10 +319,26 @@ fn flatten_opening(
         false,
         U64s(fold_grinding_nonces.clone()),
     );
-    let blind = zk_blind.as_ref().expect("A1′ openings are always hiding (zk_blind present)");
+    let blind = zk_blind
+        .as_ref()
+        .expect("A1′ openings are always hiding (zk_blind present)");
     let ZkBlindOpening { y_g, c_grind_nonce } = blind;
-    push(out, paths.y_g, 0, LeakageClass::MaskOnly, true, F128s(vec![*y_g]));
-    push(out, paths.c_grind_nonce, 0, LeakageClass::Metadata, false, U64s(vec![*c_grind_nonce]));
+    push(
+        out,
+        paths.y_g,
+        0,
+        LeakageClass::MaskOnly,
+        true,
+        F128s(vec![*y_g]),
+    );
+    push(
+        out,
+        paths.c_grind_nonce,
+        0,
+        LeakageClass::Metadata,
+        false,
+        U64s(vec![*c_grind_nonce]),
+    );
 }
 
 /// Static path names for one opening (kept `&'static` so the manifest is a
@@ -319,17 +411,73 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
     } = proof;
 
     let Commitment { root, params } = commitment;
-    push(&mut out, "commitment.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
-    push(&mut out, "commitment.params", 0, LeakageClass::Metadata, false, Bytes(params_bytes(params)));
+    push(
+        &mut out,
+        "commitment.root",
+        0,
+        LeakageClass::HiddenHash,
+        true,
+        Bytes(root.to_vec()),
+    );
+    push(
+        &mut out,
+        "commitment.params",
+        0,
+        LeakageClass::Metadata,
+        false,
+        Bytes(params_bytes(params)),
+    );
     let Commitment { root, params } = comm_p;
-    push(&mut out, "comm_p.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
-    push(&mut out, "comm_p.params", 0, LeakageClass::Metadata, false, Bytes(params_bytes(params)));
+    push(
+        &mut out,
+        "comm_p.root",
+        0,
+        LeakageClass::HiddenHash,
+        true,
+        Bytes(root.to_vec()),
+    );
+    push(
+        &mut out,
+        "comm_p.params",
+        0,
+        LeakageClass::Metadata,
+        false,
+        Bytes(params_bytes(params)),
+    );
     let Commitment { root, params } = comm_q;
-    push(&mut out, "comm_q.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
-    push(&mut out, "comm_q.params", 0, LeakageClass::Metadata, false, Bytes(params_bytes(params)));
+    push(
+        &mut out,
+        "comm_q.root",
+        0,
+        LeakageClass::HiddenHash,
+        true,
+        Bytes(root.to_vec()),
+    );
+    push(
+        &mut out,
+        "comm_q.params",
+        0,
+        LeakageClass::Metadata,
+        false,
+        Bytes(params_bytes(params)),
+    );
     let Commitment { root, params } = comm_s;
-    push(&mut out, "comm_s.root", 0, LeakageClass::HiddenHash, true, Bytes(root.to_vec()));
-    push(&mut out, "comm_s.params", 0, LeakageClass::Metadata, false, Bytes(params_bytes(params)));
+    push(
+        &mut out,
+        "comm_s.root",
+        0,
+        LeakageClass::HiddenHash,
+        true,
+        Bytes(root.to_vec()),
+    );
+    push(
+        &mut out,
+        "comm_s.params",
+        0,
+        LeakageClass::Metadata,
+        false,
+        Bytes(params_bytes(params)),
+    );
 
     let ZkZerocheckProof {
         round1_ab,
@@ -342,9 +490,30 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
         final_p_eval,
         final_q_eval,
     } = zerocheck;
-    push(&mut out, "zerocheck.round1_ab", 0, LeakageClass::WitnessDependent, true, F128s(round1_ab.clone()));
-    push(&mut out, "zerocheck.round1_c", 0, LeakageClass::WitnessDependent, true, F128s(round1_c.clone()));
-    push(&mut out, "zerocheck.mask_init", 0, LeakageClass::MaskOnly, true, F128s(vec![*mask_init]));
+    push(
+        &mut out,
+        "zerocheck.round1_ab",
+        0,
+        LeakageClass::WitnessDependent,
+        true,
+        F128s(round1_ab.clone()),
+    );
+    push(
+        &mut out,
+        "zerocheck.round1_c",
+        0,
+        LeakageClass::WitnessDependent,
+        true,
+        F128s(round1_c.clone()),
+    );
+    push(
+        &mut out,
+        "zerocheck.mask_init",
+        0,
+        LeakageClass::MaskOnly,
+        true,
+        F128s(vec![*mask_init]),
+    );
     push(
         &mut out,
         "zerocheck.multilinear_rounds",
@@ -353,35 +522,103 @@ pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatFie
         true,
         F128s(pairs_f128(multilinear_rounds)),
     );
-    push(&mut out, "zerocheck.final_a_eval", 0, LeakageClass::WitnessDependent, true, F128s(vec![*final_a_eval]));
-    push(&mut out, "zerocheck.final_b_eval", 0, LeakageClass::WitnessDependent, true, F128s(vec![*final_b_eval]));
+    push(
+        &mut out,
+        "zerocheck.final_a_eval",
+        0,
+        LeakageClass::WitnessDependent,
+        true,
+        F128s(vec![*final_a_eval]),
+    );
+    push(
+        &mut out,
+        "zerocheck.final_b_eval",
+        0,
+        LeakageClass::WitnessDependent,
+        true,
+        F128s(vec![*final_b_eval]),
+    );
     // final_c_eval is NOT absorbed: verify_zk recomputes the C-side claim
     // from round1_c and checks equality (CEvalMismatch).
-    push(&mut out, "zerocheck.final_c_eval", 0, LeakageClass::Derived, false, F128s(vec![*final_c_eval]));
-    push(&mut out, "zerocheck.final_p_eval", 0, LeakageClass::MaskOnly, true, F128s(vec![*final_p_eval]));
-    push(&mut out, "zerocheck.final_q_eval", 0, LeakageClass::MaskOnly, true, F128s(vec![*final_q_eval]));
+    push(
+        &mut out,
+        "zerocheck.final_c_eval",
+        0,
+        LeakageClass::Derived,
+        false,
+        F128s(vec![*final_c_eval]),
+    );
+    push(
+        &mut out,
+        "zerocheck.final_p_eval",
+        0,
+        LeakageClass::MaskOnly,
+        true,
+        F128s(vec![*final_p_eval]),
+    );
+    push(
+        &mut out,
+        "zerocheck.final_q_eval",
+        0,
+        LeakageClass::MaskOnly,
+        true,
+        F128s(vec![*final_q_eval]),
+    );
 
     // A2: σ_lc is absorbed inside the lincheck, between the const-pin β and
     // the first round message — the position that fixes it before γ_lc.
-    push(&mut out, "lincheck.sigma_lc", 0, LeakageClass::MaskOnly, true, F128s(vec![*sigma_lc]));
+    push(
+        &mut out,
+        "lincheck.sigma_lc",
+        0,
+        LeakageClass::MaskOnly,
+        true,
+        F128s(vec![*sigma_lc]),
+    );
 
     let LincheckProof { rounds, z_partial } = lincheck;
     // Under A2 these two carry the transcript of the *shifted* witness
     // `z + γ_lc·S`. They stay classified WitnessDependent: the class records
     // what a coordinate is a function of, not how well it is masked — the
     // masking is what the joint coverage certificate has to demonstrate.
-    push(&mut out, "lincheck.rounds", 0, LeakageClass::WitnessDependent, true, F128s(pairs_f128(rounds)));
-    push(&mut out, "lincheck.z_partial", 0, LeakageClass::WitnessDependent, true, F128s(z_partial.clone()));
+    push(
+        &mut out,
+        "lincheck.rounds",
+        0,
+        LeakageClass::WitnessDependent,
+        true,
+        F128s(pairs_f128(rounds)),
+    );
+    push(
+        &mut out,
+        "lincheck.z_partial",
+        0,
+        LeakageClass::WitnessDependent,
+        true,
+        F128s(z_partial.clone()),
+    );
     // `s_eval` is witness-free, but it is *not* absorbed: it is bound by S's
     // commitment, and the verifier consumes it to un-shift the output claim.
-    push(&mut out, "lincheck.s_eval", 0, LeakageClass::MaskOnly, false, F128s(vec![*s_eval]));
+    push(
+        &mut out,
+        "lincheck.s_eval",
+        0,
+        LeakageClass::MaskOnly,
+        false,
+        F128s(vec![*s_eval]),
+    );
 
     // Prover message order: the P, Q and S openings run (on domain-separated
     // forked challengers) before the witness opening in `prove_r1cs_zk_a1`.
     flatten_opening(&mut out, &OPEN_P_PATHS, LeakageClass::MaskOnly, open_p);
     flatten_opening(&mut out, &OPEN_Q_PATHS, LeakageClass::MaskOnly, open_q);
     flatten_opening(&mut out, &OPEN_S_PATHS, LeakageClass::MaskOnly, open_s);
-    flatten_opening(&mut out, &PCS_OPEN_PATHS, LeakageClass::WitnessDependent, pcs_open);
+    flatten_opening(
+        &mut out,
+        &PCS_OPEN_PATHS,
+        LeakageClass::WitnessDependent,
+        pcs_open,
+    );
     out
 }
 
@@ -405,7 +642,11 @@ struct Cursor<'a> {
 impl<'a> Cursor<'a> {
     fn take(&mut self, path: &str) -> &'a FlatValue {
         let f = &self.fields[self.pos];
-        assert_eq!(f.path, path, "unflatten order mismatch at position {}", self.pos);
+        assert_eq!(
+            f.path, path,
+            "unflatten order mismatch at position {}",
+            self.pos
+        );
         self.pos += 1;
         &f.value
     }
@@ -456,7 +697,9 @@ fn f128_pairs(v: Vec<F128>) -> Vec<(F128, F128)> {
 
 fn bytes_hashes(b: &[u8]) -> Vec<Hash> {
     assert_eq!(b.len() % 32, 0);
-    b.chunks_exact(32).map(|c| <Hash>::try_from(c).unwrap()).collect()
+    b.chunks_exact(32)
+        .map(|c| <Hash>::try_from(c).unwrap())
+        .collect()
 }
 
 fn one_hash(b: &[u8]) -> Hash {
@@ -488,7 +731,10 @@ fn unflatten_opening(cur: &mut Cursor, paths: &OpeningPaths) -> BatchOpeningProo
     while cur.pos < cur.fields.len() && cur.fields[cur.pos].path == paths.recursive_rows {
         let opened_rows = cur.rows(paths.recursive_rows);
         let merkle_proof = bytes_hashes(&cur.bytes(paths.recursive_merkle));
-        recursive_proofs.push(RecursiveProof { opened_rows, merkle_proof });
+        recursive_proofs.push(RecursiveProof {
+            opened_rows,
+            merkle_proof,
+        });
     }
     let final_proof = FinalProof {
         yr: cur.f128s(paths.final_yr),
@@ -518,7 +764,10 @@ fn unflatten_opening(cur: &mut Cursor, paths: &OpeningPaths) -> BatchOpeningProo
             ood_values,
             fold_grinding_nonces,
         },
-        zk_blind: Some(ZkBlindOpening { y_g, c_grind_nonce: c_grind_nonce[0] }),
+        zk_blind: Some(ZkBlindOpening {
+            y_g,
+            c_grind_nonce: c_grind_nonce[0],
+        }),
     }
 }
 
@@ -526,7 +775,10 @@ fn unflatten_opening(cur: &mut Cursor, paths: &OpeningPaths) -> BatchOpeningProo
 /// [`flatten_a1`]; asserting `unflatten_a1(flatten_a1(c, p)) == (c, p)`
 /// proves the flattening loses nothing.
 pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
-    let mut cur = Cursor { fields: flat, pos: 0 };
+    let mut cur = Cursor {
+        fields: flat,
+        pos: 0,
+    };
     let commitment = unflatten_commitment(&mut cur, "commitment.root", "commitment.params");
     let comm_p = unflatten_commitment(&mut cur, "comm_p.root", "comm_p.params");
     let comm_q = unflatten_commitment(&mut cur, "comm_q.root", "comm_q.params");
@@ -607,13 +859,29 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("open_p.ring_switches.s_hat_v", MaskOnly, true),
         ("open_p.ligerito.initial_root", HiddenHash, false),
         ("open_p.ligerito.initial_proof.opened_rows", MaskOnly, false),
-        ("open_p.ligerito.initial_proof.merkle_proof", HiddenHash, false),
+        (
+            "open_p.ligerito.initial_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_p.ligerito.recursive_roots", HiddenHash, true),
-        ("open_p.ligerito.recursive_proofs.opened_rows", MaskOnly, false),
-        ("open_p.ligerito.recursive_proofs.merkle_proof", HiddenHash, false),
+        (
+            "open_p.ligerito.recursive_proofs.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_p.ligerito.recursive_proofs.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_p.ligerito.final_proof.yr", MaskOnly, true),
         ("open_p.ligerito.final_proof.opened_rows", MaskOnly, false),
-        ("open_p.ligerito.final_proof.merkle_proof", HiddenHash, false),
+        (
+            "open_p.ligerito.final_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_p.ligerito.sumcheck_transcript", MaskOnly, true),
         ("open_p.ligerito.grinding_nonces", Metadata, false),
         ("open_p.ligerito.ood_values", MaskOnly, true),
@@ -623,13 +891,29 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("open_q.ring_switches.s_hat_v", MaskOnly, true),
         ("open_q.ligerito.initial_root", HiddenHash, false),
         ("open_q.ligerito.initial_proof.opened_rows", MaskOnly, false),
-        ("open_q.ligerito.initial_proof.merkle_proof", HiddenHash, false),
+        (
+            "open_q.ligerito.initial_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_q.ligerito.recursive_roots", HiddenHash, true),
-        ("open_q.ligerito.recursive_proofs.opened_rows", MaskOnly, false),
-        ("open_q.ligerito.recursive_proofs.merkle_proof", HiddenHash, false),
+        (
+            "open_q.ligerito.recursive_proofs.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_q.ligerito.recursive_proofs.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_q.ligerito.final_proof.yr", MaskOnly, true),
         ("open_q.ligerito.final_proof.opened_rows", MaskOnly, false),
-        ("open_q.ligerito.final_proof.merkle_proof", HiddenHash, false),
+        (
+            "open_q.ligerito.final_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_q.ligerito.sumcheck_transcript", MaskOnly, true),
         ("open_q.ligerito.grinding_nonces", Metadata, false),
         ("open_q.ligerito.ood_values", MaskOnly, true),
@@ -639,13 +923,29 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("open_s.ring_switches.s_hat_v", MaskOnly, true),
         ("open_s.ligerito.initial_root", HiddenHash, false),
         ("open_s.ligerito.initial_proof.opened_rows", MaskOnly, false),
-        ("open_s.ligerito.initial_proof.merkle_proof", HiddenHash, false),
+        (
+            "open_s.ligerito.initial_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_s.ligerito.recursive_roots", HiddenHash, true),
-        ("open_s.ligerito.recursive_proofs.opened_rows", MaskOnly, false),
-        ("open_s.ligerito.recursive_proofs.merkle_proof", HiddenHash, false),
+        (
+            "open_s.ligerito.recursive_proofs.opened_rows",
+            MaskOnly,
+            false,
+        ),
+        (
+            "open_s.ligerito.recursive_proofs.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_s.ligerito.final_proof.yr", MaskOnly, true),
         ("open_s.ligerito.final_proof.opened_rows", MaskOnly, false),
-        ("open_s.ligerito.final_proof.merkle_proof", HiddenHash, false),
+        (
+            "open_s.ligerito.final_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("open_s.ligerito.sumcheck_transcript", MaskOnly, true),
         ("open_s.ligerito.grinding_nonces", Metadata, false),
         ("open_s.ligerito.ood_values", MaskOnly, true),
@@ -654,15 +954,43 @@ pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
         ("open_s.zk_blind.c_grind_nonce", Metadata, false),
         ("pcs_open.ring_switches.s_hat_v", WitnessDependent, true),
         ("pcs_open.ligerito.initial_root", HiddenHash, false),
-        ("pcs_open.ligerito.initial_proof.opened_rows", WitnessDependent, false),
-        ("pcs_open.ligerito.initial_proof.merkle_proof", HiddenHash, false),
+        (
+            "pcs_open.ligerito.initial_proof.opened_rows",
+            WitnessDependent,
+            false,
+        ),
+        (
+            "pcs_open.ligerito.initial_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("pcs_open.ligerito.recursive_roots", HiddenHash, true),
-        ("pcs_open.ligerito.recursive_proofs.opened_rows", WitnessDependent, false),
-        ("pcs_open.ligerito.recursive_proofs.merkle_proof", HiddenHash, false),
+        (
+            "pcs_open.ligerito.recursive_proofs.opened_rows",
+            WitnessDependent,
+            false,
+        ),
+        (
+            "pcs_open.ligerito.recursive_proofs.merkle_proof",
+            HiddenHash,
+            false,
+        ),
         ("pcs_open.ligerito.final_proof.yr", WitnessDependent, true),
-        ("pcs_open.ligerito.final_proof.opened_rows", WitnessDependent, false),
-        ("pcs_open.ligerito.final_proof.merkle_proof", HiddenHash, false),
-        ("pcs_open.ligerito.sumcheck_transcript", WitnessDependent, true),
+        (
+            "pcs_open.ligerito.final_proof.opened_rows",
+            WitnessDependent,
+            false,
+        ),
+        (
+            "pcs_open.ligerito.final_proof.merkle_proof",
+            HiddenHash,
+            false,
+        ),
+        (
+            "pcs_open.ligerito.sumcheck_transcript",
+            WitnessDependent,
+            true,
+        ),
         ("pcs_open.ligerito.grinding_nonces", Metadata, false),
         ("pcs_open.ligerito.ood_values", WitnessDependent, true),
         ("pcs_open.ligerito.fold_grinding_nonces", Metadata, false),
@@ -680,7 +1008,11 @@ pub fn manifest_of(flat: &[FlatField]) -> Vec<(&'static str, LeakageClass, bool)
         match out.iter().find(|(p, _, _)| *p == f.path) {
             None => out.push((f.path, f.class, f.fs_absorbed)),
             Some((p, c, a)) => {
-                assert_eq!((*c, *a), (f.class, f.fs_absorbed), "inconsistent classification for {p}")
+                assert_eq!(
+                    (*c, *a),
+                    (f.class, f.fs_absorbed),
+                    "inconsistent classification for {p}"
+                )
             }
         }
     }
@@ -748,7 +1080,10 @@ impl SchemaIndex {
                 off += n;
             }
         }
-        SchemaIndex { entries, total: off }
+        SchemaIndex {
+            entries,
+            total: off,
+        }
     }
     /// Total F128 coordinates in the algebraic vector.
     pub fn total(&self) -> usize {
@@ -758,7 +1093,11 @@ impl SchemaIndex {
     /// the path is absent or its instances are not contiguous.
     pub fn range(&self, path: &str) -> std::ops::Range<usize> {
         let mut it = self.entries.iter().filter(|(p, _)| *p == path);
-        let first = it.next().unwrap_or_else(|| panic!("schema path not found: {path}")).1.clone();
+        let first = it
+            .next()
+            .unwrap_or_else(|| panic!("schema path not found: {path}"))
+            .1
+            .clone();
         let mut end = first.end;
         for (_, r) in it {
             assert_eq!(r.start, end, "non-contiguous instances of {path}");

@@ -160,7 +160,11 @@ pub const CERTIFIED: &[ZkCertificate] = &[ZkCertificate {
 
 /// Look up the certificate for a configuration, ignoring the circuit digest
 /// (shape match only).
-fn find_shape(family: StatementFamily, batch_size: usize, params: &PcsParams) -> Option<&'static ZkCertificate> {
+fn find_shape(
+    family: StatementFamily,
+    batch_size: usize,
+    params: &PcsParams,
+) -> Option<&'static ZkCertificate> {
     CERTIFIED.iter().find(|c| {
         c.family == family
             && c.batch_size == batch_size
@@ -184,10 +188,15 @@ pub fn require_certified(
     r1cs: &BlockR1cs,
     params: &PcsParams,
 ) -> Result<&'static ZkCertificate, ZkGateError> {
-    let cert = find_shape(family, batch_size, params)
-        .ok_or(ZkGateError::Uncertified { batch_size, m: params.m })?;
+    let cert = find_shape(family, batch_size, params).ok_or(ZkGateError::Uncertified {
+        batch_size,
+        m: params.m,
+    })?;
     if r1cs.statement_digest() != cert.circuit_digest {
-        return Err(ZkGateError::Uncertified { batch_size, m: params.m });
+        return Err(ZkGateError::Uncertified {
+            batch_size,
+            m: params.m,
+        });
     }
     Ok(cert)
 }

@@ -439,7 +439,7 @@ pub fn zero_lincheck_padding_rows(s_packed: &mut [F128], k_log: usize, useful_bi
         return;
     }
     assert!(
-        k % 128 == 0 && useful_bits % 128 == 0,
+        k.is_multiple_of(128) && useful_bits.is_multiple_of(128),
         "A2 mask padding: 2^k_log ({k}) and useful_bits ({useful_bits}) must \
          both be multiples of 128"
     );
@@ -1289,7 +1289,12 @@ pub fn prove_padded_masked_capture_z_vec<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     mask: LincheckMask<'_>,
     challenger: &mut Ch,
-) -> (LincheckProof, LincheckClaim, Vec<F128>, LincheckMaskTranscript) {
+) -> (
+    LincheckProof,
+    LincheckClaim,
+    Vec<F128>,
+    LincheckMaskTranscript,
+) {
     let (proof, claim, captured, mask_transcript) = prove_padded_inner(
         z_packed,
         m,
@@ -2341,7 +2346,9 @@ mod tests {
                 k,
                 &circuit,
                 &x_ab,
-                LincheckMask { s_packed: &s_packed },
+                LincheckMask {
+                    s_packed: &s_packed,
+                },
                 &mut ch_p,
             );
 
@@ -2421,7 +2428,9 @@ mod tests {
             k,
             &circuit,
             &x_ab,
-            LincheckMask { s_packed: &s_packed },
+            LincheckMask {
+                s_packed: &s_packed,
+            },
             &mut ch_p,
         );
 
@@ -2440,7 +2449,10 @@ mod tests {
                 Some((bad, mt.s_eval)),
                 &mut ch_v,
             );
-            assert!(got.is_err(), "verifier accepted a tampered σ_lc (δ={delta})");
+            assert!(
+                got.is_err(),
+                "verifier accepted a tampered σ_lc (δ={delta})"
+            );
         }
     }
 

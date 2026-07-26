@@ -88,7 +88,11 @@ const FLAVOR_CHAIN_LIGERITO: u8 = 3;
 const FLAVOR_R1CS_ZK_A1: u8 = 4;
 
 /// All flavor bytes this build understands (for the unknown-flavor check).
-const KNOWN_FLAVORS: [u8; 3] = [FLAVOR_R1CS_LIGERITO, FLAVOR_CHAIN_LIGERITO, FLAVOR_R1CS_ZK_A1];
+const KNOWN_FLAVORS: [u8; 3] = [
+    FLAVOR_R1CS_LIGERITO,
+    FLAVOR_CHAIN_LIGERITO,
+    FLAVOR_R1CS_ZK_A1,
+];
 
 /// Header size = 5-byte magic + 1-byte version + 1-byte flavor.
 const HEADER_LEN: usize = 7;

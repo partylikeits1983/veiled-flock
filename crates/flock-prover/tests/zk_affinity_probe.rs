@@ -261,7 +261,10 @@ fn assert_confined_to_zc_pairs(name: &str, defect: &[F128]) -> usize {
         );
         in_class += 1;
     }
-    println!("{name}: {in_class}/{} round-pair positions nonzero", pairs.len());
+    println!(
+        "{name}: {in_class}/{} round-pair positions nonzero",
+        pairs.len()
+    );
     in_class
 }
 
@@ -297,19 +300,30 @@ fn affinity_structure_probes() {
     let d_ab = xor(&t(&p0, &ua1, &ub1), &base);
     let defect: Vec<F128> = (0..n).map(|i| d_ab[i] + d_a[i] + d_b[i]).collect();
     let nz = assert_confined_to_zc_pairs("A x B affinity defect", &defect);
-    assert!(nz > 0, "expected bilinear round-pair terms; structure changed");
+    assert!(
+        nz > 0,
+        "expected bilinear round-pair terms; structure changed"
+    );
 
     // No within-species cross terms: A-rows only ever meet the constant-1
     // wire on the b̂-side, and symmetrically for B-rows.
     let d_a2 = xor(&t(&p0, &ua2, &ub0), &base);
     let d_a12 = xor(&t(&p0, &x(&ua1, &ua2), &ub0), &base);
     for i in 0..n {
-        assert_eq!(d_a12[i] + d_a[i] + d_a2[i], F128::ZERO, "A x A defect at {i}");
+        assert_eq!(
+            d_a12[i] + d_a[i] + d_a2[i],
+            F128::ZERO,
+            "A x A defect at {i}"
+        );
     }
     let d_b2 = xor(&t(&p0, &ua0, &ub2), &base);
     let d_b12 = xor(&t(&p0, &ua0, &x(&ub1, &ub2)), &base);
     for i in 0..n {
-        assert_eq!(d_b12[i] + d_b[i] + d_b2[i], F128::ZERO, "B x B defect at {i}");
+        assert_eq!(
+            d_b12[i] + d_b[i] + d_b2[i],
+            F128::ZERO,
+            "B x B defect at {i}"
+        );
     }
 
     // Witness-dependence of the mask→transcript map is likewise confined to
@@ -428,9 +442,11 @@ fn repaired_rank_certificate_fixed_ub() {
             }
         }
 
-        for (label, subset) in [("per-class spread", &spread), ("pure zc_round_pair", &pure_zc)] {
-            let mut rows: Vec<Vec<u64>> =
-                rand_deltas.iter().map(|d| restrict(d, subset)).collect();
+        for (label, subset) in [
+            ("per-class spread", &spread),
+            ("pure zc_round_pair", &pure_zc),
+        ] {
+            let mut rows: Vec<Vec<u64>> = rand_deltas.iter().map(|d| restrict(d, subset)).collect();
             let rank = rank_f2(&mut rows, SUBSET_DIM);
             println!("trial {trial} [{label}] rank = {rank}/{SUBSET_DIM}");
             assert_eq!(rank, SUBSET_DIM, "trial {trial} [{label}]: not full rank");

@@ -136,7 +136,9 @@ fn production_checked_prove_verifies() {
     );
     assert!(report.covered());
     let mut chv = FsChallenger::new(b"flock-prod-checked");
-    setup.verify_zk_a1(&comm, &proof, &mut chv).expect("checked proof must verify");
+    setup
+        .verify_zk_a1(&comm, &proof, &mut chv)
+        .expect("checked proof must verify");
     let _ = F128::ZERO;
 }
 

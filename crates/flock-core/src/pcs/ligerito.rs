@@ -3079,7 +3079,10 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let num_interleaved_0 = 1usize << initial_k;
     // zk: each L0 leaf additionally carries the blinder-g lanes.
     let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
-    assert_eq!(l0_codeword.len(), block_len_0 * num_interleaved_0 * l0_lane_mult);
+    assert_eq!(
+        l0_codeword.len(),
+        block_len_0 * num_interleaved_0 * l0_lane_mult
+    );
     assert_eq!(l0_tree.len(), 2 * block_len_0 - 1);
 
     let trace = std::env::var("LIG_PROVE_TRACE").is_ok();
@@ -3665,12 +3668,8 @@ where
         }
         None => &proof.initial_proof.opened_rows,
     };
-    let enforced_sum_0 = induce_sumcheck_enforced_sum(
-        enforced_rows_0,
-        &r_lane_fold,
-        &queries_0,
-        &alpha_0,
-    );
+    let enforced_sum_0 =
+        induce_sumcheck_enforced_sum(enforced_rows_0, &r_lane_fold, &queries_0, &alpha_0);
     if trace {
         t_enforced += _t.elapsed();
     }

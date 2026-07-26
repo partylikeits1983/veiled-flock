@@ -81,7 +81,10 @@ struct F2Span {
 
 impl F2Span {
     fn new() -> Self {
-        Self { rows: Vec::new(), pivots: Vec::new() }
+        Self {
+            rows: Vec::new(),
+            pivots: Vec::new(),
+        }
     }
     fn insert(&mut self, mut v: Vec<u64>) {
         for (row, &p) in self.rows.iter().zip(&self.pivots) {
@@ -150,7 +153,9 @@ pub fn check_mask_coverage<Ch: Challenger + Clone>(
     for _ in 0..probes {
         // A pseudorandom probe direction for P.
         for byte in buf.iter_mut() {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             *byte = (state >> 33) as u8;
         }
         let mut ch = challenger.clone();

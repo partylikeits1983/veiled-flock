@@ -351,12 +351,12 @@ fn value_subsets(n_values: usize, rng: &mut Rng) -> Vec<Vec<usize>> {
     let scalars_base = n_values - 258; // c_eval, w
     let z_partial_base = scalars_base - 64;
     let classes: [(usize, usize); 6] = [
-        (0, 64),                    // round1_ab
-        (64, 64),                   // round1_c
+        (0, 64),                     // round1_ab
+        (64, 64),                    // round1_c
         (128, z_partial_base - 128), // round pairs + finals
-        (z_partial_base, 64),       // z_partial
-        (s_hat_c_base, 128),        // s_hat_v_c
-        (s_hat_ab_base, 128),       // s_hat_v_ab
+        (z_partial_base, 64),        // z_partial
+        (s_hat_c_base, 128),         // s_hat_v_c
+        (s_hat_ab_base, 128),        // s_hat_v_ab
     ];
     (0..4)
         .map(|_| {

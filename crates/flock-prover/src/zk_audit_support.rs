@@ -20,9 +20,7 @@ use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
 use flock_core::verifier::VerifyError;
 use flock_core::zk::ZkRng;
 
-use crate::prover::{
-    R1csProofZkA1, prove_r1cs_zk_a1_with_config, verify_r1cs_zk_a1_with_config,
-};
+use crate::prover::{R1csProofZkA1, prove_r1cs_zk_a1_with_config, verify_r1cs_zk_a1_with_config};
 
 // ---------------------------------------------------------------------------
 // Recording challenger
@@ -51,7 +49,10 @@ pub struct RecordingChallenger<C> {
 
 impl<C> RecordingChallenger<C> {
     pub fn new(inner: C) -> Self {
-        Self { inner, log: Arc::new(Mutex::new(Vec::new())) }
+        Self {
+            inner,
+            log: Arc::new(Mutex::new(Vec::new())),
+        }
     }
     /// Snapshot of the recorded operations.
     pub fn recorded(&self) -> Vec<RecordedOp> {
@@ -97,13 +98,19 @@ impl<C> RecordingChallenger<C> {
 
 impl<C: Clone> Clone for RecordingChallenger<C> {
     fn clone(&self) -> Self {
-        Self { inner: self.inner.clone(), log: Arc::clone(&self.log) }
+        Self {
+            inner: self.inner.clone(),
+            log: Arc::clone(&self.log),
+        }
     }
 }
 
 impl<C: Challenger> Challenger for RecordingChallenger<C> {
     fn observe_label(&mut self, label: &[u8]) {
-        self.log.lock().unwrap().push(RecordedOp::Label(label.to_vec()));
+        self.log
+            .lock()
+            .unwrap()
+            .push(RecordedOp::Label(label.to_vec()));
         self.inner.observe_label(label);
     }
     fn observe_f128(&mut self, value: F128) {
@@ -120,7 +127,10 @@ impl<C: Challenger> Challenger for RecordingChallenger<C> {
         self.inner.observe_f128_slice(values);
     }
     fn observe_bytes(&mut self, bytes: &[u8]) {
-        self.log.lock().unwrap().push(RecordedOp::Bytes(bytes.to_vec()));
+        self.log
+            .lock()
+            .unwrap()
+            .push(RecordedOp::Bytes(bytes.to_vec()));
         self.inner.observe_bytes(bytes);
     }
     fn sample_f128(&mut self) -> F128 {
@@ -270,8 +280,16 @@ impl FixtureA1M15 {
             k_log: Self::K_LOG,
             k_skip: Self::K_SKIP,
             useful_bits: Self::USEFUL,
-            a_0: SparseBinaryMatrix { num_rows: k, num_cols: k, rows: a_rows },
-            b_0: SparseBinaryMatrix { num_rows: k, num_cols: k, rows: b_rows },
+            a_0: SparseBinaryMatrix {
+                num_rows: k,
+                num_cols: k,
+                rows: a_rows,
+            },
+            b_0: SparseBinaryMatrix {
+                num_rows: k,
+                num_cols: k,
+                rows: b_rows,
+            },
             c_0: identity,
             layout: WitnessLayout::RowMajor,
             const_pin: None,
@@ -287,7 +305,12 @@ impl FixtureA1M15 {
             zk: true,
         };
         let (lig_prover, lig_verifier) = tiny_zk_configs_for(pcs_params.log_msg_len());
-        FixtureA1M15 { r1cs, pcs_params, lig_prover, lig_verifier }
+        FixtureA1M15 {
+            r1cs,
+            pcs_params,
+            lig_prover,
+            lig_verifier,
+        }
     }
 
     /// Build the packed witness from payload + randomizer bit-vectors.
@@ -304,8 +327,8 @@ impl FixtureA1M15 {
                 z[base + Self::PAYLOAD_BASE + j] = payload[blk * Self::N_PAYLOAD + j];
             }
             for i in 0..Self::N_PROD {
-                z[base + Self::PROD_BASE + i] = z[base + Self::PAYLOAD_BASE + 2 * i]
-                    & z[base + Self::PAYLOAD_BASE + 2 * i + 1];
+                z[base + Self::PROD_BASE + i] =
+                    z[base + Self::PAYLOAD_BASE + 2 * i] & z[base + Self::PAYLOAD_BASE + 2 * i + 1];
             }
             for j in 0..Self::N_A_RAND {
                 z[base + Self::A_RAND_BASE + j] = u_a[blk * Self::N_A_RAND + j];

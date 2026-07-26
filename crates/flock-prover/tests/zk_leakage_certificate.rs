@@ -515,16 +515,28 @@ fn full_conditional_coverage_zk_zerocheck() {
         for i in 0..n {
             let (pairs, sz, pr, _qr, _fa, _fb) =
                 zk_zerocheck_transcript(&r1cs, &z0, &unit(n, i), &q);
-            let d_pairs: Vec<F128> =
-                pairs.iter().zip(&base_pairs).map(|(a, b)| *a + *b).collect();
-            let l = vec![pr.lo ^ base_pr.lo, pr.hi ^ base_pr.hi, sz.lo ^ base_sz.lo, sz.hi ^ base_sz.hi];
+            let d_pairs: Vec<F128> = pairs
+                .iter()
+                .zip(&base_pairs)
+                .map(|(a, b)| *a + *b)
+                .collect();
+            let l = vec![
+                pr.lo ^ base_pr.lo,
+                pr.hi ^ base_pr.hi,
+                sz.lo ^ base_sz.lo,
+                sz.hi ^ base_sz.hi,
+            ];
             let mut lpart = l;
             let mut rpart = flatten(&d_pairs);
             for (bp, &p) in basis.iter().zip(&piv) {
                 let (w, m) = (p / 64, 1u64 << (p % 64));
                 if lpart[w] & m != 0 {
-                    for k in 0..lpart.len() { lpart[k] ^= bp.0[k]; }
-                    for k in 0..rpart.len() { rpart[k] ^= bp.1[k]; }
+                    for k in 0..lpart.len() {
+                        lpart[k] ^= bp.0[k];
+                    }
+                    for k in 0..rpart.len() {
+                        rpart[k] ^= bp.1[k];
+                    }
                 }
             }
             if let Some(p) = first_set_bit(&lpart) {
@@ -535,7 +547,10 @@ fn full_conditional_coverage_zk_zerocheck() {
             }
         }
     }
-    println!("dim R(ker L), L={{P(ρ), σ_z}} = {} / {round_full}", rkerl.rank());
+    println!(
+        "dim R(ker L), L={{P(ρ), σ_z}} = {} / {round_full}",
+        rkerl.rank()
+    );
 
     // Witness-difference round vectors (vary payload at P=0, Q fixed) and the
     // public ab-claim change (final_a·final_b), against the fixed base.
@@ -548,7 +563,11 @@ fn full_conditional_coverage_zk_zerocheck() {
         let z = witness(&p, &ua0, &ub0);
         let (pairs, _sz, _pr, _qr, fa, fb) =
             zk_zerocheck_transcript(&r1cs, &z, &vec![false; n], &q);
-        let d: Vec<F128> = pairs.iter().zip(&base_pairs).map(|(a, b)| *a + *b).collect();
+        let d: Vec<F128> = pairs
+            .iter()
+            .zip(&base_pairs)
+            .map(|(a, b)| *a + *b)
+            .collect();
         let residual = rkerl.reduce(flatten(&d));
         resid_space.insert(residual.clone());
         let dv = fa * fb + base_v; // Δ(ab-claim)
@@ -571,8 +590,10 @@ fn full_conditional_coverage_zk_zerocheck() {
     // constant here and conditioning on it would be vacuous — the verdict
     // covers the P-side leakage {P(ρ), σ_z} only. The joint (P,Q)-side
     // statement is the job of the zk_joint_certificate suite.
-    println!("VERDICT: amended zerocheck transcript, P-side leakage L={{P(ρ), σ_z}}, has joint \
-              conditional coverage — no claim-preserving witness direction leaks.");
+    println!(
+        "VERDICT: amended zerocheck transcript, P-side leakage L={{P(ρ), σ_z}}, has joint \
+              conditional coverage — no claim-preserving witness direction leaks."
+    );
 }
 
 /// CONDITIONAL FULL-TRANSCRIPT COVERAGE (the reviewer's `d ∈ R(ker L)` test).
@@ -666,8 +687,12 @@ fn conditional_coverage_p_rho() {
             for (bp, &p) in basis.iter().zip(&piv) {
                 let (w, m) = (p / 64, 1u64 << (p % 64));
                 if pr[w] & m != 0 {
-                    for k in 0..2 { pr[k] ^= bp.0[k]; }
-                    for k in 0..rd.len() { rd[k] ^= bp.1[k]; }
+                    for k in 0..2 {
+                        pr[k] ^= bp.0[k];
+                    }
+                    for k in 0..rd.len() {
+                        rd[k] ^= bp.1[k];
+                    }
                 }
             }
             if let Some(p) = first_set_bit(&pr) {
@@ -691,10 +716,18 @@ fn conditional_coverage_p_rho() {
         let a = r1cs.apply_a_packed(&z);
         let b = r1cs.apply_b_packed(&z);
         let (proof, claim) = zerocheck::prove_packed_padded(
-            cast(&a), cast(&b), cast(&z), M, &padding, &mut RandomChallenger::new(CH_SEED),
+            cast(&a),
+            cast(&b),
+            cast(&z),
+            M,
+            &padding,
+            &mut RandomChallenger::new(CH_SEED),
         );
         let mut out = Vec::new();
-        for (m1, mi) in &proof.multilinear_rounds { out.push(*m1); out.push(*mi); }
+        for (m1, mi) in &proof.multilinear_rounds {
+            out.push(*m1);
+            out.push(*mi);
+        }
         (out, claim.a_eval * claim.b_eval) // round pairs, ab-claim value
     };
     let mut rprng = Rng(0xD1FF3);
@@ -723,7 +756,9 @@ fn conditional_coverage_p_rho() {
     let rank_both = residual_and_claim.rank();
     println!("rank(witness-diff residuals mod R(ker L)) = {rank_resid}");
     println!("rank(Δ ab-claim) = {rank_claim}");
-    println!("rank([residual | Δclaim]) = {rank_both}  (= rank(Δclaim) ⟺ residual determined by the claim)");
+    println!(
+        "rank([residual | Δclaim]) = {rank_both}  (= rank(Δclaim) ⟺ residual determined by the claim)"
+    );
 
     // The decisive check: the residuals (the part of the witness difference NOT
     // covered by the round-mask after conditioning on P(ρ)) are ENTIRELY
@@ -735,9 +770,14 @@ fn conditional_coverage_p_rho() {
         "LEAK: witness-diff residual mod R(ker L) is NOT determined by the ab-claim \
          — a claim-preserving witness direction escapes the joint mask image"
     );
-    assert!(rank_resid <= 128, "residuals should live in one F128 (the claim direction)");
-    println!("VERDICT: the only round direction P(ρ) un-covers is the public ab-claim; \
-              conditioning on the claim gives full joint coverage.");
+    assert!(
+        rank_resid <= 128,
+        "residuals should live in one F128 (the claim direction)"
+    );
+    println!(
+        "VERDICT: the only round direction P(ρ) un-covers is the public ab-claim; \
+              conditioning on the claim gives full joint coverage."
+    );
 }
 
 /// Verifier's multilinear telescoping (mirrors `zerocheck::verify`): given the
@@ -841,7 +881,10 @@ fn a1_prime_combined_completeness_and_soundness() {
         rhos,
     );
 
-    let gamma = F128 { lo: 0x9E37_79B9, hi: 0x1234_5678 };
+    let gamma = F128 {
+        lo: 0x9E37_79B9,
+        hi: 0x1234_5678,
+    };
 
     // Combined proof: round1 unmasked (randomizer-covered), mlv round pairs
     // masked by γ·M_j, initial claim shifted by γ·σ_z, final gains γ·P(ρ)Q(ρ).
@@ -949,7 +992,10 @@ fn final_b_breaks_full_mixture_hcoset() {
     let ub1 = rng.bits(B_BITS);
     let t_ub1 = transcript(&r1cs, &witness(&payload, &ua0, &ub1));
     let fb1 = coord(&t_ub1, FINAL_B_IDX);
-    assert_ne!(fb0, fb1, "final_b must depend on u_B (it is a b-side value)");
+    assert_ne!(
+        fb0, fb1,
+        "final_b must depend on u_B (it is a b-side value)"
+    );
 
     // (ii) final_b has an IDENTICALLY ZERO u_A-derivative: no single-A-bit
     //      flip changes it. This is structural (the b-cube reads A-rand rows
@@ -1039,7 +1085,9 @@ fn affine_classes_exactly_covered() {
     let n = base.len();
 
     // Affine coordinate set: everything except the bilinear round pairs.
-    let affine: Vec<usize> = (0..n).filter(|&i| !(128..FINAL_A_IDX).contains(&i)).collect();
+    let affine: Vec<usize> = (0..n)
+        .filter(|&i| !(128..FINAL_A_IDX).contains(&i))
+        .collect();
 
     // Per-coordinate mask image over (A-bits ∪ B-bits).
     let mut imgs: Vec<Coord128Space> = (0..n).map(|_| Coord128Space::default()).collect();

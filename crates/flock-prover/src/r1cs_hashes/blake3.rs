@@ -1486,8 +1486,7 @@ impl Blake3Setup {
         let mut wit_rng = rng.fork(b"witness-rand");
         let mut pcs_rng = rng.fork(b"pcs-masks");
         let n_total = self.n_block_slots();
-        let mut rand_words =
-            vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
+        let mut rand_words = vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
         wit_rng.fill_u64s(&mut rand_words);
         let (z_packed, a_packed_f128, b_packed_f128, z_packed_lincheck) =
             generate_witness_with_ab_packed_and_lincheck_zk(
@@ -1531,7 +1530,8 @@ impl Blake3Setup {
         &self,
         blocks: &[Compression],
         challenger: &mut Ch,
-    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError> {
+    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError>
+    {
         let mut rng = flock_core::zk::ZkRng::from_entropy();
         self.prove_zk_a1_with_rng(blocks, &mut rng, challenger)
     }
@@ -1544,7 +1544,8 @@ impl Blake3Setup {
         blocks: &[Compression],
         rng: &mut flock_core::zk::ZkRng,
         challenger: &mut Ch,
-    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError> {
+    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError>
+    {
         use crate::zk_certificate::{StatementFamily, require_certified};
         use flock_core::zk::MaskSampler;
 
@@ -2481,7 +2482,11 @@ mod tests {
         use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(256);
         assert!(setup.r1cs.zk.is_some());
-        assert_eq!(setup.r1cs.useful_bits, 1 << K_LOG, "blake3 zk fills the block");
+        assert_eq!(
+            setup.r1cs.useful_bits,
+            1 << K_LOG,
+            "blake3 zk fills the block"
+        );
         let mut rng = Rng::new(0xb1a_3211e);
         let blocks: Vec<Compression> = (0..256)
             .map(|_| {
@@ -2649,7 +2654,12 @@ mod tests {
             let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
             assert!(
                 crate::prover::verify_r1cs_zk_a1(
-                    &setup.r1cs, &setup.pcs_params, &bad, &comm, lc_circuit, &mut ch
+                    &setup.r1cs,
+                    &setup.pcs_params,
+                    &bad,
+                    &comm,
+                    lc_circuit,
+                    &mut ch
                 )
                 .is_err(),
                 "A1′ tamper {t} must be rejected"
@@ -2692,11 +2702,16 @@ mod tests {
     fn zk_a1_rejects_uncertified_batch_size() {
         use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(512);
-        let blocks: Vec<Compression> = (0..512).map(|_| ([0u32; 8], [0u32; 16], 0, 64, 11)).collect();
+        let blocks: Vec<Compression> = (0..512)
+            .map(|_| ([0u32; 8], [0u32; 16], 0, 64, 11))
+            .collect();
         let mut ch = FsChallenger::new(b"flock-a1-gate-test");
         let res = setup.prove_zk_a1(&blocks, &mut ch);
         assert!(
-            matches!(res, Err(crate::zk_certificate::ZkGateError::Uncertified { .. })),
+            matches!(
+                res,
+                Err(crate::zk_certificate::ZkGateError::Uncertified { .. })
+            ),
             "uncertified batch size must be refused, got {:?}",
             res.map(|_| "Ok")
         );

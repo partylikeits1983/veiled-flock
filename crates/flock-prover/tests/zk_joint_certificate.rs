@@ -47,9 +47,7 @@ use flock_core::lincheck::pack_z_lincheck_from_packed;
 use flock_core::pcs::Commitment;
 use flock_core::zk::{MaskSampler, PlaybackSampler, ZeroSampler};
 use flock_prover::prover::{A1MaskSources, R1csProofZkA1, prove_r1cs_zk_a1_with_masks};
-use flock_prover::transcript_schema::{
-    LeakageClass, SchemaIndex, algebraic_vector, flatten_a1,
-};
+use flock_prover::transcript_schema::{LeakageClass, SchemaIndex, algebraic_vector, flatten_a1};
 use flock_prover::zk_audit_support::FixtureA1M15;
 
 // ---------------------------------------------------------------------------
@@ -69,7 +67,10 @@ impl Rng {
         (0..n).map(|_| self.next_u64() & 1 == 1).collect()
     }
     fn f128(&mut self) -> F128 {
-        F128 { lo: self.next_u64(), hi: self.next_u64() }
+        F128 {
+            lo: self.next_u64(),
+            hi: self.next_u64(),
+        }
     }
 }
 
@@ -175,8 +176,6 @@ fn xor(a: &[u64], b: &[u64]) -> Vec<u64> {
     a.iter().zip(b).map(|(x, y)| x ^ y).collect()
 }
 
-
-
 /// Row-echelon basis of an **F₂¹²⁸-subspace** of `F₂¹²⁸^n`.
 ///
 /// The `μ`/`g` channel is field-valued and the transcript is F₂¹²⁸-linear in
@@ -225,9 +224,15 @@ fn f128_basis() -> Vec<F128> {
     (0..128)
         .map(|j| {
             if j < 64 {
-                F128 { lo: 1u64 << j, hi: 0 }
+                F128 {
+                    lo: 1u64 << j,
+                    hi: 0,
+                }
             } else {
-                F128 { lo: 0, hi: 1u64 << (j - 64) }
+                F128 {
+                    lo: 0,
+                    hi: 1u64 << (j - 64),
+                }
             }
         })
         .collect()
@@ -278,13 +283,25 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
     let stripe = pack_z_lincheck_from_packed(&z, FixtureA1M15::M, FixtureA1M15::K_LOG);
     let circuit = r.fx.r1cs.sparse_lincheck_circuit();
 
-    let mut s_w = F128Sampler { data: r.commit_w.to_vec(), pos: 0 };
+    let mut s_w = F128Sampler {
+        data: r.commit_w.to_vec(),
+        pos: 0,
+    };
     let mut s_p = BitsSampler::from_bits(r.p_bits);
     let mut s_q = BitsSampler::from_bits(r.q_bits);
-    let mut s_cp = F128Sampler { data: r.commit_p.to_vec(), pos: 0 };
-    let mut s_cq = F128Sampler { data: r.commit_q.to_vec(), pos: 0 };
+    let mut s_cp = F128Sampler {
+        data: r.commit_p.to_vec(),
+        pos: 0,
+    };
+    let mut s_cq = F128Sampler {
+        data: r.commit_q.to_vec(),
+        pos: 0,
+    };
     let mut s_s = BitsSampler::from_bits(r.s_bits);
-    let mut s_cs = F128Sampler { data: r.commit_s.to_vec(), pos: 0 };
+    let mut s_cs = F128Sampler {
+        data: r.commit_s.to_vec(),
+        pos: 0,
+    };
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
@@ -372,13 +389,25 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
     let b_packed = fx.r1cs.apply_b_packed(&z);
     let stripe = pack_z_lincheck_from_packed(&z, FixtureA1M15::M, FixtureA1M15::K_LOG);
     let circuit = fx.r1cs.sparse_lincheck_circuit();
-    let mut s_w = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let mut s_w = F128Sampler {
+        data: mask_material.clone(),
+        pos: 0,
+    };
     let mut s_p = BitsSampler::from_bits(&p);
     let mut s_q = BitsSampler::from_bits(&q);
-    let mut s_cp = F128Sampler { data: mask_material.clone(), pos: 0 };
-    let mut s_cq = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let mut s_cp = F128Sampler {
+        data: mask_material.clone(),
+        pos: 0,
+    };
+    let mut s_cq = F128Sampler {
+        data: mask_material.clone(),
+        pos: 0,
+    };
     let mut s_s = BitsSampler::from_bits(&q);
-    let mut s_cs = F128Sampler { data: mask_material.clone(), pos: 0 };
+    let mut s_cs = F128Sampler {
+        data: mask_material.clone(),
+        pos: 0,
+    };
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
@@ -442,7 +471,16 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
             l_zc_idx.extend(range);
         }
     }
-    (Split { r_idx, l_idx, round_block, l_zc_idx, r_paths }, total)
+    (
+        Split {
+            r_idx,
+            l_idx,
+            round_block,
+            l_zc_idx,
+            r_paths,
+        },
+        total,
+    )
 }
 
 /// F128s of mask material one hiding commitment consumes: `commit_zk` draws
@@ -605,13 +643,29 @@ fn certify_tuple(
             "  mask-slot probing: every {mask_slot_stride} of {MASK_MATERIAL} slots \
              ({} probed, each expanded to 128 F₂ directions){}",
             MASK_MATERIAL.div_ceil(mask_slot_stride),
-            if mask_slot_stride == 1 { "" } else { " — SUBSET: a pass is valid, a failure may be an artefact" }
+            if mask_slot_stride == 1 {
+                ""
+            } else {
+                " — SUBSET: a pass is valid, a failure may be an artefact"
+            }
         );
     }
-    let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
+    let l_sel: &[usize] = if bud.l_full {
+        &split.l_idx
+    } else {
+        &split.l_zc_idx
+    };
 
     // One prover run, returning the complete algebraic transcript.
-    let full_run = |payload: &[bool], u_a: &[bool], u_b: &[bool], p_bits: &[bool], s_bits: &[bool], cw: &[F128], cp: &[F128], cs_arg: &[F128]| -> Vec<F128> {
+    let full_run = |payload: &[bool],
+                    u_a: &[bool],
+                    u_b: &[bool],
+                    p_bits: &[bool],
+                    s_bits: &[bool],
+                    cw: &[F128],
+                    cp: &[F128],
+                    cs_arg: &[F128]|
+     -> Vec<F128> {
         let r = Run {
             fx,
             payload,
@@ -862,14 +916,19 @@ fn certify_tuple(
             }
             let mut hits = 0usize;
             for row in &resid_and_claim.rows {
-                let nz = (range.start..range.end)
-                    .any(|c| row.get(c * 2).is_some_and(|w| *w != 0) || row.get(c * 2 + 1).is_some_and(|w| *w != 0));
+                let nz = (range.start..range.end).any(|c| {
+                    row.get(c * 2).is_some_and(|w| *w != 0)
+                        || row.get(c * 2 + 1).is_some_and(|w| *w != 0)
+                });
                 if nz {
                     hits += 1;
                 }
             }
             if hits > 0 {
-                println!("    {path}: {hits} residual direction(s) touch this class ({} F128 coords)", range.len());
+                println!(
+                    "    {path}: {hits} residual direction(s) touch this class ({} F128 coords)",
+                    range.len()
+                );
             }
         }
     }
@@ -917,9 +976,22 @@ fn joint_certificate_smoke() {
         split.r_idx.len(),
         split.l_idx.len()
     );
-    assert!(split.r_idx.len() > 100, "R must cover the whole witness-dependent class");
-    assert!(split.l_idx.len() > 100, "L must include the P/Q opening interiors");
-    certify_tuple(&fx, &split, &split.round_block.clone(), &SMOKE, SMOKE.tuples[0], true);
+    assert!(
+        split.r_idx.len() > 100,
+        "R must cover the whole witness-dependent class"
+    );
+    assert!(
+        split.l_idx.len() > 100,
+        "L must include the P/Q opening interiors"
+    );
+    certify_tuple(
+        &fx,
+        &split,
+        &split.round_block.clone(),
+        &SMOKE,
+        SMOKE.tuples[0],
+        true,
+    );
 }
 
 /// **The complete-transcript joint conditional-coverage certificate.**
@@ -1048,16 +1120,21 @@ fn coverage_passes(
         out
     };
     let base_r = augment(&base, &payload0);
-    let l_sel: &[usize] = if bud.l_full { &split.l_idx } else { &split.l_zc_idx };
+    let l_sel: &[usize] = if bud.l_full {
+        &split.l_idx
+    } else {
+        &split.l_zc_idx
+    };
     let base_l = flatten_f128(&pick(&base, l_sel));
 
     let mut l_basis: Vec<(Vec<u64>, Vec<u64>)> = Vec::new();
     let mut l_piv: Vec<usize> = Vec::new();
     let mut rkerl = F2Space::default();
-    let absorb = |l: Vec<u64>, r: Vec<u64>,
-                      l_basis: &mut Vec<(Vec<u64>, Vec<u64>)>,
-                      l_piv: &mut Vec<usize>,
-                      rkerl: &mut F2Space| {
+    let absorb = |l: Vec<u64>,
+                  r: Vec<u64>,
+                  l_basis: &mut Vec<(Vec<u64>, Vec<u64>)>,
+                  l_piv: &mut Vec<usize>,
+                  rkerl: &mut F2Space| {
         let (mut lp, mut rp) = (l, r);
         for (b, &p) in l_basis.iter().zip(l_piv.iter()) {
             let (w, m) = (p / 64, 1u64 << (p % 64));
@@ -1275,7 +1352,18 @@ fn h1_inner_image_witness_independent_on_round_block() {
     let p_stride = (n / (dim + dim / 2)).max(1);
 
     let img = |payload: &[bool], with_p: bool| {
-        inner_image_proj(&fx, &split, &split.round_block, p_stride, 64, 16, seed, payload, with_p, &q)
+        inner_image_proj(
+            &fx,
+            &split,
+            &split.round_block,
+            p_stride,
+            64,
+            16,
+            seed,
+            payload,
+            with_p,
+            &q,
+        )
     };
     let (wa, wb) = (img(&pa, true), img(&pb, true));
     let (na, nb) = (img(&pa, false), img(&pb, false));
@@ -1407,7 +1495,10 @@ fn control_samplers_behave() {
     z.fill_u64s(&mut out);
     assert_eq!(out, [0u64; 4]);
     let data = [F128 { lo: 7, hi: 9 }, F128 { lo: 11, hi: 13 }];
-    let mut pb = PlaybackSampler { data: &data, pos: 0 };
+    let mut pb = PlaybackSampler {
+        data: &data,
+        pos: 0,
+    };
     let mut got = [0u64; 4];
     pb.fill_u64s(&mut got);
     assert_eq!(got, [7, 9, 11, 13]);
@@ -1434,7 +1525,18 @@ fn p_channel_image_requires_nondegenerate_q() {
     let p_stride = (n / (dim + dim / 2)).max(1);
 
     let img = |q: &[bool]| {
-        inner_image_proj(&fx, &split, &split.round_block, p_stride, 1 << 20, 0, seed, &payload, true, q)
+        inner_image_proj(
+            &fx,
+            &split,
+            &split.round_block,
+            p_stride,
+            1 << 20,
+            0,
+            seed,
+            &payload,
+            true,
+            q,
+        )
     };
     let good = img(&q_random);
     let bad = img(&q_const);
@@ -1485,7 +1587,10 @@ fn joint_coverage_pcs_masked_classes() {
             coords.extend(range.clone());
         }
     }
-    assert!(!coords.is_empty(), "no PCS-masked coordinates found in the schema");
+    assert!(
+        !coords.is_empty(),
+        "no PCS-masked coordinates found in the schema"
+    );
     println!(
         "PCS-masked classes under test: {} F128 coordinates ({} bits)",
         coords.len(),
@@ -1560,7 +1665,10 @@ fn mask_only_coordinates_are_witness_independent() {
         for (path, range) in &l_paths {
             let moved = range.clone().filter(|&i| t[i] != base[i]).count();
             if moved > 0 {
-                println!("  {label}: {path} moved in {moved} of {} coords", range.len());
+                println!(
+                    "  {label}: {path} moved in {moved} of {} coords",
+                    range.len()
+                );
                 movers.push((path, moved));
             }
         }

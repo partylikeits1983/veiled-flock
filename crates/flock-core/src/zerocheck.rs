@@ -690,7 +690,11 @@ pub fn prove_packed_padded_zk<C: Challenger>(
 ) -> (ZkZerocheckProof, ZerocheckClaim) {
     let k_skip = K_SKIP;
     const N_INNER: usize = 7;
-    assert!(m >= k_skip + N_INNER, "prove_zk requires m >= {}", k_skip + N_INNER);
+    assert!(
+        m >= k_skip + N_INNER,
+        "prove_zk requires m >= {}",
+        k_skip + N_INNER
+    );
     let expected_bytes = (1usize << m) / 8;
     assert_eq!(a_packed.len(), expected_bytes);
     assert_eq!(p_packed.len(), expected_bytes);
@@ -732,13 +736,24 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     let fold_table = UniSkipFoldTable::new(k_skip, z);
     let mut mlv_arg = vec![F128::ONE; n_mlv];
     mlv_arg[1..].copy_from_slice(&r[k_skip + 1..]);
-    let (mut a_mlv, mut b_mlv, g2_1, g2_inf) =
-        uni_skip_fold_and_round_pair_optimized_packed_padded(
-            a_packed, b_packed, m, k_skip, &fold_table, &mlv_arg, padding,
-        );
+    let (mut a_mlv, mut b_mlv, g2_1, g2_inf) = uni_skip_fold_and_round_pair_optimized_packed_padded(
+        a_packed,
+        b_packed,
+        m,
+        k_skip,
+        &fold_table,
+        &mlv_arg,
+        padding,
+    );
     let (mut p_mlv, mut q_mlv, mm2_1, mm2_inf) =
         uni_skip_fold_and_round_pair_optimized_packed_padded(
-            p_packed, q_packed, m, k_skip, &fold_table, &mlv_arg, &dense,
+            p_packed,
+            q_packed,
+            m,
+            k_skip,
+            &fold_table,
+            &mlv_arg,
+            &dense,
         );
 
     // ---- σ_z = Σ_x eq(r[k_skip..m], x)·P_mlv(x)·Q_mlv(x); observe; sample γ ----
@@ -858,7 +873,13 @@ pub fn mask_round_pairs<C: Challenger>(
     mlv_arg[1..].copy_from_slice(&r[k_skip + 1..]);
     let (mut p_mlv, mut q_mlv, mm2_1, mm2_inf) =
         uni_skip_fold_and_round_pair_optimized_packed_padded(
-            p_packed, q_packed, m, k_skip, &fold_table, &mlv_arg, &dense,
+            p_packed,
+            q_packed,
+            m,
+            k_skip,
+            &fold_table,
+            &mlv_arg,
+            &dense,
         );
     let mut out = Vec::with_capacity(n_mlv);
     out.push((mm2_1, mm2_inf));
@@ -1090,8 +1111,16 @@ mod tests {
             let (p_p, q_p, _) = pack_abc(&p, &q, &q);
 
             let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
-            let (proof, claim_p) =
-                prove_packed_padded_zk(&a_p, &b_p, &c_p, &p_p, &q_p, m, &PaddingSpec::dense(m), &mut ch_prove);
+            let (proof, claim_p) = prove_packed_padded_zk(
+                &a_p,
+                &b_p,
+                &c_p,
+                &p_p,
+                &q_p,
+                m,
+                &PaddingSpec::dense(m),
+                &mut ch_prove,
+            );
 
             let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
             let claim_v = verify_zk(m, &proof, &mut ch_verify)
@@ -1115,8 +1144,16 @@ mod tests {
         let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
         let (p_p, q_p, _) = pack_abc(&p, &q, &q);
         let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
-        let (proof, _) =
-            prove_packed_padded_zk(&a_p, &b_p, &c_p, &p_p, &q_p, m, &PaddingSpec::dense(m), &mut ch_prove);
+        let (proof, _) = prove_packed_padded_zk(
+            &a_p,
+            &b_p,
+            &c_p,
+            &p_p,
+            &q_p,
+            m,
+            &PaddingSpec::dense(m),
+            &mut ch_prove,
+        );
 
         let bump = F128 { lo: 0xABCD, hi: 0 };
         let mutate = |f: &dyn Fn(&mut ZkZerocheckProof)| {
@@ -1184,7 +1221,10 @@ mod tests {
             );
             let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
             let res = verify_zk(m, &proof, &mut ch_verify);
-            assert!(res.is_err(), "verify_zk ACCEPTED a false statement at m={m}: {res:?}");
+            assert!(
+                res.is_err(),
+                "verify_zk ACCEPTED a false statement at m={m}: {res:?}"
+            );
         }
     }
 
@@ -1230,8 +1270,8 @@ mod tests {
             let one_plus_rho = F128::ONE + rho;
             c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
         }
-        let expected =
-            proof.final_a_eval * proof.final_b_eval + gamma * proof.final_p_eval * proof.final_q_eval;
+        let expected = proof.final_a_eval * proof.final_b_eval
+            + gamma * proof.final_p_eval * proof.final_q_eval;
         c_running + expected
     }
 
@@ -1294,7 +1334,11 @@ mod tests {
         let r1 = zk_final_residual(m, &proof, seed, proof.mask_init + F128::ONE);
         let slope = r0 + r1; // affine over char 2: R(x+1) + R(x) = slope
         assert_ne!(r0, F128::ZERO, "defect must be visible in the residual");
-        assert_ne!(slope, F128::ZERO, "σ_z slope γ·Π(1+ρ)/(1+r_eq) must be nonzero");
+        assert_ne!(
+            slope,
+            F128::ZERO,
+            "σ_z slope γ·Π(1+ρ)/(1+r_eq) must be nonzero"
+        );
         let sigma_star = proof.mask_init + r0 * slope.inv();
         assert_eq!(
             zk_final_residual(m, &proof, seed, sigma_star),
@@ -1304,7 +1348,11 @@ mod tests {
         // Uniqueness: affine with nonzero slope ⇒ any other σ has nonzero
         // residual; spot-check a few.
         for k in 1..8u64 {
-            let other = sigma_star + F128 { lo: k, hi: k.wrapping_mul(0x9E37) };
+            let other = sigma_star
+                + F128 {
+                    lo: k,
+                    hi: k.wrapping_mul(0x9E37),
+                };
             assert_ne!(zk_final_residual(m, &proof, seed, other), F128::ZERO);
         }
 

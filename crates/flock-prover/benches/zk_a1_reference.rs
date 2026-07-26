@@ -90,7 +90,9 @@ fn main() {
                 .prove_zk_a1_with_rng(&blocks, &mut zk_rng, &mut ch)
                 .expect("A1′ bench requires a certified configuration");
             let mut chv = FsChallenger::new(DOMAIN);
-            setup.verify_zk_a1(&comm, &proof, &mut chv).expect("warm-up proof must verify");
+            setup
+                .verify_zk_a1(&comm, &proof, &mut chv)
+                .expect("warm-up proof must verify");
         }
 
         let mut best_prove = f64::MAX;

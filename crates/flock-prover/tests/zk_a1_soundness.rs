@@ -51,12 +51,14 @@ fn honest(seed: u64, mask_seed: [u8; 32]) -> (FixtureA1M15, R1csProofZkA1, Commi
 fn a1_honest_roundtrip_and_fresh_masks() {
     let (fx, proof, comm) = honest(0x5EED_01, [0x11; 32]);
     let mut chv = FsChallenger::new(DOMAIN);
-    fx.verify(&proof, &comm, &mut chv).expect("honest A1′ proof must verify");
+    fx.verify(&proof, &comm, &mut chv)
+        .expect("honest A1′ proof must verify");
 
     // Fresh masks on the same witness ⇒ a different, still-verifying proof.
     let (_, proof2, comm2) = honest(0x5EED_01, [0x22; 32]);
     let mut chv2 = FsChallenger::new(DOMAIN);
-    fx.verify(&proof2, &comm2, &mut chv2).expect("fresh-mask proof must verify");
+    fx.verify(&proof2, &comm2, &mut chv2)
+        .expect("fresh-mask proof must verify");
     assert_ne!(comm.root, comm2.root, "fresh witness mask ⇒ fresh root");
     assert_ne!(proof.zerocheck.final_p_eval, proof2.zerocheck.final_p_eval);
     assert_ne!(proof.zerocheck.mask_init, proof2.zerocheck.mask_init);
@@ -68,21 +70,60 @@ fn a1_honest_roundtrip_and_fresh_masks() {
 #[test]
 fn a1_tamper_matrix_rejected() {
     let (fx, proof, comm) = honest(0x5EED_02, [0x33; 32]);
-    let bump = F128 { lo: 0xABCD_1234, hi: 0x9 };
+    let bump = F128 {
+        lo: 0xABCD_1234,
+        hi: 0x9,
+    };
 
     let mut cases: Vec<(&str, Box<dyn Fn(&mut R1csProofZkA1)>)> = vec![
-        ("zerocheck.mask_init", Box::new(move |p| p.zerocheck.mask_init += bump)),
-        ("zerocheck.final_p_eval", Box::new(move |p| p.zerocheck.final_p_eval += bump)),
-        ("zerocheck.final_q_eval", Box::new(move |p| p.zerocheck.final_q_eval += bump)),
-        ("zerocheck.final_a_eval", Box::new(move |p| p.zerocheck.final_a_eval += bump)),
-        ("zerocheck.final_b_eval", Box::new(move |p| p.zerocheck.final_b_eval += bump)),
-        ("zerocheck.final_c_eval", Box::new(move |p| p.zerocheck.final_c_eval += bump)),
-        ("zerocheck.round1_ab[0]", Box::new(move |p| p.zerocheck.round1_ab[0] += bump)),
-        ("zerocheck.round1_ab[63]", Box::new(move |p| p.zerocheck.round1_ab[63] += bump)),
-        ("zerocheck.round1_c[0]", Box::new(move |p| p.zerocheck.round1_c[0] += bump)),
-        ("lincheck.rounds[0].0", Box::new(move |p| p.lincheck.rounds[0].0 += bump)),
-        ("lincheck.rounds[0].1", Box::new(move |p| p.lincheck.rounds[0].1 += bump)),
-        ("lincheck.z_partial[0]", Box::new(move |p| p.lincheck.z_partial[0] += bump)),
+        (
+            "zerocheck.mask_init",
+            Box::new(move |p| p.zerocheck.mask_init += bump),
+        ),
+        (
+            "zerocheck.final_p_eval",
+            Box::new(move |p| p.zerocheck.final_p_eval += bump),
+        ),
+        (
+            "zerocheck.final_q_eval",
+            Box::new(move |p| p.zerocheck.final_q_eval += bump),
+        ),
+        (
+            "zerocheck.final_a_eval",
+            Box::new(move |p| p.zerocheck.final_a_eval += bump),
+        ),
+        (
+            "zerocheck.final_b_eval",
+            Box::new(move |p| p.zerocheck.final_b_eval += bump),
+        ),
+        (
+            "zerocheck.final_c_eval",
+            Box::new(move |p| p.zerocheck.final_c_eval += bump),
+        ),
+        (
+            "zerocheck.round1_ab[0]",
+            Box::new(move |p| p.zerocheck.round1_ab[0] += bump),
+        ),
+        (
+            "zerocheck.round1_ab[63]",
+            Box::new(move |p| p.zerocheck.round1_ab[63] += bump),
+        ),
+        (
+            "zerocheck.round1_c[0]",
+            Box::new(move |p| p.zerocheck.round1_c[0] += bump),
+        ),
+        (
+            "lincheck.rounds[0].0",
+            Box::new(move |p| p.lincheck.rounds[0].0 += bump),
+        ),
+        (
+            "lincheck.rounds[0].1",
+            Box::new(move |p| p.lincheck.rounds[0].1 += bump),
+        ),
+        (
+            "lincheck.z_partial[0]",
+            Box::new(move |p| p.lincheck.z_partial[0] += bump),
+        ),
         ("comm_p.root", Box::new(|p| p.comm_p.root[0] ^= 1)),
         ("comm_q.root", Box::new(|p| p.comm_q.root[0] ^= 1)),
         ("comm_s.root", Box::new(|p| p.comm_s.root[0] ^= 1)),
@@ -99,10 +140,16 @@ fn a1_tamper_matrix_rejected() {
             "swap comm_s/comm_q",
             Box::new(|p| std::mem::swap(&mut p.comm_s, &mut p.comm_q)),
         ),
-        ("open_s strip zk_blind", Box::new(|p| p.open_s.zk_blind = None)),
+        (
+            "open_s strip zk_blind",
+            Box::new(|p| p.open_s.zk_blind = None),
+        ),
         ("comm_p.params.zk", Box::new(|p| p.comm_p.params.zk = false)),
         ("comm_q.params.m", Box::new(|p| p.comm_q.params.m += 1)),
-        ("comm_p.params.log_inv_rate", Box::new(|p| p.comm_p.params.log_inv_rate += 1)),
+        (
+            "comm_p.params.log_inv_rate",
+            Box::new(|p| p.comm_p.params.log_inv_rate += 1),
+        ),
         (
             "swap open_p/open_q",
             Box::new(|p| std::mem::swap(&mut p.open_p, &mut p.open_q)),
@@ -201,7 +248,10 @@ fn zk_gate_rejects_uncertified_configuration() {
     // The m=15 audit fixture is deliberately NOT a certified production
     // configuration — the gate must refuse it.
     let res = require_certified(StatementFamily::Blake3Batch, 8, &fx.r1cs, &fx.pcs_params);
-    assert!(matches!(res, Err(ZkGateError::Uncertified { .. })), "audit fixture must not be certified");
+    assert!(
+        matches!(res, Err(ZkGateError::Uncertified { .. })),
+        "audit fixture must not be certified"
+    );
 
     // Certified shape but a mismatched circuit digest is also refused.
     let params = PcsParams {

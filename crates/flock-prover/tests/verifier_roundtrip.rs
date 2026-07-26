@@ -148,12 +148,22 @@ fn r1cs_prove_verify_roundtrip_ligerito_zk() {
     let lc_circuit = r1cs.sparse_lincheck_circuit();
     let verify = |commitment: &pcs::Commitment, proof: &_| {
         let mut ch_v = FsChallenger::new(b"flock-lig-r1cs-zk-v0");
-        verifier::verify_ligerito(&r1cs, commitment, proof, &lc_circuit, &pcs_params, &mut ch_v)
+        verifier::verify_ligerito(
+            &r1cs,
+            commitment,
+            proof,
+            &lc_circuit,
+            &pcs_params,
+            &mut ch_v,
+        )
     };
     let claim_v = verify(&commitment, &proof)
         .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
     assert_eq!(claim_p, claim_v);
-    assert!(proof.pcs_open.zk_blind.is_some(), "zk proof must carry zk_blind");
+    assert!(
+        proof.pcs_open.zk_blind.is_some(),
+        "zk proof must carry zk_blind"
+    );
 
     // A different mask seed still verifies, with a different commitment root.
     let (proof2, commitment2, _) = prove_seeded([2u8; 32]);

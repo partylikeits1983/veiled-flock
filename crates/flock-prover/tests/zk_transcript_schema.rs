@@ -40,7 +40,13 @@ impl Rng {
     }
 }
 
-fn prove_fixture(seed: u64) -> (FixtureA1M15, flock_prover::prover::R1csProofZkA1, flock_core::pcs::Commitment) {
+fn prove_fixture(
+    seed: u64,
+) -> (
+    FixtureA1M15,
+    flock_prover::prover::R1csProofZkA1,
+    flock_core::pcs::Commitment,
+) {
     let fx = FixtureA1M15::new();
     let mut rng = Rng(seed);
     let payload = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
@@ -59,7 +65,8 @@ fn a1_schema_manifest_and_bijectivity() {
 
     // The proof verifies (sanity that the fixture is honest).
     let mut chv = FsChallenger::new(b"flock-a1-schema-test");
-    fx.verify(&proof, &comm, &mut chv).expect("fixture proof must verify");
+    fx.verify(&proof, &comm, &mut chv)
+        .expect("fixture proof must verify");
 
     let flat = flatten_a1(&comm, &proof);
 
@@ -78,14 +85,22 @@ fn a1_schema_manifest_and_bijectivity() {
     assert_eq!(proof2, proof);
 
     // 3. Serialization roundtrip is byte-exact through the parser.
-    let bundle = R1csProofBundleZkA1 { commitment: comm.clone(), proof: proof.clone() };
+    let bundle = R1csProofBundleZkA1 {
+        commitment: comm.clone(),
+        proof: proof.clone(),
+    };
     let bytes = bundle.to_bytes();
     let parsed = R1csProofBundleZkA1::from_bytes(&bytes).expect("parse");
     assert_eq!(parsed, bundle);
-    assert_eq!(parsed.to_bytes(), bytes, "re-serialization must be byte-identical");
+    assert_eq!(
+        parsed.to_bytes(),
+        bytes,
+        "re-serialization must be byte-identical"
+    );
     // ... and the parsed proof verifies.
     let mut chv2 = FsChallenger::new(b"flock-a1-schema-test");
-    fx.verify(&parsed.proof, &parsed.commitment, &mut chv2).expect("parsed proof verifies");
+    fx.verify(&parsed.proof, &parsed.commitment, &mut chv2)
+        .expect("parsed proof verifies");
 
     // 4. Pinned schema hash for this fixture shape. If this fails and the
     //    change is intentional, review the classification diff and update
@@ -93,7 +108,10 @@ fn a1_schema_manifest_and_bijectivity() {
     let h = schema_hash(&flat);
     let hex: String = h.iter().map(|b| format!("{b:02x}")).collect();
     const PINNED_M15: &str = "f428753320283fdb2019adf7ec357a7d43e462f74c75fe93ebda99f79c9bdd96";
-    assert_eq!(hex, PINNED_M15, "schema hash changed for the m=15 fixture shape");
+    assert_eq!(
+        hex, PINNED_M15,
+        "schema hash changed for the m=15 fixture shape"
+    );
 
     // 5. The coordinate index is consistent with the algebraic vector.
     let vec = algebraic_vector(&flat);
@@ -232,7 +250,8 @@ fn a1_schema_matches_wire_order() {
     // main-channel messages the schema lists in wire order).
     let mut prefix: Vec<F128> = Vec::new();
     for f in &flat {
-        if !f.fs_absorbed || !(f.path.starts_with("zerocheck.") || f.path.starts_with("lincheck.")) {
+        if !f.fs_absorbed || !(f.path.starts_with("zerocheck.") || f.path.starts_with("lincheck."))
+        {
             continue;
         }
         if let flock_prover::transcript_schema::FlatValue::F128s(v) = &f.value {
