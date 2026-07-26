@@ -43,6 +43,32 @@ One F128 direction of *claim-preserving* witness difference is uncovered, on
 Why the fixture passes and BLAKE3 does not: the fixture's witness is ~81%
 randomizer rows, a real BLAKE3 witness ~5.5%. Both results are correct.
 
+## A hypothesis to test before building anything
+
+The deficit is **512 bits = exactly 4 field elements**, and it stayed at 4
+under a 2.3× change in randomizer entropy. That constancy suggests it is not a
+coverage shortfall at all but the dimension of the *algebraic dependencies*
+the lincheck transcript satisfies by construction:
+
+- the sumcheck's running claim telescopes, so the round messages are tied to
+  the initial target — which is itself fixed by the zerocheck's `a_eval` and
+  `b_eval`, both already in the transcript;
+- the final round's claim must equal `comb_final · z_final`, one relation
+  linking the rounds to `z_partial`;
+- the constant-wire pin contributes a further fixed shift.
+
+If those dependencies account for all 4 dimensions, then the mask image is
+*correctly* smaller than the ambient space and the witness differences lie in
+the same constrained subspace — in which case the escaping 128 bits are a
+**conditioning** failure (a transcript-determined value not yet in the claim
+set) rather than a masking failure, and A2 would be the wrong repair.
+
+**Check this first.** Enumerate the public algebraic relations the lincheck
+transcript satisfies, verify they span exactly 4 field dimensions, and test
+whether the escaping direction lies inside that span. If it does, the fix is
+to condition on the missing value — cheap, and no change to the construction.
+Only if it does not is a mask channel warranted.
+
 ## The construction
 
 Mirror A1′ one layer down. The lincheck proves
