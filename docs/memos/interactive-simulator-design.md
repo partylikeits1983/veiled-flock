@@ -4,9 +4,10 @@
 public digests — whose output is computationally indistinguishable from an
 honest proof, in the classical ROM with programming.
 
-**Status: research design.** The construction below is concrete and, I
-believe, correct in outline; none of it is proved, and the phase-1 sampler is
-not implemented. Two of its steps are known to be subtle and are called out as
+**Status: IMPLEMENTED and accepting; distribution equality still open.** The
+simulator exists (`crates/flock-prover/src/preimage_simulator.rs`), receives
+only the public digests, and the unmodified verifier accepts its output. What
+remains unproved is that its output distribution matches the honest one. Two of its steps are known to be subtle and are called out as
 such.
 
 ---
@@ -33,7 +34,72 @@ parity** checks the verifier never tests. A distinguisher recomputes one
 parity functional and separates, with no oracle queries at all. The same
 applies to the `yr`/opened-row and fold-linkage relations across levels.
 
-## 2. The construction: a two-phase hybrid
+## 2. What was built (and how it differs from the sketch below)
+
+The implemented simulator is **simpler than the two-phase hybrid** originally
+specified here, because the fixed-digest relation admits a shortcut the
+unbound one does not.
+
+It commits an honest trace for messages **of its own choosing**, with the
+output region overwritten by the public digests. That vector satisfies the
+digest claim by construction and is *not* a satisfying R1CS assignment — so
+the lincheck, the six hiding commitments and the batched opening all run
+**honest production code** on it, and only the zerocheck, the one sub-proof
+that would notice, is emitted.
+
+That is strictly better than the "solve a pseudo-witness" phase 2 sketched
+below: there is no linear solve over a `2^m` vector, and every structural
+relation inside the opening holds because it is computed, so the wrong-coset
+failure mode never arises.
+
+The zerocheck emitter uses exactly the freedom the verifier leaves:
+
+* `round1_c` must interpolate at `z` to the committed vector's true C-value —
+  one linear condition on a 64-vector, solved in one coordinate;
+* `round1_ab` is free, and the AB initial claim is whatever the reconstruction
+  yields;
+* each multilinear round is free except the **last `G(∞)`**, solved so the
+  telescoped claim lands on `â(ρ)b̂(ρ) + γ·P(ρ)Q(ρ)`.
+
+**The ordering obstruction is real and is why programming is needed.** That
+last solve requires `ρ` before the message preceding it is emitted, which
+plain Fiat–Shamir does not allow. The simulator programs **18** oracle points
+(`z`, `γ`, one per multilinear round). `r_skip` and `r_outer` are deliberately
+left honest: the terminal evaluations depend only on the fold point.
+
+Two passes, because the emitter needs the committed vector's true terminal
+evaluations: pass 1 runs the prover honestly against a throwaway oracle and
+*records* them (and adopts its uniform challenges as the chosen tuple); pass 2
+emits. A single `ZerocheckSource` seam in the prover carries both, so the
+simulator runs the real code everywhere else rather than a copy that would
+drift.
+
+### Measured
+
+| property | result |
+|---|---|
+| verifier accepts simulated proof | yes, unmodified verifier |
+| oracle points programmed | 18 |
+| transcript shape vs honest | identical — 177,384 coordinates |
+| coordinates differing by value | 177,384 / 177,384 |
+| patched vector satisfies R1CS | **no** (control) |
+| honest prover on patched vector | **rejected** (control) |
+
+Identical shape matters: a length or layout difference would be a
+distinguisher needing no cryptography at all. Total value-difference is what
+fresh randomness produces and is the expected reading, not evidence of
+indistinguishability.
+
+### What is still open
+
+Distribution equality. The measurement above cannot certify it; that needs the
+coverage results restated in **claim-kernel** form for this relation, plus the
+obligations in §3. In particular the emitted zerocheck's round messages are
+uniform *by construction*, whereas the honest ones are uniform *because of the
+mask channels* — showing those two laws coincide is exactly the remaining
+theorem.
+
+## 3. The original two-phase sketch (superseded for this relation)
 
 Sample only what is genuinely free; *compute* everything that is structurally
 determined.

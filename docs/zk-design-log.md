@@ -222,3 +222,40 @@ That control immediately caught the harness absorbing the PoW nonce untagged
 where the real challenger tags it; six unit tests had missed it because none of
 them grind. Acceptance under a programmed oracle will be necessary but not
 sufficient: distribution equality is a separate measurement.
+
+## 13. The simulator, built (2026-07-27)
+
+`preimage_simulator.rs` produces an accepting proof from the public digests
+alone. **Why it works at all:** the fixed-digest relation lets the simulator
+commit an honest trace for messages *of its own choosing* with the output
+region overwritten by the public digests. That vector satisfies the digest
+claim by construction and is not a satisfying assignment, so everything except
+the zerocheck runs honest production code on it — the lincheck and the
+openings speak about whatever was committed — and only the zerocheck, the
+sub-proof that would notice, has to be emitted.
+
+**Why programming is necessary, not decorative.** The emitted zerocheck's last
+`G(∞)` is solved so the telescoped claim lands on `â(ρ)b̂(ρ)+γP(ρ)Q(ρ)`, and
+that solve needs `ρ` *before* the message preceding it is emitted. Plain
+Fiat–Shamir forbids it. With a programmable oracle the challenge is fixed in
+advance and the solve becomes available. 18 points are programmed (`z`, `γ`,
+one per multilinear round); `r_skip`/`r_outer` are left honest because the
+terminal evaluations depend only on the fold point.
+
+**Why a seam and not a second orchestration.** A simulator that runs different
+code from the prover demonstrates nothing about the prover, and a duplicate
+would drift. The A1′ prover gained one `ZerocheckSource` hook, receiving the
+honest implementation as a closure so pass 1 can *record* a run and pass 2 can
+*replace* it.
+
+**Controls, because "the verifier accepted" proves nothing alone.** The
+patched vector provably fails the R1CS (so the zerocheck genuinely had to be
+faked), and an honest prover on that same vector is rejected (so acceptance
+comes from the simulation). Transcript shape is identical to an honest proof —
+177,384 coordinates — with every coordinate differing by value.
+
+**Still open:** distribution equality. Acceptance is necessary, not
+sufficient. The emitted round messages are uniform *by construction* while the
+honest ones are uniform *because of the mask channels*; proving those two laws
+coincide is the remaining theorem, and it needs the coverage certificates
+restated in claim-kernel form.

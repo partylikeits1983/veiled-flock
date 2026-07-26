@@ -966,4 +966,118 @@ mod tests {
              passed, the digest binding would not be enforcing anything"
         );
     }
+
+    /// **Measurement: how far is the simulated transcript from an honest one?**
+    ///
+    /// Acceptance is necessary, not sufficient — a simulator whose output
+    /// verifies but is distributed differently is still a broken simulator.
+    /// This compares, coordinate by coordinate, a simulated proof against an
+    /// honest one for the same statement, and reports which classes differ
+    /// *structurally* (always, in a way a distinguisher could test) rather
+    /// than merely by value (as fresh randomness would).
+    ///
+    /// It is a diagnostic, not a proof: it can find a discrepancy but cannot
+    /// certify the absence of one. What it currently shows is recorded in
+    /// `docs/memos/interactive-simulator-design.md`.
+    #[test]
+    #[ignore = "diagnostic; run explicitly"]
+    fn measure_simulated_vs_honest_transcript() {
+        use crate::preimage_simulator::simulate;
+        use crate::r1cs_hashes::blake3::{
+            ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+        };
+        use crate::sim_oracle::shared_oracle;
+        use crate::transcript_schema::{algebraic_vector, flatten_a1};
+        use flock_core::zk::MaskSampler;
+
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        let secret = msgs_of(0xD1F_0001, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&secret);
+        let stmt = setup.statement(&digests);
+
+        // Honest proof of the same statement (the party that knows the
+        // preimages).
+        let mut hrng = flock_core::zk::ZkRng::from_seed([21u8; 32]);
+        let mut hch = FsChallenger::new(b"b3-preimage-zk");
+        let (hproof, hcomm) = setup
+            .prove(&secret, &digests, &mut hrng, &mut hch)
+            .expect("honest prove");
+
+        // Simulated proof of the same statement.
+        let own = msgs_of(0xD1F_0002, N_TEST);
+        let layout = setup.r1cs.zk.expect("zk layout");
+        let mut zrng = flock_core::zk::ZkRng::from_seed([22u8; 32]);
+        let mut rand_words = vec![
+            0u64;
+            setup.n_block_slots()
+                * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+        ];
+        zrng.fill_u64s(&mut rand_words);
+        let build = || {
+            let blocks: Vec<Compression> = own.iter().map(message_compression).collect();
+            let (z, _a, _b, stripe) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+                &blocks,
+                setup.n_blocks_log(),
+                &layout,
+                &rand_words,
+                ParamPinning::RootHash64,
+            );
+            (z, stripe)
+        };
+        let words_per_block = (1usize << 14) / 128;
+        let patch = |z: &mut [flock_core::field::F128]| {
+            for (i, d) in digests.iter().enumerate() {
+                for half in 0..2usize {
+                    let mut w = flock_core::field::F128::ZERO;
+                    for b in 0..128usize {
+                        let bit = half * 128 + b;
+                        if (d[bit / 8] >> (bit % 8)) & 1 == 1 {
+                            if b < 64 {
+                                w.lo |= 1u64 << b;
+                            } else {
+                                w.hi |= 1u64 << (b - 64);
+                            }
+                        }
+                    }
+                    z[i * words_per_block + 2 + half] = w;
+                }
+            }
+        };
+        let oracle = shared_oracle();
+        let sim = simulate(
+            &setup.r1cs,
+            &setup.pcs_params,
+            setup.r1cs.csc_lincheck_circuit(),
+            &stmt,
+            build,
+            &patch,
+            0xD1FF,
+            &oracle,
+            b"b3-preimage-zk",
+        )
+        .expect("simulate");
+
+        let hv = algebraic_vector(&flatten_a1(&hcomm, &hproof));
+        let sv = algebraic_vector(&flatten_a1(&sim.commitment, &sim.proof));
+        assert_eq!(
+            hv.len(),
+            sv.len(),
+            "simulated and honest transcripts must have the SAME SHAPE — a \
+             length difference is a distinguisher on its own"
+        );
+        let differing = hv.iter().zip(&sv).filter(|(a, b)| a != b).count();
+        println!(
+            "transcript coordinates: {} total, {} differ by value \
+             (fresh randomness makes near-total difference expected)",
+            hv.len(),
+            differing
+        );
+        // Same shape is the checkable invariant here; per-class distribution
+        // equality needs the coverage certificates, not this diagnostic.
+        assert!(
+            differing > hv.len() / 2,
+            "an almost-identical transcript would mean the simulator is \
+             reproducing witness-dependent values, not masking them"
+        );
+    }
 }
