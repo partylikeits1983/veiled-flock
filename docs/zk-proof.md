@@ -42,18 +42,19 @@ what is not yet done.
   schema, the complete mask-only leakage set conditioned on, every public
   claim the verifier learns conditioned on, and a genuinely linear
   witness-difference family. Measured over three challenge tuples at the
-  16-block fixture (121,861 probes each): 548 witness-dependent coordinates,
-  394 mask-only, field-channel subspace rank 124, inner image 52,864 bits,
-  joint image 53,024, claim space saturated at 384 bits, and
+  16-block fixture (~1.9×10⁵ probes per tuple at the current full budget;
+  complete algebraic transcript 1532 F128 = 548 witness-dependent + 983
+  mask-only + one derived — A3 grew the mask-only class from 591): claim
+  space saturated at 384 bits and
   rank[residual | dclaim] = 384 = rank(dclaim) at every tuple - no
   claim-preserving witness direction escapes the joint image.
 
   Supporting results on the round-pair class: H1 (the inner mask image is the
-  same subspace at different witnesses) holds with the degree-2 channel and
-  fails without it (384 of 2560 bits); the inner-stage deficit is exactly one
-  F128 direction and it is exactly `final_b`, supplied by the outer (u_B)
-  stage; a constant Q collapses the channel image from 2305 to 1153 bits,
-  delimiting the bad-mask set. The negative controls fire, including a canary
+  same subspace at different witnesses) holds with the degree-2 channel —
+  without it the image collapses to 768 of the block's 2816 bits; the
+  inner-stage deficit is exactly one F128 direction and it is exactly
+  `final_b`, supplied by the outer (u_B) stage; a constant Q collapses the
+  channel image from 2561 to 1281 bits, delimiting the bad-mask set. The negative controls fire, including a canary
   that appends a raw witness functional.
 
   Four corrections were needed to get an interpretable verdict, each of which
@@ -184,13 +185,10 @@ This is realized and checked: `tests/zk_simulator.rs`
 $n=256$ and verifies its output under the unchanged verifier; a second run with
 fresh randomness gives a different, still-accepting transcript.
 
-**Status caveat.** The realized simulator test currently drives
-`prove_fast_zk`, whose zerocheck is **un-amended** — a path for which the
-round-pair hiding argument of this document does not apply (and whose fallback
-mixture hypothesis is disproved, `final_b_breaks_full_mixture_hcoset`). The ZK
-claim of this document attaches to the A1′ reference path
-(`prove_r1cs_zk_a1`); the simulator and its test are being moved onto that
-path.
+(An earlier revision's caveat — that the simulator test drove `prove_fast_zk`,
+whose zerocheck is un-amended — is resolved: `zk_simulator.rs` now runs the
+certificate-gated A1′ path, `prove_zk_a1_with_rng`, which is the path this
+document's claim attaches to.)
 
 **Reduction.** Since $\mathsf{S}(x)$ is the honest prover on *some* valid
 witness $w_0$, proving $\Delta(\mathsf{View}(w),\mathsf{S}(x))\le\varepsilon$
@@ -636,18 +634,31 @@ degree count is over the challenge variables while the probability is taken
 over the mask entries.
 
 **Replacement (per-proof fail-closed self-check).** The map
-$P\mapsto(\text{round pairs}\,|\,L)$ at the prover's actual $(Q,\text{
-challenges})$ is $\mathbb{F}_2$-linear; the reference prover verifies the
-required conditional coverage for its own draw by an exact $\mathbb{F}_2$ rank
-computation (random-probe spanning through the real fold kernels + Gaussian
-elimination) and **aborts and resamples $P,Q$ on failure**. The failure event
-depends only on $(Q,\text{challenges})$ — both witness-independent — so
-resampling leaks nothing. Consequence: $\varepsilon_{\mathrm{rank}} = 0$ for
-every *emitted* proof; the unproven quantity becomes the resample probability,
-which affects liveness, not privacy (measured 0 across all recorded runs; a
-closed-form bound over Boolean $Q$ remains open). Note: masking a value
-"needs 128 bits" is only a heuristic unless the induced map has full rank;
-here rank is what is *checked per proof*, not inferred from bit-count.
+$P\mapsto\text{round pairs}$ at the prover's actual $(Q,\text{challenges})$ is
+$\mathbb{F}_2$-linear; the reference prover verifies surjectivity onto the
+round-pair block for its own draw by an exact $\mathbb{F}_2$ rank computation
+(random-probe spanning through the real fold kernels + Gaussian elimination)
+and **aborts and resamples on failure**, redrawing the complete mask set,
+witness randomizers included. (What the per-proof check certifies is the
+*marginal* round-pair image; the conditional accounting — conditioning on the
+leaked $L=\{P(\rho),\sigma_z\}$ removes exactly the public-claim direction —
+is established at the certificate level, §5, and composes with it.) The
+failure event depends only on $(Q,\text{challenges})$ — not on the witness
+directly. One caveat is load-bearing and is stated here rather than assumed:
+under Fiat–Shamir the challenges are themselves derived from the witness
+*commitment* (the check runs after `bind_statement` absorbs it), so the
+event's witness-independence is **computational**, resting on the hiding of
+the commitment in the ROM. This is an explicit lemma obligation for the
+composed theorem — the same commitment-hiding step the FS lift of §9 already
+relies on — not an unconditional fact; the certificates cannot observe it
+because they run a challenge-decoupled test challenger. Under that
+assumption, resampling leaks nothing. Consequence:
+$\varepsilon_{\mathrm{rank}} = 0$ for every *emitted* proof; the unproven
+quantity becomes the resample probability, which affects liveness, not
+privacy (measured 0 across all recorded runs; a closed-form bound over
+Boolean $Q$ remains open). Note: masking a value "needs 128 bits" is only a
+heuristic unless the induced map has full rank; here rank is what is
+*checked per proof*, not inferred from bit-count.
 
 ---
 
@@ -716,14 +727,14 @@ witness-free surjectivity argument.
 |---|------|--------|
 | 1 | Exact claim | **[P]** §1 |
 | 2 | Explicit simulator | **[P]+[C]** §2, `zk_simulator.rs` |
-| 3 | Replace sampled audits | partial **[C]** — exact image extraction, but witness-difference coverage is sampled and the full-transcript joint certificate is remaining §3/§8 |
+| 3 | Replace sampled audits | partial **[C]** — exact image extraction; the complete-transcript joint certificate passes at the fixture and the real-statement certificate over the PIOP classes (§0); witness directions remain a structured family plus random draws, and challenge tuples remain sampled |
 | 4 | Bilinear zerocheck | **[P]+[C]** §5 (`a1_prime_*`); the Lean surjective corollary applies only once (★′) is certified — its hypothesis is a Rust measurement, not Lean |
-| 5 | Joint hiding | **open** — zerocheck-layer conditional certificate only (single fixed Q, randomizers zeroed); composition lemma invalid as previously instantiated (§4 correction); full-transcript certificate + triangular lemma remaining |
+| 5 | Joint hiding | **[C]+[L]** — the complete-transcript joint conditional certificate passes at the certified fixture (§0) under the triangular composition (`MaskingTriangular.lean`, replacing the invalid coprod instantiation, §4 correction); remaining: all-tuple coverage and production-size transfer (§0, limitations) |
 | 6 | Fiat–Shamir ROM | **[P]+[S]** §9 |
 | 7 | Separate ZK/soundness | **[P]** §6 (separated theorems) |
 | 8 | Hash assumptions | **[A]** §7 (stated explicitly) |
 | 9 | Low-mask interpolation | **[P]**, encoder-test remaining §7 |
-| 10 | Mask entropy = rank | partial — rank certified at sampled draws; closed-form bound **withdrawn** (§8), per-proof self-check is the replacement |
+| 10 | Mask entropy = rank | partial — rank certified at sampled draws; closed-form bound **withdrawn** (§8); the per-proof self-check (`prove_zk_a1_checked`) is implemented and makes ε_rank = 0 for emitted proofs; a closed form (or field-valued masks that admit one) remains open |
 | 11 | Leakage boundary | **[P]** §11 |
 | 12 | Repeated-proof | **[P]** §10 |
 | 13 | Randomness lifecycle | **[P]**, zeroization/fork-test remaining §10 |
@@ -735,15 +746,22 @@ witness-free surjectivity argument.
 | 19 | Every circuit family | **scoped out** — BLAKE3 batch only |
 | 20 | Compare prior work | **[P]** §12 (this section) |
 | 21 | Benchmarks | separate; median/variance/component breakdown remaining |
-| 22 | Release criteria | **not met** — candidate/experimental; needs the amendment wired, machine-checked bounds, and independent review |
+| 22 | Release criteria | **not met** — candidate/experimental (label B); needs a green run of the hardened certificate pipeline, a closed-form ε_rank (or field-valued masks), all-tuple coverage, production transfer beyond structural argument, optimized-prover equivalence, and independent review |
 
 **Bottom line.** For BLAKE3 batch statements, ZK reduces to full-transcript
 WI (proven, L1). The affine transcript classes are hidden exactly
 (Masking.lean + exact certificates); the round messages are the hard class,
 targeted by the degree-2 $P\cdot Q$ channel with the *conditional* coverage
-condition (★′). Still open before the WI theorem is established: the
-complete-transcript joint certificate, the triangular composition lemma, and
-the per-proof rank self-check replacing the withdrawn Schwartz–Zippel bound.
+condition (★′). The three closures an earlier revision listed as open have
+landed: the complete-transcript joint certificate passes at the certified
+fixture, the triangular composition lemma is machine-checked
+(`MaskingTriangular.lean`), and the per-proof rank self-check
+(`prove_zk_a1_checked`) replaces the withdrawn Schwartz–Zippel bound. What
+remains open before a WI *theorem* (rather than a certified instance) is
+established: coverage for all challenge tuples, production-size transfer
+beyond the structural argument, a closed-form ε_rank (or field-valued masks
+that admit one), the commitment-hiding lemma behind the resample event's
+witness-independence (§8), and the single composed top-level statement.
 Sibling hiding is computational under a stated hash assumption; the FS lift
 is unconditional via the non-programming simulator *given* WI. The result is
 a candidate ZK mode with a proven partial core, pending those closures and

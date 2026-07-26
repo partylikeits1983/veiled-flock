@@ -24,8 +24,15 @@ fixture**: over all 548 witness-dependent coordinates of the complete A1′
 transcript, at three challenge tuples, conditioned on the complete mask-only
 leakage set and on every public claim the verifier learns, with the claim space
 saturated, no claim-preserving witness direction escapes the joint mask image.
-What keeps the overall label at B is §10: the certificate is per-fixture, the
-ROM assumption is assumed, and no independent review has been done.
+What keeps the overall label at B is §10 — the certificate is per-fixture, the
+ROM assumption is assumed, and no independent review has been done — plus one
+process fact: a prior revision promoted the label to A, and the promotion was
+withdrawn when the certificate *pipeline* was found to overstate itself (a
+runner that did not fail on the flagship certificate's failure, three gates
+whose `--exact` filters matched zero tests, a substring-matched evidence
+registry, and advertised negative controls that did not exist). The pipeline
+is repaired; re-promotion waits on one green end-to-end run of the hardened
+`scripts/zk-certify.sh` at the pinned revision.
 
 Explicitly **not** claimed: SHA-256, Keccak, hash chains, Merkle-path
 statements, externally bound hashes, recursive composition, arbitrary Flock
@@ -158,10 +165,12 @@ family that binds public I/O.
 | `zerocheck::zk_invalid_witness_rejected` | false statements rejected on the amended path | fast |
 | `zerocheck::zk_gamma_cancellation_unique_and_fs_ordering` | γ-uniqueness; the ordering attack works without FS and fails with it | fast |
 | `zk_joint_certificate::h1_inner_image_witness_independent_on_round_block` | H1, and that P is what discharges it | ~25 s |
-| `zk_joint_certificate::p_channel_image_requires_nondegenerate_q` | bad-Q set delimitation (2305 → 1153 bits) | ~20 s |
+| `zk_joint_certificate::p_channel_image_requires_nondegenerate_q` | bad-Q set delimitation (2561 → 1281 bits) | ~20 s |
 | `zk_joint_certificate::joint_certificate_smoke` | triangular coverage on the round block | ~40 s |
-| `zk_joint_certificate::joint_certificate_negative_controls` | detector non-vacuity (no-μ, added leakage) | ~20 s |
+| `zk_joint_certificate::joint_certificate_negative_controls` | detector non-vacuity (honest baseline passes, added unmasked leakage fails) | ~20 s |
+| `zk_joint_certificate::mask_reuse_across_proofs_is_a_leak` | reused masks leak a deterministic witness functional; fresh-per-proof masks are load-bearing | fast |
 | `zk_joint_certificate::joint_conditional_coverage_full_transcript` | complete-transcript joint coverage — **passes** at 3 tuples | offline, ~13 min/tuple |
+| `zk_blake3_certificate::blake3_witness_difference_lies_in_the_mask_image` | real-statement (m=20) coverage over the PIOP classes — **passes**, 30,464/30,464 | offline, ~15 min/class scope |
 | `zk_production_config.rs` | **at m=22**: channel surjectivity on the round-pair block (4096/4096), degenerate-Q control (2048/4096), per-proof self-check + verify, randomizer margin 12× | ~15 s |
 | `zk_simulator.rs` | simulator on the A1′ path; constructive translation exactness | mixed |
 | `zk_leakage_certificate.rs` | affine-class exact coverage; A1′ round-pair image | offline |
@@ -180,44 +189,30 @@ assumption; no independent review; side channels and QROM out of scope.
 1. **Sibling hiding** is assumed (ROM / hash pseudorandomness), not derived.
 2. **Challenge-tuple genericity**: certificates hold at the tuples tested; no
    argument covers all tuples.
-3. **PRINCIPAL OPEN ITEM — localized to the lincheck layer.** Run directly
-   on a real BLAKE3 batch statement (m=20, 64 blocks, triangular probing,
-   claim space saturated at 640 bits), `rank[resid | Δclaim] = 768` against
-   640: one F128 direction of claim-preserving witness difference is
-   unaccounted for (`blake3_witness_difference_lies_in_the_mask_image`, kept
-   failing and documented). Four things are established about it:
+3. **RESOLVED — the former principal open item (`round1_c`), closed by
+   amendment A3.** On a real BLAKE3 batch statement (m=20, 64 blocks,
+   triangular probing, claim space saturated at 640 bits) one F128 direction
+   of claim-preserving witness difference escaped the mask image, attributed
+   to `zerocheck.round1_c`. Amendment A2 removed the lincheck's share
+   (9728/10240 with 128 bits escaping → 10240/10240 with none); amendment A3
+   (the round-1 mask pair, `docs/round1c-mask-channel.md` — the cheap
+   diagonal design was first ruled out by measurement) closed the remainder:
+   `blake3_witness_difference_lies_in_the_mask_image` now **passes** at
+   30,464/30,464 bits with `rank[resid | Δclaim] = 640 = rank(Δclaim)`
+   (`docs/zk-proof.md` §0). It stays in this section because two findings
+   from the failure outlast the fix and bind how every other result here
+   must be read:
 
-   - **It is the statement, not the harness.** The identical procedure on the
-     synthetic fixture gives 384 = 384 (`control_same_procedure_on_the_passing_fixture`).
-   - **Amendment A2 removed the lincheck from it.** Before A2 the residual was
-     carried by `zerocheck.round1_c`, `lincheck.rounds` and
-     `lincheck.z_partial`; after it, by `zerocheck.round1_c` alone. The
-     lincheck classes go from 9728/10240 with 128 bits escaping to
-     10240/10240 with nothing escaping.
-   - **It lives inside the zerocheck layer.** Running on `zerocheck.*` alone
-     reproduces the failure exactly (12032/20224, same 128 bits, same
-     attribution), so no cross-layer interaction is involved. The arithmetic
-     confirms A2's channel is clean: 22272 − 12032 = 10240, exactly the
-     lincheck subspace and nothing more.
-   - **It is joint, not marginal.** `round1_c` alone passes (8192/8192). The
-     failure appears only when it must be covered simultaneously with every
-     other coordinate — the protocol instance of the two-dimensional example
-     in the paper's conditional-coverage section. A reviewer should note that
-     per-class coverage results are therefore not composable, here or
-     anywhere else in this development.
-
-   Excluded by measurement rather than by argument: region alignment (L3,
-   verified), the constant-wire pin (a witness-independent target shift), the
-   randomizer budget (2.3× the entropy in the covering species left the image
-   rank identical — built, measured, reverted), and the conditioning
-   hypothesis (adding a_eval, b_eval to the claim set changed nothing).
-
-   Repair specified in `docs/round1c-mask-channel.md`, including the cheap
-   falsifiable check that should precede it and why the obvious diagonal mask
-   is probably ruled out. Harder than A2: round 1 carries two interpolation
-   conventions and a constraint-domain vanishing condition tying `round1_ab`
-   to `round1_c`, and that condition is exactly what makes the zerocheck
-   sound — so a careless mask there is a soundness break, not a privacy win.
+   - **The escape was joint, not marginal.** `round1_c` passed in isolation
+     at 8192/8192 the entire time; the failure appeared only when it had to
+     be covered simultaneously with every other coordinate. A reviewer
+     should note that per-class coverage results are therefore not
+     composable, here or anywhere else in this development.
+   - **The assumption that broke was never written down as an assumption.**
+     The randomizer rows were *believed* to cover the affine classes — true
+     on the synthetic fixture (~81% randomizer rows) and false on a real
+     witness (~5.5%). A certificate run only on the vehicle would have
+     reported success indefinitely.
 
 4. **The fixture certificate.** The complete-transcript certificate passes at
    the reduced fixture (m=16) chosen so exact probing is feasible. Measured

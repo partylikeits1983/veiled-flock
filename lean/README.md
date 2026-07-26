@@ -63,9 +63,11 @@ theorem and machine-checked hypotheses:
    No `sorry`; the proofs depend only on Lean's standard axioms
    (`propext`, `Classical.choice`, `Quot.sound`).
 
-2. **The Rust rank audits** (re-runnable locally; CI integration is being
-   added — as of this revision no CI job compiles or runs the `zk` feature)
-   verify hypotheses on the real prover at fixed challenges:
+2. **The Rust rank audits** (re-runnable locally, and run in CI:
+   `.github/workflows/test.yml` compiles and tests the `zk` feature per PR,
+   and `.github/workflows/zk-certificates.yml` runs the offline certificate
+   suite on a schedule) verify hypotheses on the real prover at fixed
+   challenges:
    - *PCS layer* (`crates/flock-core/src/pcs/zk_audit.rs`): unit-probe
      differencing extracts the mask map, and Gaussian elimination checks
      that witness-difference directions, restricted to the kernel of the

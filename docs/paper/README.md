@@ -3,18 +3,38 @@
 A candidate zero-knowledge mode for BLAKE3 batch statements in Flock, a
 hash-based SNARK for batch R1CS over F₂.
 
-**Decision label: A — the narrow claim is supported by completed evidence.**
-Every certificate the argument depends on passes, including the one that was
-failing. On a real BLAKE3 batch statement (m=20, all PIOP classes = 30,464
-bits, claims saturated at 640 bits over 768 witness pairs) the joint mask
-image is **30,464 / 30,464** and `rank[resid | Δclaim] = 640 = rank(Δclaim)`:
-no claim-preserving witness direction escapes. The complete-transcript
+**Decision label: B — experimental candidate with a proven partial core.**
+A prior revision of this note carried label A ("the narrow claim is supported
+by completed evidence"). That label is withdrawn — not because any measured
+result regressed, but because the evidence *pipeline* it rested on was found
+to overstate itself: the certificate runner recorded a failure of the
+flagship complete-transcript certificate in its manifest yet still exited 0;
+the registry's evidence check matched test names by substring rather than
+against what actually runs; three end-to-end gates (the m=22 A1′ and
+fast-path roundtrips, and the A3 staged roundtrip) silently matched **zero
+tests** — they were addressed by bare name under `--exact`, so those
+roundtrips were never executed by the certificate runner at all; and two of
+the six advertised joint-certificate negative controls existed. A label that
+tracks evidence has to fall when the evidence chain does.
+
+**What restoring label A requires:** the pipeline fixes are in (fail-fatal
+runner with a matched-zero-tests guard, exact-name bidirectional evidence
+check, the mask-reuse control implemented, the remaining controls delegated
+by name to the tests that own them) — what remains is one complete green run
+of the hardened `scripts/zk-certify.sh`, recorded with its manifest at the
+pinned revision. The label tracks the evidence chain, not optimism about it.
+
+The measured results themselves are unchanged and expected to reproduce. On a
+real BLAKE3 batch statement (m=20, all PIOP classes = 30,464 bits, claims
+saturated at 640 bits over 768 witness pairs) the joint mask image is
+**30,464 / 30,464** and `rank[resid | Δclaim] = 640 = rank(Δclaim)`: no
+claim-preserving witness direction escapes. The complete-transcript
 certificate passes at the certified fixture over all 548 witness-dependent
 coordinates, at three challenge tuples, conditioned on the complete mask-only
-leakage set (983 F128) and on every public claim the verifier learns. Measured
-*at* the production configuration (m=22): the degree-2 channel spans the
-round-pair block in full (4096/4096 bits), a degenerate Q spans exactly half,
-the per-proof coverage self-check passes with no resampling and its proof
+leakage set and on every public claim the verifier learns. Measured *at* the
+production configuration (m=22): the degree-2 channel spans the round-pair
+block in full (4096/4096 bits), a degenerate Q spans exactly half, the
+per-proof coverage self-check passes with no resampling and its proof
 verifies, and the randomizer margin binding `s_hat_v` is 12× the requirement
 versus 3× at the fixture.
 

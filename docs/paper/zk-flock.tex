@@ -121,12 +121,20 @@ simulator programs nothing and rewinds nothing, which makes a QROM
 zero-knowledge statement plausible, but we do not write the theorem and do not
 rely on it.
 
-\paragraph{Status.} \textbf{The narrow claim above is supported by completed
-evidence.} Every certificate the argument depends on passes, including the one
-that was failing: on a real BLAKE3 statement, over the PIOP classes, no
-claim-preserving witness direction escapes the joint mask image. Getting there
-required two amendments (A2, A3) that measurement forced and that are part of
-the construction described here.
+\paragraph{Status.} \textbf{Experimental candidate with a proven partial core
+(label B).} Every certificate the argument depends on passes as most recently
+measured, including the one that was failing: on a real BLAKE3 statement, over
+the PIOP classes, no claim-preserving witness direction escapes the joint mask
+image. Getting there required two amendments (A2, A3) that measurement forced
+and that are part of the construction described here. A prior revision
+promoted this status to ``supported by completed evidence'' on the strength of
+those results; that promotion is withdrawn, because the certificate
+\emph{pipeline} they ran under was subsequently found to overstate itself (a
+runner that did not fail on the flagship certificate's failure, a
+substring-matched evidence registry, three end-to-end gates whose test filters
+matched zero tests, and advertised negative controls that did not exist). The
+pipeline is repaired; the status returns to ``supported'' when the hardened
+runner completes one green end-to-end run at the pinned revision.
 
 What that does \emph{not} mean, stated plainly because the distinction is the
 whole point of this note. Several load-bearing steps are discharged by exact
@@ -520,24 +528,27 @@ challenges, and every downstream value is $\Fbig$-linear in the blinded message.
 
 \paragraph{What the certificates establish.} All numbers below are measured on
 the real amended prover at the reduced-size fixture, whose complete algebraic
-transcript is 1140 field elements (548 witness-dependent, 591 mask-only, one
-derived). Amendment~A2 enlarged the mask-only class: $\sigma_{lc}$,
-$\hat S(\rho)$ and every value inside $S$'s hiding opening are conditioned on,
-so the channel is not credited with coverage it does not have.
+transcript is 1532 field elements (548 witness-dependent, 983 mask-only, one
+derived). Amendments~A2 and~A3 both enlarged the mask-only class:
+$\sigma_{lc}$, $\hat S(\rho)$, $M_c(z)$, $h(z)$ and every value inside the
+$S$, $S_c$, $S_h$ hiding openings are conditioned on, so those channels are
+not credited with coverage they do not have.
 
 \begin{itemize}
 \item \textbf{H1 holds, and the degree-2 channel is what makes it hold.} The
-inner-mask image on the round-pair block spans the \emph{same} 2432-bit subspace
+inner-mask image on the round-pair block spans the \emph{same} 2688-bit subspace
 at two different witnesses when the $P$ channel is active. With the channel
-disabled the two spans differ. So the constant-image hypothesis of
+disabled the image collapses to 768 of the block's 2816 bits — far too small to
+hide the block regardless of whether that residue happens to be
+witness-independent at a given fixture. So the constant-image hypothesis of
 Theorem~\ref{thm:tri} is not vacuous, and it is the degree-2 channel that
 discharges it.
 \item \textbf{The inner stage falls exactly one direction short, and it is the
-expected one.} The inner image covers 2432 of the block's 2560 bits; the missing
+expected one.} The inner image covers 2688 of the block's 2816 bits; the missing
 128 bits are exactly the $\hat b$-side final evaluation, whose inner-mask
 derivative is identically zero. This is the coordinate that disproved an earlier
 flat-mixture argument. The outer ($u_B$) stage supplies it: the joint image is
-2560 of 2560 bits.
+2816 of 2816 bits.
 \item \textbf{No claim-preserving witness direction escapes, on the round-pair
 class.} Conditioned on the complete mask-only leakage set and on \emph{every}
 public claim the verifier learns --- the ab-claim, the reduced evaluation
@@ -564,12 +575,17 @@ blocks $\times$ chunks $\ge 128$ \emph{with margin}; the residual
 concentrated in exactly that class at $1.5\times$ margin and vanished at
 $3\times$. Production BLAKE3 runs at $\sim\!12\times$.
 \item \textbf{The bad set is nonempty and delimited.} At a constant $Q$ the
-channel's image collapses from 2305 to 1153 bits --- it reaches the $G(1)$ half
+channel's image collapses from 2561 to 1281 bits --- it reaches the $G(1)$ half
 but not the degree-2 $G(\infty)$ half, which is precisely its reason for
 existing.
-\item \textbf{The detector is not vacuous.} Disabling the PCS mask, or appending
-an unmasked witness functional to the transcript vector, both break the
-certificate.
+\item \textbf{The detector is not vacuous.} Appending an unmasked witness
+functional to the transcript vector breaks the certificate; reusing one mask
+draw across two proofs exposes a deterministic witness functional that no
+draw can move, while fresh draws move every affine coordinate. Controls that
+are not \emph{coverage} controls for this block live with the test that owns
+the channel: no-$P$ breaks H1's constant-image hypothesis, a constant $Q$
+collapses the channel image, and withholding the PCS blinder fails the PCS
+layer's own rank audit.
 \item \textbf{Measured at the production configuration, not assumed.} At
 $m=22$ the degree-2 channel spans the round-pair block in full (4096 of 4096
 bits, by random-probe spanning through the real fold kernels, which can only
@@ -596,7 +612,7 @@ is recorded.
 \textbf{Configuration} & \textbf{$m$} & \textbf{Role} & \textbf{Certificate status} \\
 \midrule
 BLAKE3 batch, $2^8$ compressions & 22 & the production certified config & gated; structural transfer \\
-Reduced masked-identity fixture & 15 & joint certificate (round-pair class) & checked \\
+Reduced masked-identity fixture & 16 & complete-transcript joint certificate & checked \\
 \bottomrule
 \end{tabular}
 \caption{Certified configurations. The zero-knowledge API refuses any
@@ -613,11 +629,19 @@ is withdrawn. The implemented $P,Q$ are \emph{Boolean} --- one bit per cube entr
 is vacuous; the bound also conflated a single entry's degree with a
 $2304\times2304$ determinant's, and took the probability over a different
 variable set from the one the degree was counted in. What replaces it is a
-per-proof check: coverage of the round-pair block conditioned on the mask-only
-leakage is an $\Ftwo$ rank condition on data the prover already has, so the
-prover verifies it for its own draw and resamples $P,Q$ on failure. The failure
-event depends only on the mask draw and the challenges, both witness-independent,
-so resampling leaks nothing. Consequently $\erank = 0$ for every emitted proof,
+per-proof check: the marginal coverage of the round-pair block is an $\Ftwo$
+rank condition on data the prover already has, so the prover verifies it for
+its own draw and resamples the complete mask set on failure (the conditional
+accounting --- conditioning on the leaked mask functionals removes exactly the
+public-claim direction --- is established at the certificate level and
+composes with it). The failure event depends only on the mask draw and the
+challenges --- not on the witness directly. One caveat is stated rather than
+assumed: under Fiat--Shamir the challenges are derived from the witness
+\emph{commitment}, so the event's witness-independence is \emph{computational},
+resting on the commitment's hiding in the ROM --- the same step the
+Fiat--Shamir lift already relies on, recorded as an explicit lemma obligation
+for the composed theorem. Under that assumption, resampling leaks nothing.
+Consequently $\erank = 0$ for every emitted proof,
 and what remains unquantified is the resample probability --- a liveness
 quantity, not a privacy one. A closed-form bound over Boolean masks remains open.
 (Had $P,Q$ been drawn from $\Fbig$ instead, a corrected Schwartz--Zippel argument
