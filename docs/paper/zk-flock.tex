@@ -438,22 +438,25 @@ derivative is identically zero. This is the coordinate that disproved an earlier
 flat-mixture argument. The outer ($u_B$) stage supplies it: the joint image is
 2560 of 2560 bits.
 \item \textbf{No claim-preserving witness direction escapes, on the round-pair
-class.} With the claim space saturated (128 bits) and a genuinely linear family
-of witness differences, the residual of every tested difference modulo the joint
-image is determined by the claim.
-\item \textbf{The complete-transcript version of that check does not pass at
-this fixture, and the reason is measured.} Over all 586 witness-dependent
-coordinates the joint image reaches 29{,}312 bits and 128 claim-preserving
-directions escape. The fixture carries 26{,}624 randomizer bits against a
-coordinate set spanning 75{,}008 bits --- a $2.8\times$ deficit against the
-sizing rule of roughly 128 randomizer bits per revealed field element --- and
-the measured image sits at that budget rather than at the transcript dimension.
-This is therefore a property of the fixture, which was built for $k$-wise
-subset audits of the PIOP layer rather than for a pipeline whose PCS layer
-alone contributes some 470 field elements. It is not evidence of a leak in a
-properly budgeted configuration; it is equally not evidence of coverage.
-Closing it requires a fixture whose randomizer budget matches its transcript,
-and that is the principal outstanding gap (\S\ref{sec:limitations}).
+class.} Conditioned on the complete mask-only leakage set and on \emph{every}
+public claim the verifier learns --- the ab-claim, the reduced evaluation
+$v=\hat z(r)$ that the opening proves, and the $\hat c$ claim, a 384-bit claim
+space that the witness-difference family saturates --- the residual of every
+tested difference modulo the joint image is determined by the claim.
+\item \textbf{Two harness defects were found by running this, and both had
+made verdicts uninterpretable rather than wrong in the safe direction.} First,
+the criterion compares $\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]$
+with $\mathrm{rank}(\Delta\text{claim})$, and both are capped by the number of
+sampled witness directions --- so below the claim dimension it can hold merely
+because no claim-preserving combination exists among the samples. Second, the
+PCS masks are \emph{field}-valued, so probing one bit per slot samples $1/128$
+of that channel; the earlier reported coverage failure, and the fixture-budget
+diagnosis offered for it, were both artefacts of that gap. Counting the field
+dimensions correctly, the fixture carries 157{,}696 mask dimensions against a
+75{,}008-bit coordinate space. The certificate now saturates the claim space
+before recording any verdict, and expands each mask slot to its full 128
+directions using the transcript's $\Fbig$-linearity in those slots, verified
+against real probes before being relied on.
 \item \textbf{The bad set is nonempty and delimited.} At a constant $Q$ the
 channel's image collapses from 2305 to 1153 bits --- it reaches the $G(1)$ half
 but not the degree-2 $G(\infty)$ half, which is precisely its reason for
@@ -654,11 +657,11 @@ Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
 \item \textbf{The complete-transcript certificate is open.} It is established
-for the round-pair class --- the class the amendment exists for --- but not for
-the whole transcript: at the reduced fixture the check fails for the diagnosed
-budget reason of \S\ref{sec:certificates}, and no adequately budgeted fixture
-has yet been built and probed. Everything the paper says about full-transcript
-witness-indistinguishability is therefore conditional on that gap closing.
+for the round-pair class --- the class the amendment exists for --- and the two
+harness defects that made the whole-transcript verdict uninterpretable have
+been fixed (\S\ref{sec:certificates}), but the corrected whole-transcript run
+is not yet reported here. Everything this paper says about full-transcript
+witness-indistinguishability is conditional on that run.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.
