@@ -33,7 +33,24 @@ what is not yet done.
   rejected (`prove_verify_r1cs_zk_a1_roundtrip`). This is a self-contained
   reference path; the optimized fused prover is a differential-tested
   follow-up (the shipped `prove_fast_zk` still runs the un-amended zerocheck).
-- The joint conditional coverage is verified on the **real amended prover** at
+- **Complete-transcript coverage is OPEN.** The joint conditional certificate
+  now runs the COMPLETE A1′ pipeline on the real prover with every coordinate
+  located through the canonical transcript schema. It establishes, for the
+  zerocheck round-pair class: H1 (the inner mask image is the same subspace at
+  different witnesses, and the degree-2 channel is what makes it so — without
+  `P` the spans differ); an inner-image deficit of exactly one F128 direction,
+  which is exactly `final_b` and which the outer (`u_B`) stage supplies
+  (2432/2560 → 2560/2560); and no claim-preserving witness direction escaping,
+  with the claim space saturated. Over the COMPLETE transcript the same check
+  **fails** at the available fixture: 128 claim-preserving directions escape.
+  The cause is diagnosed and quantitative — that fixture carries 26,624
+  randomizer bits against a 75,008-bit coordinate set (a 2.8× deficit against
+  the ~128-bits-per-revealed-value sizing rule), and the measured joint image
+  sits at the budget, not the transcript dimension. That is a property of the
+  fixture, not evidence of a leak in a properly budgeted configuration — and
+  equally not evidence of coverage. Closing it needs an adequately budgeted
+  fixture.
+- The earlier joint conditional coverage was verified at
   the zerocheck layer only (`full_conditional_coverage_zk_zerocheck`,
   `L={P(ρ),σ_z}`, at a **single fixed `Q`** — so conditioning on `Q(ρ)` in that
   experiment is vacuous — and with the randomizer channels held at zero).

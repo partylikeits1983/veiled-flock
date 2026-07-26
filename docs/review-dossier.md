@@ -19,6 +19,13 @@ the **reference** amended prover is claimed to be:
 > explicit rank-failure term ε_rank, and hiding of unopened Merkle siblings
 > computational under the hash assumption of §7.
 
+**This is the target, and it is not fully established.** The
+witness-indistinguishability step holds for the zerocheck round-pair class
+(measured, with H1 verified and the outer stage supplying the one direction the
+inner stage cannot reach) and is **open** over the complete transcript — see
+§10.3. Everything downstream of it, including the classical-ROM ZK conclusion,
+is conditional on closing that gap.
+
 Explicitly **not** claimed: SHA-256, Keccak, hash chains, Merkle-path
 statements, externally bound hashes, recursive composition, arbitrary Flock
 statements, QROM security (soundness or ZK), side-channel resistance, and the
@@ -135,7 +142,7 @@ family that binds public I/O.
 | `zk_joint_certificate::p_channel_image_requires_nondegenerate_q` | bad-Q set delimitation (2305 → 1153 bits) | ~20 s |
 | `zk_joint_certificate::joint_certificate_smoke` | triangular coverage on the round block | ~40 s |
 | `zk_joint_certificate::joint_certificate_negative_controls` | detector non-vacuity (no-μ, added leakage) | ~20 s |
-| `zk_joint_certificate::joint_conditional_coverage_full_transcript` | complete-transcript joint coverage | offline, hours |
+| `zk_joint_certificate::joint_conditional_coverage_full_transcript` | complete-transcript joint coverage — **currently FAILS**, diagnosed as fixture under-budgeting (26,624 randomizer bits vs 75,008 needed) | offline, ~7 min/tuple |
 | `zk_simulator.rs` | simulator on the A1′ path; constructive translation exactness | mixed |
 | `zk_leakage_certificate.rs` | affine-class exact coverage; A1′ round-pair image | offline |
 | `pcs/zk_audit.rs` | PCS-layer image containment; no-g negative control | fast |
@@ -153,10 +160,18 @@ assumption; no independent review; side channels and QROM out of scope.
 1. **Sibling hiding** is assumed (ROM / hash pseudorandomness), not derived.
 2. **Challenge-tuple genericity**: certificates hold at the tuples tested; no
    argument covers all tuples.
-3. **Fixture-to-production transfer**: the full-transcript certificate is
-   computed at the reduced fixture; the argument that the maps are structurally
-   identical at production size is stated, not machine-checked.
-4. **Optimized prover**: no equivalence to the reference path is established.
+3. **The complete-transcript certificate is OPEN.** Established for the
+   round-pair class; over the whole transcript it fails at the reduced fixture
+   for a diagnosed budget reason (that fixture carries 26,624 randomizer bits
+   against a 75,008-bit coordinate set, a 2.8x deficit against the
+   ~128-bits-per-revealed-element sizing rule, and the measured joint image
+   sits at the budget rather than the transcript dimension). Closing it needs
+   an adequately budgeted fixture. Until then the full-transcript WI claim is
+   not established.
+4. **Fixture-to-production transfer**: certificates are computed at the reduced
+   fixture; the argument that the maps are structurally identical at production
+   size is stated, not machine-checked.
+5. **Optimized prover**: no equivalence to the reference path is established.
 
 ## 11. Revision hashes
 

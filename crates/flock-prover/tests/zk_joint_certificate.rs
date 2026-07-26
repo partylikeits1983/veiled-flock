@@ -655,14 +655,33 @@ fn certify_tuple(
     }
 
     assert_claim_saturated(claim_space.rank(), bud.witness_dirs);
+    // Randomizer budget of this fixture versus the coordinate set under
+    // test. The documented sizing rule is ~128 randomizer bits per revealed
+    // F128; a coordinate set larger than the budget cannot be covered no
+    // matter how the masks are arranged, so the verdict below is only
+    // meaningful when this ratio is ≥ 1.
+    let budget_bits = FixtureA1M15::A_BITS + FixtureA1M15::B_BITS;
+    let needed_bits = coords.len() * 128;
+    let ratio = budget_bits as f64 / needed_bits as f64;
+    if verbose {
+        println!(
+            "  randomizer budget {budget_bits} bits vs {needed_bits} bits of \
+             coordinates under test (ratio {ratio:.2})"
+        );
+    }
     assert_eq!(
         resid_and_claim.rank(),
         claim_space.rank(),
-        "LEAK at challenge tuple {ch_seed:#x}: a claim-preserving witness \
-         direction escapes the joint image (inner conditional image on \
-         ker L, plus the outer u_B stage) of the A1′ transcript. L = every \
-         mask-only coordinate: σ_z, P(ρ), Q(ρ), y_g, and all values inside \
-         the hiding P/Q openings."
+        "COVERAGE FAILURE at challenge tuple {ch_seed:#x}: {} claim-preserving \
+         witness direction(s) escape the joint image (inner conditional image \
+         on ker L, plus the outer u_B stage). L = every mask-only coordinate: \
+         σ_z, P(ρ), Q(ρ), y_g, and all values inside the hiding P/Q openings. \
+         Randomizer budget {budget_bits} bits vs {needed_bits} bits of \
+         coordinates (ratio {ratio:.2}); a ratio below 1 means this fixture \
+         is under-budgeted for this coordinate set and the failure is a \
+         property of the FIXTURE, not evidence of a leak in a properly \
+         budgeted configuration — but it is not evidence of coverage either.",
+        resid_and_claim.rank() - claim_space.rank()
     );
 }
 
@@ -684,11 +703,32 @@ fn joint_certificate_smoke() {
     certify_tuple(&fx, &split, &split.round_block.clone(), &SMOKE, SMOKE.tuples[0], true);
 }
 
-/// **The certificate.** Full-support probes of every inner mask channel,
-/// the complete leakage set, structured witness-difference directions, at
-/// several challenge tuples.
+/// **The complete-transcript certificate — CURRENTLY FAILING, and known why.**
+///
+/// Full-support probes of every inner mask channel, the complete mask-only
+/// leakage set, and a linear witness-difference family, over all 586
+/// witness-dependent coordinates.
+///
+/// Measured result at the reduced fixture (60,928 probes, ~7 min/tuple):
+/// inner `dim R(ker L) = 27,264`, joint `29,312`, `rank(Δclaim) = 128`,
+/// `rank[resid | Δclaim] = 256` — so 128 claim-preserving directions escape.
+///
+/// The cause is diagnosed and quantitative: this fixture carries 26,624
+/// randomizer bits while the coordinate set under test spans 75,008 bits,
+/// a 2.8× deficit against the documented ~128-bits-per-revealed-F128 sizing
+/// rule, and the measured joint image (29,312 bits) sits right at the
+/// budget rather than at the transcript dimension. The fixture was built
+/// for k-wise subset audits of the PIOP layer, not for full coverage of a
+/// pipeline whose PCS layer alone contributes ~470 field elements.
+///
+/// So this is NOT evidence of a leak in a properly budgeted configuration —
+/// and it is NOT evidence of coverage either. Closing it needs a fixture
+/// whose randomizer budget matches its transcript, which is the outstanding
+/// gap recorded in the paper's limitations. The test is kept, failing, so
+/// the gap cannot be forgotten; `joint_certificate_smoke` covers the
+/// round-pair class, where the budget is ample and coverage does hold.
 #[test]
-#[ignore = "offline exact certificate (tens of thousands of prover runs); run via scripts/zk-certify.sh"]
+#[ignore = "KNOWN GAP: fails at the under-budgeted reduced fixture; see the doc comment"]
 fn joint_conditional_coverage_full_transcript() {
     let fx = FixtureA1M15::new();
     let (split, total) = split_by_class(&fx);

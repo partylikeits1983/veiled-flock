@@ -29,7 +29,7 @@
 \large A candidate construction for BLAKE3 batch statements}
 \author{Alexander Lee}
 \date{v5, July 2026 --- research note\\
-\small source revision \texttt{SYNCCOMMIT}}
+\small source revision \texttt{14c5d030651d}}
 
 \begin{document}
 \maketitle
@@ -57,8 +57,13 @@ the optimized prover is \emph{not} amended and is excluded from the claim.
 \textbf{Evidence.} The reduction to witness-indistinguishability is proved; the
 masking, triangular-composition and bad-set mixture theorems are machine-checked
 in Lean~4; the composition hypotheses are discharged by exact $\Ftwo$
-image-coverage certificates computed on the real prover; per-item status is
-tabulated in Table~\ref{tab:claims} and \S\ref{sec:roadmap}.
+image-coverage certificates computed on the real prover for the zerocheck
+round-pair class --- the class the amendment exists for. The corresponding
+certificate over the \emph{complete} transcript does not yet pass at the
+available fixture, for a diagnosed and quantified budget reason
+(\S\ref{sec:certificates}); that is the principal open item, and the
+full-transcript claim is conditional on it. Per-item status is tabulated in
+Table~\ref{tab:claims} and \S\ref{sec:roadmap}.
 \textbf{Assumptions and limits.} A random-oracle (or hash-pseudorandomness)
 assumption for sibling hiding; certificates are computed at sampled challenge
 tuples; the full-transcript certificate is established at a reduced-size fixture
@@ -184,7 +189,7 @@ evidence supports. Extending the binding is future work, not a corollary.
 \midrule
 Completeness & reference prover, certified configs & telescoping identity; roundtrip tests & proved; tested \\
 Zerocheck soundness ($\gamma$ batching) & amended zerocheck, any config & Lemma~\ref{lem:gamma}; adversarial suite & proved; constructively checked \\
-Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & SYNCWI \\
+Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & round-pair class established; complete transcript \textbf{open} \\
 Merkle sibling hiding & all hiding openings & $\kmin$-min-entropy leaves, ROM & assumed (computational) \\
 ZK after Fiat--Shamir & BLAKE3 batch, certified configs & Lemma~\ref{lem:reduction} + rows above & conditional on those rows \\
 QROM (ZK or soundness) & --- & --- & not claimed \\
@@ -432,9 +437,23 @@ expected one.} The inner image covers 2432 of the block's 2560 bits; the missing
 derivative is identically zero. This is the coordinate that disproved an earlier
 flat-mixture argument. The outer ($u_B$) stage supplies it: the joint image is
 2560 of 2560 bits.
-\item \textbf{No claim-preserving witness direction escapes.} With the claim
-space saturated, the residual of every tested witness difference modulo the joint
+\item \textbf{No claim-preserving witness direction escapes, on the round-pair
+class.} With the claim space saturated (128 bits) and a genuinely linear family
+of witness differences, the residual of every tested difference modulo the joint
 image is determined by the claim.
+\item \textbf{The complete-transcript version of that check does not pass at
+this fixture, and the reason is measured.} Over all 586 witness-dependent
+coordinates the joint image reaches 29{,}312 bits and 128 claim-preserving
+directions escape. The fixture carries 26{,}624 randomizer bits against a
+coordinate set spanning 75{,}008 bits --- a $2.8\times$ deficit against the
+sizing rule of roughly 128 randomizer bits per revealed field element --- and
+the measured image sits at that budget rather than at the transcript dimension.
+This is therefore a property of the fixture, which was built for $k$-wise
+subset audits of the PIOP layer rather than for a pipeline whose PCS layer
+alone contributes some 470 field elements. It is not evidence of a leak in a
+properly budgeted configuration; it is equally not evidence of coverage.
+Closing it requires a fixture whose randomizer budget matches its transcript,
+and that is the principal outstanding gap (\S\ref{sec:limitations}).
 \item \textbf{The bad set is nonempty and delimited.} At a constant $Q$ the
 channel's image collapses from 2305 to 1153 bits --- it reaches the $G(1)$ half
 but not the degree-2 $G(\infty)$ half, which is precisely its reason for
@@ -459,8 +478,8 @@ is recorded.
 \toprule
 \textbf{Configuration} & \textbf{$m$} & \textbf{Role} & \textbf{Certificate status} \\
 \midrule
-BLAKE3 batch, $2^8$ compressions & 22 & the production certified config & SYNCB \\
-Reduced masked-identity fixture & 15 & full-transcript joint certificate & SYNCA \\
+BLAKE3 batch, $2^8$ compressions & 22 & the production certified config & gated; structural transfer \\
+Reduced masked-identity fixture & 15 & joint certificate (round-pair class) & checked \\
 \bottomrule
 \end{tabular}
 \caption{Certified configurations. The zero-knowledge API refuses any
@@ -550,7 +569,39 @@ the mask species cost in a tuned implementation. Panel~(b) is the reference
 amended prover, the object of the claim, which uses naive round-pair kernels by
 design and is not optimized.
 
-SYNCBENCH
+\begin{table}[h]
+\centering\small
+\textbf{(a) Optimized pipeline --- \emph{not} ZK-certified, excluded from the claim}\\[2pt]
+\begin{tabular}{@{}rrrrrrrr@{}}
+\toprule
+batch & $m$ & base prove & zk prove & prove $\times$ & verify $\times$ & size $\times$ & zk size \\
+\midrule
+1{,}024  & 24 & 6.6\,ms  & 14.4\,ms  & 2.18 & 0.99 & 1.82 & 525\,KiB \\
+4{,}096  & 26 & 13.7\,ms & 40.7\,ms  & 2.97 & 1.03 & 1.72 & 552\,KiB \\
+16{,}384 & 28 & 39.4\,ms & 140.9\,ms & 3.58 & 1.02 & 1.65 & 589\,KiB \\
+\bottomrule
+\end{tabular}
+
+\vspace{8pt}
+\textbf{(b) A1$'$ reference prover --- the object of the claim, unoptimized by design}\\[2pt]
+\begin{tabular}{@{}rrrrrr@{}}
+\toprule
+batch & $m$ & witness gen & prove & verify & (non-zk \texttt{prove\_fast}) \\
+\midrule
+256 & 22 & 0.5\,ms & 20.0\,ms & 4.3\,ms & 4.3\,ms \\
+\bottomrule
+\end{tabular}
+\caption{Best of 5 runs after a verified warm-up, 12 threads, Apple silicon,
+at the source revision on the title page. The two panels measure
+\emph{different pipelines} and must not be compared: panel~(b) uses naive
+round-pair kernels and performs three hiding commitments and three hiding
+openings, where panel~(a) uses the fused kernels and one of each. The
+reference path is $4.6\times$ the non-zk fused prover at the same batch size;
+that ratio is an artefact of the reference implementation, not a cost of
+zero-knowledge. With the per-proof mask-coverage check enabled
+(\S\ref{sec:certificates}) the reference prover additionally pays thousands of
+fold passes per proof, which is why that check is opt-in.}
+\end{table}
 
 \section{Related work}\label{sec:related}
 
@@ -579,10 +630,10 @@ Masking (Thm.~\ref{thm:mask}) & affine classes & Lean~4, machine-checked \\
 Triangular composition (Thm.~\ref{thm:tri}) & joint WI & Lean~4, machine-checked \\
 Bad-set mixture (Thm.~\ref{thm:badset}) & $\erank$ accounting & Lean~4, machine-checked \\
 H1 / conditional coverage & hypotheses of Thm.~\ref{thm:tri} & exact certificate (measured) \\
-Full-transcript WI & Lemma~\ref{lem:reduction} & theorem + certificate, per Table~\ref{tab:configs} \\
+Full-transcript WI & Lemma~\ref{lem:reduction} & \textbf{open} --- theorem available, certificate not yet established \\
 Self-generated-witness simulation & classical-ROM ZK & proved here (Lemma~\ref{lem:reduction}) \\
 Sibling hiding & classical-ROM ZK & assumed \\
-Classical-ROM ZK & the headline claim & proved, conditional on the above \\
+Classical-ROM ZK & the headline claim & proved, conditional on the above (hence conditional on an open item) \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -602,9 +653,15 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{Certificate scope.} The full-transcript joint certificate is
-computed at the reduced fixture; transfer to production size rests on structural
-identity of the maps, not on a production-size full-support probe.
+\item \textbf{The complete-transcript certificate is open.} It is established
+for the round-pair class --- the class the amendment exists for --- but not for
+the whole transcript: at the reduced fixture the check fails for the diagnosed
+budget reason of \S\ref{sec:certificates}, and no adequately budgeted fixture
+has yet been built and probed. Everything the paper says about full-transcript
+witness-indistinguishability is therefore conditional on that gap closing.
+\item \textbf{Certificate scope.} Certificates are computed at the reduced
+fixture; transfer to production size rests on structural identity of the maps,
+not on a production-size full-support probe.
 \item \textbf{Challenge tuples.} Certificates are computed at sampled fixed
 tuples, including tuples replayed from real Fiat--Shamir transcripts. Coverage
 for all tuples is not established.
