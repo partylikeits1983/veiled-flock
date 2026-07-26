@@ -1,8 +1,11 @@
-# Zero-knowledge for Flock (amended protocol A1′): proof document
+# Zero-knowledge for Flock (amended protocol A1′+A2): proof document
 
 This document states and proves the zero-knowledge property of the `zk` mode
-for **BLAKE3 batch statements**, under the amendment A1′ (a degree-2 committed
-mask channel for the zerocheck round messages). It is written to be checkable:
+for **BLAKE3 batch statements**, under two amendments: A1′ (a degree-2
+committed mask channel for the zerocheck round messages) and A2 (a committed
+*additive* channel for the lincheck, §5b). The two are different in kind
+because the layers are: the zerocheck masks a product of witness-dependent
+multilinears, the lincheck a linear slot against a public multiplier. It is written to be checkable:
 each claim is marked with how it is established —
 
 - **[P]** closed-form proof in this document;
@@ -84,6 +87,16 @@ what is not yet done.
   Schwartz–Zippel over `{0,1}` is vacuous at these degrees. See §8 for the
   replacement. The Merkle-sibling hiding argument (§7) is closed-form but not
   machine-checked; per-parameter certificate gating is not yet wired.
+- **The real-statement certificate does NOT pass.** On a real BLAKE3 batch
+  statement (m=20, 64 blocks) one F₂¹²⁸ direction of claim-preserving witness
+  difference still escapes the mask image, attributed to `zerocheck.round1_c`.
+  Amendment A2 (§5b) closed the lincheck half of this — those classes went
+  from 9,728/10,240 bits with 128 escaping to 10,240/10,240 with nothing
+  escaping — but the round-1 C-side half is open, and running on
+  `zerocheck.*` alone reproduces the failure exactly, so it is not a
+  cross-layer artefact. Repair specified in `docs/round1c-mask-channel.md`,
+  not made. Until it closes, the whole-transcript claim on the production
+  statement family rests on the fixture certificate plus structural transfer.
 - Out of scope entirely: SHA-256/Keccak encoders, the hash-chain statement,
   QROM *soundness*, side-channel resistance, and independent cryptographic
   review.
@@ -395,6 +408,25 @@ claim unconstrained. Binding it to $S$'s commitment removes the freedom.
 **Knowledge soundness is unchanged.** $S$ enters no R1CS constraint; it is a
 term added to a claim, and the extractor still recovers $z$ from the witness
 commitment, whose opening is checked at the un-shifted claim $w$.
+
+**Measured outcome.** On the real BLAKE3 statement the lincheck classes go
+from an image of 9,728 of 10,240 bits with 128 bits of claim-preserving
+witness difference escaping, to 10,240 of 10,240 with nothing escaping. The
+amendment does what it was built to do, and the arithmetic confirms it does
+*only* that: the unrestricted joint image is 22,272 bits and the
+zerocheck-only joint image is 12,032, a difference of exactly the 10,240-bit
+lincheck subspace. An additive channel on a linear slot should contribute
+precisely that subspace and no other direction, and it does.
+
+**What A2 does not fix.** The unrestricted certificate still fails by one
+$\mathbb{F}_{2^{128}}$ direction, now attributed to `zerocheck.round1_c`
+alone — the univariate-skip C-side message, also linear in the witness, also
+covered by randomizer rows alone, and deliberately outside the degree-2
+channel because a mask there would not vanish on the constraint domain. The
+escape there is *joint, not marginal*: `round1_c` in isolation is fully
+covered (8,192/8,192), and the failure appears only when it must be covered
+simultaneously with every other coordinate — which is (★′) biting exactly as
+written. Repair specified in `docs/round1c-mask-channel.md`, not made.
 
 ---
 
