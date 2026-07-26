@@ -57,7 +57,9 @@ use crate::digest_bind::{
 };
 use crate::r1cs_hashes::blake3::{
     BLAKE3_IV, Compression, FLAGS_ROOT_HASH, K_LOG, ParamPinning, ROOT_HASH_BLOCK_LEN,
-    build_block_r1cs_pinned, generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
+    build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
+    generate_witness_with_ab_packed_and_lincheck_pinned,
+    generate_witness_with_ab_packed_and_lincheck_zk_pinned, min_n_blocks_log,
 };
 
 /// Bytes of message covered by one instance of this relation.
@@ -329,6 +331,181 @@ impl Blake3PreimageSetup {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Zero-knowledge mode
+// ---------------------------------------------------------------------------
+
+/// The zk-mode fixed-digest setup: the same relation, proved through the
+/// amended (masked) A1′ pipeline with a hiding commitment.
+///
+/// **Status: knowledge-sound and masked, NOT yet certified zero-knowledge.**
+/// The masking channels blind every witness-dependent transcript coordinate
+/// exactly as they do for the batch statement, and the digest claim adds only
+/// a public value. What is *not* yet established is the property that makes
+/// the mode meaningful for a fixed digest: a simulator that receives only the
+/// public digests and produces an accepting transcript. The batch mode's
+/// simulator cannot be reused — it is the honest prover on a witness of its
+/// own choosing, which is legitimate only when the statement binds nothing.
+/// Building that simulator (and the extractor that recovers real preimages)
+/// is tracked in `docs/memos/`; until both exist this type carries no
+/// zero-knowledge claim and is not certificate-gated.
+#[derive(Clone, Debug)]
+pub struct Blake3PreimageZkSetup {
+    pub n_blocks: usize,
+    pub r1cs: BlockR1cs,
+    pub pcs_params: PcsParams,
+}
+
+impl Blake3PreimageZkSetup {
+    pub fn new(n_blocks: usize) -> Self {
+        assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
+        let n_log = min_n_blocks_log(n_blocks);
+        let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
+        r1cs.csc_lincheck_circuit();
+        flock_core::scratch::prewarm_prover(r1cs.m);
+        let pcs_params = PcsParams {
+            m: r1cs.m,
+            log_inv_rate: 1,
+            log_batch_size: 6,
+            profile: flock_core::pcs::ligerito::LigeritoProfile::Fast,
+            zk: true,
+        };
+        Self {
+            n_blocks,
+            r1cs,
+            pcs_params,
+        }
+    }
+
+    pub fn n_blocks_log(&self) -> usize {
+        min_n_blocks_log(self.n_blocks)
+    }
+
+    pub fn n_block_slots(&self) -> usize {
+        1usize << self.n_blocks_log()
+    }
+
+    /// The public statement for a digest list (same rule as the non-zk path).
+    pub fn statement(&self, digests: &[[u8; DIGEST_BYTES]]) -> DigestStatement {
+        let pad_words = ParamPinning::RootHash64.padding_digest_words();
+        let mut pad = [0u8; DIGEST_BYTES];
+        for w in 0..8 {
+            pad[w * 4..w * 4 + 4].copy_from_slice(&pad_words[w].to_le_bytes());
+        }
+        DigestStatement {
+            layout: digest_layout(),
+            n_log: self.n_blocks_log(),
+            digests: digests.iter().map(digest_to_bits).collect(),
+            padding: PaddingDigest::Constant,
+            padding_bits: digest_to_bits(&pad),
+        }
+    }
+
+    /// Prove, with masking, that the committed messages hash to `digests`.
+    pub fn prove<Ch: Challenger + Clone>(
+        &self,
+        msgs: &[[u8; MESSAGE_BYTES]],
+        digests: &[[u8; DIGEST_BYTES]],
+        rng: &mut flock_core::zk::ZkRng,
+        challenger: &mut Ch,
+    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), PreimageError> {
+        use flock_core::zk::MaskSampler;
+
+        if digests.len() != self.n_blocks || msgs.len() != self.n_blocks {
+            return Err(PreimageError::BatchSizeMismatch {
+                expected: self.n_blocks,
+                got: digests.len().max(msgs.len()),
+            });
+        }
+        for (i, (m, d)) in msgs.iter().zip(digests).enumerate() {
+            if ::blake3::hash(m).as_bytes() != d {
+                return Err(PreimageError::DigestMismatch { index: i });
+            }
+        }
+        let stmt = self.statement(digests);
+        stmt.validate();
+        let layout = self.r1cs.zk.expect("zk setup carries a layout");
+
+        let mut wit_rng = rng.fork(b"preimage-witness-rand");
+        let mut mask_rng = rng.fork(b"preimage-masks");
+        let n_total = self.n_block_slots();
+        let mut rand_words =
+            vec![0u64; n_total * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)];
+        wit_rng.fill_u64s(&mut rand_words);
+
+        let blocks: Vec<Compression> = msgs.iter().map(message_compression).collect();
+        let (z_packed, a_packed, b_packed, z_lincheck) =
+            generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+                &blocks,
+                self.n_blocks_log(),
+                &layout,
+                &rand_words,
+                ParamPinning::RootHash64,
+            );
+        let lc_circuit = self.r1cs.csc_lincheck_circuit();
+        let log_n = self.pcs_params.log_msg_len();
+        let lig_config = flock_core::pcs::ligerito::prover_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        )
+        .expect("Ligerito prover config");
+
+        absorb_statement(challenger, &stmt);
+
+        let mut forks = crate::prover::A1MaskForks::from_rng(&mut mask_rng);
+        let layout_kind = self.r1cs.layout;
+        let stmt_for_claim = stmt.clone();
+        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd(
+            &self.r1cs,
+            &self.pcs_params,
+            z_packed,
+            a_packed,
+            b_packed,
+            z_lincheck,
+            lc_circuit,
+            &lig_config,
+            forks.sources(),
+            &mut |ch: &mut Ch| {
+                let dch = DigestChallenges::sample(&stmt_for_claim, ch);
+                vec![digest_claim(&stmt_for_claim, layout_kind, &dch)]
+            },
+            None,
+            challenger,
+        );
+        Ok((proof, comm))
+    }
+
+    /// Verify a masked preimage proof against the public digests.
+    pub fn verify<Ch: Challenger + Clone>(
+        &self,
+        commitment: &Commitment,
+        proof: &crate::prover::R1csProofZkA1,
+        digests: &[[u8; DIGEST_BYTES]],
+        challenger: &mut Ch,
+    ) -> Result<(), flock_core::verifier::VerifyError> {
+        let stmt = self.statement(digests);
+        stmt.validate();
+        absorb_statement(challenger, &stmt);
+        let layout_kind = self.r1cs.layout;
+        crate::prover::verify_r1cs_zk_a1_pd(
+            &self.r1cs,
+            &self.pcs_params,
+            proof,
+            commitment,
+            self.r1cs.csc_lincheck_circuit(),
+            &mut |ch: &mut Ch| {
+                let dch = DigestChallenges::sample(&stmt, ch);
+                vec![(
+                    digest_claim_point(&stmt, layout_kind, &dch),
+                    digest_claim_value(&stmt, &dch),
+                )]
+            },
+            challenger,
+        )
+    }
+}
+
 /// Absorb the public digest statement into the transcript.
 ///
 /// This must happen before any challenge is drawn: it is what makes every
@@ -459,6 +636,74 @@ mod tests {
         assert!(
             setup.verify(&comm, &proof, &my_digests, &mut chv).is_err(),
             "a proof of other preimages must not verify against my digests"
+        );
+    }
+
+    /// The masked (zk-mode) path proves and verifies the same statement.
+    #[test]
+    fn zk_preimage_roundtrip() {
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        let msgs = msgs_of(0x2222_3333, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&msgs);
+        let mut rng = flock_core::zk::ZkRng::from_seed([7u8; 32]);
+        let mut ch = FsChallenger::new(b"b3-preimage-zk");
+        let (proof, comm) = setup
+            .prove(&msgs, &digests, &mut rng, &mut ch)
+            .expect("zk prove");
+        let mut chv = FsChallenger::new(b"b3-preimage-zk");
+        setup
+            .verify(&comm, &proof, &digests, &mut chv)
+            .expect("honest masked preimage proof must verify");
+    }
+
+    /// Masking is live on the zk path: two proofs of the SAME statement and
+    /// witness under different mask draws differ in their commitment and in
+    /// witness-dependent transcript values. (This is a freshness check, not a
+    /// zero-knowledge claim — see the type's docs.)
+    #[test]
+    fn zk_preimage_masks_are_fresh() {
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        let msgs = msgs_of(0x4444_5555, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&msgs);
+
+        let mut go = |seed: u8| {
+            let mut rng = flock_core::zk::ZkRng::from_seed([seed; 32]);
+            let mut ch = FsChallenger::new(b"b3-preimage-zk");
+            setup
+                .prove(&msgs, &digests, &mut rng, &mut ch)
+                .expect("prove")
+        };
+        let (p1, c1) = go(1);
+        let (p2, c2) = go(2);
+        assert_ne!(c1.root, c2.root, "fresh masks must move the commitment");
+        assert_ne!(
+            p1.zerocheck.final_a_eval, p2.zerocheck.final_a_eval,
+            "fresh masks must move the witness-dependent evaluations"
+        );
+        // Both still verify against the same public digests.
+        for (p, c) in [(&p1, &c1), (&p2, &c2)] {
+            let mut chv = FsChallenger::new(b"b3-preimage-zk");
+            setup.verify(c, p, &digests, &mut chv).expect("verify");
+        }
+    }
+
+    /// The zk path is bound to its digest list too.
+    #[test]
+    fn zk_wrong_digest_rejected() {
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        let msgs = msgs_of(0x6666_7777, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&msgs);
+        let mut rng = flock_core::zk::ZkRng::from_seed([9u8; 32]);
+        let mut ch = FsChallenger::new(b"b3-preimage-zk");
+        let (proof, comm) = setup
+            .prove(&msgs, &digests, &mut rng, &mut ch)
+            .expect("prove");
+        let mut tampered = digests.clone();
+        tampered[0][31] ^= 0x80;
+        let mut chv = FsChallenger::new(b"b3-preimage-zk");
+        assert!(
+            setup.verify(&comm, &proof, &tampered, &mut chv).is_err(),
+            "masked proof must not verify against a different digest list"
         );
     }
 }
