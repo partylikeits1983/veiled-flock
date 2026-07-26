@@ -17,9 +17,19 @@ Amendment A2 closed the lincheck. On a real BLAKE3 statement
 | `lincheck.*` alone | 9,728 / 10,240 — **128 bits escape** | 10,240 / 10,240 — **passes** |
 | `zerocheck.round1_c` alone | 8,192 / 8,192 — passes | 8,192 / 8,192 — passes |
 | all PIOP classes | 128 bits escape, on `round1_c` + `lincheck.rounds` + `lincheck.z_partial` | 128 bits escape, on **`zerocheck.round1_c` only** |
+| `zerocheck.*` alone | — | 12,032 / 20,224 — **128 bits escape**, on `round1_c` |
 
 So one F128 direction of claim-preserving witness difference is still
 uncovered, and it now sits entirely in `round1_c`.
+
+**The gap is inside the zerocheck layer, not a cross-layer interaction.**
+Running the certificate on `zerocheck.*` alone reproduces the failure exactly
+— same 128 bits, same attribution — so nothing about the lincheck, A2, or the
+interaction between the layers is involved. The arithmetic also confirms A2's
+channel is clean and complete: the unrestricted joint image is 22,272 bits and
+the zerocheck-only joint image is 12,032, and 22,272 − 12,032 = 10,240, the
+full lincheck subspace. A2 contributes exactly that subspace and nothing else,
+which is what an additive channel on a linear slot should do.
 
 ## What `round1_c` is, and why it is unmasked
 

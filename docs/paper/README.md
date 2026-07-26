@@ -1,4 +1,4 @@
-# Making Flock Zero-Knowledge — research note (v5)
+# Making Flock Zero-Knowledge — research note (v5.1)
 
 A candidate zero-knowledge mode for BLAKE3 batch statements in Flock, a
 hash-based SNARK for batch R1CS over F₂.
@@ -17,6 +17,29 @@ requirement versus 3× at the fixture. What keeps this at label B: run directly 
 (m=20, PIOP classes), one F128 direction of claim-preserving witness
 difference is still unaccounted for — a specific measured lead, not a proven
 leak. Plus the ROM assumption and the absence of independent review.
+
+**What changed in v5.1 — amendment A2.** v5 stated the lincheck's transcript
+classes were covered by the randomizer witness rows. Measurement refuted that,
+so the construction gained a second mask channel: a committed additive shift
+`z ↦ z + γ_lc·S` for the lincheck. It is a different kind of channel from the
+zerocheck's on purpose — the zerocheck masks a *product* of witness-dependent
+multilinears and needs a degree-2 mask, while the lincheck's multiplier is
+*public* and its z-slot *linear*, so an additive shift makes that layer's
+transcript equal to the honest transcript of a shifted witness. Measured: the
+lincheck classes go from 9,728/10,240 bits with 128 escaping to 10,240/10,240
+with nothing escaping.
+
+With A2 in, the residual on the unrestricted real-statement run is attributed
+to **one** class, `zerocheck.round1_c` — down from three. That class is the
+univariate-skip C-side message, linear in the witness, sitting outside the
+degree-2 channel by design (a mask there would not vanish on the constraint
+domain and would break the zerocheck assumption). The escape there is *joint,
+not marginal*: `round1_c` passes in isolation at 8,192/8,192, and only fails
+when it must be covered simultaneously with everything else. The repair is
+specified in `docs/round1c-mask-channel.md` and not made.
+
+The label does not move on partial progress: one of the two measured gaps is
+closed with a built, tested, soundness-argued amendment; the other is open.
 
 ## The claim, exactly
 
@@ -57,11 +80,17 @@ fail-closed API. Full list in `CHANGES.md`.
 
 ## Performance
 
-Two pipelines, not comparable. Optimized (no ZK claim): 2.2–3.6× prove,
-~1.0× verify, 1.65–1.82× proof size versus non-zk, at batches 2¹⁰–2¹⁴.
-Reference amended prover at 2⁸ compressions (m=22): 20.0 ms prove, 4.3 ms
-verify, versus 4.3 ms for the non-zk fused prover — a reference-implementation
+Two pipelines, not comparable. Optimized (no ZK claim): 2.24/3.16/3.95× prove,
+0.98–1.03× verify, 1.65–1.82× proof size versus non-zk, at batches 2¹⁰/2¹²/2¹⁴.
+Reference amended prover at 2⁸ compressions (m=22): 22.8 ms prove, 4.5 ms
+verify, versus 3.8 ms for the non-zk fused prover — a reference-implementation
 artefact, not a cost of zero-knowledge.
+
+Amendment A2 costs 20.0 → 22.8 ms proving and 4.3 → 4.5 ms verification: one
+more full-size commitment and opening. That is more than the channel needs —
+`S` only masks the length-2^k_log folded table (4,096 entries here, against
+2²²), so a commitment over that domain would be some three orders of magnitude
+smaller. Left unoptimized on purpose: correctness first, cost second.
 
 ## Building the paper
 

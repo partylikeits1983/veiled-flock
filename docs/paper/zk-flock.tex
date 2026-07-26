@@ -121,8 +121,12 @@ rely on it.
 \paragraph{Status.} \textbf{Experimental candidate with a proven partial core.}
 Several load-bearing steps are discharged by exact computation rather than
 closed-form proof, one composition hypothesis is measured rather than derived,
-and there has been no independent review. We do not label this production
-zero-knowledge.
+and there has been no independent review. Most importantly, the coverage
+certificate on a \emph{real} BLAKE3 statement still fails by one $\Fbig$
+direction on \texttt{zerocheck.round1\_c} (\S\ref{sec:limitations}). We do not
+label this production zero-knowledge, and the label does not move because one
+of the two measured gaps was closed: amendment~A2 removed the lincheck from
+that residual, which is progress on the open item, not its resolution.
 
 \section{The relation, and what zero-knowledge means here}\label{sec:relation}
 
@@ -653,9 +657,9 @@ design and is not optimized.
 \toprule
 batch & $m$ & base prove & zk prove & prove $\times$ & verify $\times$ & size $\times$ & zk size \\
 \midrule
-1{,}024  & 24 & 6.6\,ms  & 14.4\,ms  & 2.18 & 0.99 & 1.82 & 525\,KiB \\
-4{,}096  & 26 & 13.7\,ms & 40.7\,ms  & 2.97 & 1.03 & 1.72 & 552\,KiB \\
-16{,}384 & 28 & 39.4\,ms & 140.9\,ms & 3.58 & 1.02 & 1.65 & 589\,KiB \\
+1{,}024  & 24 & 5.5\,ms  & 12.4\,ms  & 2.24 & 0.98 & 1.82 & 526\,KiB \\
+4{,}096  & 26 & 11.7\,ms & 36.9\,ms  & 3.16 & 1.03 & 1.72 & 553\,KiB \\
+16{,}384 & 28 & 34.0\,ms & 134.4\,ms & 3.95 & 1.02 & 1.65 & 592\,KiB \\
 \bottomrule
 \end{tabular}
 
@@ -665,19 +669,26 @@ batch & $m$ & base prove & zk prove & prove $\times$ & verify $\times$ & size $\
 \toprule
 batch & $m$ & witness gen & prove & verify & (non-zk \texttt{prove\_fast}) \\
 \midrule
-256 & 22 & 0.5\,ms & 20.0\,ms & 4.3\,ms & 4.3\,ms \\
+256 & 22 & 0.5\,ms & 22.8\,ms & 4.5\,ms & 3.8\,ms \\
 \bottomrule
 \end{tabular}
 \caption{Best of 5 runs after a verified warm-up, 12 threads, Apple silicon,
 at the source revision on the title page. The two panels measure
 \emph{different pipelines} and must not be compared: panel~(b) uses naive
-round-pair kernels and performs three hiding commitments and three hiding
+round-pair kernels and performs four hiding commitments and four hiding
 openings, where panel~(a) uses the fused kernels and one of each. The
-reference path is $4.6\times$ the non-zk fused prover at the same batch size;
+reference path is $6.0\times$ the non-zk fused prover at the same batch size;
 that ratio is an artefact of the reference implementation, not a cost of
-zero-knowledge. With the per-proof mask-coverage check enabled
-(\S\ref{sec:certificates}) the reference prover additionally pays thousands of
-fold passes per proof, which is why that check is opt-in.}
+zero-knowledge. Amendment~A2 accounts for $20.0\rightarrow22.8$\,ms of
+proving and $4.3\rightarrow4.5$\,ms of verification --- one more full-size
+commitment and opening. That is more than the channel needs: $S$ only ever
+masks the length-$2^{k_{\log}}$ folded table (4{,}096 entries at this shape,
+against $2^{22}$), so a commitment over that domain would be some three orders
+of magnitude smaller. It is left unoptimized on purpose, per the ordering
+this work follows --- correctness first, cost second. With the per-proof
+mask-coverage check enabled (\S\ref{sec:certificates}) the reference prover
+additionally pays thousands of fold passes per proof, which is why that check
+is opt-in.}
 \end{table}
 
 \section{Related work}\label{sec:related}
@@ -707,6 +718,10 @@ Masking (Thm.~\ref{thm:mask}) & affine classes & Lean~4, machine-checked \\
 Triangular composition (Thm.~\ref{thm:tri}) & joint WI & Lean~4, machine-checked \\
 Bad-set mixture (Thm.~\ref{thm:badset}) & $\erank$ accounting & Lean~4, machine-checked \\
 H1 / conditional coverage & hypotheses of Thm.~\ref{thm:tri} & exact certificate (measured) \\
+A2 batching soundness & lincheck amendment & Lemma~\ref{lem:gamma} transplanted; tested \\
+A2 output-claim recovery & PCS binding to $\hat z$ & proved; tested end to end \\
+eq-table $\Ftwo$-span (A2) & Boolean mask reaches $\Fbig$ & measured, not derived \\
+\texttt{round1\_c} joint coverage & full-transcript WI on real statements & \textbf{open} (\S\ref{sec:limitations}) \\
 Full-transcript WI & Lemma~\ref{lem:reduction} & theorem + checked certificate, per Table~\ref{tab:configs} \\
 Self-generated-witness simulation & classical-ROM ZK & proved here (Lemma~\ref{lem:reduction}) \\
 Sibling hiding & classical-ROM ZK & assumed \\
@@ -715,10 +730,15 @@ Classical-ROM ZK & the headline claim & proved, conditional on the rows above \\
 \end{tabular}
 \end{table}
 
-Reading the table: everything above the ``assumed'' line is either machine-checked
-or computed; the two load-bearing non-proved items are the ROM assumption and the
-fact that the composition hypotheses are \emph{measured at certified
-configurations} rather than derived for all parameters.
+Reading the table: everything above the ``assumed'' line is either
+machine-checked or computed. Three items are not proved, and they are of
+different kinds. The ROM assumption is a stated cryptographic assumption. The
+composition hypotheses and the eq-table span are \emph{measured at certified
+configurations} rather than derived for all parameters. The
+\texttt{round1\_c} row is neither: it is a certificate that currently
+\emph{fails} on the real statement family, by one $\Fbig$ direction, and it is
+listed here rather than omitted because a roadmap that only lists what passes
+is not a roadmap.
 
 \section{Limitations}\label{sec:limitations}
 
