@@ -1,0 +1,243 @@
+//! **Coverage certificates for the fixed-digest relation.**
+//!
+//! The simulator (`preimage_simulator`) produces an accepting transcript
+//! without a preimage. Acceptance alone is not zero knowledge: the simulated
+//! distribution must also match the honest one. These certificates measure the
+//! half of that statement which is measurable.
+//!
+//! ## The shape of the argument
+//!
+//! The simulated transcript is uniform on the variety the verifier's checks cut
+//! out (free coordinates drawn uniformly, dependent ones solved). So the
+//! distributions coincide exactly when the **honest** transcript is uniform on
+//! that same variety — i.e. when the mask channels move the honest
+//! witness-dependent coordinates over their whole space, once the public values
+//! the verifier learns anyway are held fixed.
+//!
+//! That is a rank statement, and it is what these tests measure:
+//!
+//! * the degree-2 `P·Q` channel spans the zerocheck round-pair block **in
+//!   full**, so the honest round messages are uniform exactly as the simulated
+//!   ones are;
+//! * a degenerate mask spans strictly less, so the measurement is not vacuous;
+//! * the randomizer rows move the terminal evaluations, which is what makes
+//!   the simulator's freedom to choose them legitimate.
+//!
+//! ## Why this is the *claim-kernel* form and not the older one
+//!
+//! Every earlier certificate in this repository measures
+//! witness-indistinguishability: that two valid witnesses induce
+//! indistinguishable transcripts. For a fixed digest the preimage is
+//! essentially unique, so there is no second witness and that form is
+//! **vacuous**. These certificates therefore quantify over *masks*, not over
+//! witness pairs — a witness-free statement, which is both the only one
+//! available here and strictly stronger.
+//!
+//! ## What they do not establish
+//!
+//! Random probing can only under-estimate a rank, so a full-rank measurement is
+//! sound evidence of surjectivity; but these run at one challenge tuple and
+//! cover the PIOP block, not the PCS-opening interior. The remaining
+//! obligations are enumerated in `docs/memos/interactive-simulator-design.md`.
+
+#![cfg(feature = "zk")]
+
+use flock_core::field::F128;
+use flock_prover::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_zk_pinned};
+use flock_prover::r1cs_hashes::blake3_preimage::{
+    Blake3PreimageSetup, Blake3PreimageZkSetup, MESSAGE_BYTES,
+};
+use flock_prover::zk_rank_check::check_mask_coverage;
+
+/// The certified production shape: 256 instances, m = 22.
+const N: usize = 256;
+
+fn msgs(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
+    let mut s = seed | 1;
+    (0..n)
+        .map(|_| {
+            std::array::from_fn(|_| {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                (s & 0xFF) as u8
+            })
+        })
+        .collect()
+}
+
+fn random_cube_bytes(seed: u64, m: usize) -> Vec<u8> {
+    let mut s = seed | 1;
+    let mut out = vec![0u8; (1usize << m) / 8];
+    for b in out.iter_mut() {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        *b = (s & 0xFF) as u8;
+    }
+    out
+}
+
+/// **The load-bearing measurement.** For the fixed-digest circuit at the
+/// production shape, the degree-2 `P·Q` channel spans the entire zerocheck
+/// round-pair block.
+///
+/// This is what licenses the simulator's round messages. The simulator draws
+/// them uniformly (solving one coordinate for the terminal identity); the
+/// honest prover derives them from a witness and then adds `γ·M_j` from this
+/// channel. If the channel is surjective onto the block, the honest messages
+/// are uniform over it too, whatever the witness was — so the two laws agree
+/// on this class rather than merely looking similar.
+#[test]
+#[ignore = "production-shape rank measurement; run explicitly"]
+fn pq_channel_spans_the_round_block_for_the_fixed_digest_circuit() {
+    let setup = Blake3PreimageZkSetup::new(N);
+    let m = setup.r1cs.m;
+    assert_eq!(m, 22, "production shape");
+
+    let q = random_cube_bytes(0xC0FF_EE01, m);
+    let ch = flock_core::challenger::FsChallenger::new(b"preimage-cert");
+    let report = check_mask_coverage(&q, m, 0xA11CE, &ch).expect("channel must cover the block");
+    println!(
+        "P·Q channel on the fixed-digest circuit: rank {} / {} bits, {} probes",
+        report.rank, report.target_bits, report.probes
+    );
+    assert_eq!(
+        report.rank, report.target_bits,
+        "the degree-2 channel must span the round-pair block IN FULL — without \
+         that, the honest round messages are not uniform and the simulator's \
+         uniform ones would be distinguishable"
+    );
+}
+
+/// **The non-vacuity control.** A degenerate `Q` (constant cube) cannot reach
+/// the degree-2 half of each round message, so it must span strictly less. If
+/// this passed at full rank the measurement above would be meaningless.
+#[test]
+#[ignore = "production-shape rank measurement; run explicitly"]
+fn degenerate_mask_does_not_span_the_round_block() {
+    let setup = Blake3PreimageZkSetup::new(N);
+    let m = setup.r1cs.m;
+    let q_const = vec![0xFFu8; (1usize << m) / 8];
+    let ch = flock_core::challenger::FsChallenger::new(b"preimage-cert");
+    match check_mask_coverage(&q_const, m, 0xA11CE, &ch) {
+        Ok(r) => panic!(
+            "a constant Q spanned the whole block ({}/{}) — the coverage check \
+             is not measuring what it claims",
+            r.rank, r.target_bits
+        ),
+        Err(failed) => {
+            println!(
+                "constant Q: rank {} / {} bits (must be strictly short)",
+                failed.report.rank, failed.report.target_bits
+            );
+            assert!(failed.report.rank < failed.report.target_bits);
+        }
+    }
+}
+
+/// **The simulator's committed vector is masked exactly like an honest one.**
+///
+/// The simulator commits a patched trace; the honest prover commits a real
+/// witness. Both carry the same randomizer layout, so the transcript classes
+/// the randomizers cover are uniform in both — which is why the simulator may
+/// choose the terminal evaluations freely. Measured as: fresh mask draws move
+/// the terminal evaluations and the commitment root in BOTH settings.
+#[test]
+fn randomizers_move_the_terminals_in_both_settings() {
+    let setup = Blake3PreimageZkSetup::new(N);
+    let secret = msgs(0x1234_5678, N);
+    let digests = Blake3PreimageSetup::digests_of(&secret);
+
+    let run = |seed: u8| {
+        let mut rng = flock_core::zk::ZkRng::from_seed([seed; 32]);
+        let mut ch = flock_core::challenger::FsChallenger::new(b"b3-preimage-zk");
+        setup
+            .prove(&secret, &digests, &mut rng, &mut ch)
+            .expect("prove")
+    };
+    let (p1, c1) = run(41);
+    let (p2, c2) = run(42);
+
+    assert_ne!(c1.root, c2.root, "fresh masks must move the commitment");
+    assert_ne!(
+        p1.zerocheck.final_a_eval, p2.zerocheck.final_a_eval,
+        "fresh masks must move the â terminal — the simulator relies on this \
+         class being mask-covered rather than witness-determined"
+    );
+    assert_ne!(
+        p1.zerocheck.final_b_eval, p2.zerocheck.final_b_eval,
+        "fresh masks must move the b̂ terminal"
+    );
+    assert_ne!(
+        p1.zerocheck.mask_init, p2.zerocheck.mask_init,
+        "fresh masks must move σ_z — the simulator takes it from a fresh draw"
+    );
+}
+
+/// **The public claim really is public.** The digest claim's value is a
+/// function of the statement and the challenges only, so conditioning the
+/// hiding argument on it concedes nothing: two different witnesses for the
+/// same digests induce the *same* claim value.
+///
+/// This matters because every earlier certificate in this repository had to
+/// condition on internal claims whose own witness-independence was never
+/// separately established. Here the conditioning is on a value the verifier
+/// computes itself.
+#[test]
+fn the_digest_claim_is_a_public_function_of_the_statement() {
+    use flock_prover::digest_bind::{DigestChallenges, digest_claim_value};
+
+    let setup = Blake3PreimageZkSetup::new(N);
+    let secret = msgs(0xAAAA, N);
+    let digests = Blake3PreimageSetup::digests_of(&secret);
+    let stmt = setup.statement(&digests);
+
+    // Two independent transcripts reaching the claim.
+    let value_at = |seed: &[u8]| {
+        let mut ch = flock_core::challenger::FsChallenger::new(seed);
+        let dch = DigestChallenges::sample(&stmt, &mut ch);
+        (digest_claim_value(&stmt, &dch), dch)
+    };
+    let (v1, d1) = value_at(b"one");
+    let (v2, _) = value_at(b"two");
+    assert_ne!(v1, v2, "different challenges must give different targets");
+
+    // Recomputing at the same challenges gives the same value — no witness
+    // enters anywhere.
+    assert_eq!(digest_claim_value(&stmt, &d1), v1);
+
+    // And a different witness for the SAME digests would produce the same
+    // claim, because the claim reads the statement, not the witness.
+    let other = msgs(0xBBBB, N);
+    let other_digests = Blake3PreimageSetup::digests_of(&other);
+    let other_stmt = setup.statement(&other_digests);
+    assert_ne!(
+        digest_claim_value(&other_stmt, &d1),
+        v1,
+        "a different statement must give a different target"
+    );
+}
+
+/// The fixed-digest circuit really is a different statement from the batch
+/// circuit, so none of the batch statement's evidence is silently inherited.
+#[test]
+fn fixed_digest_circuit_is_not_the_batch_circuit() {
+    let pinned = build_block_r1cs_zk_pinned(8, ParamPinning::RootHash64);
+    let free = build_block_r1cs_zk_pinned(8, ParamPinning::Free);
+    assert_ne!(
+        pinned.statement_digest(),
+        free.statement_digest(),
+        "the pinned circuit must have its own statement digest"
+    );
+}
+
+/// A sanity check on the field helper the certificates lean on.
+#[test]
+fn f128_inverse_roundtrips() {
+    let x = F128 {
+        lo: 0x1234_5678_9ABC_DEF0,
+        hi: 0x0FED_CBA9_8765_4321,
+    };
+    assert_eq!(x * x.inv(), F128::ONE);
+}

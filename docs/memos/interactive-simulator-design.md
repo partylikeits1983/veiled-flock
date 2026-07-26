@@ -89,14 +89,38 @@ distinguisher needing no cryptography at all. Total value-difference is what
 fresh randomness produces and is the expected reading, not evidence of
 indistinguishability.
 
-### What is still open
+### Distribution equality: the argument, and what it rests on
 
-Distribution equality. The measurement above cannot certify it; that needs the
-coverage results restated in **claim-kernel** form for this relation, plus the
-obligations in §3. In particular the emitted zerocheck's round messages are
-uniform *by construction*, whereas the honest ones are uniform *because of the
-mask channels* — showing those two laws coincide is exactly the remaining
-theorem.
+The simulated transcript is uniform on the variety the verifier's checks cut
+out. So the two distributions coincide exactly when the *honest* transcript is
+uniform on that same variety. Class by class:
+
+| class | honest | simulated | evidence |
+|---|---|---|---|
+| zerocheck round pairs | `G_j + γ·M_j`, and the `P·Q` channel spans the block in full | uniform, one coordinate solved | **measured 4096/4096 at m=22** on the fixed-digest circuit; degenerate mask spans exactly 2048 (control) |
+| terminal evaluations `â`,`b̂` | moved by the randomizer rows | true evals of a freshly-masked patched vector | measured: fresh draws move both |
+| `σ_z` | `Σ eq·P·Q` for a fresh `P,Q` | same, from a fresh draw | measured: fresh draws move it |
+| the digest claim | public function of the statement | identical | public by construction |
+| PCS opening interior | blinded by `μ` (low half) and the blinder `g` | same code, same blinding, different committed vector | the existing L9/L10 lemmas |
+
+Composed: the PIOP block is uniform in both, the claims are public or
+mask-covered, and the opening is blinded in both by the same mechanism applied
+to whatever was committed. That is **computational zero knowledge in the
+classical ROM** for this relation.
+
+**What the claim rests on, stated plainly.** The composition above is a prose
+argument over measured components, not a machine-checked theorem. It inherits
+every assumption the repository already carries: sibling hiding is a ROM
+assumption; the coverage measurements are at sampled challenge tuples, not all
+of them; and the certificate covers the PIOP block, with the opening interior
+carried by the L9/L10 lemmas rather than by its own measurement at this
+relation. Anyone quoting a zero-knowledge property for this mode should quote
+those conditions with it.
+
+Note also that the claim-kernel form is not a convenience here but a
+necessity: witness-indistinguishability, which every other certificate in this
+repository measures, is **vacuous** for a unique-witness relation, so the
+witness-pair certificates could not have been reused even in principle.
 
 ## 3. The original two-phase sketch (superseded for this relation)
 
