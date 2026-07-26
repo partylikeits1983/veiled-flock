@@ -20,6 +20,7 @@ pub mod merkle_path;
 pub mod proof_io;
 pub mod prover;
 pub mod r1cs_hashes;
+pub mod sim_oracle;
 #[cfg(feature = "zk")]
 pub mod transcript_schema;
 #[cfg(feature = "zk")]

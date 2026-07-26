@@ -666,7 +666,7 @@ mod tests {
         let msgs = msgs_of(0x4444_5555, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&msgs);
 
-        let mut go = |seed: u8| {
+        let go = |seed: u8| {
             let mut rng = flock_core::zk::ZkRng::from_seed([seed; 32]);
             let mut ch = FsChallenger::new(b"b3-preimage-zk");
             setup
@@ -705,5 +705,44 @@ mod tests {
             setup.verify(&comm, &proof, &tampered, &mut chv).is_err(),
             "masked proof must not verify against a different digest list"
         );
+    }
+
+    /// **The harness-faithfulness control.** A real proof, produced and
+    /// verified through the programmable-oracle challenger with NOTHING
+    /// programmed, must behave exactly as under plain Fiat–Shamir. Without
+    /// this, any later "the simulator's output verifies" result would be
+    /// meaningless — it could hold because the harness is a different
+    /// protocol rather than because the simulation works.
+    #[test]
+    fn oracle_harness_accepts_a_real_proof_unprogrammed() {
+        use crate::sim_oracle::{OracleChallenger, shared_oracle};
+
+        let setup = Blake3PreimageSetup::new(N_TEST);
+        let msgs = msgs_of(0x0AC1E_5EED, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&msgs);
+
+        let oracle = shared_oracle();
+        let mut ch = OracleChallenger::new(b"b3-preimage", oracle.clone());
+        let (proof, comm) = setup.prove(&msgs, &digests, &mut ch).expect("prove");
+        assert!(
+            oracle.lock().unwrap().is_empty(),
+            "the control must run with an unprogrammed oracle"
+        );
+
+        let mut chv = OracleChallenger::new(b"b3-preimage", oracle.clone());
+        setup
+            .verify(&comm, &proof, &digests, &mut chv)
+            .expect("a real proof must verify through the oracle harness");
+
+        // And the same proof verifies under plain Fiat–Shamir, so the harness
+        // is not merely self-consistent.
+        let mut chf = FsChallenger::new(b"b3-preimage");
+        setup
+            .verify(&comm, &proof, &digests, &mut chf)
+            .expect("the same proof must verify under plain Fiat-Shamir");
+
+        // The oracle recorded a query transcript — the object a straightline
+        // extractor reads.
+        assert!(oracle.lock().unwrap().query_count() > 0);
     }
 }
