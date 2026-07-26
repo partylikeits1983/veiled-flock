@@ -7,8 +7,7 @@ honest proof, in the classical ROM with programming.
 **Status: IMPLEMENTED and accepting; distribution equality still open.** The
 simulator exists (`crates/flock-prover/src/preimage_simulator.rs`), receives
 only the public digests, and the unmodified verifier accepts its output. What
-remains unproved is that its output distribution matches the honest one. Two of its steps are known to be subtle and are called out as
-such.
+remains unproved is that its output distribution matches the honest one.
 
 ---
 
