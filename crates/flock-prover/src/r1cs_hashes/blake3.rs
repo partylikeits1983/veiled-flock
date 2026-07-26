@@ -1510,6 +1510,8 @@ impl Blake3Setup {
         )
     }
 
+    // (see `zk_rand_words_per_block_pub` below)
+
     /// **The A1′ reference zero-knowledge prover** — the entry point the ZK
     /// claim attaches to, and the only one that runs the amended (masked)
     /// zerocheck.

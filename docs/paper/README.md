@@ -13,11 +13,10 @@ joint mask image. Measured *at* the production configuration (m=22): the degree-
 the round-pair block in full (4096/4096 bits), a degenerate Q spans exactly
 half, the per-proof coverage self-check passes with no resampling and its
 proof verifies, and the randomizer margin binding `s_hat_v` is 12× the
-requirement versus 3× at the fixture. What keeps this at label B: the
-*whole-transcript* certificate is per-fixture, so its transfer to production
-rests on structural identity of the maps plus that margin rather than on a
-production-size probe — and the ROM assumption and independent review
-remain.
+requirement versus 3× at the fixture. What keeps this at label B: run directly on a *real* BLAKE3 statement
+(m=20, PIOP classes), one F128 direction of claim-preserving witness
+difference is still unaccounted for — a specific measured lead, not a proven
+leak. Plus the ROM assumption and the absence of independent review.
 
 ## The claim, exactly
 

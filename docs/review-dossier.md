@@ -162,14 +162,18 @@ assumption; no independent review; side channels and QROM out of scope.
 1. **Sibling hiding** is assumed (ROM / hash pseudorandomness), not derived.
 2. **Challenge-tuple genericity**: certificates hold at the tuples tested; no
    argument covers all tuples.
-3. **The complete-transcript certificate is per-fixture — structurally, not
-   for want of compute.** The criterion reasons about claim-preserving
-   *combinations* of witness differences, so it needs a linear sub-family of
-   valid witnesses. BLAKE3 traces have none: message→witness is nonlinear
-   (measured — additivity fails on 5,952 of 4.19M witness bits,
-   `blake3_witness_has_no_linear_difference_family`). The criterion therefore
-   cannot be evaluated directly on the claimed statement family at any size.
-   Closing this needs a different proof technique, not more probing. It passes at the
+3. **PRINCIPAL OPEN ITEM — the certificate passes on the synthetic vehicle
+   but not yet on a real BLAKE3 statement.** Run directly on a BLAKE3 batch
+   statement (m=20, 64 blocks, PIOP classes, triangular probing, claim space
+   saturated at 384 bits): the inner stage spans 21,504 of 30,464 bits, the
+   outer species adds exactly the 128 further bits the fixture predicted, and
+   `rank[resid | Δclaim] = 512` against 384 — one F128 direction of
+   claim-preserving witness difference is unaccounted for
+   (`blake3_witness_difference_lies_in_the_mask_image`, kept failing and
+   documented). This is a lead, not a proven leak: the codomain is
+   restricted, probing is random, and the criterion's failure direction is
+   conservative. First hypothesis, by analogy with the fixture: a fourth
+   transcript-determined public value missing from the conditioning set. It passes at the
    reduced fixture (m=16, small query counts) chosen so exact probing is
    feasible; exhaustive probing at m=22 would need millions of prover runs.
    Measured *at* the production configuration: channel surjectivity on the

@@ -668,23 +668,26 @@ principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
 Table~\ref{tab:configs}. Others are refused by the API rather than proved.
 \item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
 check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The complete-transcript certificate is per-fixture, and this is
-structural rather than a compute limit.} The coverage criterion reasons about
-\emph{claim-preserving combinations} of witness-difference directions, so the
-sampled differences must span a genuine space of witness differences --- a
-linear sub-family of valid witnesses. The audit fixture supplies one by
-construction. A BLAKE3 statement does not: its witness is a compression
-trace, and the map from message bits to witness is nonlinear (measured:
-flipping two message bits separately and together fails additivity on 5{,}952
-of $4.19$M witness bits). So the criterion cannot be evaluated directly on the
-claimed statement family at \emph{any} size, and no amount of probing at
-$m=22$ would change that. What is measured at the production configuration is
-narrower --- channel surjectivity on the round-pair block, its degenerate-$Q$
-control, the per-proof self-check, and the randomizer margin
-(\S\ref{sec:certificates}) --- and transfer of the whole-transcript statement
-rests on the maps being structurally identical plus the larger margin
-($12\times$ versus $3\times$). This is the principal remaining gap, and
-closing it needs a different proof technique, not more compute.
+\item \textbf{The certificate passes on the synthetic vehicle but not yet on
+a real BLAKE3 statement, and the gap is now a specific measured direction.}
+The criterion is usable on the hash statement family --- a \emph{pass} is
+sound even without a linear witness sub-family, since every genuine
+claim-equal pair is among the combinations it quantifies over --- so this was
+run directly on a real BLAKE3 batch statement ($m=20$, 64 blocks, the same
+$3\times$ randomizer margin the fixture certificate needed), restricted to the
+PIOP coordinate classes so the image could be saturated. The triangular
+structure reproduces: the inner stage spans 21{,}504 of 30{,}464 bits and the
+outer species adds exactly 128 more, the single direction the fixture showed
+it is responsible for. But with the claim space saturated at 384 bits,
+$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 512$: \emph{one}
+$\Fbig$ direction of claim-preserving witness difference is unaccounted for.
+That is a lead, not a proven leak --- the codomain is restricted, probing is
+random rather than exhaustive, and the criterion's failure direction is the
+conservative one --- and by analogy with the fixture, where the residual
+closed once every transcript-determined public value was conditioned on, the
+first hypothesis is a fourth such value. Until it is resolved, the
+whole-transcript claim rests on the fixture certificate plus structural
+transfer, and this is the principal open item.
 \item \textbf{Certificate scope.} Certificates are computed at the reduced
 fixture; transfer to production size rests on structural identity of the maps,
 not on a production-size full-support probe.
