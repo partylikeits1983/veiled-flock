@@ -91,4 +91,5 @@ earlier evidence transfers unexamined.
    extraction, methodology, limits.
 2. `zk-flock.tex` — the earlier batch-statement work, which supplies the mask
    channels this builds on.
-3. `CHANGES.md` — what moved from v5.2 to v6.
+3. `CHANGES-v6.md` — what moved from v5.2 to v6, including the findings that
+   changed the design. (`CHANGES.md` is the superseded v5.2 record.)
