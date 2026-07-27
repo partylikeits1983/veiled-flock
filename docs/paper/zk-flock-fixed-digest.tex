@@ -1,0 +1,358 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm,booktabs,hyperref,microtype}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{assumption}[theorem]{Assumption}
+
+\newcommand{\Ftwo}{\mathbb{F}_2}
+\newcommand{\Fbig}{\mathbb{F}_{2^{128}}}
+\newcommand{\erank}{\varepsilon_{\mathrm{rank}}}
+\newcommand{\ehash}{\varepsilon_{\mathrm{hash}}}
+\newcommand{\blake}{\mathrm{BLAKE3}}
+
+\title{Zero-Knowledge Proofs of BLAKE3 Preimage Knowledge in Flock\\
+\large A fixed-digest relation, a simulator, and an extractor}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+Earlier work made Flock's BLAKE3 \emph{batch} statement zero-knowledge. That
+statement binds no public input: it asserts only that some valid compressions
+exist, and its simulator is the honest prover on a witness it chooses itself.
+This note reports the statement applications actually want --- for public
+digests $y_1,\dots,y_n$, knowledge of preimages $x_1,\dots,x_n$ with
+$\blake(x_i)=y_i$ --- together with both halves of the security property: a
+simulator that receives only the digests and whose output the unmodified
+verifier accepts, and an extractor that recovers real preimages and
+\emph{fails} on the simulator's own output. We describe the construction, the
+measurements behind it, and --- at least as importantly --- the methodology,
+including the design errors the methodology caught.
+\end{abstract}
+
+\section{Why the previous statement was not enough}
+
+The batch statement's public input is the batch size. Its digest covers the
+matrices and layout; the verifier receives the setup, the commitment and the
+proof, and compares the accepted claim values against nothing. So the assertion
+is ``there exist $2^n$ valid BLAKE3 compressions'', which anyone can satisfy.
+
+Every zero-knowledge result for that statement inherits the weakness, because
+its simulator is the honest prover run on a self-generated witness --- legitimate
+\emph{precisely} because nothing constrains the witness. Two consequences bite
+as soon as a digest is pinned:
+
+\begin{itemize}
+\item a simulator that could produce a witness for a \emph{given} $y$ would be
+inverting $\blake$;
+\item the preimage is essentially unique, so
+\textbf{witness-indistinguishability is vacuous} --- and witness-indistinguishability
+is what every coverage certificate in the previous work measures.
+\end{itemize}
+
+The fixed-digest statement is therefore a new object, not a parameter change,
+and none of the earlier evidence transfers unexamined.
+
+\section{The relation}
+
+\subsection{Making one compression a whole hash}
+
+$\blake$ of a message fitting a single 64-byte block is one compression with
+$cv = IV$, $\text{counter} = 0$, $\text{block\_len} = 64$ and
+$\text{flags} = \textsc{chunk\_start}\,|\,\textsc{chunk\_end}\,|\,\textsc{root}$.
+We pin exactly those wires. Since the R1CS is in circuit shape ($C=I$), row $i$
+asserts $(Az)_i (Bz)_i = z_i$, so a slot is forced to one by $1\cdot 1 = z_s$ and
+to zero by $0 \cdot 1 = z_s$; no new mechanism is needed. The message words stay
+free: they are the witness. The pinning lives in $A_0, B_0$ and hence in the
+statement digest, so a proof for the free circuit can never be read as a proof
+for this one.
+
+\paragraph{An implementation trap worth recording.} Pinning a bit to zero
+\emph{must} keep the constant wire on the $b$-side. The alternative
+$0\cdot 0 = z_s$ pins equally well and satisfies the R1CS --- and breaks every
+honest proof. The witness generator emits $b[s]=1$ for parameter slots, so the
+Hadamard product still matched while the $B z$ \emph{vector} did not, and the
+lincheck, which checks the matrix--vector products rather than only their
+product, rejected. The symptom was a lincheck failure on a witness that
+satisfies the R1CS.
+
+\subsection{Binding the digests}
+
+The output region $\textit{out\_lo}$ occupies an aligned 256-bit slot of every
+block. The digest list is therefore a \emph{public} assignment to that slot
+across instances, and binding it is one multilinear identity checked inside the
+\emph{existing} batched opening:
+\[
+  \hat z_{\text{packed}}(\tau,\ \textsc{sel}=\textsc{out},\ \iota)
+  \;=\; \hat y(\tau,\iota),
+\]
+where $\hat y$ is the multilinear extension of the public digests. The
+\textbf{verifier computes the target itself}, so it is not a proof field and
+there is nothing for a prover to move; soundness is Schwartz--Zippel at
+$(n_{\log}+2)/2^{128}$.
+
+\paragraph{Why a random point and not the digest's own indices.} The obvious
+binding --- open the witness at the digest bit positions --- leaks. A
+ring-switched claim at a Boolean point publishes $\hat s_v$, whose entries are
+then literally the 128 raw bits of the witness word; a packed-direct claim at a
+Boolean point reveals that whole word. Evaluating at a random point reveals only
+$\hat y(\tau)$, which is public. This is what makes the binding compatible with
+hiding: conditioning the privacy argument on a public value concedes nothing.
+
+\subsection{Padding, and a measurement that contradicted an assumption}
+
+The batch is padded to $2^{n_{\log}}$ instances. Padding slots are not free: the
+constant-wire pin already required every block to carry a valid compression, and
+under a pinning they must satisfy the pinned rows too. So a padding slot holds
+the hash of the all-zero message, and its digest is $\blake(0^{64})$ ---
+\textbf{not zero}. A statement that assumed zero padding would compute the wrong
+target and reject honest proofs. The padding rule is consequently part of the
+statement hash.
+
+\subsection{Transcript binding}
+
+The digest list, its order, the padding rule and the geometry are absorbed
+before any challenge, so every challenge --- and hence the proof --- is specific
+to this statement. This also closes a gap the older chain statement still has:
+its public endpoints are checked arithmetically but never absorbed, so its
+challenges do not depend on them.
+
+\section{The simulator}
+
+\begin{definition}[NIZK]
+There is a PPT simulator $\mathsf{S}$ such that for every statement $y$ and
+every witness $x$ with $\blake(x_i)=y_i$, the distributions of $\mathsf{P}^H(y,x)$
+and $\mathsf{S}^{H[\cdot]}(y)$ are computationally indistinguishable to a
+distinguisher with oracle access to $H$, where $\mathsf{S}$ may program $H$.
+\end{definition}
+
+$\mathsf{S}$ receives only $y$: no preimage, no trace, no trapdoor --- the
+system is transparent and there is none to give.
+
+\subsection{Construction}
+
+The fixed-digest relation admits a construction simpler than the general
+recipe. $\mathsf{S}$ commits an honest trace for messages \emph{of its own
+choosing}, with the output region overwritten by the public digests. That vector
+satisfies the digest claim by construction and is \emph{not} a satisfying R1CS
+assignment. Consequently:
+
+\begin{itemize}
+\item the lincheck, the six hiding commitments and the batched opening all run
+\textbf{unmodified production code} on it --- they speak about whatever was
+committed;
+\item only the zerocheck, the one sub-proof that would notice, is emitted.
+\end{itemize}
+
+The emitted zerocheck uses exactly the freedom the verifier leaves. The
+$C$-side evaluation is \emph{recomputed} by the verifier as the interpolation of
+$\textit{round1}_c$ at $z$, so that vector must interpolate to the committed
+vector's true $C$-value --- one linear condition on a 64-vector, solved in one
+coordinate. $\textit{round1}_{ab}$ is free. Each multilinear round is free
+except the last $G(\infty)$, which is solved so the telescoped claim lands
+exactly on $\hat a(\rho)\hat b(\rho) + \gamma P(\rho)Q(\rho)$.
+
+\paragraph{Why programming is necessary and not decorative.} That final solve
+needs $\rho$ \emph{before} the message preceding it is emitted, and plain
+Fiat--Shamir samples $\rho$ only after. The ordering obstruction is real. With a
+programmable oracle the challenge is fixed in advance and the solve becomes
+available. The implementation programs 18 points ($z$, $\gamma$, and one per
+multilinear round); $r_{\text{skip}}$ and $r_{\text{outer}}$ are deliberately
+left honest, since the terminal evaluations depend only on the fold point.
+
+\paragraph{Two passes.} The emitter needs the committed vector's true terminal
+evaluations before it can telescope to them. Pass one runs the prover honestly
+against a throwaway oracle and records them, adopting its (uniform) challenges
+as the chosen tuple; pass two emits.
+
+\subsection{Three constructions that do not work}
+
+Recording the failures is part of the method, because two of them look correct.
+
+\begin{enumerate}
+\item \emph{Run the honest prover on a self-chosen witness.} The batch
+simulator. The digest claim pins $\hat z$ on the output region to the public
+digests; a self-chosen message hashes elsewhere.
+\item \emph{Patch a valid witness and prove honestly.} The patched vector does
+not satisfy the R1CS, so the honest zerocheck does not vanish and the verifier
+rejects. (This is now a regression test.)
+\item \emph{Sample every revealed value from the coset the verifier's equations
+cut out.} This is the one that looks right. Per level the Ligerito verifier
+checks a single batched terminal identity, so that coset is strictly larger than
+the set of honest transcripts: honest opened rows are rows of a Reed--Solomon
+codeword, and at deep levels the query count exceeds the per-lane message
+dimension, so they satisfy public code-parity relations the verifier never
+tests. A distinguisher recomputes one parity functional and separates, with no
+oracle queries at all.
+\end{enumerate}
+
+Construction 3 is why the implemented simulator \emph{computes} the opening
+rather than sampling it.
+
+\section{Distribution equality}
+
+Acceptance is necessary, not sufficient: a simulator whose output verifies but
+is distributed differently is still broken. The simulated transcript is uniform
+on the variety the verifier's checks cut out, so the two laws coincide exactly
+when the \emph{honest} transcript is uniform on that same variety. Class by
+class:
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Class} & \textbf{Honest} & \textbf{Evidence} \\
+\midrule
+zerocheck round pairs & $G_j + \gamma M_j$ & channel spans $4096/4096$ bits at $m{=}22$ \\
+degenerate control & --- & constant mask spans exactly $2048$ \\
+terminals $\hat a,\hat b$ & moved by randomizer rows & measured across fresh draws \\
+$\sigma_z$ & $\sum \mathrm{eq}\cdot PQ$, fresh $P,Q$ & measured across fresh draws \\
+digest claim & public function of $y$ & public by construction \\
+opening interior & blinded by $\mu$, $g$ & existing low-mask / blinder lemmas \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Full rank on the round-pair block is the load-bearing measurement: it says the
+honest round messages are uniform over that block \emph{whatever the witness
+was}, which is exactly the law the simulator samples. The degenerate control ---
+a constant mask reaching the $G(1)$ half and no more --- shows the measurement is
+not vacuous.
+
+\paragraph{Claim-kernel form.} These certificates quantify over \emph{masks},
+not over witness pairs. That is a necessity rather than a preference: for a
+unique-witness relation the witness-pair form is vacuous, so the earlier
+certificates could not have been reused even in principle.
+
+\section{Knowledge extraction}
+
+Zero knowledge says a proof reveals nothing; it says nothing about whether the
+prover knew anything. Building a simulator before an extractor is the dangerous
+order, since a protocol that hides everything and proves nothing passes every
+zero-knowledge test.
+
+\begin{definition}[Straightline ROM extraction]
+There is a PPT $\mathsf{E}$ which, given a prover's random-oracle query
+transcript and an accepting proof for $y$, outputs $x_1,\dots,x_n$ with
+$\blake(x_i)=y_i$ except with negligible probability.
+\end{definition}
+
+The extractor has two halves. \emph{Recovering the committed message} is the
+standard BCS argument: every committed Merkle leaf is an oracle query, so the
+query transcript yields the codeword, which decodes. We cite this rather than
+re-derive it. \emph{Turning the committed message into preimages} is
+system-specific and is where a mistake would hide: which coordinates are the
+message, how they are packed, and whether what emerges is real. That half is
+implemented, and it ends with an external $\blake(x_i) = y_i$ check that
+touches no circuit wire, no claim value and no part of the proof.
+
+The external recheck rules out, simultaneously, the three near-misses that would
+each look like success: recovering \emph{mask columns} (the randomizer rows and
+five mask cubes are committed data too), recovering an assignment untied to the
+digests, and recovering an opening claim instead of the message.
+
+\paragraph{The test that separates the two properties.} \textbf{Extraction fails
+on the simulator's commitment.} The simulator produces a transcript the verifier
+accepts and knows no preimage; if extraction succeeded there, the extractor
+would be recovering something other than knowledge and the claim would be empty.
+Alongside it: extraction recovers the real preimages from an honest commitment,
+and perturbing the randomizer sections moves the commitment without moving one
+extracted byte.
+
+\section{Methodology}
+
+The technical content above is less transferable than the method that produced
+it, so we state the method explicitly.
+
+\paragraph{Take the verifier's checks as the specification.} The simulator was
+not designed from the protocol's intent but from the verifier's code: each check
+was read as a constraint, each constraint classified as \emph{determined} or
+\emph{free}, and the free ones filled with the dependent ones solved. This is
+what makes the emitted zerocheck correct by construction rather than by
+argument, and it is what exposed the ordering obstruction --- a fact about the
+check order that no amount of reasoning about the protocol's purpose would have
+surfaced.
+
+\paragraph{Every claim gets a control that must fail.} An assertion that
+something passes is worth little without a companion showing the test can fail.
+The controls here are load-bearing and several caught real errors:
+
+\begin{itemize}
+\item an \emph{unprogrammed} oracle must reproduce plain Fiat--Shamir. This
+caught the harness absorbing the proof-of-work nonce as raw bytes where the real
+challenger tags it --- every challenge after the first grind was silently
+desynchronised, and six unit tests had passed because none of them grind.
+\item the patched vector must \emph{fail} the R1CS, and an \emph{honest} prover
+on it must be \emph{rejected}, or the simulator's acceptance would prove
+nothing.
+\item a degenerate mask must span strictly less than the full block, or the
+coverage measurement would be vacuous.
+\item extraction must fail on the simulator.
+\end{itemize}
+
+\paragraph{Keep the demonstration on the real code path.} A simulator that runs
+a reimplementation demonstrates nothing about the prover, and a parallel
+orchestration drifts. The prover therefore gained exactly one seam --- a
+zerocheck source that defaults to the honest implementation and receives it as a
+closure --- so one source can \emph{record} a run and another \emph{replace} it,
+while the commitments, the lincheck and the openings stay production code.
+
+\paragraph{Make the model executable where feasible.} Random-oracle programming
+is usually a sentence in a proof. Here it is an object: a programmable oracle
+whose unprogrammed behaviour is byte-identical to the real challenger, against
+which the unmodified verifier accepts or does not. This converts a class of
+reasoning errors into test failures.
+
+\paragraph{Prefer the witness-free statement.} When the relation has a unique
+witness, witness-indistinguishability is vacuous. Restating coverage in
+claim-kernel form --- quantified over masks, modulo the public claims --- is both
+the only available statement and a strictly stronger one, and it removes the
+universal quantifier over witness pairs that no amount of sampling could close.
+
+\paragraph{Write down what breaks, not only what works.} The three failed
+simulator constructions, the pinning trap, the padding-digest correction and
+the desynchronised nonce are recorded in the design log because each was a
+plausible-looking step that measurement rejected. A development that records
+only its successes cannot be audited.
+
+\section{What this rests on}
+\label{sec:limits}
+
+The composition of the sections above is a rigorous prose argument over
+measured and cited components; it is not a machine-checked theorem. Quoting the
+result without these conditions would overstate it.
+
+\begin{itemize}
+\item \textbf{Sibling hiding is a random-oracle assumption}, not a derivation.
+\item \textbf{Coverage is measured at sampled challenge tuples}, not all of
+them. Random probing can only under-estimate a rank, so a full-rank reading is
+sound evidence of surjectivity at the tuple measured.
+\item \textbf{The opening interior} is carried by the existing low-mask and
+blinder lemmas rather than measured at this relation.
+\item \textbf{The extractor's ROM-observation half is cited}, not executed;
+making it executable means routing leaf hashing through the recording oracle.
+\item \textbf{Simulation-extractability is not proved.} Plain zero knowledge
+and plain knowledge soundness do not compose in the random-oracle model; the
+target is the weak form, with divergence at the statement absorption as the
+mechanism.
+\item \textbf{No quantitative extraction bound} is stated.
+\item Scope: 64-byte messages, the certified configuration ($m=22$, 256
+instances), classical ROM. Longer messages need chunk and tree chaining;
+QROM and side channels are out of scope.
+\item \textbf{No independent cryptographic review} has been performed.
+\end{itemize}
+
+\section{Status}
+
+For the certified configuration, and subject to \S\ref{sec:limits}, the
+fixed-digest mode is a computational zero-knowledge argument of knowledge in the
+classical random-oracle model for knowledge of BLAKE3 preimages of public
+digests. Both halves of the property are implemented and tested against the
+unmodified verifier, and the tests that would detect their absence are present
+and fail when they should.
+
+\end{document}
