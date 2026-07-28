@@ -1,4 +1,7 @@
-# Paper change summary (v4 → v5, v5 → v5.1, v5.1 → v5.2)
+# Paper change summary: historical v4 to v5.2 record
+
+This file is superseded by `CHANGES-v7.md`. Its Boolean P/Q construction and
+security wording are not the active protocol or claim.
 
 A reader who knows v4 can read this instead of diffing. Weakenings are listed
 before strengthenings on purpose.

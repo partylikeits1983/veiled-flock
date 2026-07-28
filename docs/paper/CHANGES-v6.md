@@ -1,4 +1,7 @@
-# v5.2 → v6: from a statement that binds nothing to one that binds digests
+# v5.2 to v6: historical change record
+
+This file records the v6 transition and is superseded by `CHANGES-v7.md`.
+Its P/Q construction and security wording are not the active protocol or claim.
 
 ## The headline change
 

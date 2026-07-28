@@ -1,10 +1,8 @@
 \documentclass[11pt]{article}
 
-\usepackage[margin=1.1in]{geometry}
+\usepackage[margin=1.05in]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
-\usepackage{booktabs}
-\usepackage{tikz}
-\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
+\usepackage{array,booktabs}
 \usepackage[hidelinks]{hyperref}
 \usepackage{microtype}
 
@@ -15,916 +13,373 @@
 \newtheorem{assumption}{Assumption}
 
 \newcommand{\F}{\mathbb{F}}
-\newcommand{\Ftwo}{\F_2}
-\newcommand{\Fbig}{\F_{2^{128}}}
-\newcommand{\Img}{\mathrm{Im}}
-\newcommand{\shatv}{\hat{s}_v}
-% Statistical distance, kept distinct from the witness-difference vector d.
-\newcommand{\Dsd}{\Delta_{\mathrm{SD}}}
-\newcommand{\erank}{\varepsilon_{\mathrm{rank}}}
-\newcommand{\ehash}{\varepsilon_{\mathrm{hash}}}
-\newcommand{\kmin}{k_{\min}}
-\newcommand{\kskip}{k_{\mathrm{skip}}}
+\newcommand{\K}{\F_{2^{128}}}
+\newcommand{\Img}{\operatorname{Im}}
+\newcommand{\rank}{\operatorname{rank}}
+\newcommand{\TV}{\Delta_{\mathrm{TV}}}
+\newcommand{\RO}{\mathcal{H}}
 
 \title{Making Flock Zero-Knowledge:\\
-\large A candidate construction for BLAKE3 batch statements}
+\large Fixed-digest BLAKE3, symbolic coverage, and an executable ROM game}
 \author{Alexander Lee}
-\date{v5.2, July 2026 --- research note\\
-\small source revision \texttt{d4c4f7707020}}
+\date{v7, July 2026 --- implementation and security note}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-\textbf{Problem.} Flock is a hash-based SNARK for batch R1CS over $\Ftwo$ --- a
-zerocheck + lincheck PIOP compiled with a ring-switched Ligerito commitment and
-Fiat--Shamir. It is succinct but not zero-knowledge: every prover message is a
-deterministic function of the witness.
-\textbf{Construction.} We give a candidate honest-verifier zero-knowledge mode
-for BLAKE3 batch statements from five ingredients: randomizer witness rows that
-blind the affine transcript classes; a hiding Ligerito opening (a low-half mask
-plus a full-support blinder folded into the recursion); and three committed
-mask channels, one per transcript layer the randomizer rows do not cover.
-The three are deliberately different in kind, because the layers are. The
-zerocheck's multilinear rounds mask a \emph{product} of witness-dependent
-multilinears, so the mask must be degree-2: $\gamma\cdot P\cdot Q$. The
-lincheck's multiplier is \emph{public} and its $z$-slot \emph{linear}, so an
-additive shift $z\mapsto z+\gamma_{lc}S$ suffices and makes that layer's
-transcript equal to the honest transcript of a shifted witness. The
-zerocheck's round~1 admits neither, because the verifier reconstructs from the
-identity $P^{AB}+P^{C}=0$ on a domain $S$ and any mask must vanish there; it
-is masked instead by a \emph{pair} $(M_c,\ M_c+V_S h)$ whose sum is a multiple
-of $S$'s vanishing polynomial, which leaves the reconstruction intact while
-letting the two sides move independently.
-\textbf{Claim.} For the enumerated certified configurations of
-Table~\ref{tab:configs}, the \emph{algebraic} transcript of the reference prover
-is statistically witness-indistinguishable up to an explicit rank-failure term
-$\erank$, and the complete protocol is \emph{computational} zero-knowledge in the
-classical random-oracle model, because hiding of unopened Merkle siblings is
-computational.
-\textbf{Implemented.} The amended prover and verifier run end to end and verify;
-the optimized prover is \emph{not} amended and is excluded from the claim.
-\textbf{Evidence.} The reduction to witness-indistinguishability is proved; the
-masking, triangular-composition and bad-set mixture theorems are machine-checked
-in Lean~4; and the composition hypotheses are discharged by exact $\Ftwo$
-image-coverage certificates computed on the real prover --- including a
-complete-transcript joint conditional certificate at the certified fixture, in
-which no claim-preserving witness direction escapes the joint mask image. The
-same certificate, run on a \emph{real} BLAKE3 statement over the PIOP classes,
-also passes --- but only after two amendments that measurement forced: it
-initially left one $\Fbig$ direction unaccounted for, and six candidate
-explanations were eliminated experimentally (two of them by making a change,
-measuring no improvement, and reverting) before the construction was touched.
-Per-item status is tabulated in Table~\ref{tab:claims} and
-\S\ref{sec:roadmap}.
-\textbf{Assumptions and limits.} A random-oracle (or hash-pseudorandomness)
-assumption for sibling hiding; certificates are computed at sampled challenge
-tuples; the full-transcript certificate is established at a reduced-size fixture
-with structural transfer to production size; no independent cryptographic review
-has been performed. QROM security is not claimed.
-\textbf{Performance.} Reference-path and optimized-path costs are reported
-separately in \S\ref{sec:perf}; they are different pipelines and are not
-comparable.
+Flock's original BLAKE3 prover reveals deterministic functions of its witness.
+This note specifies and implements a zero-knowledge mode for two exact
+production profiles: the free BLAKE3 batch relation and, more importantly, the
+fixed-digest relation
+\[
+  y_i=\operatorname{BLAKE3}(x_i),\qquad |x_i|=64\text{ bytes},\quad 1\le i\le256.
+\]
+The construction uses field-valued masking over $\K$, a public affine
+$Q^\star$, a hiding Ligerito commitment, a proof nonce, and one framed random
+oracle shared by Fiat--Shamir, Merkle trees, and proof of work.  A symbolic
+coverage calculation emits a nonzero minor of total-degree bound 720; hence
+the production PIOP bad set has probability at most $720/2^{128}$.  A
+closed-form PCS translator preserves the combined opening vector and leaves
+16,384 bits of conditional entropy in each fresh initial wide leaf.  A sealed,
+one-pass simulator sees only the public digest statement, programs at most 18
+fresh oracle points, and produces a proof accepted by the unmodified verifier.
+
+Under the classical programmable-random-oracle model and the assumptions made
+explicit below, this gives \emph{computational zero knowledge} for the two
+registered circuit digests.  At an adversarial hash-query budget $Q=2^{64}$,
+the symbolic PIOP term has 118.508 bits and the explicit listed union bound is
+118.502 bits.  Knowledge is a separate claim: the shipped
+standalone profile has about 55.994 bits of currently provable classical
+knowledge security after the Fiat--Shamir loss and is labelled
+\emph{100-bit conjectured classical knowledge security}.  It does not meet a
+100-bit standalone theorem threshold.
 \end{abstract}
 
-\section{Scope, claim, and status}\label{sec:scope}
+\section{Scope and security labels}\label{sec:scope}
 
-This section is the only place scope and status are stated, apart from the
-limitations in \S\ref{sec:limitations}.
+The certificate registry contains exactly the following profiles.  Unknown
+families, circuit digests, batch sizes, or PCS parameters are rejected before
+proof generation.
 
-\paragraph{Statement family.} BLAKE3 \emph{batch} statements only: $2^{n}$
-independent compressions sharing per-block matrices. The SHA-256 and Keccak
-encoders and the hash-chain statement remain non-zk, and the chain statement is
-excluded on purpose --- it binds public endpoints, which breaks the simulator
-argument of \S\ref{sec:relation}. This is not a generic ZK transformation for
-Flock.
-
-\paragraph{Object of the claim.} The \emph{reference} amended prover
-(\texttt{prove\_zk\_a1}; see Appendix~\ref{app:impl}), which runs the masked
-zerocheck. The optimized single-pass prover runs the un-amended zerocheck; the
-round-message hiding argument does not apply to it, and no zero-knowledge claim
-is made for it. The zero-knowledge API is certificate-gated: a configuration
-without a checked certificate is refused, not proved.
-
-\paragraph{Property.} The algebraic transcript --- every verifier-visible field
-element --- is statistically witness-indistinguishable up to $\erank$
-(\S\ref{sec:certificates}). Unopened Merkle siblings are hidden
-\emph{computationally} under the hash assumption of \S\ref{sec:assumptions}.
-Composing the two, the complete protocol is computational zero-knowledge in the
-classical ROM after Fiat--Shamir. ``Honest-verifier'' is genuine: the argument is
-public-coin, so verifier aborts and malformed challenges are not a separate case.
-Masks are drawn freshly per proof, so $k$ proofs compose with error
-$k(\erank+\ehash)$.
-
-\paragraph{QROM.} Not claimed, for either zero-knowledge or soundness. The
-simulator programs nothing and rewinds nothing, which makes a QROM
-zero-knowledge statement plausible, but we do not write the theorem and do not
-rely on it.
-
-\paragraph{Status.} \textbf{Experimental candidate with a proven partial core
-(label B).} Every certificate the argument depends on passes as most recently
-measured, including the one that was failing: on a real BLAKE3 statement, over
-the PIOP classes, no claim-preserving witness direction escapes the joint mask
-image. Getting there required two amendments (A2, A3) that measurement forced
-and that are part of the construction described here. A prior revision
-promoted this status to ``supported by completed evidence'' on the strength of
-those results; that promotion is withdrawn, because the certificate
-\emph{pipeline} they ran under was subsequently found to overstate itself (a
-runner that did not fail on the flagship certificate's failure, a
-substring-matched evidence registry, three end-to-end gates whose test filters
-matched zero tests, and advertised negative controls that did not exist). The
-pipeline is repaired; the status returns to ``supported'' when the hardened
-runner completes one green end-to-end run at the pinned revision.
-
-What that does \emph{not} mean, stated plainly because the distinction is the
-whole point of this note. Several load-bearing steps are discharged by exact
-computation on the real prover rather than by closed-form proof; two
-hypotheses --- the composition hypotheses and the eq-table $\Ftwo$-span --- are
-\emph{measured}, not derived; certificates are computed at sampled challenge
-tuples; the complete transcript is certified at a reduced-size fixture with
-structural transfer to production size, while the real-statement certificate
-covers the PIOP classes; sibling hiding is a computational assumption; and
-there has been \textbf{no independent cryptographic review}. We do not call
-this production zero-knowledge. The claim is the narrow one in this section,
-with the assumptions of \S\ref{sec:assumptions} and the limits of
-\S\ref{sec:limitations}, and it should be read as exactly that and no wider.
-
-\section{The relation, and what zero-knowledge means here}\label{sec:relation}
-
-\begin{definition}[Statement and witness]
-A BLAKE3 batch statement is the public tuple $x = (\text{batch size } 2^{n})$;
-everything else about the instance --- the sparse matrices $A,B$, the witness
-layout, the randomizer layout --- is determined by $n$ and the protocol version
-and is absorbed into a statement digest. The witness is a packed assignment
-$z\in\Ftwo^{2^{m}}$, and the relation is
-\[
-  \mathcal{R} \;=\; \{(x,z)\;:\; A z \circ B z = z\},
-\]
-an R1CS over $\Ftwo$ with $C = I$, block-diagonal over the batch.
-\end{definition}
-
-Three facts about this relation drive everything else. \emph{First}, no
-caller-supplied value is bound: not a message, not a chaining value, not a hash
-output, not a compression output. The verifier receives the setup, the
-commitment, and the proof, and compares the accepted claim values against
-nothing. The only pinned wire is the constant-one wire, pinned to the constant
-$1$. \emph{Second}, a valid witness is therefore efficiently self-generatable:
-choose arbitrary compression inputs, run the honest compression trace, fill the
-randomizer rows with uniform bits. \emph{Third}, the simulator receives $x$
-alone.
-
-\begin{definition}[View and distance]
-$\mathrm{View}\langle \mathsf{P}(x,z),\mathsf{V}(x)\rangle$ is the transcript
-together with the verifier's coins. $\Dsd(X,Y)$ denotes statistical distance.
-The protocol is honest-verifier zero-knowledge with error $\varepsilon$ if there
-is a probabilistic polynomial-time $\mathsf{S}$ with
-$\Dsd(\mathrm{View}\langle \mathsf{P}(x,z),\mathsf{V}(x)\rangle,\mathsf{S}(x))\le\varepsilon$
-for every $(x,z)\in\mathcal{R}$; it is witness-indistinguishable with error
-$\varepsilon$ if that distance between the views of any two valid witnesses of
-the same $x$ is at most $\varepsilon$.
-\end{definition}
-
-\begin{lemma}[Reduction to witness-indistinguishability]\label{lem:reduction}
-Let $\mathsf{S}(x)$ pick arbitrary valid compressions, build the corresponding
-witness $z_0$, and run the honest prover with fresh masks. Then $\mathsf{S}$ is
-efficient, receives no witness, and for every valid $z$,
-$\Dsd(\mathrm{View}(z),\mathsf{S}(x)) = \Dsd(\mathrm{View}(z),\mathrm{View}(z_0))$.
-Hence honest-verifier zero-knowledge with error $\varepsilon$ follows from
-full-transcript witness-indistinguishability with error $\varepsilon$.
-\end{lemma}
-
-\begin{proof}
-$\mathsf{S}$ is the honest prover run on the particular valid witness $z_0$ it
-generated, so $\mathsf{S}(x)$ and $\mathrm{View}(z_0)$ are the same
-distribution; substitute. Efficiency is the cost of one honest proof. Note the
-quantifier: $z_0$ is chosen by $\mathsf{S}$ and may be any valid witness, which
-is legitimate precisely because $x$ constrains none of it.
-\end{proof}
-
-The consequence worth stating plainly is a limitation. If the statement bound a
-hash output, a chaining value, or a message --- as the hash-chain statement does
---- then $\mathsf{S}$ could not generate a witness matching that value without
-inverting the hash, and Lemma~\ref{lem:reduction} would fail. Nothing in this
-paper extends to such statements; the API refuses them.
-
-\paragraph{What a statement with no public input is good for.} On its own,
-``there exist $2^n$ valid BLAKE3 compressions'' is not a useful assertion. Its
-value is threefold: it is the inner statement of larger protocols that supply
-the binding externally; it is the setting in which the masking construction can
-be isolated and certified without the simulator question being entangled with a
-hash-inversion question; and it is the honest boundary of what the present
-evidence supports. Extending the binding is future work, not a corollary.
-
-\begin{table}[t]
-\centering
-\small
-\begin{tabular}{@{}llll@{}}
-\toprule
-\textbf{Claim} & \textbf{Scope} & \textbf{Basis} & \textbf{Status} \\
-\midrule
-Completeness & reference prover, certified configs & telescoping identity; roundtrip tests & proved; tested \\
-Zerocheck soundness ($\gamma$ batching) & amended zerocheck, any config & Lemma~\ref{lem:gamma}; adversarial suite & proved; constructively checked \\
-Lincheck soundness ($\gamma_{lc}$ batching, A2) & amended lincheck, any config & Lemma~\ref{lem:gamma} transplanted; tamper suite & proved; constructively checked \\
-A2 output-claim recovery & amended lincheck & $\hat S(\rho)$ bound by $S$'s commitment & proved; tested end to end \\
-Round-1 soundness preserved (A3) & amended zerocheck & mask pair sums to a multiple of $V_S$ & proved; tested end to end \\
-Algebraic-transcript WI & certified configs (Table~\ref{tab:configs}) & Lean + exact certificates & established at the certified fixture \\
-Merkle sibling hiding & all hiding openings & $\kmin$-min-entropy leaves, ROM & assumed (computational) \\
-ZK after Fiat--Shamir & BLAKE3 batch, certified configs & Lemma~\ref{lem:reduction} + rows above & conditional on those rows \\
-QROM (ZK or soundness) & --- & --- & not claimed \\
-Optimized prover & excluded from the claim & --- & benchmark only; no ZK claim \\
-\bottomrule
-\end{tabular}
-\caption{The claims at a glance. ``Proved'' means a closed-form argument in this
-paper or in Lean; ``certified'' means established by exact computation on the
-real prover at the stated configurations; ``assumed'' means stated, not derived.}
-\label{tab:claims}
-\end{table}
-
-\section{Protocol overview}\label{sec:overview}
-
-The amended protocol, with the privacy purpose of each step.
-
-\begin{enumerate}
-\item \textbf{Extend the witness with randomizer rows.} Two species, on fresh
-witness columns filled with uniform bits: $A$-type rows $u\cdot 1 = u$ and
-$B$-type rows $1\cdot u' = u'$. \emph{Purpose:} blind the affine transcript
-classes (round-1 vectors, lincheck, ring-switch, PCS values). They are
-\emph{not} sufficient on their own for two of those classes on real
-statements --- the lincheck and \texttt{round1\_c} --- which is why steps~6
-and~7 carry mask channels of their own. That insufficiency was measured, not
-anticipated: on the synthetic fixture, whose witness is some $81\%$
-randomizer rows against a real witness's $5.5\%$, the randomizer rows really
-do suffice (\S\ref{sec:limitations}).
-\item \textbf{Commit the witness hidingly}, with a low-half mask $\mu$ and a
-full-support blinder $g$. \emph{Purpose:} hide the opened codeword rows and
-everything downstream of them in the recursion.
-\item \textbf{Commit five fresh witness-free multilinears
-$P,Q,S,S_c,S_h$ hidingly.} \emph{Purpose:} $P,Q$ supply the zerocheck's
-degree-2 mask channel (A1$'$), $S$ the lincheck's additive one (A2), and
-$S_c,S_h$ the round-1 pair (A3); committing first is what stops the prover
-from choosing any of them after seeing the challenges.
-\item \textbf{Bind $\sigma_z=\sum_x \mathrm{eq}(r,x)P(x)Q(x)$} into the
-transcript. \emph{Purpose:} fix the mask channel's contribution before the
-batching challenge exists.
-\item \textbf{Derive $\gamma$} by Fiat--Shamir, after the commitments and
-$\sigma_z$. \emph{Purpose:} soundness of the batching (Lemma~\ref{lem:gamma}).
-\item \textbf{Run the masked zerocheck} on $\hat a\hat b + \gamma PQ$, with
-round~1 additionally carrying the A3 pair: $P^{C}\mapsto P^{C}+M_c$ and
-$P^{AB}\mapsto P^{AB}+M_c+V_S h$, where $M_c,h$ are the round-1 C-side
-messages of $S_c,S_h$. \emph{Purpose:} the multilinear round messages are the
-one class no degree-1 mask reaches; round~1 is linear in the witness but is
-covered only by randomizer rows, which measurably does not suffice on real
-statements. The $V_S$ factor is what lets round~1 be masked at all --- the
-combined polynomial still vanishes on $S$, so the verifier's reconstruction,
-and the soundness argument resting on it, are untouched.
-\item \textbf{Run the masked lincheck} on $z + \gamma_{lc}S$: once $\alpha$ and
-the constant-wire pin $\beta$ fix the public vector $\mathrm{comb}$, bind
-$\sigma_{lc}=\sum_i \mathrm{comb}(i)S_{\mathrm{vec}}(i)$, derive $\gamma_{lc}$,
-and run the existing sumcheck on the shifted table.
-\emph{Purpose:} the lincheck's own classes. The randomizer rows of step~1 do
-\emph{not} suffice for them on real statements --- see \S\ref{sec:channel}.
-Because $\mathrm{comb}$ is public and the sumcheck's $z$-slot is linear, the
-shift leaves the degree structure untouched and every message of the layer
-becomes the honest transcript of a shifted witness.
-\item \textbf{Open the witness, $P,Q$, $S$, $S_c$ and $S_h$ hidingly, then check
-$\hat a(\rho)\hat b(\rho)+\gamma P(\rho)Q(\rho)$ and recover the lincheck's
-output claim as $w = w_{\text{sent}} + \gamma_{lc}\hat S(\rho)$.}
-\emph{Purpose:} the hiding openings keep the leakage down to the evaluations
-themselves; a plain opening would additionally reveal opened rows of $P$,
-enlarging the conditioning set (\S\ref{sec:channel}). $\hat S(\rho)$ must come
-from $S$'s commitment rather than be claimed: an unbound $\hat S(\rho)$ could
-be chosen after $\rho$ and absorb an arbitrary defect into the output claim.
-The same is true of A3's $M_c(z)=\hat S_c(z,r_{rest})$ and
-$h(z)=\hat S_h(z,r_{rest})$, which are opened at the $\hat c$-claim point ---
-exactly where the un-shift happens. Note that A3, unlike A1$'$ and A2, needs
-no batching challenge: those add a prover-\emph{claimed} sum the verifier
-cannot recompute, whereas A3 adds only committed evaluations, which the
-openings bind directly.
-\end{enumerate}
-
-\begin{figure}[t]
-\centering
-\begin{tikzpicture}[
-  node distance=6mm and 9mm,
-  box/.style={draw, rounded corners, align=center, font=\small, minimum height=8mm, inner sep=3pt},
-  wit/.style={-{Latex[length=2mm]}, thick},
-  mask/.style={-{Latex[length=2mm]}, dashed, thick},
-  chal/.style={-{Latex[length=2mm]}, dotted, thick},
-]
-\node[box] (w) {witness $z$\\+ randomizer rows};
-\node[box, below=8mm of w] (pq) {fresh $P,Q,S$\\(witness-free)};
-\node[box, right=of w] (cw) {commit $z$\\($\mu$, $g$)};
-\node[box, right=of pq] (cpq) {commit $P,Q,S$\\(hiding)};
-\node[box, right=14mm of cw] (sig) {bind $\sigma_z$};
-\node[box, below=8mm of sig] (gam) {derive $\gamma$};
-\node[box, right=of sig] (zc) {masked\\zerocheck};
-\node[box, below=8mm of zc] (lc) {masked lincheck\\+ ring switch};
-\node[box, right=of zc] (op) {hiding\\openings at $\rho$};
-\node[box, below=8mm of op] (tr) {verifier-visible\\transcript};
-
-\draw[wit] (w) -- (cw);
-\draw[mask] (pq) -- (cpq);
-\draw[wit] (cw) -- (sig);
-\draw[mask] (cpq) -- (sig);
-\draw[chal] (sig) -- (gam);
-\draw[wit] (sig) -- (zc);
-\draw[chal] (gam) -- (zc);
-\draw[wit] (zc) -- (lc);
-\draw[wit] (zc) -- (op);
-\draw[mask] (cpq.east) to[out=0,in=200] (op.west);
-\draw[wit] (op) -- (tr);
-\draw[wit] (lc) -- (tr);
-
-\begin{scope}[on background layer]
-\node[draw, dashed, gray, rounded corners, fit=(w)(pq)(cw)(cpq), inner sep=4pt, label={[gray,font=\scriptsize]below:all masks committed here}] {};
-\node[draw, dotted, gray, rounded corners, fit=(gam), inner sep=6pt, label={[gray,font=\scriptsize]below:first challenge that depends on them}] {};
-\end{scope}
-\end{tikzpicture}
-\caption{The amended protocol. Solid arrows carry witness-dependent data,
-dashed arrows the independent mask channels, dotted arrows public challenges.
-Every mask is committed strictly to the left of the first challenge that could
-depend on it; this ordering is what Lemma~\ref{lem:gamma} needs.}
-\label{fig:overview}
-\end{figure}
-
-\begin{table}[t]
-\centering\small
-\begin{tabular}{@{}ll@{}}
-\toprule
-\textbf{Symbol} & \textbf{Meaning} \\
-\midrule
-$z$ & packed witness, including randomizer rows \\
-$\hat a,\hat b,\hat c$ & multilinear extensions of $Az$, $Bz$, $Cz=z$ \\
-$m$, $\kskip$ & $\log_2$ witness length; univariate-skip block size ($6$) \\
-$u_A,u_B$ & the two randomizer species ($A$-type, $B$-type rows) \\
-$\mu$, $g$ & PCS low-half mask; full-support blinder \\
-$P,Q$ & the two committed witness-free mask multilinears \\
-$\sigma_z$ & $\sum_x \mathrm{eq}(r,x)P(x)Q(x)$, sent before $\gamma$ \\
-$\gamma$ & Fiat--Shamir challenge batching the two sumcheck claims \\
-$\rho$ & the zerocheck's final evaluation point \\
-$R$ & the map from inner masks to witness-dependent transcript coordinates \\
-$L$ & the map from masks to \emph{mask-only} transcript coordinates (the leakage set) \\
-$R(\ker L)$ & the reachable image with every leaked coordinate held fixed \\
-$d$ & a witness-difference direction in transcript space \\
-$\erank$, $\ehash$ & mask-rank failure term; sibling-hiding term \\
-$\kmin$ & conditional min-entropy of an unopened Merkle leaf, in bits \\
-$\Dsd$ & statistical distance \\
-\bottomrule
-\end{tabular}
-\caption{Notation.}\label{tab:notation}
-\end{table}
-
-\section{The transcript splits into an affine part and one hard class}\label{sec:split}
-
-Fix the verifier challenges. Every revealed value except the zerocheck round
-messages is affine in the masks with a witness-independent linear part: the
-round-1 vectors are protected by 128-bit region alignment, and the lincheck,
-ring-switch and PCS values are $\Fbig$-linear in the committed data. For an
-affine map, image coverage of the witness-difference directions \emph{is}
-distribution equality --- so those classes are hidden exactly when the mask
-image covers those directions, which is what the certificates of
-\S\ref{sec:certificates} check.
-
-\begin{theorem}[Masking; Lean~4, no \texttt{sorry}]\label{thm:mask}
-Let $A:U\to V$ be additive with $U$ finite, $f:W\to V$, and suppose
-$f(w)-f(w')\in\Img A$ for the witness pairs of interest. Then for every value
-the fiber counts under $w$ and $w'$ are equal, the transcript is uniform on its
-coset with multiplicity $|\ker A|$, and $u\mapsto Au+r$ from any public
-representative $r$ reproduces the honest distribution exactly. If $A$ is
-surjective the coset condition is vacuous.
-\end{theorem}
-
-The hypothesis is stated for ``the witness pairs of interest'' because
-\S\ref{sec:relation} has no public inputs to condition on: the pairs that matter
-are those inducing the same accepted claim value, which the opening genuinely
-determines from revealed data. That conditioning is part of the definition of
-the view, not a weakening of it.
-
-The exception is real. A zerocheck round sends $(G(1),G(\infty))$ where $G$ is
-degree~2 in the fold variable and $G(\infty)$ is its leading coefficient. The
-randomizer species enter $\hat a$ and $\hat b$ separately, so $G$ carries genuine
-$u_A\!\cdot\!u_B$ cross terms once a fold group spans the region boundary: the
-round messages are \emph{not} affine in the masks, and image coverage does not
-apply to them. A degree-1 mask cannot reach $G(\infty)$ at all, and in
-characteristic~2 the classical separable mask $\sum_i g_i(x_i)$ sums to zero over
-the cube. This is the sole obstruction, and \S\ref{sec:channel} is the response
-to it.
-
-\section{The degree-2 channel and conditional coverage}\label{sec:channel}
-
-Run the zerocheck on $\hat a\hat b + \gamma PQ$ with $P,Q$ fresh, witness-free,
-full-support multilinears committed before $\gamma$ exists. Each round message
-becomes $G_j+\gamma M_j$ and the final check gains $\gamma P(\rho)Q(\rho)$.
-Because $P,Q$ carry no witness, the mask contribution's distribution is
-witness-independent by construction. What must be checked is that it is
-\emph{jointly} sufficient, and the joint condition is strictly stronger than the
-marginal one.
-
-\paragraph{A two-dimensional example.} Let the transcript be
-$T(w,p)=(w_1+p_1,\;w_2+p_2)$ over $\Ftwo$ with uniform mask $p$, and suppose the
-protocol also reveals $\ell(p)=p_1+p_2$. Marginally each coordinate of $T$ is
-uniform and reveals nothing. Jointly, $T_1+T_2+\ell = w_1+w_2$: a witness
-functional in the clear. The mask image is all of $\Ftwo^2$, and that is not
-enough. The right condition restricts the mask to the kernel of the revealed
-functional: $d\in R(\ker \ell)$, where here $\ker\ell=\{(0,0),(1,1)\}$ and the
-reachable set is only the diagonal, which is exactly the set of witness
-differences that stay hidden.
-
-\paragraph{The real condition.} The same $P$ that masks the round messages is
-revealed through $P(\rho)$, through $\sigma_z$, and through every value inside
-$P$'s own opening. Writing $L$ for the map collecting all of them, the condition
-is
-\[
-  d \;\in\; R(\ker L) \;+\; \Img(\text{outer stage}) \;+\; \langle \text{claim direction}\rangle
-  \qquad\text{for every witness difference } d .
-\]
-Three things about this deserve emphasis. First, it is why $P,Q$ must be opened
-\emph{hidingly}: a plain opening would put the opened rows of $P$ into $L$,
-shrinking $\ker L$ and un-covering claim-preserving directions. Second, the
-direction the inner stage cannot reach is not ``public''; it is an internal claim
-direction that the affine channel hides and that the outer stage carries --- see
-below. Third, the certificate must be the joint conditional form over the whole
-$P$-dependent transcript, not a per-coordinate check.
-
-\paragraph{Why the composition is triangular, not a sum of images.} An earlier
-version of this argument composed the randomizer channel and the $P\cdot Q$
-channel by adding their images. That step is invalid: adding images requires both
-channels to be additive maps on the transcript space, and the randomizer channel
-is certifiably \emph{bilinear} on exactly the round-pair coordinates it was
-needed for. The valid structure is triangular. Fix the outer masks $(u_B,Q)$; the
-transcript is then affine in the inner masks $(u_A,\mu,g,P)$. Quotient by the
-inner image and require the residual to be affine in the outer masks with a
-witness-independent linear part, with claim-equal witnesses' residues differing
-inside the outer image.
-
-\paragraph{The lincheck needs a channel of its own (amendment A2).} The
-randomizer rows of step~1 were believed to cover the lincheck's classes.
-Measurement on a real BLAKE3 statement says otherwise: with the zerocheck's
-own classes fully covered, the lincheck classes alone left one $\Fbig$
-direction of claim-preserving witness difference outside the mask image
-(image 9{,}728 of 10{,}240 bits). The fixture passes the same test because its
-witness is some $81\%$ randomizer rows; a real BLAKE3 witness is about
-$5.5\%$. Six candidate explanations --- the harness, the zerocheck classes,
-region alignment, the constant-wire pin, the randomizer budget, and a missing
-conditioning value --- were eliminated by measurement before the construction
-was touched; two of them by making the change, measuring no improvement, and
-reverting.
-
-The repair is a second channel, and it is \emph{not} a copy of the first. The
-zerocheck masks a product $\hat a\hat b$ of two witness-dependent
-multilinears, so its mask must live in the same degree-2 space and coverage of
-a witness direction inside that quadratic form is a rank condition to be
-certified. The lincheck's sumcheck instead has a \emph{public} multiplier
-$\mathrm{comb}$ and a \emph{linear} $z$-slot, so an additive shift suffices:
-run it on $z+\gamma_{lc}S$ for a witness-free $S$ committed before
-$\gamma_{lc}$, and recover the output claim with $\hat S(\rho)$ opened against
-$S$'s commitment. Every message of the layer is then a function of the shifted
-table alone --- the honest transcript of a shifted witness --- so the layer is
-masked outright rather than covered to a rank condition. Measured after the
-amendment: image $10{,}240$ of $10{,}240$ bits, and
-$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
-= \mathrm{rank}(\Delta\text{claim}) = 640$, i.e.\ nothing escapes.
-
-One caveat is worth stating precisely, because it is the difference between
-``masked'' and ``unconditionally masked''. The commitment scheme commits
-bit-valued data, so $S$ is Boolean and the reachable shift on the folded table
-is $\gamma_{lc}\sum_j \mathrm{eq}_j S[j,i]$ --- an $\Ftwo$-combination of the
-eq-table entries, drawn independently per slot. It covers all of $\Fbig$ per
-slot exactly when the eq table $\Ftwo$-spans the field, which is a property of
-the challenges and is therefore \emph{measured by the coverage certificate},
-not assumed. A field-valued mask would remove that step; a Boolean one does
-not.
-
-\begin{theorem}[Triangular composition; Lean~4, no \texttt{sorry}]\label{thm:tri}
-Let $T(w,u,b)=A_{w,b}u+g_{w,b}$ with $U$, $B$ finite. If
-(H1) $\Img A_{w,b}=V_0$ for all $w,b$;
-(H2) $\pi(g_{w,b})=\mathcal{B}(b)+d(w)$ in $V/V_0$ for an additive
-$\mathcal{B}$ independent of $w$; and
-(H3) $d(w)-d(w')\in\Img\mathcal{B}$ for claim-equal $w,w'$;
-then the joint distribution of $T$ over uniform $(u,b)$ is identical for $w$ and
-$w'$.
-\end{theorem}
-
-\begin{theorem}[Mixture with a bad set; Lean~4, no \texttt{sorry}]\label{thm:badset}
-If the per-$b$ distributions agree for every $b$ outside a set $\mathrm{Bad}$,
-then the mixtures over uniform $b$ are at statistical distance at most
-$|\mathrm{Bad}|/|B|$.
-\end{theorem}
-
-Theorem~\ref{thm:badset} is where $\erank$ formally lives: $\mathrm{Bad}$ is the
-set of mask draws for which the coverage above fails.
-
-\section{Certificates, certified configurations, and $\erank$}\label{sec:certificates}
-
-An \emph{exact $\Ftwo$ image-coverage certificate} extracts the true linear image
-of a mask channel by unit-probing every mask coordinate of the real prover and
-then decides membership by Gaussian elimination. It is exact in the image
-extraction; the witness-difference directions it tests are a structured
-spanning family plus random draws, and the challenge tuple is fixed per run.
-The PCS layer is additionally supported by two structural lemmas rather than by
-probing alone --- the low-half mask occupies the low degree-graded basis slots,
-so its map to opened symbols is surjective at every query set identically in the
-challenges, and every downstream value is $\Fbig$-linear in the blinded message.
-
-\paragraph{What the certificates establish.} All numbers below are measured on
-the real amended prover at the reduced-size fixture, whose complete algebraic
-transcript is 1532 field elements (548 witness-dependent, 983 mask-only, one
-derived). Amendments~A2 and~A3 both enlarged the mask-only class:
-$\sigma_{lc}$, $\hat S(\rho)$, $M_c(z)$, $h(z)$ and every value inside the
-$S$, $S_c$, $S_h$ hiding openings are conditioned on, so those channels are
-not credited with coverage they do not have.
-
-\begin{itemize}
-\item \textbf{H1 holds, and the degree-2 channel is what makes it hold.} The
-inner-mask image on the round-pair block spans the \emph{same} 2688-bit subspace
-at two different witnesses when the $P$ channel is active. With the channel
-disabled the image collapses to 768 of the block's 2816 bits — far too small to
-hide the block regardless of whether that residue happens to be
-witness-independent at a given fixture. So the constant-image hypothesis of
-Theorem~\ref{thm:tri} is not vacuous, and it is the degree-2 channel that
-discharges it.
-\item \textbf{The inner stage falls exactly one direction short, and it is the
-expected one.} The inner image covers 2688 of the block's 2816 bits; the missing
-128 bits are exactly the $\hat b$-side final evaluation, whose inner-mask
-derivative is identically zero. This is the coordinate that disproved an earlier
-flat-mixture argument. The outer ($u_B$) stage supplies it: the joint image is
-2816 of 2816 bits.
-\item \textbf{No claim-preserving witness direction escapes, on the round-pair
-class.} Conditioned on the complete mask-only leakage set and on \emph{every}
-public claim the verifier learns --- the ab-claim, the reduced evaluation
-$v=\hat z(r)$ that the opening proves, and the $\hat c$ claim, a 384-bit claim
-space that the witness-difference family saturates --- the residual of every
-tested difference modulo the joint image is determined by the claim.
-\item \textbf{The complete transcript is covered.} Over all 548
-witness-dependent coordinates of the complete A1$'$ transcript, at three
-challenge tuples, with the complete mask-only leakage set and every public
-claim conditioned on and the claim space saturated,
-$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
-= \mathrm{rank}(\Delta\text{claim})$: no claim-preserving witness direction
-escapes the joint image.
-\item \textbf{Four corrections were needed to get an interpretable verdict},
-and each had made earlier results uninterpretable rather than wrong in the
-safe direction. The criterion is capped by the number of sampled witness
-directions, so below the claim dimension it passes for free. The witness
-family must be genuinely linear. The PCS masks are \emph{field}-valued, so
-probing one bit per slot samples $1/128$ of that channel --- representing its
-image as an $\Fbig$-subspace instead is also what makes the certificate
-affordable. And $\shatv$ binds the randomizer sizing: slice $r$ sees only
-witness bits at positions $\equiv r \pmod{128}$, so the requirement is
-blocks $\times$ chunks $\ge 128$ \emph{with margin}; the residual
-concentrated in exactly that class at $1.5\times$ margin and vanished at
-$3\times$. Production BLAKE3 runs at $\sim\!12\times$.
-\item \textbf{The bad set is nonempty and delimited.} At a constant $Q$ the
-channel's image collapses from 2561 to 1281 bits --- it reaches the $G(1)$ half
-but not the degree-2 $G(\infty)$ half, which is precisely its reason for
-existing.
-\item \textbf{The detector is not vacuous.} Appending an unmasked witness
-functional to the transcript vector breaks the certificate; reusing one mask
-draw across two proofs exposes a deterministic witness functional that no
-draw can move, while fresh draws move every affine coordinate. Controls that
-are not \emph{coverage} controls for this block live with the test that owns
-the channel: no-$P$ breaks H1's constant-image hypothesis, a constant $Q$
-collapses the channel image, and withholding the PCS blinder fails the PCS
-layer's own rank audit.
-\item \textbf{Measured at the production configuration, not assumed.} At
-$m=22$ the degree-2 channel spans the round-pair block in full (4096 of 4096
-bits, by random-probe spanning through the real fold kernels, which can only
-under-estimate a rank); a degenerate $Q$ spans exactly half, so the
-measurement is not vacuous at that size either; the per-proof coverage
-self-check passes with no resampling and its proof verifies; and the
-randomizer margin that binds the $\shatv$ slices is $12\times$ the
-requirement there, against $3\times$ at the certified fixture.
-\end{itemize}
-
-\paragraph{A vacuity failure mode, and the guard against it.} The coverage
-criterion compares the rank of $[\text{residual}\mid\Delta\text{claim}]$ with the
-rank of $\Delta\text{claim}$. Both are capped by the number of sampled witness
-directions, so with fewer than $128$ directions --- the claim's bit dimension ---
-the equality can hold merely because no claim-preserving combination exists among
-the samples. An earlier certificate in this line of work used $40$ and is vacuous
-by this measure. The certificates here assert claim saturation before any verdict
-is recorded.
-
-\begin{table}[t]
+\begin{table}[h]
 \centering\small
 \begin{tabular}{@{}llll@{}}
 \toprule
-\textbf{Configuration} & \textbf{$m$} & \textbf{Role} & \textbf{Certificate status} \\
+Family & Public input & Circuit / PCS & ZK status \\
 \midrule
-BLAKE3 batch, $2^8$ compressions & 22 & the production certified config & gated; structural transfer \\
-Reduced masked-identity fixture & 16 & complete-transcript joint certificate & checked \\
+BLAKE3 batch & batch size 256 & $m=22$, rate $1/2$, batch log 6 & computational ZK \\
+BLAKE3 preimage & 256 digests & $m=22$, rate $1/2$, batch log 6 & computational ZK \\
 \bottomrule
 \end{tabular}
-\caption{Certified configurations. The zero-knowledge API refuses any
-configuration not listed here, matching on protocol version, circuit digest,
-layout digest, transcript-schema version, field representation, fold order,
-endianness, PCS parameters, and batch size.}
-\label{tab:configs}
 \end{table}
 
-\paragraph{$\erank$, honestly.} A previous version of this argument bounded
-$\erank$ by Schwartz--Zippel over ``uniform mask entries in $\Fbig$''. That bound
-is withdrawn. The implemented $P,Q$ are \emph{Boolean} --- one bit per cube entry
---- so the entries range over $\{0,1\}$, where Schwartz--Zippel at these degrees
-is vacuous; the bound also conflated a single entry's degree with a
-$2304\times2304$ determinant's, and took the probability over a different
-variable set from the one the degree was counted in. What replaces it is a
-per-proof check: the marginal coverage of the round-pair block is an $\Ftwo$
-rank condition on data the prover already has, so the prover verifies it for
-its own draw and resamples the complete mask set on failure (the conditional
-accounting --- conditioning on the leaked mask functionals removes exactly the
-public-claim direction --- is established at the certificate level and
-composes with it). The failure event depends only on the mask draw and the
-challenges --- not on the witness directly. One caveat is stated rather than
-assumed: under Fiat--Shamir the challenges are derived from the witness
-\emph{commitment}, so the event's witness-independence is \emph{computational},
-resting on the commitment's hiding in the ROM --- the same step the
-Fiat--Shamir lift already relies on, recorded as an explicit lemma obligation
-for the composed theorem. Under that assumption, resampling leaks nothing.
-Consequently $\erank = 0$ for every emitted proof,
-and what remains unquantified is the resample probability --- a liveness
-quantity, not a privacy one. A closed-form bound over Boolean masks remains open.
-(Had $P,Q$ been drawn from $\Fbig$ instead, a corrected Schwartz--Zippel argument
-would apply and give roughly $2^{-109}$ at production size; that variant is not
-what is implemented.)
+The preimage family covers one full BLAKE3 hash of exactly 64 bytes.  Its R1CS
+pins the IV, counter, block length, and \texttt{CHUNK\_START},
+\texttt{CHUNK\_END}, and \texttt{ROOT} flags.  SHA-256, Keccak, longer BLAKE3
+messages, chains, Merkle-path statements, recursion, side channels, and the
+QROM are out of scope.  No claim in this note transfers to those cases.
 
-\section{Soundness of the amendment}\label{sec:soundness}
+\paragraph{Mandatory separation of claims.}
+``Computational ZK'' describes witness hiding.  ``Knowledge security''
+describes extraction.  The shipped standalone profile may be described as
+\emph{100-bit conjectured classical knowledge security}; its theorem column
+must remain 55.994 bits at $Q=2^{64}$.  Section~\ref{sec:knowledge} gives the
+three permitted knowledge profiles.
 
-Privacy and soundness are argued separately here, and neither is used to justify
-the other.
-
-\begin{lemma}[$\gamma$-batching]\label{lem:gamma}
-Completeness: for an honest prover both claims telescope through the same round
-schedule, so the final check holds identically. Soundness: with all prover
-messages fixed, the verifier's final residual is affine in $\sigma_z$ with slope
-$\gamma\prod_j(1+\rho_j)/(1+r_{\mathrm{eq},j})$; writing $\delta$ and $\delta'$
-for the two sides' defects, acceptance requires $\delta+\gamma\delta'=0$. For
-$(\delta,\delta')\ne 0$ at most one $\gamma$ satisfies this, so a prover who must
-fix the defects before seeing $\gamma$ succeeds with probability at most
-$2^{-128}$, on top of the unchanged sumcheck error.
-\end{lemma}
-
-The ordering supplies the ``before'': the $P,Q$ commitments and $\sigma_z$ are
-absorbed into the transcript before $\gamma$ is sampled (Figure~\ref{fig:overview}).
-This is checked constructively rather than asserted: on an invalid witness we
-measure the affine response, solve for the unique $\sigma_z$ that cancels the
-defect, and observe that the patched proof is accepted when the challenge is
-fixed in advance --- the ordering attack is real --- and rejected under
-Fiat--Shamir and at a hundred further challenge tuples. Knowledge soundness is
-unchanged: mask columns satisfy no real constraint, so every accepting extended
-witness restricts to a valid original one, and the extractor runs on the
-real-wire sub-witness unmodified.
-
-\section{Assumptions, Fiat--Shamir, and the leakage boundary}\label{sec:assumptions}
-
-\begin{assumption}[Sibling hiding]
-Model the leaf hash as a random oracle, or assume it is pseudorandom on
-high-min-entropy inputs. Each level-0 leaf carries its 64 blinder lane symbols,
-i.e.\ $8192$ bits of fresh randomness; conditioning on all revealed data leaves
-each unopened leaf with min-entropy $\kmin\ge 8192-512$ bits, so an unopened
-sibling hash is distinguishable from uniform with advantage at most
-$\ehash \le q\cdot 2^{-\kmin}$ over $q$ queries.
+\begin{assumption}[Classical programmable random oracle]\label{ass:rom}
+SHA-256, used with the injective frames in Section~\ref{sec:ro}, is modelled as
+a classical random oracle.  The simulator may program fresh, previously
+unqueried points.  Collision resistance and pseudorandomness hide unopened
+Merkle leaves and siblings.  Quantum queries are excluded.
 \end{assumption}
 
-This is stated, not derived from collision resistance; collision resistance gives
-binding, not hiding.
+\section{The relation and protocol}\label{sec:protocol}
 
-The interactive argument is public-coin and the simulator of
-Lemma~\ref{lem:reduction} is non-programming, so the Fiat--Shamir lift needs no
-oracle programming and no rewinding: the same $\mathsf{S}$ is the NIZK simulator
-in the classical ROM with the same error. Proof-of-work grinding and challenge
-derivation are ordinary parts of the transcript $\mathsf{S}$ itself produces.
+Let $z$ be the packed binary assignment for the block-diagonal BLAKE3 R1CS,
+embedded into $\K$.  The prover establishes
+\[
+  (Az)\circ(Bz)=Cz
+\]
+with Flock's zerocheck and lincheck, then opens the committed vector using the
+ring-switched Ligerito PCS.  In the fixed-digest family the verifier also
+derives a packed-direct opening claim from the public digest list.  The list,
+padding policy, witness layout, and circuit matrices are transcript-bound
+before the first challenge.
 
-The transcript is allowed to reveal, and reveals only: the statement digest, the
-batch size, proof size and parameter selection, the Fiat--Shamir challenges,
-proof-of-work nonces, query positions, and the accepted claim as a constrained
-quantity. Everything else is either covered by a mask image or computationally
-hidden. Timing, retry counts, memory access patterns and error messages are side
-channels and are out of scope.
+The zero-knowledge prover adds independent randomizer rows and four committed
+mask sources: the field-valued zerocheck mask $P$, the lincheck mask $S$, and
+the round-one masks $S_c,S_h$.  The witness commitment and each mask
+commitment use independent $\mu$ and $g$ hiding randomness.  All streams,
+including the proof nonce, are forks of one per-proof DRBG under distinct
+labels.
 
-\section{Performance}\label{sec:perf}
+The zerocheck mask is
+\[
+  \gamma P(X)Q^\star(X),
+  \qquad
+  Q^\star(X)=q_0+\sum_j q_jX_j,
+\]
+where $P$ is uniform over $\K$ on a translated subcube of the top
+$d_{\log}=12$ variables and $Q^\star$ is protocol-fixed, public, affine, and
+nonzero on every Boolean cube point.  This replaces the withdrawn construction
+with two Boolean masks $P,Q$.  There is no $Q$ commitment, opening, final
+evaluation, or mask-randomness fork in protocol \texttt{flock-zk-fv-v3}.
 
-Two panels, deliberately not combined. Panel~(a) is the optimized pipeline,
-which carries \emph{no} zero-knowledge claim and is measured only to show what
-the mask species cost in a tuned implementation. Panel~(b) is the reference
-amended prover, the object of the claim, which uses naive round-pair kernels by
-design and is not optimized.
+\section{One framed random oracle}\label{sec:ro}
 
-\begin{table}[h]
-\centering\small
-\textbf{(a) Optimized pipeline --- \emph{not} ZK-certified, excluded from the claim}\\[2pt]
-\begin{tabular}{@{}rrrrrrrr@{}}
-\toprule
-batch & $m$ & base prove & zk prove & prove $\times$ & verify $\times$ & size $\times$ & zk size \\
-\midrule
-1{,}024  & 24 & 5.5\,ms  & 12.4\,ms  & 2.24 & 0.98 & 1.82 & 526\,KiB \\
-4{,}096  & 26 & 11.7\,ms & 36.9\,ms  & 3.16 & 1.03 & 1.72 & 553\,KiB \\
-16{,}384 & 28 & 34.0\,ms & 134.4\,ms & 3.95 & 1.02 & 1.65 & 592\,KiB \\
-\bottomrule
-\end{tabular}
+Every hash point begins with a disjoint role byte.  Merkle points additionally
+bind protocol version, proof nonce, commitment channel, recursion depth, node
+level, node index, payload length, and payload.  Proof-of-work points are
+\[
+  \texttt{ROLE\_POW}\parallel\textit{state}\parallel\textit{nonce}.
+\]
+Fiat--Shamir absorbs the 32-byte proof nonce immediately after the statement
+and before any challenge.  Native hashing and external recording/programming
+backends consume identical frames and return byte-identical answers when no
+point is programmed.
 
-\vspace{8pt}
-\textbf{(b) A1$'$ reference prover --- the object of the claim, unoptimized by design}\\[2pt]
-\begin{tabular}{@{}rrrrrr@{}}
-\toprule
-batch & $m$ & witness gen & prove & verify & (non-zk \texttt{prove\_fast}) \\
-\midrule
-256 & 22 & 0.5\,ms & 34.4\,ms & 6.0\,ms & 3.9\,ms \\
-\bottomrule
-\end{tabular}
-\caption{Best of 5 runs after a verified warm-up, 12 threads, Apple silicon,
-at the source revision on the title page. The two panels measure
-\emph{different pipelines} and must not be compared: panel~(b) uses naive
-round-pair kernels and performs six hiding commitments and six hiding
-openings, where panel~(a) uses the fused kernels and one of each. The
-reference path is $8.8\times$ the non-zk fused prover at the same batch size;
-that ratio is an artefact of the reference implementation, not a cost of
-zero-knowledge. The two amendments account for the growth:
-$20.0\rightarrow22.8$\,ms (A2) $\rightarrow34.4$\,ms (A3) of proving, and
-$4.3\rightarrow4.5\rightarrow6.0$\,ms of verification --- three more
-full-size commitments and openings. All three are larger than their channels
-need. $S$ masks only the length-$2^{k_{\log}}$ folded table (4{,}096 entries
-here, against $2^{22}$), and $S_c,S_h$ enter only through their round-1
-messages, $2^{k_{\mathrm{skip}}}=64$ field elements each. Committing over
-those domains instead of the full cube would cut the added cost by orders of
-magnitude. It is left unoptimized on purpose, per the ordering this work
-follows --- correctness first, cost second --- and the panel reports what the
-reference path actually costs rather than what a tuned one would. With the
-per-proof mask-coverage check enabled (\S\ref{sec:certificates}) the
-reference prover additionally pays thousands of fold passes per proof, which
-is why that check is opt-in.}
-\end{table}
+These frames serve three purposes.  First, the Merkle extractor can recognize
+every witness leaf query without relying on observation order.  Second,
+simulator programming cannot alias a leaf, internal node, transcript squeeze,
+or proof-of-work query.  Third, reusing a proof across nonces, commitment
+channels, or recursive depths changes every relevant oracle point.  Scalar and
+four-way SIMD midstate implementations are tested against the one-shot
+definition for every tail shape.
 
-\section{Related work}\label{sec:related}
+\section{Symbolic PIOP coverage}\label{sec:s2}
 
-The randomizer rows are the ethSTARK randomizer-trace idea transplanted to a
-batch-R1CS PIOP~\cite{ethSTARK}; the hiding opening follows Ligero/Ligerito-style
-masking~\cite{Ligerito}; the degree-2 $P\cdot Q$ channel is the
-Chiesa--Forbes--Spooner masking-polynomial idea~\cite{CFS17} rebuilt to survive
-characteristic~2, where the classical separable mask vanishes over the cube.
-Diamond~\cite{Diamond25} gives a zero-knowledge polynomial commitment over binary
-fields; whether it could replace the hiding opening --- removing $\mu$ and $g$
---- is open and worth settling. What is new here is the reduction of
-\S\ref{sec:relation}, the triangular composition of \S\ref{sec:channel}, and the
-exact conditional image-coverage methodology of \S\ref{sec:certificates}.
-Flock itself is described in~\cite{Flock}; the ring-switching front end follows
-\cite{DP24}.
+Fix the challenges after the commitment.  Let $R$ map the coefficients of $P$
+to the $2n$ zerocheck round-message coordinates, and let $L$ map them to the
+two mask values revealed later: the initial masked claim and $P(\rho)$.  For a
+fixed leakage value the available displacement is $R(\ker L)$.
 
-\section{Theorem dependency roadmap}\label{sec:roadmap}
+\begin{theorem}[Conditioned field-mask coverage]\label{thm:coverage}
+For $m\in\{13,15,22\}$, the emitted symbolic matrix satisfies, outside its
+selected minor's zero set,
+\[
+  \begin{gathered}
+    \rank\begin{bmatrix}R\\L\end{bmatrix}=2n,
+    \qquad \rank L=2,\\
+    \dim R(\ker L)=2n-2.
+  \end{gathered}
+\]
+At the production shape $m=22$, the selected determinant has total degree at
+most 720 in the $32$ challenge variables.  Uniform challenges therefore give
+\[
+  \Pr[\text{coverage failure}]\le \frac{720}{2^{128}}
+  <2^{-118.508}.
+\]
+\end{theorem}
 
-\begin{table}[h]
-\centering\small
+The implementation derives both the concrete and symbolic matrices from the
+same generic round kernels.  \texttt{SymScalar} has three backends: concrete
+$\K$ evaluation, conservative per-variable tropical degree bounds, and exact
+sparse multivariate polynomials for toy instances.  It deliberately exposes no
+inversion operation.  Thus challenge-dependent denominators cannot silently
+enter the polynomial calculation.
+
+The S2 JSON artifact pins the selected rows, columns, nonzero determinant
+evaluations, and degree vectors.  One Lean adapter instantiates Mathlib's
+sum-of-per-variable-degree Schwartz--Zippel theorem; another proves the
+bad-set mixture step.  This theorem covers the field-mask block; it does not
+by itself claim PCS opening privacy.
+
+\section{PCS replacement and entropy}\label{sec:s3}
+
+Write the initial hiding commitment's combined vector as
+\[
+  F=(\mu\parallel z)+c\,g,
+\]
+where $c\in\K$ is transcript-derived.  For any claim-preserving witness
+difference $d$ and $c\ne0$, the translator sets
+\[
+  \delta g_{\mathrm{top}}=c^{-1}d
+\]
+so that $\delta F_{\mathrm{top}}=0$.  It solves the selected initial-level
+encoding equations for $\delta\mu$ and takes
+$\delta g_{\mathrm{lo}}=c^{-1}\delta\mu$, making every opened initial wide row
+identical as well.  Characteristic two removes sign distinctions in these
+equalities.
+
+The production opening makes 218 initial-level queries while each lane has
+512 independent mask symbols.  After conditioning on an opened wide leaf, at
+least 16,384 bits remain.  Since $\delta F=0$ globally, every recursive
+codeword, root, sibling, sumcheck value, and out-of-domain sample is identical;
+no recursive entropy charge is needed.  The only algebraic exceptional event
+is $c=0$, with probability $2^{-128}$.
+
+The implementation exhaustively destructures all opening proof fields into a
+12-category manifest.  Adding a proof field without classifying it is a compile
+failure.  The exact translator is differentially tested against the shipped
+NTT and wide interleaving.  The pinned artifacts are
+\texttt{s3\_opening\_functionals.json} and
+\texttt{s3\_minentropy\_table.json}.
+
+\section{The sealed simulator game}\label{sec:simulation}
+
+The simulator accepts a capability \texttt{SealedStatement} whose private
+fields contain only the setup and public digests; its function type cannot
+name a witness or preimage.  In one pass it constructs a trace for unrelated
+messages, overwrites the public-output region, samples the zerocheck terminal
+values, and solves the dependent messages.  The patched trace is not a valid
+R1CS witness, and the honest prover run on it is rejected.  Nevertheless, after
+programming the required fresh oracle points, the unmodified production
+verifier accepts the simulated proof.
+
+The executable game ledger consists of:
+\begin{center}
+\small
 \begin{tabular}{@{}lll@{}}
 \toprule
-\textbf{Result} & \textbf{Feeds} & \textbf{Established by} \\
+Game & Change & Charged term \\
 \midrule
-Masking (Thm.~\ref{thm:mask}) & affine classes & Lean~4, machine-checked \\
-Triangular composition (Thm.~\ref{thm:tri}) & joint WI & Lean~4, machine-checked \\
-Bad-set mixture (Thm.~\ref{thm:badset}) & $\erank$ accounting & Lean~4, machine-checked \\
-H1 / conditional coverage & hypotheses of Thm.~\ref{thm:tri} & exact certificate (measured) \\
-A2 batching soundness & lincheck amendment & Lemma~\ref{lem:gamma} transplanted; tested \\
-A2 output-claim recovery & PCS binding to $\hat z$ & proved; tested end to end \\
-eq-table $\Ftwo$-span (A2) & Boolean mask reaches $\Fbig$ & measured, not derived \\
-Round-1 soundness preserved (A3) & masked round 1 & mask pair sums to a multiple of $V_S$; tested \\
-Real-statement joint coverage & WI on the production family & exact certificate, PIOP classes (measured) \\
-Full-transcript WI & Lemma~\ref{lem:reduction} & theorem + checked certificate, per Table~\ref{tab:configs} \\
-Self-generated-witness simulation & classical-ROM ZK & proved here (Lemma~\ref{lem:reduction}) \\
-Sibling hiding & classical-ROM ZK & assumed \\
-Classical-ROM ZK & the headline claim & proved, conditional on the rows above \\
+$G_0$ & honest proof & 0 \\
+$G_1$ & translate PIOP masks & $720/2^{128}$ \\
+$G_2$ & translate $\mu,g$ & $\Pr[c=0]+\varepsilon_{\rm solve}$ \\
+$G_3$ & replace hidden Merkle leaves & $\varepsilon_{\rm sibling}+\varepsilon_{\rm hash}$ \\
+$G_4$ & pre-sample and program challenges & $\varepsilon_{\rm prequery}+\varepsilon_{\rm prefix}$ \\
+$G_5$ & sealed one-pass simulator & degenerate-challenge terms \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{center}
 
-Reading the table: everything above the ``assumed'' line is either
-machine-checked or computed. Three items are not proved, and they are of
-different kinds. The ROM assumption is a stated cryptographic assumption. The
-composition hypotheses and the eq-table span are \emph{measured at certified
-configurations} rather than derived for all parameters. The real-statement row is a
-certificate over the PIOP classes at a sampled challenge tuple, not a
-closed-form theorem, and the complete transcript at production size is
-covered by the fixture certificate plus structural transfer rather than
-directly.
+At $Q=2^{64}$ adversarial oracle queries and at most 18 programmed points, the
+prequery term has 187.830 bits, the initial sibling term has more than 16,300
+bits, and the symbolic rank term has 118.508 bits.  Summing the listed terms
+gives 118.502 bits before conventional hash-collision terms.
 
-\section{Limitations}\label{sec:limitations}
+\begin{theorem}[Scoped computational zero knowledge]\label{thm:zk}
+Assume the classical programmable-RO model, Theorem~\ref{thm:coverage}, the PCS
+translator and entropy bounds of Section~\ref{sec:s3}, and freshness of the
+programmed points.  Then the registered fixed-digest profile is computationally
+zero knowledge, with distinguishing advantage bounded by the sum of the six
+game terms above.  The registered free-batch profile follows as the easier
+self-generated-witness special case.
+\end{theorem}
 
-\begin{itemize}
-\item \textbf{Unsupported statement families.} SHA-256, Keccak, hash chains, and
-Merkle-path statements have no zero-knowledge mode. Chains are excluded on
-principle: they bind public endpoints, which breaks Lemma~\ref{lem:reduction}.
-\item \textbf{Unsupported parameters.} Only the configurations of
-Table~\ref{tab:configs}. Others are refused by the API rather than proved.
-\item \textbf{$\erank$.} Zero per emitted proof by construction (the per-proof
-check), but the resample probability has no closed-form bound over Boolean masks.
-\item \textbf{The real-statement certificate passes, after two amendments
-that measurement forced.} The criterion is usable on the hash statement
-family --- a \emph{pass} is sound even without a linear witness sub-family,
-since every genuine claim-equal pair is among the combinations it quantifies
-over --- so it was run directly on a real BLAKE3 batch statement ($m=20$, 64
-blocks), restricted to the PIOP coordinate classes so the image could be
-saturated. Measured: the inner stage spans 30{,}336 of 30{,}464 bits, the
-outer species completes it to $30{,}464/30{,}464$, and with the claim space
-saturated at 640 bits over 768 real witness pairs,
-$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}]
-= \mathrm{rank}(\Delta\text{claim}) = 640$.
+This is a classical-ROM theorem.  It is neither a QROM result nor a claim that
+SHA-256 is an information-theoretic random oracle.
 
-It did not start there, and the history is the substance of this item.
-Initially the image spanned 22{,}272 of 30{,}464 bits and
-$\mathrm{rank}[\text{residual}\mid\Delta\text{claim}] = 768$ --- one $\Fbig$
-direction of claim-preserving witness difference unaccounted for, carried by
-\texttt{zerocheck.round1\_c}, \texttt{lincheck.rounds} and
-\texttt{lincheck.z\_partial}. Six candidate explanations were eliminated by
-measurement rather than by argument --- the harness (a methodological control
-on the synthetic fixture), the zerocheck's other classes, region alignment
-(lemma~L3), the constant-wire pin, the randomizer budget ($2.3\times$ the
-entropy in the covering species: built, measured, identical, reverted), and
-the conditioning hypothesis (adding $\hat a(\rho),\hat b(\rho)$ to the claim
-set: no change). Only then was the construction changed. A2 took the lincheck
-classes from $9{,}728/10{,}240$ with 128 bits escaping to $10{,}240/10{,}240$
-with none; A3 took the zerocheck classes from $12{,}032/20{,}224$ to
-$20{,}224/20{,}224$.
+\section{Extraction and simulation extractability}\label{sec:extract}
 
-Two methodological points survive the fix and are worth more than the result.
-First, the escape was \emph{joint, not marginal}: \texttt{round1\_c} passed in
-isolation at $8{,}192/8{,}192$ the entire time. Full projection onto a class
-only means every target on that class is matched by \emph{some} image vector,
-which is free to be wrong on every other class --- the two-dimensional example
-of \S\ref{sec:channel} occurring in the protocol. Per-class certificates do
-not compose into a joint one, here or anywhere else in this development.
-Second, the assumption that broke was never stated as an assumption: the
-randomizer rows were \emph{believed} to cover the affine classes, and on the
-synthetic fixture (some $81\%$ randomizer rows against a real witness's
-$5.5\%$) they do. A certificate run only on the vehicle would have reported
-success indefinitely.
+The point-oracle recorder observes all framed leaf queries made while building
+the witness commitment.  For a complete valid codeword it reconstructs the
+interleaved word, applies the inverse NTT lane by lane, re-encodes the candidate,
+checks the configured unique-radius inequality, and returns the witness half;
+the low mask and blinder lanes are separate outputs.  The system-specific
+extractor then reads exactly the 512 message bits of each instance and checks
+\[
+  \operatorname{BLAKE3}(x_i)=y_i
+\]
+with the external \texttt{blake3} implementation.  This final check refers to
+no circuit wire or proof claim.  Honest recorded commitments recover the real
+preimages; the simulator's commitment fails extraction.
 
-Probing is random rather than exhaustive and the codomain is restricted to the
-PIOP classes, so what this certifies is membership in a \emph{spanned} image
-over those classes at the sampled challenge tuple. The complete transcript,
-including the PCS-opening coordinates, is certified at the reduced fixture
-(next item), not at production size.
-\item \textbf{Certificate scope.} Certificates are computed at the reduced
-fixture; transfer to production size rests on structural identity of the maps,
-not on a production-size full-support probe.
-\item \textbf{Challenge tuples.} Certificates are computed at sampled fixed
-tuples, including tuples replayed from real Fiat--Shamir transcripts. Coverage
-for all tuples is not established.
-\item \textbf{Optimized-prover equivalence.} Not established. The optimized
-prover runs an un-amended zerocheck and is outside the claim; making it
-equivalent is a differential-testing task, not a proof.
-\item \textbf{ROM assumption.} Sibling hiding is assumed, not derived.
-\item \textbf{Independent review.} None has been performed. The review dossier
-accompanying this note is the intended entry point.
-\item \textbf{Side channels and QROM.} Out of scope; no claims.
-\end{itemize}
+The executable decoder is a straight-line candidate validator and exact-word
+decoder, not a complete Reed--Solomon error-correction implementation for every
+received word within the theoretical radius.  The general noisy-word step is
+therefore supplied by the Ligerito proximity/unique-decoding theorem, not by a
+claim that the current routine corrects arbitrary errors.
 
-\appendix
-\section{Implementation map}\label{app:impl}
+For simulation extractability, the simulator records the prefix
+\[
+  (\textit{statement digest},\textit{proof nonce},\textit{protocol version}).
+\]
+Extraction is allowed only on a fresh prefix and refuses a prefix returned by
+the simulation oracle.  This is \emph{fresh-prefix weak simulation
+extractability}.  Same-prefix simulation extractability and straight-line
+random-beacon-resistant knowledge are not claimed.
+
+\section{Knowledge security profiles}\label{sec:knowledge}
+
+The interactive opening has an L0 fold access-structure term at least
+$257/2^{128}$, corresponding to 119.994 bits.  The classical Fiat--Shamir
+knowledge reduction charges $(Q+1)\kappa_\Gamma$.  At $Q=2^{64}$, this term
+alone limits the standalone theorem to
+\[
+  128-\log_2 257-64 = 55.994\text{ bits}.
+\]
+This loss is classical, not post-quantum.
 
 \begin{table}[h]
 \centering\small
-\begin{tabular}{@{}lll@{}}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.28\linewidth}>{\raggedright\arraybackslash}p{0.17\linewidth}>{\raggedright\arraybackslash}p{0.43\linewidth}@{}}
 \toprule
-\textbf{\S\ref{sec:overview} step} & \textbf{Entry point} & \textbf{Evidence} \\
+Profile & Provable bits & Required label \\
 \midrule
-1 & \texttt{ZkBlockLayout}, \texttt{write\_zk\_randomizers} & \texttt{statement\_digest\_binds\_zk\_layout} \\
-2, 3 & \texttt{pcs::commit::commit\_zk} & \texttt{commit\_zk\_matches\_wide\_oracle} \\
-4--6 & \texttt{zerocheck::prove\_packed\_padded\_zk} / \texttt{verify\_zk} & \texttt{zk\_invalid\_witness\_rejected}, \texttt{verify\_zk\_rejects\_mutations} \\
-5 & Fiat--Shamir ordering & \texttt{zk\_gamma\_cancellation\_unique\_and\_fs\_ordering} \\
-8 & \texttt{pcs::open\_zk\_blinded} & \texttt{zk\_pq\_hiding\_open\_roundtrip} \\
-all & \texttt{Blake3Setup::prove\_zk\_a1} / \texttt{verify\_zk\_a1} & \texttt{zk\_a1\_soundness.rs} (tamper matrix) \\
---- & \texttt{transcript\_schema} & \texttt{zk\_transcript\_schema.rs} \\
---- & \texttt{zk\_certificate} (API gate) & \texttt{zk\_certificate\_digest\_matches\_setup} \\
-\S\ref{sec:certificates} & \texttt{zk\_joint\_certificate.rs} & H1, coverage, negative controls \\
-\S\ref{sec:relation} & \texttt{zk\_simulator.rs} & translation-exactness test \\
-\S\ref{sec:channel} & \texttt{lean/Flockzk/MaskingTriangular.lean} & \texttt{scripts/lean-axioms.sh} \\
+Standalone FS over $\F_{2^{128}}$ & 55.994 at $Q=2^{64}$ & 100-bit conjectured classical knowledge security \\
+Unbiased post-commitment beacon over $\F_{2^{128}}$ & 119.994 & provable 100-bit; not standalone \\
+Standalone FS with challenge-only $\F_{2^{256}}$ & 183.994 at $Q=2^{64}$ & engineering follow-up; machinery not implemented \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-\section{Reproduction}\label{app:repro}
+The repository pins both the interactive and post-Fiat--Shamir columns in
+\path{docs/artifacts/knowledge-ledger.json}.  Running
+\path{scripts/knowledge-ledger.py} with \texttt{--check} regenerates and
+compares them.
+Grinding, a small-$Q$ convention, generic parallel repetition, or omitting an
+individual fold challenge does not repair the standalone bound.
 
+\section{Implementation, reproduction, and limits}\label{sec:implementation}
+
+The wire protocol is \texttt{flock-zk-fv-v3}; proof I/O version 6 and transcript
+schema version 5 bind the proof nonce, framed oracle domains, and P-only mask
+schema.  The exact registered circuit digests are:
 \begin{verbatim}
-cargo test  --release --workspace --features zk        # fast suite
-scripts/zk-certify.sh                                  # exact certificates
-cd lean && lake build && cd .. && scripts/lean-axioms.sh
-ZKB_LOG2S=10,12,14 ZKB_RUNS=5 \
-  cargo bench --features zk --bench zk_vs_baseline     # panel (a)
-ZKA1_NS=256 ZKA1_RUNS=5 \
-  cargo bench --features zk --bench zk_a1_reference    # panel (b)
+BLAKE3 batch:
+4a398ca2e73d9d1f70611bd6a2a408b0404aabddcf6cf75c29cfa412f72f8423
+BLAKE3 fixed digest:
+e71bde2b053b1b697412d2d30c2e2e57f7b5f1822484fcbcc15c89ea202890d5
 \end{verbatim}
 
-See \texttt{docs/review-dossier.md} for the full evidence index, exact bounds,
-security-sensitive function list, and revision hashes.
+The certification command is fail-fatal and rejects zero-test filters:
+\begin{verbatim}
+rustup override set stable
+scripts/zk-certify.sh
+cargo test --release --workspace --features zk,symbolic
+cargo clippy --workspace --all-targets --features zk,symbolic -- -D warnings
+cd lean && lake build
+\end{verbatim}
+It replays the symbolic artifacts, transcript schema, RO framing, production
+rank gates, simulator, extractor, fixed-digest and batch roundtrips, Lean
+adapters, knowledge ledger, and the ban on direct SHA-256 calls outside the two
+reviewed oracle modules.  Certificate evidence names are compared with script
+test names in both directions.
+
+The following limitations remain material:
+\begin{itemize}
+\item The proof relies on the classical programmable-RO abstraction and has no
+QROM analysis.
+\item The knowledge reduction does not prove 100 standalone bits over
+$\F_{2^{128}}$; the precise label in Section~\ref{sec:knowledge} is mandatory.
+\item The executable decoder validates a candidate but does not implement a
+complete arbitrary-error RS decoder.
+\item Only 64-byte BLAKE3 preimages and the two exact registry entries are
+enabled.  Other Flock statement families remain non-zk.
+\item Side-channel resistance, recursive composition, and same-prefix
+simulation extractability are out of scope.
+\item The construction and proof have not received independent cryptographic
+review.  The executable evidence is a reproducibility aid, not a substitute
+for review.
+\end{itemize}
+
+Subject to these limits, the implementation now has the object absent from the
+earlier drafts: a public-statement-only simulator whose output is accepted by
+the unmodified verifier, together with a symbolic distribution argument and a
+fail-closed registry for the exact deployed shapes.  That is the scope in which
+Flock is zero knowledge.
 
 \begin{thebibliography}{9}
-\bibitem{CFS17} A. Chiesa, M. Forbes, N. Spooner. \emph{A Zero Knowledge Sumcheck
-and its Applications}. ePrint 2017/305.
-\bibitem{Ligerito} Ligerito: a small and concretely fast polynomial commitment
-scheme. ePrint 2025/1187.
+\bibitem{BCS} E. Ben-Sasson, A. Chiesa, N. Spooner. \emph{Interactive Oracle
+Proofs}. TCC 2016 / IACR ePrint 2016/116.
+\bibitem{CFS17} A. Chiesa, M. Forbes, N. Spooner. \emph{A Zero Knowledge
+Sumcheck and its Applications}. IACR ePrint 2017/305.
+\bibitem{Ligerito} \emph{Ligerito: a small and concretely fast polynomial
+commitment scheme}. IACR ePrint 2025/1187.
 \bibitem{DP24} B. Diamond, J. Posen. \emph{Polylogarithmic Proofs for
-Multilinears over Binary Towers}. ePrint 2024/504.
-\bibitem{Diamond25} B. Diamond. \emph{A Zero-Knowledge Polynomial Commitment
-Scheme over Binary Fields}. ePrint 2025/1015.
-\bibitem{ethSTARK} StarkWare. \emph{ethSTARK Documentation}. ePrint 2021/582.
+Multilinears over Binary Towers}. IACR ePrint 2024/504.
 \bibitem{Flock} Succinct Labs. \emph{Flock}.
 \url{https://github.com/succinctlabs/flock}.
 \end{thebibliography}
