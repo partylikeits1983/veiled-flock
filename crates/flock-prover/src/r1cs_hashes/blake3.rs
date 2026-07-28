@@ -1726,8 +1726,8 @@ impl Blake3Setup {
     /// Gated: refuses any configuration without a matching
     /// [`crate::zk_certificate::ZkCertificate`]. Owns the whole mask
     /// lifecycle from a single per-proof DRBG — witness randomizer rows plus
-    /// the forks `prove_r1cs_zk_a1` makes for `P`, `Q`, A2's `S`, A3's
-    /// `S_c`/`S_h`, and the six hiding commitments — so every mask channel
+    /// the forks `prove_r1cs_zk_a1` makes for `P`, A2's `S`, A3's
+    /// `S_c`/`S_h`, and the five hiding commitments — so every mask channel
     /// the certificates reason about is sampled here, independently and
     /// domain-separated.
     ///
@@ -2778,8 +2778,8 @@ mod tests {
 
     /// **Z10: end-to-end A1′ reference prover/verifier on a real BLAKE3 zk
     /// statement.** Generates a real zk witness (with randomizer rows), runs
-    /// `prove_r1cs_zk_a1` (masked zerocheck â·b̂+γ·P·Q + hiding P,Q openings at
-    /// ρ + the hiding witness opening), and verifies through
+    /// `prove_r1cs_zk_a1` (masked zerocheck a*b+gamma*P*Q-star plus the hiding
+    /// P and witness openings), and verifies through
     /// `verify_r1cs_zk_a1`. Confirms the full amended pipeline produces an
     /// accepting proof; fresh masks give a different transcript that still
     /// verifies; tampering `P(ρ)`, `σ_z`, or a masked round message is
@@ -2858,6 +2858,10 @@ mod tests {
             &mut chv2,
         )
         .expect("fresh-mask A1′ proof must verify");
+        assert_ne!(
+            proof.proof_nonce, proof2.proof_nonce,
+            "the per-proof RO nonce must be fresh"
+        );
         assert_ne!(comm.root, comm2.root, "fresh witness mask ⇒ fresh root");
         assert_ne!(
             proof.zerocheck.final_p_eval, proof2.zerocheck.final_p_eval,
@@ -2865,12 +2869,13 @@ mod tests {
         );
 
         // Tamper rejection.
-        for t in 0..3 {
+        for t in 0..4 {
             let mut bad = proof.clone();
             match t {
                 0 => bad.zerocheck.final_p_eval.lo ^= 1,
                 1 => bad.zerocheck.mask_init.lo ^= 1,
-                _ => bad.zerocheck.multilinear_rounds[2].1.lo ^= 1,
+                2 => bad.zerocheck.multilinear_rounds[2].1.lo ^= 1,
+                _ => bad.proof_nonce[0] ^= 1,
             }
             let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
             assert!(
@@ -2895,13 +2900,25 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn zk_certificate_digest_matches_setup() {
-        use crate::zk_certificate::{CERTIFIED, StatementFamily};
+        use crate::zk_certificate::{CERTIFIED, StatementFamily, require_certified};
         let setup = Blake3Setup::with_zk(256);
         let digest = setup.r1cs.statement_digest();
-        let cert = CERTIFIED
+        let Some(cert) = CERTIFIED
             .iter()
             .find(|c| c.family == StatementFamily::Blake3Batch && c.batch_size == 256)
-            .expect("the 256-block BLAKE3 batch config must be certified");
+        else {
+            assert!(
+                require_certified(
+                    StatementFamily::Blake3Batch,
+                    256,
+                    &setup.r1cs,
+                    &setup.pcs_params,
+                )
+                .is_err(),
+                "an empty certificate registry must fail closed"
+            );
+            return;
+        };
         if cert.circuit_digest != digest {
             let body: Vec<String> = digest.iter().map(|b| format!("0x{b:02x}")).collect();
             panic!(

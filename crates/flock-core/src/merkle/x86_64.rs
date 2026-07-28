@@ -168,3 +168,116 @@ pub fn hash4_equal_len(inputs: [&[u8]; 4], out: &mut [Hash]) {
         }
     }
 }
+
+/// Continue four framed hashes from a shared block-aligned SHA-256 midstate.
+///
+/// Each stream appends its 12-byte `level || index` prefix and equal-length
+/// payload. Only the first suffix block is staged; subsequent full payload
+/// blocks are consumed directly.
+#[inline]
+pub fn hash4_equal_len_from_midstate(
+    midstate: &[u32; 8],
+    absorbed_len: usize,
+    prefixes: [[u8; 12]; 4],
+    inputs: [&[u8]; 4],
+    out: &mut [Hash],
+) {
+    let len = inputs[0].len();
+    debug_assert!(absorbed_len.is_multiple_of(64));
+    debug_assert!(inputs.iter().all(|input| input.len() == len));
+    debug_assert!(out.len() >= 4);
+
+    unsafe {
+        let state = midstate.as_ptr().cast::<__m128i>();
+        let dcba = _mm_loadu_si128(state);
+        let efgh = _mm_loadu_si128(state.add(1));
+        let cdab = _mm_shuffle_epi32(dcba, 0xb1);
+        let efgh = _mm_shuffle_epi32(efgh, 0x1b);
+        let abef_initial = _mm_alignr_epi8(cdab, efgh, 8);
+        let cdgh_initial = _mm_blend_epi16(efgh, cdab, 0xf0);
+        let mut abef = [abef_initial; 4];
+        let mut cdgh = [cdgh_initial; 4];
+        let suffix_len = 12 + len;
+        let mut consumed = 0usize;
+
+        if suffix_len >= 64 {
+            let mut first = [[0u8; 64]; 4];
+            for stream in 0..4 {
+                first[stream][..12].copy_from_slice(&prefixes[stream]);
+                first[stream][12..].copy_from_slice(&inputs[stream][..52]);
+            }
+            compress4(
+                &mut abef,
+                &mut cdgh,
+                [
+                    first[0].as_ptr(),
+                    first[1].as_ptr(),
+                    first[2].as_ptr(),
+                    first[3].as_ptr(),
+                ],
+            );
+            consumed = 52;
+
+            while len - consumed >= 64 {
+                compress4(
+                    &mut abef,
+                    &mut cdgh,
+                    [
+                        inputs[0].as_ptr().add(consumed),
+                        inputs[1].as_ptr().add(consumed),
+                        inputs[2].as_ptr().add(consumed),
+                        inputs[3].as_ptr().add(consumed),
+                    ],
+                );
+                consumed += 64;
+            }
+        }
+
+        let rem = suffix_len % 64;
+        let tail_blocks = if rem < 56 { 1 } else { 2 };
+        let bit_len = ((absorbed_len + suffix_len) as u64) * 8;
+        let mut tails = [[0u8; 128]; 4];
+        for stream in 0..4 {
+            if suffix_len < 64 {
+                tails[stream][..12].copy_from_slice(&prefixes[stream]);
+                tails[stream][12..12 + len].copy_from_slice(inputs[stream]);
+            } else {
+                tails[stream][..len - consumed].copy_from_slice(&inputs[stream][consumed..]);
+            }
+            tails[stream][rem] = 0x80;
+            tails[stream][tail_blocks * 64 - 8..tail_blocks * 64]
+                .copy_from_slice(&bit_len.to_be_bytes());
+        }
+        for block in 0..tail_blocks {
+            compress4(
+                &mut abef,
+                &mut cdgh,
+                [
+                    tails[0].as_ptr().add(block * 64),
+                    tails[1].as_ptr().add(block * 64),
+                    tails[2].as_ptr().add(block * 64),
+                    tails[3].as_ptr().add(block * 64),
+                ],
+            );
+        }
+
+        let endian = _mm_set_epi64x(
+            0x0c0d_0e0f_0809_0a0bu64 as i64,
+            0x0405_0607_0001_0203u64 as i64,
+        );
+        for stream in 0..4 {
+            let feba = _mm_shuffle_epi32(abef[stream], 0x1b);
+            let dchg = _mm_shuffle_epi32(cdgh[stream], 0xb1);
+            let dcba = _mm_blend_epi16(feba, dchg, 0xf0);
+            let hgef = _mm_alignr_epi8(dchg, feba, 8);
+            _mm_storeu_si128(
+                out[stream].as_mut_ptr().cast::<__m128i>(),
+                _mm_shuffle_epi8(dcba, endian),
+            );
+            _mm_storeu_si128(
+                out[stream].as_mut_ptr().add(16).cast::<__m128i>(),
+                _mm_shuffle_epi8(hgef, endian),
+            );
+        }
+    }
+}

@@ -11,7 +11,7 @@
 //! would each be worthless, and this module is written so that none of them
 //! can pass unnoticed:
 //!
-//! 1. recovering the **mask columns** (the randomizer rows, `P`, `Q`, `S`,
+//! 1. recovering the **mask columns** (the randomizer rows, `P`, `S`,
 //!    `S_c`, `S_h`) instead of witness columns — they are also committed data,
 //!    and an extractor that read the wrong region would look successful;
 //! 2. recovering an assignment that satisfies the R1CS but is **not tied to
@@ -39,6 +39,9 @@
 //! differently.
 
 use flock_core::field::F128;
+use flock_core::pcs::PcsParams;
+
+use crate::ligerito_decode::decode_zk_codeword;
 
 use crate::r1cs_hashes::blake3::{K_LOG, M_BASE, WORD_BITS};
 use crate::r1cs_hashes::blake3_preimage::{DIGEST_BYTES, MESSAGE_BYTES};
@@ -52,6 +55,11 @@ pub enum ExtractError {
     /// check that makes the extractor meaningful: it fails for a prover that
     /// knew no preimage, however well-formed its proof looked.
     NotAPreimage { index: usize },
+    /// The recording-oracle transcript did not contain one well-formed leaf
+    /// for every position of the witness commitment.
+    BadLeafQueries,
+    /// The recorded word did not decode inside the configured unique radius.
+    Decode,
 }
 
 impl std::fmt::Display for ExtractError {
@@ -65,11 +73,59 @@ impl std::fmt::Display for ExtractError {
                 "recovered candidate {index} does not hash to the public digest — \
                  the prover did not know a preimage"
             ),
+            Self::BadLeafQueries => write!(
+                f,
+                "recording-oracle transcript does not contain a complete witness codeword"
+            ),
+            Self::Decode => write!(f, "recorded codeword is outside the unique-decoding radius"),
         }
     }
 }
 
 impl std::error::Error for ExtractError {}
+
+/// Decode the packed witness from all depth-0 witness leaf queries recorded
+/// by the point oracle. Leaves contain the interleaved RS codeword; inverse
+/// NTT per lane recovers `[μ || z]` and the function returns only `z`, never
+/// the low mask block or the independent blinder lanes.
+pub fn recover_witness_from_leaf_queries(
+    leaves: &[(u64, Vec<u8>)],
+    params: &PcsParams,
+) -> Result<Vec<F128>, ExtractError> {
+    if !params.zk || leaves.len() != params.n_leaves() {
+        return Err(ExtractError::BadLeafQueries);
+    }
+    let leaf_len = params.leaf_size_bytes();
+    let lanes = 1usize << params.log_lanes_committed();
+    let f_lanes = params.num_ntts();
+    let positions = params.n_positions();
+    let mut codeword = vec![F128::ZERO; positions * lanes];
+    let mut seen = vec![false; positions];
+    for (index, payload) in leaves {
+        let index = usize::try_from(*index).map_err(|_| ExtractError::BadLeafQueries)?;
+        if index >= positions || seen[index] || payload.len() != leaf_len {
+            return Err(ExtractError::BadLeafQueries);
+        }
+        seen[index] = true;
+        for (lane, bytes) in payload.chunks_exact(16).enumerate() {
+            codeword[index * lanes + lane] = F128 {
+                lo: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
+                hi: u64::from_le_bytes(bytes[8..].try_into().unwrap()),
+            };
+        }
+    }
+    if seen.iter().any(|present| !present) {
+        return Err(ExtractError::BadLeafQueries);
+    }
+
+    let decoded = decode_zk_codeword(&codeword, params).map_err(|_| ExtractError::Decode)?;
+    debug_assert_eq!(
+        decoded.witness.len(),
+        1usize << params.witness_log_msg_len()
+    );
+    let _ = f_lanes;
+    Ok(decoded.witness)
+}
 
 /// Read the message words of instance `i` out of a packed committed vector.
 ///
@@ -132,4 +188,56 @@ pub fn extract_preimages(
         out.push(candidate);
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    use flock_core::pcs::ligerito::LigeritoProfile;
+    use flock_core::ro::{RecordingOracle, RoChannel, RoContext};
+    use flock_core::zk::ZkRng;
+
+    #[test]
+    fn recorded_leaf_queries_reconstruct_committed_message() {
+        let params = PcsParams {
+            m: 13,
+            log_inv_rate: 1,
+            log_batch_size: 2,
+            profile: LigeritoProfile::Fast,
+            zk: true,
+        };
+        let witness = (0..(1usize << params.witness_log_msg_len()))
+            .map(|i| F128 {
+                lo: (i as u64).wrapping_mul(0x9e37_79b9),
+                hi: !(i as u64),
+            })
+            .collect::<Vec<_>>();
+        let recorder = Arc::new(RecordingOracle::new());
+        let ro = RoContext::external([0x31; 32], recorder.clone());
+        let mut rng = ZkRng::from_seed([0x72; 32]);
+        let _ = flock_core::pcs::commit::commit_zk_with_ro(
+            &witness,
+            &params,
+            &mut rng,
+            &ro,
+            RoChannel::Witness,
+        );
+
+        let leaves = recorder.leaf_payloads(RoChannel::Witness);
+        let recovered = recover_witness_from_leaf_queries(&leaves, &params).expect("decode");
+        assert_eq!(recovered, witness);
+        assert!(
+            recorder.leaf_payloads(RoChannel::MaskP).is_empty(),
+            "commitment channels must not alias"
+        );
+
+        let mut corrupted = leaves;
+        corrupted[0].1[0] ^= 1;
+        assert_eq!(
+            recover_witness_from_leaf_queries(&corrupted, &params),
+            Err(ExtractError::Decode)
+        );
+    }
 }

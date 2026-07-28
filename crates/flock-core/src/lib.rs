@@ -20,6 +20,7 @@
 pub mod bits;
 pub mod challenger;
 pub mod field;
+pub mod linalg;
 pub mod lincheck;
 pub mod merkle;
 pub mod ntt;
@@ -27,7 +28,10 @@ pub mod pcs;
 pub mod permutation;
 pub mod proof;
 pub mod r1cs;
+pub mod ro;
 pub mod scratch;
+#[cfg(feature = "symbolic")]
+pub mod symbolic;
 pub mod verifier;
 pub mod zerocheck;
 pub mod zk;

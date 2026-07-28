@@ -10,7 +10,7 @@ authors = ["Succinct Labs", "Benedikt Bunz", "William Wang"]
 
 [workspace.dependencies]
 rayon = "1.10"
-sha2 = { version = "0.10", features = ["asm"] }
+sha2 = { version = "0.10", features = ["asm", "compress"] }
 sha3 = "0.10"
 blake3 = "1.5"
 serde = { version = "1", features = ["derive"] }

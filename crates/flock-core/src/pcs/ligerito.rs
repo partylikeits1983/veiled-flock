@@ -2309,6 +2309,41 @@ pub(crate) fn ligero_commit(
     log_inv_rate: usize,
     ntt: &AdditiveNttF128,
 ) -> LigeroWitness {
+    let ro = crate::ro::RoContext::plain();
+    let mut witness = ligero_commit_with_ro(
+        poly,
+        log_msg_cols,
+        log_num_interleaved,
+        log_inv_rate,
+        ntt,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        0,
+    );
+    // Legacy recursive APIs predate the protocol RO context and their dense
+    // verifiers still consume the unframed benchmark tree. Production PCS
+    // paths call `ligero_commit_with_ro` directly.
+    let data_bytes: &[u8] = unsafe {
+        core::slice::from_raw_parts(
+            witness.mat.as_ptr() as *const u8,
+            witness.mat.len() * core::mem::size_of::<F128>(),
+        )
+    };
+    witness.tree = merkle::merkle_tree(data_bytes, witness.block_len);
+    witness
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn ligero_commit_with_ro(
+    poly: &[F128],
+    log_msg_cols: usize,
+    log_num_interleaved: usize,
+    log_inv_rate: usize,
+    ntt: &AdditiveNttF128,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> LigeroWitness {
     let msg_cols = 1usize << log_msg_cols;
     let num_interleaved = 1usize << log_num_interleaved;
     let block_len = msg_cols << log_inv_rate;
@@ -2337,7 +2372,7 @@ pub(crate) fn ligero_commit(
         )
     };
     debug_assert_eq!(data_bytes.len(), block_len * leaf_size_bytes);
-    let tree = merkle::merkle_tree(data_bytes, block_len);
+    let tree = merkle::merkle_tree_framed(data_bytes, block_len, ro, channel, tree_depth);
 
     LigeroWitness {
         mat,
@@ -2963,6 +2998,7 @@ pub fn recursive_prover_with_basis<Ch: Challenger>(
     l0_tree: &[Hash],
     challenger: &mut Ch,
 ) -> LigeritoProof {
+    let ro = crate::ro::RoContext::plain();
     recursive_prover_with_basis_impl(
         config,
         packed_witness,
@@ -2972,6 +3008,9 @@ pub fn recursive_prover_with_basis<Ch: Challenger>(
         l0_tree,
         None,
         None,
+        false,
+        &ro,
+        crate::ro::RoChannel::Witness,
         challenger,
     )
 }
@@ -3003,6 +3042,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
     zk_l0: ZkL0,
     challenger: &mut Ch,
 ) -> LigeritoProof {
+    let ro = crate::ro::RoContext::plain();
     recursive_prover_with_basis_impl(
         config,
         f_blinded,
@@ -3015,6 +3055,44 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
             u_2: round0_uv.1,
         }),
         Some(zk_l0),
+        false,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+}
+
+/// zk basis prover with explicit point-oracle context and commitment channel.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>(
+    config: &ProverConfig,
+    f_blinded: Vec<F128>,
+    b_initial: Vec<F128>,
+    target: F128,
+    l0_codeword: &[F128],
+    l0_tree: &[Hash],
+    round0_uv: (F128, F128),
+    zk_l0: ZkL0,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> LigeritoProof {
+    recursive_prover_with_basis_impl(
+        config,
+        f_blinded,
+        b_initial,
+        target,
+        l0_codeword,
+        l0_tree,
+        Some(SumcheckMessage {
+            u_0: round0_uv.0,
+            u_2: round0_uv.1,
+        }),
+        Some(zk_l0),
+        true,
+        ro,
+        channel,
         challenger,
     )
 }
@@ -3035,6 +3113,7 @@ pub fn recursive_prover_with_basis_precomputed_round0<Ch: Challenger>(
     round0_uv: (F128, F128),
     challenger: &mut Ch,
 ) -> LigeritoProof {
+    let ro = crate::ro::RoContext::plain();
     recursive_prover_with_basis_impl(
         config,
         packed_witness,
@@ -3047,6 +3126,42 @@ pub fn recursive_prover_with_basis_precomputed_round0<Ch: Challenger>(
             u_2: round0_uv.1,
         }),
         None,
+        false,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+}
+
+/// Basis prover with explicit point-oracle context and commitment channel.
+#[allow(clippy::too_many_arguments)]
+pub fn recursive_prover_with_basis_precomputed_round0_with_ro<Ch: Challenger>(
+    config: &ProverConfig,
+    packed_witness: Vec<F128>,
+    b_initial: Vec<F128>,
+    target: F128,
+    l0_codeword: &[F128],
+    l0_tree: &[Hash],
+    round0_uv: (F128, F128),
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> LigeritoProof {
+    recursive_prover_with_basis_impl(
+        config,
+        packed_witness,
+        b_initial,
+        target,
+        l0_codeword,
+        l0_tree,
+        Some(SumcheckMessage {
+            u_0: round0_uv.0,
+            u_2: round0_uv.1,
+        }),
+        None,
+        true,
+        ro,
+        channel,
         challenger,
     )
 }
@@ -3061,6 +3176,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     l0_tree: &[Hash],
     first_msg: Option<SumcheckMessage>,
     zk_l0: Option<ZkL0>,
+    framed: bool,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> LigeritoProof {
     let log_n = packed_witness.len().trailing_zeros() as usize;
@@ -3167,13 +3285,26 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let _t = std::time::Instant::now();
     let ntt_1 = AdditiveNttF128::standard(log_msg_cols_1 + log_inv_rate_1);
     let f1 = sc_prover.f().to_vec();
-    let wtns_1 = ligero_commit(
-        &f1,
-        log_msg_cols_1,
-        log_num_interleaved_1,
-        log_inv_rate_1,
-        &ntt_1,
-    );
+    let wtns_1 = if framed {
+        ligero_commit_with_ro(
+            &f1,
+            log_msg_cols_1,
+            log_num_interleaved_1,
+            log_inv_rate_1,
+            &ntt_1,
+            ro,
+            channel,
+            1,
+        )
+    } else {
+        ligero_commit(
+            &f1,
+            log_msg_cols_1,
+            log_num_interleaved_1,
+            log_inv_rate_1,
+            &ntt_1,
+        )
+    };
     if trace {
         t_commits += _t.elapsed();
     }
@@ -3378,13 +3509,26 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         let _t = std::time::Instant::now();
         let ntt_next = AdditiveNttF128::standard(log_msg_cols_next + log_inv_rate_next);
         let f_evals = sc_prover.f().to_vec();
-        let wtns_next = ligero_commit(
-            &f_evals,
-            log_msg_cols_next,
-            log_num_interleaved_next,
-            log_inv_rate_next,
-            &ntt_next,
-        );
+        let wtns_next = if framed {
+            ligero_commit_with_ro(
+                &f_evals,
+                log_msg_cols_next,
+                log_num_interleaved_next,
+                log_inv_rate_next,
+                &ntt_next,
+                ro,
+                channel,
+                (i + 2) as u8,
+            )
+        } else {
+            ligero_commit(
+                &f_evals,
+                log_msg_cols_next,
+                log_num_interleaved_next,
+                log_inv_rate_next,
+                &ntt_next,
+            )
+        };
         if trace {
             t_commits += _t.elapsed();
         }
@@ -3488,6 +3632,66 @@ where
     // Returns 2^yr_log_n values: eval_b(ris ++ y_bits) for y ∈ [0, 2^yr_log_n).
     // This API allows callers to amortize prefix work across yr positions
     // (e.g. ring_switch::eval_rs_eq_prefix + finish_from_prefix).
+    F: Fn(&[F128], usize) -> Vec<F128>,
+{
+    recursive_verifier_with_basis_succinct_impl(
+        config,
+        proof,
+        log_n,
+        target,
+        expected_initial_root,
+        eval_b_residual,
+        zk_l0,
+        None,
+        challenger,
+    )
+}
+
+/// Succinct basis verifier with an explicit point-oracle context and channel.
+#[allow(clippy::too_many_arguments)]
+pub fn recursive_verifier_with_basis_succinct_with_ro<Ch, F>(
+    config: &VerifierConfig,
+    proof: &LigeritoProof,
+    log_n: usize,
+    target: F128,
+    expected_initial_root: &Hash,
+    eval_b_residual: F,
+    zk_l0: Option<ZkL0>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> bool
+where
+    Ch: Challenger,
+    F: Fn(&[F128], usize) -> Vec<F128>,
+{
+    recursive_verifier_with_basis_succinct_impl(
+        config,
+        proof,
+        log_n,
+        target,
+        expected_initial_root,
+        eval_b_residual,
+        zk_l0,
+        Some((ro, channel)),
+        challenger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn recursive_verifier_with_basis_succinct_impl<Ch, F>(
+    config: &VerifierConfig,
+    proof: &LigeritoProof,
+    log_n: usize,
+    target: F128,
+    expected_initial_root: &Hash,
+    eval_b_residual: F,
+    zk_l0: Option<ZkL0>,
+    ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
+    challenger: &mut Ch,
+) -> bool
+where
+    Ch: Challenger,
     F: Fn(&[F128], usize) -> Vec<F128>,
 {
     let trace = std::env::var("LIG_VERIFY_TRACE").is_ok();
@@ -3632,13 +3836,15 @@ where
     // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
     // rows, then combine each into an F-row with c for the enforced sum.
     let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
-    if !verify_level_opens(
+    if !verify_level_opens_maybe_ro(
         &proof.initial_root,
         block_len_0,
         &queries_0,
         &proof.initial_proof.opened_rows,
         num_interleaved_0 * l0_lane_mult,
         &proof.initial_proof.merkle_proof,
+        ro_context,
+        0,
     ) {
         return false;
     }
@@ -3788,13 +3994,15 @@ where
                 t_sample_q += _t.elapsed();
             }
             let _t = std::time::Instant::now();
-            if !verify_level_opens(
+            if !verify_level_opens_maybe_ro(
                 &prev_root,
                 prev_block_len,
                 &queries_last,
                 &proof.final_proof.opened_rows,
                 prev_num_interleaved,
                 &proof.final_proof.merkle_proof,
+                ro_context,
+                (i + 1) as u8,
             ) {
                 return false;
             }
@@ -3996,13 +4204,15 @@ where
         let rp = &proof.recursive_proofs[recursive_proof_idx];
         recursive_proof_idx += 1;
         let _t = std::time::Instant::now();
-        if !verify_level_opens(
+        if !verify_level_opens_maybe_ro(
             &prev_root,
             prev_block_len,
             &queries_i,
             &rp.opened_rows,
             prev_num_interleaved,
             &rp.merkle_proof,
+            ro_context,
+            (i + 1) as u8,
         ) {
             return false;
         }
@@ -4711,10 +4921,44 @@ fn verify_level_opens(
     expected_num_interleaved: usize,
     multi_proof: &[Hash],
 ) -> bool {
+    if queries.len() != opened_rows.len()
+        || opened_rows
+            .iter()
+            .any(|row| row.len() != expected_num_interleaved)
+    {
+        return false;
+    }
+    let leaf_hashes = opened_rows
+        .iter()
+        .map(|row| {
+            let bytes: &[u8] = unsafe {
+                core::slice::from_raw_parts(
+                    row.as_ptr() as *const u8,
+                    row.len() * core::mem::size_of::<F128>(),
+                )
+            };
+            merkle::hash_leaf(bytes)
+        })
+        .collect::<Vec<_>>();
+    merkle::verify_merkle_multi_proof(root, block_len, queries, &leaf_hashes, multi_proof)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_level_opens_with_ro(
+    root: &Hash,
+    block_len: usize,
+    queries: &[usize],
+    opened_rows: &[Vec<F128>],
+    expected_num_interleaved: usize,
+    multi_proof: &[Hash],
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> bool {
     if queries.len() != opened_rows.len() {
         return false;
     }
-    let mut leaf_hashes: Vec<Hash> = Vec::with_capacity(opened_rows.len());
+    let mut leaf_payloads: Vec<&[u8]> = Vec::with_capacity(opened_rows.len());
     for row in opened_rows {
         if row.len() != expected_num_interleaved {
             return false;
@@ -4725,9 +4969,52 @@ fn verify_level_opens(
                 row.len() * core::mem::size_of::<F128>(),
             )
         };
-        leaf_hashes.push(merkle::hash_leaf(bytes));
+        leaf_payloads.push(bytes);
     }
-    merkle::verify_merkle_multi_proof(root, block_len, queries, &leaf_hashes, multi_proof)
+    merkle::verify_merkle_multi_proof_framed(
+        root,
+        block_len,
+        queries,
+        &leaf_payloads,
+        multi_proof,
+        ro,
+        channel,
+        tree_depth,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_level_opens_maybe_ro(
+    root: &Hash,
+    block_len: usize,
+    queries: &[usize],
+    opened_rows: &[Vec<F128>],
+    expected_num_interleaved: usize,
+    multi_proof: &[Hash],
+    ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
+    tree_depth: u8,
+) -> bool {
+    match ro_context {
+        Some((ro, channel)) => verify_level_opens_with_ro(
+            root,
+            block_len,
+            queries,
+            opened_rows,
+            expected_num_interleaved,
+            multi_proof,
+            ro,
+            channel,
+            tree_depth,
+        ),
+        None => verify_level_opens(
+            root,
+            block_len,
+            queries,
+            opened_rows,
+            expected_num_interleaved,
+            multi_proof,
+        ),
+    }
 }
 
 /// Verifier counterpart to [`recursive_prover`]. Supports arbitrary `R ≥ 1`.

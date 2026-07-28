@@ -172,6 +172,17 @@ impl Drop for ProverData {
 ///
 /// `z_packed.len()` must equal `2^(m - LOG_PACKING) = 2^(m - 7)`.
 pub fn commit(z_packed: &[F128], params: &PcsParams) -> (Commitment, ProverData) {
+    let ro = crate::ro::RoContext::plain();
+    commit_with_ro(z_packed, params, &ro, crate::ro::RoChannel::Witness)
+}
+
+/// [`commit`] with an explicit point-oracle context and commitment channel.
+pub fn commit_with_ro(
+    z_packed: &[F128],
+    params: &PcsParams,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
     params.validate();
     assert!(!params.zk, "zk params require commit_zk");
     assert_eq!(z_packed.len(), 1usize << params.log_msg_len());
@@ -189,7 +200,7 @@ pub fn commit(z_packed: &[F128], params: &PcsParams) -> (Commitment, ProverData)
     // RS-encoding zero coefficients that the NTT's first-layer butterfly will
     // read). Saves ~64 MB of memory writes at m=29 (~9 ms).
     let codeword = crate::scratch::take_f128(codeword_len);
-    commit_into(z_packed, params, codeword)
+    commit_into_with_ro(z_packed, params, codeword, ro, channel)
 }
 
 /// Like [`commit`], but reuses a caller-provided codeword buffer instead of
@@ -202,7 +213,25 @@ pub fn commit(z_packed: &[F128], params: &PcsParams) -> (Commitment, ProverData)
 pub fn commit_into(
     z_packed: &[F128],
     params: &PcsParams,
+    codeword: Vec<F128>,
+) -> (Commitment, ProverData) {
+    let ro = crate::ro::RoContext::plain();
+    commit_into_with_ro(
+        z_packed,
+        params,
+        codeword,
+        &ro,
+        crate::ro::RoChannel::Witness,
+    )
+}
+
+/// [`commit_into`] with an explicit point-oracle context and channel.
+pub fn commit_into_with_ro(
+    z_packed: &[F128],
+    params: &PcsParams,
     mut codeword: Vec<F128>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
 ) -> (Commitment, ProverData) {
     params.validate();
     assert!(!params.zk, "zk params require commit_zk");
@@ -222,7 +251,7 @@ pub fn commit_into(
     // layers' full-buffer reads and multiplies.
     replicate_message_fill(&mut codeword, z_packed);
 
-    finalize_commit(codeword, params)
+    finalize_commit(codeword, params, ro, channel)
 }
 
 /// Zero-knowledge commit: commits `message′ = [mask ‖ z_packed]` (uniform
@@ -248,6 +277,19 @@ pub fn commit_zk<R: crate::zk::MaskSampler + ?Sized>(
     params: &PcsParams,
     rng: &mut R,
 ) -> (Commitment, ProverData) {
+    let ro = crate::ro::RoContext::plain();
+    commit_zk_with_ro(z_packed, params, rng, &ro, crate::ro::RoChannel::Witness)
+}
+
+/// [`commit_zk`] with an explicit point-oracle context and commitment channel.
+#[cfg(feature = "zk")]
+pub fn commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
+    z_packed: &[F128],
+    params: &PcsParams,
+    rng: &mut R,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
     params.validate();
     assert!(params.zk, "commit_zk requires PcsParams.zk");
     assert_eq!(z_packed.len(), 1usize << params.witness_log_msg_len());
@@ -260,7 +302,7 @@ pub fn commit_zk<R: crate::zk::MaskSampler + ?Sized>(
 
     let mut codeword = crate::scratch::take_f128(params.codeword_len_f128());
     replicate_message_fill_zk(&mut codeword, &mask, z_packed, &blind, params.num_ntts());
-    let (commitment, mut pd) = finalize_commit(codeword, params);
+    let (commitment, mut pd) = finalize_commit(codeword, params, ro, channel);
     pd.zk_mask = mask;
     pd.zk_blind = blind;
     (commitment, pd)
@@ -332,7 +374,12 @@ pub(crate) fn replicate_message_fill(codeword: &mut [F128], msg: &[F128]) {
 
 /// Shared tail of [`commit`] / [`commit_into`]: interleaved forward additive
 /// NTT (RS-encode every lane) then the initial Merkle tree over codeword rows.
-fn finalize_commit(mut codeword: Vec<F128>, params: &PcsParams) -> (Commitment, ProverData) {
+fn finalize_commit(
+    mut codeword: Vec<F128>,
+    params: &PcsParams,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
     let timing = std::env::var_os("FLOCK_COMMIT_TIMING").is_some();
     let t_ntt = std::time::Instant::now();
     // ---- Interleaved forward additive NTT: 2^log_batch_size independent
@@ -368,7 +415,7 @@ fn finalize_commit(mut codeword: Vec<F128>, params: &PcsParams) -> (Commitment, 
     // Initial tree: one leaf per codeword position, each containing the
     // row-batch lanes (num_ntts F_{2^128} values = 2^log_batch_size). This is
     // Ligerito's L0 commitment.
-    let merkle_tree = merkle::merkle_tree(codeword_bytes, params.n_leaves());
+    let merkle_tree = merkle::merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0);
     let root = *merkle_tree.last().expect("merkle tree non-empty");
     if timing {
         eprintln!(
@@ -518,9 +565,16 @@ mod tests {
             let oracle_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(oracle.as_ptr() as *const u8, oracle.len() * 16)
             };
-            let oracle_root = *crate::merkle::merkle_tree(oracle_bytes, params.n_leaves())
-                .last()
-                .unwrap();
+            let ro = crate::ro::RoContext::plain();
+            let oracle_root = *crate::merkle::merkle_tree_framed(
+                oracle_bytes,
+                params.n_leaves(),
+                &ro,
+                crate::ro::RoChannel::Witness,
+                0,
+            )
+            .last()
+            .unwrap();
             assert_eq!(
                 commitment.root, oracle_root,
                 "root mismatch at m={m} r={log_inv_rate}"
@@ -581,9 +635,16 @@ mod tests {
             let oracle_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(oracle.as_ptr() as *const u8, oracle.len() * 16)
             };
-            let oracle_root = *crate::merkle::merkle_tree(oracle_bytes, params.n_leaves())
-                .last()
-                .unwrap();
+            let ro = crate::ro::RoContext::plain();
+            let oracle_root = *crate::merkle::merkle_tree_framed(
+                oracle_bytes,
+                params.n_leaves(),
+                &ro,
+                crate::ro::RoChannel::Witness,
+                0,
+            )
+            .last()
+            .unwrap();
             assert_eq!(commitment.root, oracle_root, "zk root mismatch at m={m}");
 
             // Determinism under the seed; fresh masks under a new seed.

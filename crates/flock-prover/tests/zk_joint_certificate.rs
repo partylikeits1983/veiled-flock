@@ -1,3 +1,8 @@
+//! LEGACY P/Q regression fixture. The active certificate is the symbolic
+//! field-valued coverage and PCS translator suite; this file is retained only
+//! to detect drift in the historical audit vehicle and is not certification
+//! evidence for protocol `flock-zk-fv-v3`.
+//!
 //! **The joint full-transcript coverage certificate** for the A1′ reference
 //! prover (Workstreams D + E).
 //!
@@ -39,8 +44,8 @@
 //! * mask reuse across proofs → `mask_reuse_across_proofs_is_a_leak`;
 //! * no-`P` breaks H1 (witness-independence of the inner image), not slice
 //!   coverage → `h1_inner_image_witness_independent_on_round_block`;
-//! * constant `Q` collapses the P-channel image to the `G(1)` half →
-//!   `p_channel_image_requires_nondegenerate_q`;
+//! * the withdrawn constant-Q control is replaced by the active public-Q-star
+//!   conditioned-rank regression;
 //! * no-`μ` / no-`g` cannot reach this block at all; the PCS layer's own
 //!   control is `pcs::zk_audit::pcs_rank_audit_negative_control_without_g`
 //!   (flock-core, in the certificate evidence set).
@@ -53,8 +58,10 @@
 
 use flock_core::challenger::RandomChallenger;
 use flock_core::field::F128;
+use flock_core::linalg::{F128Mat, conditioned_image};
 use flock_core::lincheck::pack_z_lincheck_from_packed;
 use flock_core::pcs::Commitment;
+use flock_core::zerocheck::{K_SKIP, SmallMaskSpec, mask_functional_matrix_fv};
 use flock_core::zk::{MaskSampler, PlaybackSampler, ZeroSampler};
 use flock_prover::prover::{A1MaskSources, R1csProofZkA1, prove_r1cs_zk_a1_with_masks};
 use flock_prover::transcript_schema::{LeakageClass, SchemaIndex, algebraic_vector, flatten_a1};
@@ -303,12 +310,12 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
         pos: 0,
     };
     let mut s_p = BitsSampler::from_bits(r.p_bits);
-    let mut s_q = BitsSampler::from_bits(r.q_bits);
+    let _s_q = BitsSampler::from_bits(r.q_bits);
     let mut s_cp = F128Sampler {
         data: r.commit_p.to_vec(),
         pos: 0,
     };
-    let mut s_cq = F128Sampler {
+    let _s_cq = F128Sampler {
         data: r.commit_q.to_vec(),
         pos: 0,
     };
@@ -330,9 +337,7 @@ fn run(r: &Run) -> (Vec<F128>, R1csProofZkA1, Commitment) {
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
-        q: &mut s_q,
         commit_p: &mut s_cp,
-        commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
         s_c: &mut s_sc,
@@ -427,12 +432,12 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
         pos: 0,
     };
     let mut s_p = BitsSampler::from_bits(&p);
-    let mut s_q = BitsSampler::from_bits(&q);
+    let _s_q = BitsSampler::from_bits(&q);
     let mut s_cp = F128Sampler {
         data: mask_material.clone(),
         pos: 0,
     };
-    let mut s_cq = F128Sampler {
+    let _s_cq = F128Sampler {
         data: mask_material.clone(),
         pos: 0,
     };
@@ -454,9 +459,7 @@ fn split_by_class(fx: &FixtureA1M15) -> (Split, usize) {
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
-        q: &mut s_q,
         commit_p: &mut s_cp,
-        commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
         s_c: &mut s_sc,
@@ -1749,54 +1752,29 @@ fn control_samplers_behave() {
     assert_eq!(got, [7, 9, 11, 13]);
 }
 
-/// **The `P` channel needs a non-degenerate `Q`.** The degree-2 channel
-/// contributes `γ·M_j(P·Q)`; at a constant `Q` the fold slope `ΔQ` vanishes,
-/// so the channel reaches the `G(1)` half of each round message but not the
-/// degree-2 `G(∞)` half — precisely the coordinate no degree-1 mask can
-/// reach, and the reason the amendment exists. Measured as a strict image
-/// deficit on the round block, which also delimits the bad-`Q` set that the
-/// `ε_rank` term (Lean: `mixture_witness_indep_bad_set`) accounts for.
+/// Replacement for the withdrawn random-Q control: the public affine Q-star
+/// is nonzero on the Boolean cube, and the shipped field-valued P map has the
+/// full conditioned image at this fixture shape.
 #[test]
-fn p_channel_image_requires_nondegenerate_q() {
-    let fx = FixtureA1M15::new();
-    let (split, _) = split_by_class(&fx);
-    let seed = 0x7777_1234;
-    let n = 1usize << FixtureA1M15::M;
-    let dim = split.round_block.len() * 128;
-    let mut rng = Rng(0xB16_0BAD);
-    let payload = rng.bits(FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS);
-    let q_random = rng.bits(n);
-    let q_const = vec![true; n];
-    let p_stride = (n / (dim + dim / 2)).max(1);
-
-    let img = |q: &[bool]| {
-        inner_image_proj(
-            &fx,
-            &split,
-            &split.round_block,
-            p_stride,
-            1 << 20,
-            0,
-            seed,
-            &payload,
-            true,
-            q,
-        )
-    };
-    let good = img(&q_random);
-    let bad = img(&q_const);
-    println!(
-        "P-channel image on the round block ({dim} bits): random Q rank {}, constant Q rank {}",
-        good.rank(),
-        bad.rank()
-    );
+fn public_qstar_field_mask_has_full_conditioned_rank() {
+    let m = FixtureA1M15::M;
+    let n = m - K_SKIP;
+    let spec = SmallMaskSpec::default();
     assert!(
-        bad.rank() < good.rank(),
-        "a constant Q must give a strictly smaller P-channel image (it cannot \
-         reach the degree-2 G(∞) half); measured {} vs {}",
-        bad.rank(),
-        good.rank()
+        spec.q_star_dense(m)
+            .iter()
+            .all(|value| *value != F128::ZERO)
     );
+
+    let mut rng = Rng(0xB16_0BAD);
+    let r_rest = (0..n).map(|_| rng.f128()).collect::<Vec<_>>();
+    let rhos = (0..n).map(|_| rng.f128()).collect::<Vec<_>>();
+    let rows = mask_functional_matrix_fv(spec, m, &r_rest, &rhos);
+    let round = F128Mat::from_rows(&rows[..2 * n]);
+    let leakage = F128Mat::from_rows(&rows[2 * n..]);
+    assert_eq!(leakage.rank(), 2);
+    assert_eq!(F128Mat::from_rows(&rows).rank(), 2 * n);
+    assert_eq!(conditioned_image(&round, &leakage).rank(), 2 * n - 2);
 }
 
 /// **Coverage restricted to the PCS-masked coordinate classes.**

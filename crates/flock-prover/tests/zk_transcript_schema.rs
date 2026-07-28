@@ -1,6 +1,6 @@
 //! Canonical-transcript-schema tripwires, on the complete A1′ pipeline at
 //! the m=15 masked-identity fixture (full pipeline: hiding commits, masked
-//! zerocheck, lincheck, hiding witness/P/Q openings).
+//! zerocheck, lincheck, and hiding witness/P openings).
 //!
 //! What is being pinned and why:
 //! - `manifest`: the ordered `(path, class, fs_absorbed)` classification of
@@ -107,7 +107,7 @@ fn a1_schema_manifest_and_bijectivity() {
     //    the constant (printed below).
     let h = schema_hash(&flat);
     let hex: String = h.iter().map(|b| format!("{b:02x}")).collect();
-    const PINNED_M15: &str = "bc5a5134b7a88568d53e3d66b5faf880df365785906326aae564e7a90a2e8f23";
+    const PINNED_M15: &str = "364b775016ee4ab4df278b34ba1b0c2db409f83aaddb8e06f5ac4f6cd38e4e32";
     assert_eq!(
         hex, PINNED_M15,
         "schema hash changed for the m=15 fixture shape"
@@ -142,7 +142,7 @@ fn a1_schema_matches_wire_order() {
     let flat = flatten_a1(&comm, &proof);
 
     // Every F128 the prover absorbed, across the main channel and the
-    // domain-separated P/Q opening forks (clones share the log).
+    // domain-separated opening forks (clones share the log).
     let observed = rec.observed_f128s();
 
     // Flattened fs_absorbed F128 values.
@@ -217,9 +217,9 @@ fn a1_schema_matches_wire_order() {
     );
     assert_eq!(
         extras.len(),
-        6,
-        "expected exactly 6 derived absorptions (one combined Ligerito target \
-         per hiding opening: witness, P, Q, A2's S, A3's S_c and S_h); anything \
+        5,
+        "expected exactly 5 derived absorptions (one combined Ligerito target \
+         per hiding opening: witness, P, A2's S, A3's S_c and S_h); anything \
          else is an unclassified absorption: {extras:?}"
     );
     // No extra may be a proof value: collect EVERY F128 in the proof
@@ -300,5 +300,5 @@ fn a1_schema_matches_wire_order() {
         })
         .collect();
     assert!(labels.iter().any(|l| l == b"flock-a1-open-P"));
-    assert!(labels.iter().any(|l| l == b"flock-a1-open-Q"));
+    assert!(!labels.iter().any(|l| l == b"flock-a1-open-Q"));
 }

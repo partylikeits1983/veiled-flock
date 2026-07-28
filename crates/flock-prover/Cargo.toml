@@ -11,6 +11,7 @@ description = "Apple-silicon-optimized end-to-end prover for Flock (R1CS over GF
 hash-count = ["flock-core/hash-count"]
 unsound-challenger = ["flock-core/unsound-challenger"]
 zk = ["flock-core/zk"]
+symbolic = ["flock-core/symbolic"]
 
 [dependencies]
 flock-core = { path = "../flock-core" }
@@ -29,6 +30,7 @@ flock-core = { path = "../flock-core", features = ["unsound-challenger"] }
 keccak = { workspace = true }
 # Software Keccak-256 baseline for keccak_native_chain.
 sha3 = { workspace = true }
+serde_json = { workspace = true }
 
 [[bench]]
 name = "ntt"

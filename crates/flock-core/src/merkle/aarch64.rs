@@ -123,3 +123,97 @@ pub fn hash4_equal_len(inputs: [&[u8]; 4], out: &mut [Hash]) {
         }
     }
 }
+
+/// Continue four framed hashes from a shared block-aligned SHA-256 midstate.
+///
+/// Each stream appends its 12-byte `level || index` prefix and equal-length
+/// payload. Only the first suffix block is staged; subsequent full payload
+/// blocks are consumed directly.
+#[inline]
+pub fn hash4_equal_len_from_midstate(
+    midstate: &[u32; 8],
+    absorbed_len: usize,
+    prefixes: [[u8; 12]; 4],
+    inputs: [&[u8]; 4],
+    out: &mut [Hash],
+) {
+    let len = inputs[0].len();
+    debug_assert!(absorbed_len.is_multiple_of(64));
+    debug_assert!(inputs.iter().all(|input| input.len() == len));
+    debug_assert!(out.len() >= 4);
+
+    unsafe {
+        let mut abcd = [vld1q_u32(midstate.as_ptr()); 4];
+        let mut efgh = [vld1q_u32(midstate.as_ptr().add(4)); 4];
+        let suffix_len = 12 + len;
+        let mut consumed = 0usize;
+
+        if suffix_len >= 64 {
+            let mut first = [[0u8; 64]; 4];
+            for stream in 0..4 {
+                first[stream][..12].copy_from_slice(&prefixes[stream]);
+                first[stream][12..].copy_from_slice(&inputs[stream][..52]);
+            }
+            compress4(
+                &mut abcd,
+                &mut efgh,
+                [
+                    first[0].as_ptr(),
+                    first[1].as_ptr(),
+                    first[2].as_ptr(),
+                    first[3].as_ptr(),
+                ],
+            );
+            consumed = 52;
+
+            while len - consumed >= 64 {
+                compress4(
+                    &mut abcd,
+                    &mut efgh,
+                    [
+                        inputs[0].as_ptr().add(consumed),
+                        inputs[1].as_ptr().add(consumed),
+                        inputs[2].as_ptr().add(consumed),
+                        inputs[3].as_ptr().add(consumed),
+                    ],
+                );
+                consumed += 64;
+            }
+        }
+
+        let rem = suffix_len % 64;
+        let tail_blocks = if rem < 56 { 1 } else { 2 };
+        let bit_len = ((absorbed_len + suffix_len) as u64) * 8;
+        let mut tails = [[0u8; 128]; 4];
+        for stream in 0..4 {
+            if suffix_len < 64 {
+                tails[stream][..12].copy_from_slice(&prefixes[stream]);
+                tails[stream][12..12 + len].copy_from_slice(inputs[stream]);
+            } else {
+                tails[stream][..len - consumed].copy_from_slice(&inputs[stream][consumed..]);
+            }
+            tails[stream][rem] = 0x80;
+            tails[stream][tail_blocks * 64 - 8..tail_blocks * 64]
+                .copy_from_slice(&bit_len.to_be_bytes());
+        }
+        for block in 0..tail_blocks {
+            compress4(
+                &mut abcd,
+                &mut efgh,
+                [
+                    tails[0].as_ptr().add(block * 64),
+                    tails[1].as_ptr().add(block * 64),
+                    tails[2].as_ptr().add(block * 64),
+                    tails[3].as_ptr().add(block * 64),
+                ],
+            );
+        }
+
+        for stream in 0..4 {
+            let be_lo = vrev32q_u8(vreinterpretq_u8_u32(abcd[stream]));
+            let be_hi = vrev32q_u8(vreinterpretq_u8_u32(efgh[stream]));
+            vst1q_u8(out[stream].as_mut_ptr(), be_lo);
+            vst1q_u8(out[stream].as_mut_ptr().add(16), be_hi);
+        }
+    }
+}

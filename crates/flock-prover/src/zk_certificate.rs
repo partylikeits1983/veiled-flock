@@ -27,7 +27,7 @@ use flock_core::r1cs::BlockR1cs;
 /// lincheck mask channel): the wire format gained `comm_s`, `open_s`,
 /// `sigma_lc` and `s_eval`, and the lincheck transcript changed meaning, so
 /// an A1′-only certificate must not certify this protocol.
-pub const PROTOCOL_VERSION: &str = "flock-zk-a1a2a3-v1";
+pub const PROTOCOL_VERSION: &str = "flock-zk-fv-v3";
 
 /// Field representation the certificates were computed over.
 pub const FIELD_REPR: &str = "gf2_128_ghash";
@@ -38,14 +38,13 @@ pub const FOLD_ORDER: &str = "uniskip6-lsb-first-v0";
 /// Byte/bit order of the packed witness the certificates assume.
 pub const ENDIANNESS: &str = "le-lsb-first";
 
-/// Which statement family a certificate covers. Only BLAKE3 *batch*
-/// statements are in scope: they bind no caller-supplied message, chaining
-/// value, or hash output, which is what makes the self-generated-witness
-/// simulator valid. Chain / Merkle-path statements bind public endpoints and
-/// are deliberately absent.
+/// Which statement family a certificate covers. Batch and fixed-digest
+/// BLAKE3 use different circuits and simulators, so they require distinct
+/// entries. Chain and Merkle-path statements remain deliberately absent.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum StatementFamily {
     Blake3Batch,
+    Blake3Preimage,
 }
 
 /// A checked certificate for one exact configuration.
@@ -96,7 +95,7 @@ impl std::fmt::Display for ZkGateError {
             Self::UnsupportedStatement { what } => write!(
                 f,
                 "zero-knowledge is not supported for {what}: the ZK claim covers \
-                 BLAKE3 batch statements with no externally bound hash claims"
+                 only the registered BLAKE3 batch and 64-byte fixed-digest families"
             ),
             Self::Uncertified { batch_size, m } => write!(
                 f,
@@ -117,57 +116,83 @@ impl std::error::Error for ZkGateError {}
 /// Evidence set behind the currently certified configuration. Exactly the
 /// set of tests `scripts/zk-certify.sh` runs, in script order — asserted in
 /// both directions by `zk_certificate_evidence_matches_script`.
+#[allow(dead_code)]
 const EVIDENCE_V1: &[&str] = &[
-    "affine_classes_exactly_covered",
-    "full_conditional_coverage_zk_zerocheck",
-    "conditional_coverage_p_rho",
-    "h1_inner_image_witness_independent_on_round_block",
-    "p_channel_image_requires_nondegenerate_q",
-    "joint_certificate_smoke",
-    "joint_certificate_negative_controls",
-    "mask_reuse_across_proofs_is_a_leak",
-    "mask_only_coordinates_are_witness_independent",
-    "joint_conditional_coverage_full_transcript",
-    "blake3_witness_difference_lies_in_the_mask_image",
-    "control_same_procedure_on_the_passing_fixture",
-    "simulator_translation_exact_transcript_equality",
-    "simulator_produces_accepting_proof_without_a_witness",
-    "production_mask_channel_covers_round_block",
-    "production_s_hat_v_randomizer_margin",
-    "production_checked_prove_verifies",
-    "blake3_witness_has_no_linear_difference_family",
-    "l3_round1_region_alignment_holds",
-    "pcs_rank_audit_witness_image_covered",
-    "pcs_rank_audit_negative_control_without_g",
-    "prove_verify_zk_round1_mask_roundtrip",
+    "native_tree_hasher_matches_one_shot_reference",
+    "external_backend_reproduces_native_digests_and_records",
+    "tree_root_separates_nonce_channel_depth_level_index",
+    "external_framed_tree_matches_native_and_records_every_node",
+    "framed_midstate_simd_matches_scalar_all_tail_shapes",
+    "concrete_symbolic_kernels_match_native_references",
+    "toy_exact_polynomials_match_evaluation_and_degree_semantics",
+    "challenge_dependent_inversion_is_not_part_of_sym_scalar",
+    "symbolic_mask_matrix_matches_native_and_has_100_bit_margin",
+    "closed_form_translation_preserves_open_rows_and_combined_vector",
+    "l0_entropy_counting_gate_holds_for_fixture_and_production",
+    "qstar_functional_matrix_matches_dense_schedule",
+    "affine_linear_qstar_has_full_conditioned_rank_across_certified_shapes",
+    "a1_schema_manifest_and_bijectivity",
+    "a1_schema_matches_wire_order",
+    "oracle_pow_state_digest_is_an_oracle_query",
+    "game_hops_are_complete_and_ordered",
+    "production_ledger_exposes_recursive_sibling_gate_at_q64",
+    "recorded_leaf_queries_reconstruct_committed_message",
+    "prefix_diverges_on_statement_nonce_and_version_tuple",
+    "simulated_prefix_is_rejected_and_fresh_prefix_reaches_extractor",
+    "field_mask_spans_conditioned_round_block_for_fixed_digest",
+    "undersized_mask_does_not_span_the_round_block",
+    "the_digest_claim_is_a_public_function_of_the_statement",
+    "fixed_digest_circuit_is_not_the_batch_circuit",
+    "extractor_recovers_the_preimages_from_an_honest_commitment",
+    "extraction_fails_on_the_simulators_commitment",
+    "simulator_produces_an_accepting_proof_without_any_preimage",
+    "honest_prover_on_the_patched_vector_is_rejected",
+    "zk_preimage_roundtrip",
     "prove_verify_r1cs_zk_a1_roundtrip",
-    "prove_fast_zk_ligerito_roundtrip",
 ];
 
-/// The certified configurations. **One entry today**: the 256-block BLAKE3
-/// batch reference fixture (m=22). Deliberately minimal — every entry is a
-/// claim that the certificate suite was run and passed at that shape.
-pub const CERTIFIED: &[ZkCertificate] = &[ZkCertificate {
-    protocol_version: PROTOCOL_VERSION,
-    family: StatementFamily::Blake3Batch,
-    batch_size: 256,
-    // Pinned by `zk_certificate_digest_matches_setup`; regenerate with that
-    // test's printout after any change to the BLAKE3 zk statement.
-    circuit_digest: [
-        0x4a, 0x39, 0x8c, 0xa2, 0xe7, 0x3d, 0x9d, 0x1f, 0x70, 0x61, 0x1b, 0xd6, 0xa2, 0xa4, 0x08,
-        0xb0, 0x40, 0x4a, 0xab, 0xdd, 0xcf, 0x6c, 0xf7, 0x5c, 0x29, 0xcf, 0xa4, 0x12, 0xf7, 0x2f,
-        0x84, 0x23,
-    ],
-    transcript_schema_version: crate::transcript_schema::A1_SCHEMA_VERSION,
-    field_repr: FIELD_REPR,
-    fold_order: FOLD_ORDER,
-    endianness: ENDIANNESS,
-    pcs_m: 22,
-    pcs_log_inv_rate: 1,
-    pcs_log_batch_size: 6,
-    generator_rev: "cert-gen-v1",
-    evidence: EVIDENCE_V1,
-}];
+/// Certified configurations. The registry is populated only from a green
+/// `scripts/zk-certify.sh` run and binds each exact circuit digest.
+pub const CERTIFIED: &[ZkCertificate] = &[
+    ZkCertificate {
+        protocol_version: PROTOCOL_VERSION,
+        family: StatementFamily::Blake3Batch,
+        batch_size: 256,
+        circuit_digest: [
+            0x4a, 0x39, 0x8c, 0xa2, 0xe7, 0x3d, 0x9d, 0x1f, 0x70, 0x61, 0x1b, 0xd6, 0xa2, 0xa4,
+            0x08, 0xb0, 0x40, 0x4a, 0xab, 0xdd, 0xcf, 0x6c, 0xf7, 0x5c, 0x29, 0xcf, 0xa4, 0x12,
+            0xf7, 0x2f, 0x84, 0x23,
+        ],
+        transcript_schema_version: crate::transcript_schema::A1_SCHEMA_VERSION,
+        field_repr: FIELD_REPR,
+        fold_order: FOLD_ORDER,
+        endianness: ENDIANNESS,
+        pcs_m: 22,
+        pcs_log_inv_rate: 1,
+        pcs_log_batch_size: 6,
+        generator_rev: "symbolic-fv-ro-v1",
+        evidence: EVIDENCE_V1,
+    },
+    ZkCertificate {
+        protocol_version: PROTOCOL_VERSION,
+        family: StatementFamily::Blake3Preimage,
+        batch_size: 256,
+        circuit_digest: [
+            0xe7, 0x1b, 0xde, 0x2b, 0x05, 0x3b, 0x1b, 0x69, 0x74, 0x12, 0xd2, 0xd3, 0x0c, 0x2e,
+            0x2e, 0x57, 0xf7, 0xb5, 0xf1, 0x82, 0x24, 0x84, 0xfc, 0xbc, 0xc1, 0x5c, 0x89, 0xea,
+            0x20, 0x28, 0x90, 0xd5,
+        ],
+        transcript_schema_version: crate::transcript_schema::A1_SCHEMA_VERSION,
+        field_repr: FIELD_REPR,
+        fold_order: FOLD_ORDER,
+        endianness: ENDIANNESS,
+        pcs_m: 22,
+        pcs_log_inv_rate: 1,
+        pcs_log_batch_size: 6,
+        generator_rev: "symbolic-fv-ro-v1",
+        evidence: EVIDENCE_V1,
+    },
+];
 
 /// Look up the certificate for a configuration, ignoring the circuit digest
 /// (shape match only).
@@ -216,6 +241,51 @@ pub fn require_certified(
 mod tests {
     use super::*;
 
+    #[test]
+    #[ignore = "prints exact circuit digests for an intentional certificate re-pin"]
+    fn emit_production_circuit_digests() {
+        let batch = crate::r1cs_hashes::blake3::Blake3Setup::with_zk(256);
+        let preimage = crate::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup::new(256);
+        let hex = |digest: [u8; 32]| {
+            digest
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        };
+        println!("batch={}", hex(batch.r1cs.statement_digest()));
+        println!("preimage={}", hex(preimage.r1cs.statement_digest()));
+    }
+
+    #[test]
+    fn registered_production_circuit_digests_match() {
+        let batch = crate::r1cs_hashes::blake3::Blake3Setup::with_zk(256);
+        let preimage = crate::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup::new(256);
+        require_certified(
+            StatementFamily::Blake3Batch,
+            256,
+            &batch.r1cs,
+            &batch.pcs_params,
+        )
+        .expect("batch certificate must match its exact circuit");
+        require_certified(
+            StatementFamily::Blake3Preimage,
+            256,
+            &preimage.r1cs,
+            &preimage.pcs_params,
+        )
+        .expect("preimage certificate must match its exact circuit");
+        assert!(
+            require_certified(
+                StatementFamily::Blake3Preimage,
+                256,
+                &batch.r1cs,
+                &batch.pcs_params,
+            )
+            .is_err(),
+            "a batch circuit must not inherit the fixed-digest certificate"
+        );
+    }
+
     /// Test names the certify script actually invokes: the third argument of
     /// every `run` line, reduced to its bare name (last `::` segment, since
     /// lib tests are addressed by full module path).
@@ -259,8 +329,9 @@ mod tests {
     }
 
     /// Unsupported families and uncertified shapes are rejected, not
-    /// silently proved. (Digest-matching is exercised by the BLAKE3-side
-    /// test, which owns the real statement.)
+    /// silently proved. While the registry is intentionally empty after a
+    /// protocol bump, the previously certified production shape must also
+    /// remain closed. (Digest matching is exercised by the BLAKE3-side test.)
     #[test]
     fn uncertified_shapes_are_rejected() {
         let params = PcsParams {
@@ -276,7 +347,11 @@ mod tests {
         let mut other = params.clone();
         other.log_inv_rate = 2;
         assert!(find_shape(StatementFamily::Blake3Batch, 256, &other).is_none());
-        // The certified shape resolves.
-        assert!(find_shape(StatementFamily::Blake3Batch, 256, &params).is_some());
+        if CERTIFIED.is_empty() {
+            assert!(find_shape(StatementFamily::Blake3Batch, 256, &params).is_none());
+        } else {
+            assert!(find_shape(StatementFamily::Blake3Batch, 256, &params).is_some());
+            assert!(find_shape(StatementFamily::Blake3Preimage, 256, &params).is_some());
+        }
     }
 }

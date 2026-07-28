@@ -37,14 +37,12 @@
 //!
 //! ## Zero-knowledge status
 //!
-//! The prove entry points here are the **non-zk** ones: they prove knowledge
-//! of preimages, they do not hide them. The zk mode for this statement needs a
-//! simulator that receives only `y` and produces an accepting transcript — a
-//! different object from the batch mode's simulator, which is the honest
-//! prover on a self-chosen witness and is valid *only* because that statement
-//! binds nothing. See `docs/memos/` for the construction and its open
-//! obligations; until it is built and certified, no zero-knowledge claim
-//! attaches to this statement.
+//! [`Blake3PreimageSetup`] is the non-zk prover. [`Blake3PreimageZkSetup`]
+//! uses the certified field-mask protocol and is gated to the exact production
+//! shape. Its simulator accepts only a sealed public statement, and the
+//! unmodified verifier checks the resulting proof through the same framed
+//! random oracle. The precise computational-ZK and knowledge-security scopes
+//! are recorded in `docs/paper/zk-flock.tex`.
 
 use flock_core::challenger::Challenger;
 use flock_core::pcs::{Commitment, PcsParams};
@@ -55,11 +53,12 @@ use crate::digest_bind::{
     DigestChallenges, DigestLayout, DigestStatement, PaddingDigest, digest_claim,
     digest_claim_point, digest_claim_value,
 };
+#[cfg(feature = "zk")]
+use crate::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
 use crate::r1cs_hashes::blake3::{
     BLAKE3_IV, Compression, FLAGS_ROOT_HASH, K_LOG, ParamPinning, ROOT_HASH_BLOCK_LEN,
     build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
-    generate_witness_with_ab_packed_and_lincheck_pinned,
-    generate_witness_with_ab_packed_and_lincheck_zk_pinned, min_n_blocks_log,
+    generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
 
 /// Bytes of message covered by one instance of this relation.
@@ -115,6 +114,9 @@ pub enum PreimageError {
     DigestMismatch { index: usize },
     /// The statement's digest count does not match the setup's batch size.
     BatchSizeMismatch { expected: usize, got: usize },
+    /// The caller selected a zk shape that is not in the fail-closed
+    /// certificate registry.
+    Uncertified,
 }
 
 impl std::fmt::Display for PreimageError {
@@ -127,6 +129,7 @@ impl std::fmt::Display for PreimageError {
             Self::BatchSizeMismatch { expected, got } => {
                 write!(f, "statement has {got} digests, setup expects {expected}")
             }
+            Self::Uncertified => write!(f, "fixed-digest zk configuration is not certified"),
         }
     }
 }
@@ -338,17 +341,10 @@ impl Blake3PreimageSetup {
 /// The zk-mode fixed-digest setup: the same relation, proved through the
 /// amended (masked) A1′ pipeline with a hiding commitment.
 ///
-/// **Status: knowledge-sound and masked, NOT yet certified zero-knowledge.**
-/// The masking channels blind every witness-dependent transcript coordinate
-/// exactly as they do for the batch statement, and the digest claim adds only
-/// a public value. What is *not* yet established is the property that makes
-/// the mode meaningful for a fixed digest: a simulator that receives only the
-/// public digests and produces an accepting transcript. The batch mode's
-/// simulator cannot be reused — it is the honest prover on a witness of its
-/// own choosing, which is legitimate only when the statement binds nothing.
-/// Building that simulator (and the extractor that recovers real preimages)
-/// is tracked in `docs/memos/`; until both exist this type carries no
-/// zero-knowledge claim and is not certificate-gated.
+/// The proving path is fail-closed: it runs only for a circuit digest and PCS
+/// shape registered as [`crate::zk_certificate::StatementFamily::Blake3Preimage`].
+/// Its computational-ZK claim is separate from the standalone knowledge
+/// label; see the paper for the exact bounds and assumptions.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -402,6 +398,7 @@ impl Blake3PreimageZkSetup {
     }
 
     /// Prove, with masking, that the committed messages hash to `digests`.
+    #[cfg(feature = "zk")]
     pub fn prove<Ch: Challenger + Clone>(
         &self,
         msgs: &[[u8; MESSAGE_BYTES]],
@@ -410,6 +407,14 @@ impl Blake3PreimageZkSetup {
         challenger: &mut Ch,
     ) -> Result<(crate::prover::R1csProofZkA1, Commitment), PreimageError> {
         use flock_core::zk::MaskSampler;
+
+        crate::zk_certificate::require_certified(
+            crate::zk_certificate::StatementFamily::Blake3Preimage,
+            self.n_blocks,
+            &self.r1cs,
+            &self.pcs_params,
+        )
+        .map_err(|_| PreimageError::Uncertified)?;
 
         if digests.len() != self.n_blocks || msgs.len() != self.n_blocks {
             return Err(PreimageError::BatchSizeMismatch {
@@ -454,9 +459,10 @@ impl Blake3PreimageZkSetup {
         absorb_statement(challenger, &stmt);
 
         let mut forks = crate::prover::A1MaskForks::from_rng(&mut mask_rng);
+        let proof_nonce = forks.proof_nonce;
         let layout_kind = self.r1cs.layout;
         let stmt_for_claim = stmt.clone();
-        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd(
+        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd_nonce(
             &self.r1cs,
             &self.pcs_params,
             z_packed,
@@ -472,12 +478,14 @@ impl Blake3PreimageZkSetup {
             },
             None,
             None,
+            proof_nonce,
             challenger,
         );
         Ok((proof, comm))
     }
 
     /// Verify a masked preimage proof against the public digests.
+    #[cfg(feature = "zk")]
     pub fn verify<Ch: Challenger + Clone>(
         &self,
         commitment: &Commitment,
@@ -485,16 +493,33 @@ impl Blake3PreimageZkSetup {
         digests: &[[u8; DIGEST_BYTES]],
         challenger: &mut Ch,
     ) -> Result<(), flock_core::verifier::VerifyError> {
+        let ro = flock_core::ro::RoContext::native(proof.proof_nonce);
+        self.verify_with_ro(commitment, proof, digests, &ro, challenger)
+    }
+
+    /// Verify with an explicit point-oracle backend. The ROM simulator uses
+    /// this to give the unmodified verification logic the same oracle object
+    /// as its challenger and Merkle commitments.
+    #[cfg(feature = "zk")]
+    pub fn verify_with_ro<Ch: Challenger + Clone>(
+        &self,
+        commitment: &Commitment,
+        proof: &crate::prover::R1csProofZkA1,
+        digests: &[[u8; DIGEST_BYTES]],
+        ro: &flock_core::ro::RoContext,
+        challenger: &mut Ch,
+    ) -> Result<(), flock_core::verifier::VerifyError> {
         let stmt = self.statement(digests);
         stmt.validate();
         absorb_statement(challenger, &stmt);
         let layout_kind = self.r1cs.layout;
-        crate::prover::verify_r1cs_zk_a1_pd(
+        crate::prover::verify_r1cs_zk_a1_pd_ro(
             &self.r1cs,
             &self.pcs_params,
             proof,
             commitment,
             self.r1cs.csc_lincheck_circuit(),
+            ro,
             &mut |ch: &mut Ch| {
                 let dch = DigestChallenges::sample(&stmt, ch);
                 vec![(
@@ -757,82 +782,24 @@ mod tests {
     #[test]
     fn simulator_produces_an_accepting_proof_without_any_preimage() {
         use crate::preimage_simulator::simulate;
-        use crate::r1cs_hashes::blake3::{
-            ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-        };
         use crate::sim_oracle::{OracleChallenger, shared_oracle};
+        use crate::sim_seal::{SealedStatement, SimCoins};
 
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         // The statement: digests of messages the simulator will never see.
         let secret = msgs_of(0x5EC1_5EC1, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&secret);
-        let stmt = setup.statement(&digests);
-
-        // The simulator's own, unrelated messages.
-        let own = msgs_of(0x09E4_09E4, N_TEST);
-        let layout = setup.r1cs.zk.expect("zk layout");
-        let n_slots = setup.n_block_slots();
-        let mut zrng = flock_core::zk::ZkRng::from_seed([3u8; 32]);
-        let mut rand_words =
-            vec![0u64; n_slots * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)];
-        {
-            use flock_core::zk::MaskSampler;
-            zrng.fill_u64s(&mut rand_words);
-        }
-        let build = || {
-            let blocks: Vec<Compression> = own.iter().map(message_compression).collect();
-            let (z, _a, _b, stripe) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
-                &blocks,
-                setup.n_blocks_log(),
-                &layout,
-                &rand_words,
-                ParamPinning::RootHash64,
-            );
-            (z, stripe)
-        };
-
-        // Overwrite the output slots with the PUBLIC digests. Packed word
-        // (block i, slot j) holds out_lo's two halves at j = 2, 3.
-        let patch = |z: &mut [flock_core::field::F128]| {
-            let words_per_block = (1usize << 14) / 128;
-            for (i, d) in digests.iter().enumerate() {
-                for half in 0..2usize {
-                    let mut w = flock_core::field::F128::ZERO;
-                    for b in 0..128usize {
-                        let bit = half * 128 + b;
-                        let byte = d[bit / 8];
-                        if (byte >> (bit % 8)) & 1 == 1 {
-                            if b < 64 {
-                                w.lo |= 1u64 << b;
-                            } else {
-                                w.hi |= 1u64 << (b - 64);
-                            }
-                        }
-                    }
-                    z[i * words_per_block + 2 + half] = w;
-                }
-            }
-        };
-
+        let sealed = SealedStatement::new(&setup, &digests).expect("public statement");
         let oracle = shared_oracle();
-        let sim = simulate(
-            &setup.r1cs,
-            &setup.pcs_params,
-            setup.r1cs.csc_lincheck_circuit(),
-            &stmt,
-            build,
-            &patch,
-            0xC0FFEE,
-            &oracle,
-            b"b3-preimage-zk",
-        )
-        .expect("simulation must succeed");
+        let sim = simulate(&sealed, SimCoins::new(0xC0FFEE), &oracle, b"b3-preimage-zk")
+            .expect("simulation must succeed");
 
         println!("simulator programmed {} oracle points", sim.programmed);
 
         let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
+        let ro = crate::sim_oracle::ro_context(sim.proof.proof_nonce, oracle.clone());
         setup
-            .verify(&sim.commitment, &sim.proof, &digests, &mut chv)
+            .verify_with_ro(&sim.commitment, &sim.proof, &digests, &ro, &mut chv)
             .expect("the UNMODIFIED verifier must accept the simulated proof");
     }
 
@@ -939,9 +906,10 @@ mod tests {
         crate::r1cs_hashes::blake3_preimage::absorb_statement(&mut ch, &stmt);
         let mut mrng = flock_core::zk::ZkRng::from_seed([6u8; 32]);
         let mut forks = crate::prover::A1MaskForks::from_rng(&mut mrng);
+        let proof_nonce = forks.proof_nonce;
         let layout_kind = setup.r1cs.layout;
         let stmt2 = stmt.clone();
-        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd(
+        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd_nonce(
             &setup.r1cs,
             &setup.pcs_params,
             z,
@@ -957,6 +925,7 @@ mod tests {
             },
             None, // honest zerocheck — no simulation
             None,
+            proof_nonce,
             &mut ch,
         );
         let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle);
@@ -983,17 +952,13 @@ mod tests {
     #[ignore = "diagnostic; run explicitly"]
     fn measure_simulated_vs_honest_transcript() {
         use crate::preimage_simulator::simulate;
-        use crate::r1cs_hashes::blake3::{
-            ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-        };
         use crate::sim_oracle::shared_oracle;
+        use crate::sim_seal::{SealedStatement, SimCoins};
         use crate::transcript_schema::{algebraic_vector, flatten_a1};
-        use flock_core::zk::MaskSampler;
 
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         let secret = msgs_of(0xD1F_0001, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&secret);
-        let stmt = setup.statement(&digests);
 
         // Honest proof of the same statement (the party that knows the
         // preimages).
@@ -1003,59 +968,11 @@ mod tests {
             .prove(&secret, &digests, &mut hrng, &mut hch)
             .expect("honest prove");
 
-        // Simulated proof of the same statement.
-        let own = msgs_of(0xD1F_0002, N_TEST);
-        let layout = setup.r1cs.zk.expect("zk layout");
-        let mut zrng = flock_core::zk::ZkRng::from_seed([22u8; 32]);
-        let mut rand_words = vec![
-            0u64;
-            setup.n_block_slots()
-                * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)
-        ];
-        zrng.fill_u64s(&mut rand_words);
-        let build = || {
-            let blocks: Vec<Compression> = own.iter().map(message_compression).collect();
-            let (z, _a, _b, stripe) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
-                &blocks,
-                setup.n_blocks_log(),
-                &layout,
-                &rand_words,
-                ParamPinning::RootHash64,
-            );
-            (z, stripe)
-        };
-        let words_per_block = (1usize << 14) / 128;
-        let patch = |z: &mut [flock_core::field::F128]| {
-            for (i, d) in digests.iter().enumerate() {
-                for half in 0..2usize {
-                    let mut w = flock_core::field::F128::ZERO;
-                    for b in 0..128usize {
-                        let bit = half * 128 + b;
-                        if (d[bit / 8] >> (bit % 8)) & 1 == 1 {
-                            if b < 64 {
-                                w.lo |= 1u64 << b;
-                            } else {
-                                w.hi |= 1u64 << (b - 64);
-                            }
-                        }
-                    }
-                    z[i * words_per_block + 2 + half] = w;
-                }
-            }
-        };
+        // Simulated proof of the same public statement.
+        let sealed = SealedStatement::new(&setup, &digests).expect("public statement");
         let oracle = shared_oracle();
-        let sim = simulate(
-            &setup.r1cs,
-            &setup.pcs_params,
-            setup.r1cs.csc_lincheck_circuit(),
-            &stmt,
-            build,
-            &patch,
-            0xD1FF,
-            &oracle,
-            b"b3-preimage-zk",
-        )
-        .expect("simulate");
+        let sim =
+            simulate(&sealed, SimCoins::new(0xD1FF), &oracle, b"b3-preimage-zk").expect("simulate");
 
         let hv = algebraic_vector(&flatten_a1(&hcomm, &hproof));
         let sv = algebraic_vector(&flatten_a1(&sim.commitment, &sim.proof));

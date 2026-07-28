@@ -1,0 +1,20 @@
+{
+  "protocol": "flock-zk-fv-v3",
+  "game_hops": [
+    {"hop":"G0","change":"honest prover","term":"0"},
+    {"hop":"G1","change":"PIOP mask translation","term":"epsilon_s2_rank <= 720/2^128"},
+    {"hop":"G2","change":"PCS mu/g translation","term":"Pr[c=0] + epsilon_query_solve"},
+    {"hop":"G3","change":"framed Merkle boundary","term":"epsilon_sibling + epsilon_hash"},
+    {"hop":"G4","change":"fresh RO programming","term":"epsilon_prequery + epsilon_prefix_collision"},
+    {"hop":"G5","change":"sealed one-pass solve","term":"Pr[degenerate rho or comb]"}
+  ],
+  "production_q_hash_log2": 64,
+  "programmed_points_upper_bound": 18,
+  "s2_rank_bits": 118.50814690367032,
+  "explicit_union_bound_bits": 118.50214816304889,
+  "prequery_bits": 187.83007499855768,
+  "l0_sibling_conditional_entropy_bits": 16384,
+  "recursive_siblings": "identical because delta_F=0 globally",
+  "conservative_zk_bits_at_q64": 118.50214816304889,
+  "status": "algebraic and hash-boundary game terms closed"
+}
