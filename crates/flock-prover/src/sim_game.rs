@@ -135,9 +135,9 @@ impl SimGameLedger {
 }
 
 /// The nonzero proof-of-work difficulties in one registered PCS opening:
-/// one 10-bit blinder challenge, six L0 folds, three L1 folds, and one L2
+/// one 10-bit blinder challenge, six L0 folds, four L1 folds, and one L2
 /// fold. Five independent PCS openings use this schedule in each proof.
-pub const PRODUCTION_GRIND_BITS_PER_OPENING: &[u32] = &[10, 9, 8, 7, 6, 5, 4, 4, 3, 2, 1];
+pub const PRODUCTION_GRIND_BITS_PER_OPENING: &[u32] = &[10, 9, 8, 7, 6, 5, 4, 4, 3, 2, 1, 1];
 pub const PRODUCTION_PCS_OPENINGS: u64 = 5;
 
 /// Bound the total candidate hashes used by all registered grinding sites.

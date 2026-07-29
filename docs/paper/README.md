@@ -65,11 +65,18 @@ changing it would intentionally make proofs incompatible.
 ## Reproduction
 
 ```sh
+scripts/zk-paper-reproduce.sh
+```
+
+The combined command runs the certificate and benchmark suites. The individual
+developer checks remain:
+
+```sh
 scripts/zk-certify.sh
 cargo test --release --workspace --features zk,symbolic
 cargo clippy --workspace --all-targets --features zk,symbolic -- -D warnings
 cd lean && lake build
-ZK_BENCH_THREADS=12 ZK_BENCH_RUNS=10 scripts/zk-benchmark.sh
+ZK_BENCH_THREADS=12 ZK_BENCH_RUNS=20 scripts/zk-benchmark.sh
 ```
 
 Build the paper with `tectonic zk-flock.tex` and the companion with

@@ -839,6 +839,12 @@ mod tests {
             .expect("simulated proof verifies");
         let all_points = oracle.lock().unwrap().queries().to_vec();
         let verifier = OracleQueryCounts::classify(&all_points[prover_points.len()..]);
+        assert_eq!(
+            verifier.pow_candidates,
+            crate::sim_game::PRODUCTION_PCS_OPENINGS
+                * crate::sim_game::PRODUCTION_GRIND_BITS_PER_OPENING.len() as u64,
+            "recorded verifier grind sites must match the production schedule",
+        );
 
         println!("prover oracle counts: {prover:?}");
         println!("verifier oracle counts: {verifier:?}");

@@ -28,14 +28,14 @@
     "verifier_merkle_nodes": 5915,
     "verifier_pow_candidates": 60,
     "verifier_transcript_and_state": 2579,
-    "nonzero_grinding_sites": 55,
-    "grinding_candidate_bound": 956065,
+    "nonzero_grinding_sites": 60,
+    "grinding_candidate_bound": 957910,
     "grinding_tail_probability": "at most 2^-128",
-    "protocol_query_bound": 996013,
-    "total_query_bound": "2^64 + 996013",
-    "collision_term": "binom(2^64 + 996013, 2) / 2^256",
+    "protocol_query_bound": 997858,
+    "total_query_bound": "2^64 + 997858",
+    "collision_term": "binom(2^64 + 997858, 2) / 2^256",
     "programming_prequery_term": "18 * 2^64 / 2^256",
-    "sibling_term": "(2^64 + 996013) / 2^16384"
+    "sibling_term": "(2^64 + 997858) / 2^16384"
   },
   "final_zk_bits_at_q64": 118.49915812044307,
   "status": "complete classical-ROM ledger for the registered profile"
