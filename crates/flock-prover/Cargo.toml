@@ -207,5 +207,10 @@ required-features = ["unsound-challenger"]
 name = "permutation"
 harness = false
 
+[[bench]]
+name = "zk_vs_baseline"
+harness = false
+required-features = ["zk"]
+
 [lints]
 workspace = true
