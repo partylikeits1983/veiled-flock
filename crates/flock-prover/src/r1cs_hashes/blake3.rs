@@ -1486,8 +1486,7 @@ impl Blake3Setup {
         let mut wit_rng = rng.fork(b"witness-rand");
         let mut pcs_rng = rng.fork(b"pcs-masks");
         let n_total = self.n_block_slots();
-        let mut rand_words =
-            vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
+        let mut rand_words = vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
         wit_rng.fill_u64s(&mut rand_words);
         let (z_packed, a_packed_f128, b_packed_f128, z_packed_lincheck) =
             generate_witness_with_ab_packed_and_lincheck_zk(
@@ -1506,6 +1505,205 @@ impl Blake3Setup {
             z_packed_lincheck,
             lc_circuit,
             &mut pcs_rng,
+            challenger,
+        )
+    }
+
+    // (see `zk_rand_words_per_block_pub` below)
+
+    /// **The A1′ reference zero-knowledge prover** — the entry point the ZK
+    /// claim attaches to, and the only one that runs the amended (masked)
+    /// zerocheck.
+    ///
+    /// Gated: refuses any configuration without a matching
+    /// [`crate::zk_certificate::ZkCertificate`]. Owns the whole mask
+    /// lifecycle from a single per-proof DRBG — witness randomizer rows plus
+    /// the forks `prove_r1cs_zk_a1` makes for `P`, `Q`, A2's `S`, A3's
+    /// `S_c`/`S_h`, and the six hiding commitments — so every mask channel
+    /// the certificates reason about is sampled here, independently and
+    /// domain-separated.
+    ///
+    /// Contrast [`Self::prove_fast_zk`]: optimized, but its zerocheck is
+    /// **un-amended**, so the round-message hiding argument does not apply
+    /// to it. No ZK claim is made for that path.
+    #[cfg(feature = "zk")]
+    pub fn prove_zk_a1<Ch: Challenger + Clone>(
+        &self,
+        blocks: &[Compression],
+        challenger: &mut Ch,
+    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError>
+    {
+        let mut rng = flock_core::zk::ZkRng::from_entropy();
+        self.prove_zk_a1_with_rng(blocks, &mut rng, challenger)
+    }
+
+    /// [`Self::prove_zk_a1`] with a caller-provided DRBG (deterministic
+    /// tests and the certificate suites).
+    #[cfg(feature = "zk")]
+    pub fn prove_zk_a1_with_rng<Ch: Challenger + Clone>(
+        &self,
+        blocks: &[Compression],
+        rng: &mut flock_core::zk::ZkRng,
+        challenger: &mut Ch,
+    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError>
+    {
+        use crate::zk_certificate::{StatementFamily, require_certified};
+        use flock_core::zk::MaskSampler;
+
+        require_certified(
+            StatementFamily::Blake3Batch,
+            self.n_blocks,
+            &self.r1cs,
+            &self.pcs_params,
+        )?;
+        assert_eq!(blocks.len(), self.n_blocks);
+        assert!(self.pcs_params.zk, "use Blake3Setup::with_zk");
+        let layout = self.r1cs.zk.expect("zk setup carries a layout");
+        assert_eq!(
+            self.r1cs.layout,
+            flock_core::r1cs::WitnessLayout::RowMajor,
+            "zk witness generation currently supports the row-major layout"
+        );
+
+        let mut wit_rng = rng.fork(b"a1-witness-rand");
+        let mut mask_rng = rng.fork(b"a1-masks");
+        let n_total = self.n_block_slots();
+        let mut rand_words = vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
+        wit_rng.fill_u64s(&mut rand_words);
+        let (z_packed, a_packed_f128, b_packed_f128, z_packed_lincheck) =
+            generate_witness_with_ab_packed_and_lincheck_zk(
+                blocks,
+                self.n_blocks_log(),
+                &layout,
+                &rand_words,
+            );
+        let lc_circuit = self.r1cs.csc_lincheck_circuit();
+        Ok(crate::prover::prove_r1cs_zk_a1(
+            &self.r1cs,
+            &self.pcs_params,
+            z_packed,
+            a_packed_f128,
+            b_packed_f128,
+            z_packed_lincheck,
+            lc_circuit,
+            &mut mask_rng,
+            challenger,
+        ))
+    }
+
+    /// [`Self::prove_zk_a1_with_rng`] with the **per-proof mask-coverage
+    /// self-check** enabled: the mask draw is verified to cover the
+    /// round-pair block, and a draw that fails is discarded and resampled
+    /// (up to `max_resamples`) rather than emitted.
+    ///
+    /// This is what makes `ε_rank = 0` true of emitted proofs rather than a
+    /// probability bound (see `crate::zk_rank_check` for why the previous
+    /// Schwartz–Zippel bound was withdrawn). The failure event depends only
+    /// on `(Q, challenges)` — not on the witness directly. One caveat is
+    /// load-bearing: under Fiat–Shamir the challenges are derived from the
+    /// witness *commitment* (this check runs after `bind_statement` absorbs
+    /// it), so the event's witness-independence is **computational** — it
+    /// rests on the commitment's hiding (ROM assumption), the same step the
+    /// FS lift already relies on — not unconditional. See
+    /// `docs/zk-proof.md` §8. Under that assumption, discarding and
+    /// resampling leaks nothing about the witness.
+    ///
+    /// It is a separate entry point because the check runs thousands of fold
+    /// passes over the full cube and dominates proving at production size;
+    /// callers choose between paying it per proof and relying on the
+    /// certificates' measured coverage at the certified configuration.
+    #[cfg(feature = "zk")]
+    pub fn prove_zk_a1_checked<Ch: Challenger + Clone>(
+        &self,
+        blocks: &[Compression],
+        rng: &mut flock_core::zk::ZkRng,
+        max_resamples: usize,
+        challenger: &mut Ch,
+    ) -> Result<
+        (
+            crate::prover::R1csProofZkA1,
+            Commitment,
+            crate::zk_rank_check::RankCheckReport,
+        ),
+        crate::zk_certificate::ZkGateError,
+    > {
+        use crate::zk_certificate::{StatementFamily, require_certified};
+        use flock_core::zk::MaskSampler;
+
+        require_certified(
+            StatementFamily::Blake3Batch,
+            self.n_blocks,
+            &self.r1cs,
+            &self.pcs_params,
+        )?;
+        assert_eq!(blocks.len(), self.n_blocks);
+        let layout = self.r1cs.zk.expect("zk setup carries a layout");
+        let lc_circuit = self.r1cs.csc_lincheck_circuit();
+        let log_n = self.pcs_params.log_msg_len();
+        let lig_config = flock_core::pcs::ligerito::prover_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        )
+        .expect("Ligerito config");
+
+        for attempt in 0..=max_resamples {
+            let mut wit_rng = rng.fork(b"a1-witness-rand");
+            let mut mask_rng = rng.fork(b"a1-masks");
+            let n_total = self.n_block_slots();
+            let mut rand_words =
+                vec![0u64; n_total * super::common::zk_rand_words_per_block(&layout)];
+            wit_rng.fill_u64s(&mut rand_words);
+            let (z_packed, a_f128, b_f128, stripe) =
+                generate_witness_with_ab_packed_and_lincheck_zk(
+                    blocks,
+                    self.n_blocks_log(),
+                    &layout,
+                    &rand_words,
+                );
+            let mut forks = crate::prover::A1MaskForks::from_rng(&mut mask_rng);
+            let mut ch = challenger.clone();
+            let (proof, comm, report) = crate::prover::prove_r1cs_zk_a1_with_masks(
+                &self.r1cs,
+                &self.pcs_params,
+                z_packed,
+                a_f128,
+                b_f128,
+                stripe,
+                lc_circuit,
+                &lig_config,
+                forks.sources(),
+                Some(0xC0FF_EE00 ^ attempt as u64),
+                &mut ch,
+            );
+            let mut report = report.expect("coverage check requested");
+            if report.covered() {
+                report.resamples = attempt;
+                *challenger = ch;
+                return Ok((proof, comm, report));
+            }
+            // Draw rejected: the proof is discarded, never emitted.
+        }
+        Err(crate::zk_certificate::ZkGateError::MaskCoverageExhausted {
+            attempts: max_resamples + 1,
+        })
+    }
+
+    /// Verifier for [`Self::prove_zk_a1`].
+    #[cfg(feature = "zk")]
+    pub fn verify_zk_a1<Ch: Challenger + Clone>(
+        &self,
+        commitment: &Commitment,
+        proof: &crate::prover::R1csProofZkA1,
+        challenger: &mut Ch,
+    ) -> Result<(), flock_core::verifier::VerifyError> {
+        let lc_circuit = self.r1cs.csc_lincheck_circuit();
+        crate::prover::verify_r1cs_zk_a1(
+            &self.r1cs,
+            &self.pcs_params,
+            proof,
+            commitment,
+            lc_circuit,
             challenger,
         )
     }
@@ -2291,7 +2489,11 @@ mod tests {
         use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(256);
         assert!(setup.r1cs.zk.is_some());
-        assert_eq!(setup.r1cs.useful_bits, 1 << K_LOG, "blake3 zk fills the block");
+        assert_eq!(
+            setup.r1cs.useful_bits,
+            1 << K_LOG,
+            "blake3 zk fills the block"
+        );
         let mut rng = Rng::new(0xb1a_3211e);
         let blocks: Vec<Compression> = (0..256)
             .map(|_| {
@@ -2374,8 +2576,14 @@ mod tests {
     /// accepting proof; fresh masks give a different transcript that still
     /// verifies; tampering `P(ρ)`, `σ_z`, or a masked round message is
     /// rejected.
+    ///
+    /// **Not `#[ignore]`d, deliberately.** It costs under a second in release
+    /// and it is the only fast-suite test that exercises the *batch-major*
+    /// witness layout end to end. That matters for amendment A2: batch-major
+    /// `ab_claim_point` reshuffles the quirky point, and `S` is opened at
+    /// exactly that point, so the A2 opening takes a code path the row-major
+    /// m=15 fixture never reaches.
     #[test]
-    #[ignore = "e2e A1′ reference prover (256-block BLAKE3)"]
     fn prove_verify_r1cs_zk_a1_roundtrip() {
         use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(256);
@@ -2450,17 +2658,7 @@ mod tests {
 
         // Tamper rejection.
         for t in 0..3 {
-            let mut bad = crate::prover::R1csProofZkA1 {
-                zerocheck: proof.zerocheck.clone(),
-                lincheck: proof.lincheck.clone(),
-                pcs_open: proof.pcs_open.clone(),
-                ab: proof.ab.clone(),
-                c: proof.c.clone(),
-                open_p: proof.open_p.clone(),
-                open_q: proof.open_q.clone(),
-                comm_p: proof.comm_p.clone(),
-                comm_q: proof.comm_q.clone(),
-            };
+            let mut bad = proof.clone();
             match t {
                 0 => bad.zerocheck.final_p_eval.lo ^= 1,
                 1 => bad.zerocheck.mask_init.lo ^= 1,
@@ -2469,12 +2667,67 @@ mod tests {
             let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
             assert!(
                 crate::prover::verify_r1cs_zk_a1(
-                    &setup.r1cs, &setup.pcs_params, &bad, &comm, lc_circuit, &mut ch
+                    &setup.r1cs,
+                    &setup.pcs_params,
+                    &bad,
+                    &comm,
+                    lc_circuit,
+                    &mut ch
                 )
                 .is_err(),
                 "A1′ tamper {t} must be rejected"
             );
         }
+    }
+
+    /// The certified circuit digest in the ZK certificate registry must be
+    /// the digest of the real 256-block BLAKE3 zk statement; the gate is
+    /// otherwise vouching for a circuit nobody proves against. On failure
+    /// this prints the current digest for an intentional re-pin.
+    #[cfg(feature = "zk")]
+    #[test]
+    fn zk_certificate_digest_matches_setup() {
+        use crate::zk_certificate::{CERTIFIED, StatementFamily};
+        let setup = Blake3Setup::with_zk(256);
+        let digest = setup.r1cs.statement_digest();
+        let cert = CERTIFIED
+            .iter()
+            .find(|c| c.family == StatementFamily::Blake3Batch && c.batch_size == 256)
+            .expect("the 256-block BLAKE3 batch config must be certified");
+        if cert.circuit_digest != digest {
+            let body: Vec<String> = digest.iter().map(|b| format!("0x{b:02x}")).collect();
+            panic!(
+                "certified circuit_digest is stale. Current statement digest:\n[{}]",
+                body.join(", ")
+            );
+        }
+        assert_eq!(cert.pcs_m, setup.pcs_params.m);
+        assert_eq!(cert.pcs_log_inv_rate, setup.pcs_params.log_inv_rate);
+        assert_eq!(cert.pcs_log_batch_size, setup.pcs_params.log_batch_size);
+    }
+
+    /// The ZK API fails closed: an uncertified batch size is refused before
+    /// any proving work happens. (Constructing the setup is cheap relative
+    /// to proving; the gate rejects at the entry point.)
+    #[cfg(feature = "zk")]
+    #[test]
+    #[ignore = "builds a second large zk setup; run with --ignored"]
+    fn zk_a1_rejects_uncertified_batch_size() {
+        use flock_core::challenger::FsChallenger;
+        let setup = Blake3Setup::with_zk(512);
+        let blocks: Vec<Compression> = (0..512)
+            .map(|_| ([0u32; 8], [0u32; 16], 0, 64, 11))
+            .collect();
+        let mut ch = FsChallenger::new(b"flock-a1-gate-test");
+        let res = setup.prove_zk_a1(&blocks, &mut ch);
+        assert!(
+            matches!(
+                res,
+                Err(crate::zk_certificate::ZkGateError::Uncertified { .. })
+            ),
+            "uncertified batch size must be refused, got {:?}",
+            res.map(|_| "Ok")
+        );
     }
 
     /// Generic (matrix-driven) Ligerito prove produces a byte-identical

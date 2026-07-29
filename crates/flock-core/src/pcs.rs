@@ -230,7 +230,11 @@ fn open_zk_blinded<Ch: Challenger>(
     use rayon::prelude::*;
     let w = packed_witness.len();
     assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
-    assert_eq!(prover_data.zk_blind.len(), 2 * w, "commit_zk blinder missing");
+    assert_eq!(
+        prover_data.zk_blind.len(),
+        2 * w,
+        "commit_zk blinder missing"
+    );
     let g = &prover_data.zk_blind;
     let g_top = &g[w..];
 
@@ -1073,7 +1077,10 @@ mod tests {
         // Proof stripped of its zk_blind ⇒ mode mismatch ⇒ reject.
         let (c5, mut p5) = prove([5u8; 32], false, false);
         p5.zk_blind = None;
-        assert!(verify(&c5, &p5).is_err(), "missing zk_blind must be rejected");
+        assert!(
+            verify(&c5, &p5).is_err(),
+            "missing zk_blind must be rejected"
+        );
     }
 
     /// **Z2: hiding P,Q commitment + opening at the zerocheck point ρ.**
@@ -1125,8 +1132,9 @@ mod tests {
             let mut ch = FsChallenger::new(b"flock-z2-v0");
             ch.observe_bytes(&comm_p.root);
             ch.observe_bytes(&comm_q.root);
-            let (mut zkproof, claim) =
-                crate::zerocheck::prove_packed_padded_zk(&ap, &bp, &cp, &pbp, &qbp, m, &pad, &mut ch);
+            let (mut zkproof, claim) = crate::zerocheck::prove_packed_padded_zk(
+                &ap, &bp, &cp, &pbp, &qbp, m, &pad, &mut ch,
+            );
             if tamper_pr {
                 zkproof.final_p_eval += F128::ONE;
             }

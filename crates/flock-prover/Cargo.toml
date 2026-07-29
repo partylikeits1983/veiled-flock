@@ -212,5 +212,10 @@ name = "zk_vs_baseline"
 harness = false
 required-features = ["zk"]
 
+[[bench]]
+name = "zk_a1_reference"
+harness = false
+required-features = ["zk"]
+
 [lints]
 workspace = true

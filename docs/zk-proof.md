@@ -1,8 +1,11 @@
-# Zero-knowledge for Flock (amended protocol A1′): proof document
+# Zero-knowledge for Flock (amended protocol A1′+A2): proof document
 
 This document states and proves the zero-knowledge property of the `zk` mode
-for **BLAKE3 batch statements**, under the amendment A1′ (a degree-2 committed
-mask channel for the zerocheck round messages). It is written to be checkable:
+for **BLAKE3 batch statements**, under two amendments: A1′ (a degree-2
+committed mask channel for the zerocheck round messages) and A2 (a committed
+*additive* channel for the lincheck, §5b). The two are different in kind
+because the layers are: the zerocheck masks a product of witness-dependent
+multilinears, the lincheck a linear slot against a public multiplier. It is written to be checkable:
 each claim is marked with how it is established —
 
 - **[P]** closed-form proof in this document;
@@ -33,17 +36,74 @@ what is not yet done.
   rejected (`prove_verify_r1cs_zk_a1_roundtrip`). This is a self-contained
   reference path; the optimized fused prover is a differential-tested
   follow-up (the shipped `prove_fast_zk` still runs the un-amended zerocheck).
-- The joint conditional coverage is verified on the **real amended prover** at
-  the zerocheck layer (`full_conditional_coverage_zk_zerocheck`, `L={P(ρ),σ_z}`
-  — no claim-preserving witness direction leaks); the affine and PCS layers
-  reuse the existing exact certificates, composing by the independent-channel
-  lemma (`MaskingSurjective.coprod_covers`, Lean). What remains: assembling
-  these into **one** complete-transcript certificate over the integrated
-  prover, for a small explicit parameter set (currently one fixture per
-  layer).
-- The bad-mask probability bound (§8) and the Merkle-sibling hiding argument
-  (§9) are closed-form but **not machine-checked** with an explicit numerical
-  constant; per-parameter certificate gating is not yet wired.
+- **Complete-transcript coverage: ESTABLISHED at the certified fixture.**
+  The joint conditional certificate runs the COMPLETE A1' pipeline on the real
+  prover, with every coordinate located through the canonical transcript
+  schema, the complete mask-only leakage set conditioned on, every public
+  claim the verifier learns conditioned on, and a genuinely linear
+  witness-difference family. Measured over three challenge tuples at the
+  16-block fixture (~1.9×10⁵ probes per tuple at the current full budget;
+  complete algebraic transcript 1532 F128 = 548 witness-dependent + 983
+  mask-only + one derived — A3 grew the mask-only class from 591): claim
+  space saturated at 384 bits and
+  rank[residual | dclaim] = 384 = rank(dclaim) at every tuple - no
+  claim-preserving witness direction escapes the joint image.
+
+  Supporting results on the round-pair class: H1 (the inner mask image is the
+  same subspace at different witnesses) holds with the degree-2 channel —
+  without it the image collapses to 768 of the block's 2816 bits; the
+  inner-stage deficit is exactly one F128 direction and it is exactly
+  `final_b`, supplied by the outer (u_B) stage; a constant Q collapses the
+  channel image from 2561 to 1281 bits, delimiting the bad-mask set. The negative controls fire, including a canary
+  that appends a raw witness functional.
+
+  Four corrections were needed to get an interpretable verdict, each of which
+  had made earlier results uninterpretable rather than wrong-in-the-safe-
+  direction: (i) the coverage criterion is capped by the number of sampled
+  witness directions, so below the claim dimension it passes for free - the
+  earlier certificate used 40 against a 128-bit claim; (ii) the witness family
+  must be genuinely linear; (iii) mu and g are FIELD-valued, so probing one
+  bit per slot samples 1/128 of that channel (an earlier "the fixture is 2.8x
+  under-budgeted" diagnosis was a consequence of this and is RETRACTED -
+  counted correctly the fixture is over-budgeted); (iv) `s_hat_v` binds the
+  randomizer sizing at `blocks x A-chunks >= 128` per bit-residue WITH MARGIN,
+  and the residual concentrated in exactly that class at 1.5x margin and
+  vanished at 3x. Production BLAKE3 runs at ~12x.
+- The earlier joint conditional coverage was verified at
+  the zerocheck layer only (`full_conditional_coverage_zk_zerocheck`,
+  `L={P(ρ),σ_z}`, at a **single fixed `Q`** — so conditioning on `Q(ρ)` in that
+  experiment is vacuous — and with the randomizer channels held at zero).
+  **Correction:** the affine and PCS layers do *not* compose with the
+  round-pair channel via `MaskingSurjective.coprod_covers` — that lemma
+  requires both channels to be additive maps into the transcript space, and
+  the randomizer channel is certified *bilinear* on the round-pair coordinates
+  (L4). The valid composition is triangular/conditional (fix `u_B,Q`; the
+  remaining channels are affine) — see the correction in §4. What remains:
+  the complete-transcript joint certificate over the integrated prover for an
+  explicit parameter set, and a machine-checked triangular composition lemma.
+- The bad-mask probability bound previously stated in §8 (Schwartz–Zippel over
+  the mask entries) is **withdrawn**: the implemented `P,Q` are Boolean — one
+  bit per cube entry (`prover.rs::sample_mask_bits`) — so the bound's
+  uniform-`F₂₁₂₈`-entries hypothesis is false for the shipped prover, and
+  Schwartz–Zippel over `{0,1}` is vacuous at these degrees. See §8 for the
+  replacement. The Merkle-sibling hiding argument (§7) is closed-form but not
+  machine-checked; per-parameter certificate gating is not yet wired.
+- **The real-statement certificate PASSES.** On a real BLAKE3 batch statement
+  (m=20, 64 blocks, all PIOP classes = 30,464 bits, claims saturated at 640
+  bits over 768 witness pairs): joint mask image 30,464/30,464 and
+  rank[residual | dclaim] = 640 = rank(dclaim). Two amendments were required
+  and both were forced by measurement: A2 (§5b) took the lincheck classes from
+  9,728/10,240 with 128 bits escaping to 10,240/10,240 with none, and A3 (§5c)
+  took the zerocheck classes from 12,032/20,224 to 20,224/20,224.
+
+  Two methodological findings outlast the fix. The escape was **joint, not
+  marginal** — `round1_c` passed in isolation at 8,192/8,192 the entire time —
+  so per-class coverage never composed into joint coverage. And the assumption
+  that broke was never written down as an assumption: the randomizer rows were
+  *believed* to cover the affine classes, which is true on the synthetic
+  fixture (~81% randomizer rows) and false on a real witness (~5.5%). A
+  certificate run only on the vehicle would have reported success
+  indefinitely.
 - Out of scope entirely: SHA-256/Keccak encoders, the hash-chain statement,
   QROM *soundness*, side-channel resistance, and independent cryptographic
   review.
@@ -59,7 +119,8 @@ mask columns). Write $\pi\leftarrow \mathsf{P}(x,w)$ for the honest zk prover's
 proof on statement $x$ and witness $w$, and $\mathrm{View}$ for the transcript
 plus verifier coins.
 
-**Claim (Z1, interactive, [P]+[L]+[C]+[A]).** There is a PPT simulator
+**Claim (Z1, interactive — TARGET; evidence status per component, see §0 and
+§12).** There is a PPT simulator
 $\mathsf{S}$ taking only $x$ such that for every $x$ and every valid witness
 $w$,
 $$\Delta\big(\mathrm{View}\langle \mathsf{P}(x,w),\mathsf{V}(x)\rangle,\ \mathsf{S}(x)\big)\ \le\ \varepsilon_{\mathrm{rank}} + \varepsilon_{\mathrm{hash}},$$
@@ -74,10 +135,11 @@ $\mathsf{S}$ is a NIZK simulator in the classical ROM, with the same error.
 The lift is unconditional given Z1 because $\mathsf{S}$ is *non-programming*
 (§2).
 
-**Claim (Z3, QROM, [P]+[A]).** $\mathsf{S}$ programs nothing and rewinds
-nothing, so the ZK property survives quantum oracle access verbatim except
-$\varepsilon_{\mathrm{hash}} \to O(q\cdot 2^{-k_{\min}/2})$ (generic quantum
-search / O2H). **QROM soundness is not claimed.**
+**Claim (Z3, QROM — NOT CLAIMED; conjecture only).** $\mathsf{S}$ programs
+nothing and rewinds nothing, which makes a QROM ZK statement *plausible*
+(heuristically $\varepsilon_{\mathrm{hash}} \to O(q\cdot 2^{-k_{\min}/2})$ by
+generic quantum search / O2H), but no precise theorem is written and none is
+claimed. **QROM soundness is likewise not claimed.**
 
 **Multi-proof.** Masks are drawn fresh per proof (§10); $k$ proofs compose
 with error $k(\varepsilon_{\mathrm{rank}}+\varepsilon_{\mathrm{hash}})$.
@@ -123,6 +185,11 @@ This is realized and checked: `tests/zk_simulator.rs`
 $n=256$ and verifies its output under the unchanged verifier; a second run with
 fresh randomness gives a different, still-accepting transcript.
 
+(An earlier revision's caveat — that the simulator test drove `prove_fast_zk`,
+whose zerocheck is un-amended — is resolved: `zk_simulator.rs` now runs the
+certificate-gated A1′ path, `prove_zk_a1_with_rng`, which is the path this
+document's claim attaches to.)
+
 **Reduction.** Since $\mathsf{S}(x)$ is the honest prover on *some* valid
 witness $w_0$, proving $\Delta(\mathsf{View}(w),\mathsf{S}(x))\le\varepsilon$
 is exactly proving $\Delta(\mathsf{View}(w),\mathsf{View}(w_0))\le\varepsilon$
@@ -153,8 +220,12 @@ the affine coordinates.
 univariate-skip interpolation groups are 64 consecutive rows; every
 randomizer / mask / padding region is 128-bit aligned, so no group mixes
 A-rows, B-rows, and real rows. Hence the round-1 vectors $P^{AB},P^{C}$ are
-affine in $u$. (A runtime layout assertion enforces the alignment the proof
-relies on.)
+affine in $u$. **Verified** (`l3_round1_region_alignment_holds`): on the real
+BLAKE3 zk layout the A-species occupies 12 whole skip groups and the B-species
+2, and the two sets of groups are disjoint — so no univariate-skip fold group
+mixes the species or straddles a region boundary, which is exactly what the
+proof relies on. This closes review item L3, previously asserted with a
+runtime check the audit could not locate.
 
 **Lemma L4 (the round messages are bilinear, and why; [P], [C]).** A round
 sends $(G(1),G(\infty))$ where $G$ is degree 2 in the fold variable and
@@ -192,17 +263,30 @@ surjective, the coset condition is vacuous: WI holds for *every* pair
 (`transcript_witness_indep_of_surjective`, `pmf_*`). This is used for the
 round-pair block under A1′.
 
-**Composition (`MaskingSurjective.lean`, [L]).** For two independent mask
-channels $g_1:U_1\to V$, $g_2:U_2\to V$, the coproduct
-$g_1\boxplus g_2$ has range $=\mathrm{Im}\,g_1+\mathrm{Im}\,g_2$
-(`mem_range_coprod`), so if the witness-difference splits as
-$d_1+d_2$ with $d_i\in\mathrm{Im}\,g_i$ then it is covered by the joint map
-(`coprod_covers`). Under A1′: $g_2$ = the $P\cdot Q$ channel (round-pair
-block), $g_1$ = the existing masks (affine classes).
+**Composition (`MaskingSurjective.lean`, [L]) — CORRECTION: does not apply as
+previously instantiated.** For two independent mask channels
+$g_1:U_1\to V$, $g_2:U_2\to V$ that are **additive homomorphisms**, the
+coproduct $g_1\boxplus g_2$ has range $=\mathrm{Im}\,g_1+\mathrm{Im}\,g_2$
+(`mem_range_coprod`, `coprod_covers`). An earlier revision of this document
+instantiated $g_1$ = the existing masks and $g_2$ = the $P\cdot Q$ channel and
+concluded the whole amended transcript reduces to the single-map theorem.
+That instantiation is **invalid**: the existing-mask channel is not additive
+on the round-pair coordinates — it carries certified $u_A\!\cdot\!u_B$
+bilinear cross terms (L4, `zk_affinity_probe.rs`), so `coprod_covers`'s
+hypothesis fails on exactly the class it was needed for.
 
-This is why the *whole* amended transcript reduces to the single-map masking
-theorem; `MaskingMixture.lean` (the fixed-$u_B$ conditional argument) is
-retained only as the fallback for the un-amended, bilinear protocol.
+The correct composition is **triangular/conditional**: fix the outer masks
+$(u_B, Q)$; the transcript is then affine in the remaining (inner) channels
+$(u_A,\mu,g,P)$, whose joint image must cover the claim-conditioned
+witness-difference directions on the kernel of the leakage map; the
+$u_B$-dependent coordinates (e.g. the $\hat b$-side final evaluation) are
+handled by the outer stage on the quotient; mixing over $Q$ carries an
+explicit bad-set term. The abstract lemma (`MaskingTriangular.lean`, with a
+bad-set mixture bound `MaskingMixtureBadSet.lean`) and the corresponding
+full-transcript certificate are the load-bearing replacements — see §0 status.
+`MaskingMixture.lean` (the flat fixed-$u_B$ mixture) is retained only as a
+stepping stone: its `h_coset` hypothesis is **disproved on the full
+transcript** (`final_b_breaks_full_mixture_hcoset`).
 
 ---
 
@@ -224,18 +308,195 @@ Round-1 is left unmasked (it is already affine and covered, L3); only the
 multilinear round pairs receive the channel.
 
 **Why it hides (the design's core).** Because $P,Q$ are witness-free, the mask
-contribution's distribution is witness-independent by construction. Hiding of
-the round pairs reduces to a clean, checkable statement:
+contribution's distribution is witness-independent by construction. But the
+checkable statement is the **joint, conditional** one, not the marginal one.
+The same $P$ that masks the round pairs is also revealed through $P(\rho)$,
+$\sigma$, and every other $P$-functional the verifier sees (including the
+values inside $P$'s own hiding opening); revealing those constrains $P$ and
+can un-blind the round messages. The load-bearing condition is therefore:
 
-> **(★)** For a uniform $Q$, the map $P\mapsto(\text{round-pair coordinates of
-> } P\cdot Q)$ is surjective onto the round-pair coordinate space.
+> **(★′)** For a uniform $Q$, the map $P\mapsto(\text{round-pair coordinates
+> of } P\cdot Q)$, **restricted to the kernel of the map $L$ collecting every
+> other revealed $P$-functional** ($P(\rho)$, $\sigma$, opening-internal
+> values), covers every claim-conditioned witness-difference direction of the
+> round-pair block: $d\in R(\ker L)$.
 
-Given (★): at any fixed $Q$ the map is affine in $P$ with full image, so the
-combined round pair $G_j+\gamma M_j$ is uniform over the round-pair space
-regardless of the witness-dependent $G_j$ — exact distribution equality
-(Theorem 4, surjective corollary). Mixing over $Q$ preserves it (WI is a
-per-$Q$ property, and $Q$ is witness-free). Composition (Theorem 4) with the
-affine classes covers the whole transcript.
+Marginal surjectivity of $P\mapsto\text{round pairs}$ (the earlier (★)) is
+*necessary but not sufficient*; the measured facts are that conditioning on
+$P(\rho)$ removes exactly one $\mathbb{F}_{2^{128}}$-direction (the internal
+ab-claim direction, itself hidden by the affine channel) and conditioning on
+$\{P(\rho),\sigma\}$ removes two, with the residuals determined by the claim
+(`full_conditional_coverage_zk_zerocheck`, `conditional_coverage_p_rho`).
+Given (★′) at fixed $(u_B,Q)$: the inner map is affine in $P$ with the
+required conditional image, so the combined round pair $G_j+\gamma M_j$ is
+uniform on the claim-conditioned space — exact distribution equality on the
+slice. Mixing over $Q$ carries the explicit bad-set term of §8, and
+composition with the affine classes is the **triangular** argument of §4
+(correction), *not* the coproduct lemma.
+
+---
+
+## 5b. The amendment A2: a committed mask channel for the lincheck
+
+A1′ masks the zerocheck's round messages. It does not touch the lincheck,
+which is covered only by the randomizer witness rows — and on a real BLAKE3
+statement those rows are ~5.5% of the witness, against ~81% on the synthetic
+fixture. Measurement (`tests/zk_blake3_certificate.rs`) localized a
+claim-preserving witness direction escaping on `lincheck.rounds` and
+`lincheck.z_partial`, and six candidate explanations were eliminated
+experimentally before the construction was changed; the record is in
+`docs/lincheck-mask-channel.md`.
+
+**The construction.** The lincheck proves $\sum_i \mathrm{comb}(i)\,z(i)=T$
+by a product sumcheck in which $\mathrm{comb}$ is **public** and the $z$-slot
+enters **linearly**. That is a stronger structure than the zerocheck's, and
+it admits a strictly simpler repair than the degree-2 $S\cdot T$ channel A1′
+needed: mask the $z$-slot additively.
+
+1. Draw a witness-free cube $S$ from the prover DRBG (fork `a2-S`), zero its
+   padding rows, and commit it hidingly (`commit_zk`). Its root is bound with
+   $P$'s and $Q$'s, before any challenge of the run.
+2. After $\alpha$ and the const-pin $\beta$ fix `comb`, absorb
+   $\sigma_{lc}=\sum_i \mathrm{comb}(i)\,S_{\mathrm{vec}}(i)$, then draw
+   $\gamma_{lc}$.
+3. Run the sumcheck on $z+\gamma_{lc}S$ with initial claim
+   $T+\gamma_{lc}\sigma_{lc}$.
+4. Recover the output claim as $w = w_{\text{sent}} + \gamma_{lc}\hat S(\rho)$
+   (char 2), with $\hat S(\rho)$ opened against $S$'s commitment at the
+   lincheck's own output point.
+
+**Why it hides.** Every message of the layer — the round pairs and
+`z_partial` — is a deterministic function of the shifted table
+$z+\gamma_{lc}S$ at fixed public `comb` and fixed challenges. So the masked
+transcript is *exactly the honest transcript of a shifted witness*. This is a
+different and stronger situation than A1′'s: there the mask had to cover a
+witness-difference direction inside a quadratic form, and coverage was a
+rank condition to be certified. Here the shift acts on the layer's input.
+The remaining question is only how much of $\mathbb{F}_{2^{128}}^k$ the
+reachable shifts $\gamma_{lc}\cdot\mathrm{fold}_{x_{\text{outer}}}(S)$ span,
+since $S$ is a **Boolean** cube: $\mathrm{fold}(S)[i]=\sum_j
+\mathrm{eq}_j S[j,i]$ ranges over the $\mathbb{F}_2$-span of the eq-table
+entries, one independent draw per $i$. That span is full whenever the eq
+table $\mathbb{F}_2$-spans $\mathbb{F}_{2^{128}}$ — a property of the
+challenges, so it is **measured, not assumed**, by the same joint coverage
+certificate that covers the rest of the transcript.
+
+**Completeness.** Structural: the masked run *is* an honest run of the
+existing prover on $z+\gamma_{lc}S$ with the initial claim shifted by
+$\gamma_{lc}\sigma_{lc}$. Pinned end-to-end by
+`masked_roundtrip_recovers_the_unmasked_claim`, which also checks that
+$\hat S(\rho)$ carries exactly the PCS's evaluation semantics — the
+statement the opening will be asked to certify.
+
+**Soundness of the batching (Lemma L6, transplanted).** Let
+$\delta = \sum\mathrm{comb}\cdot z - T$ and
+$\delta' = \sigma_{lc} - \sum\mathrm{comb}\cdot S$. Both are fixed before
+$\gamma_{lc}$ is drawn ($z$ and $S$ by their commitments, $\sigma_{lc}$ by
+absorption). The combined initial claim is correct iff
+$\delta+\gamma_{lc}\delta'=0$, so a prover with $(\delta,\delta')\neq(0,0)$
+succeeds for at most one $\gamma_{lc}$: probability $2^{-128}$, and the
+Fiat–Shamir ordering denies the choice. Constructive check:
+`masked_verify_rejects_sigma_tamper`.
+
+**Why $\hat S(\rho)$ must be opened, not merely claimed.** This is the step
+the amendment's own spec flagged as most likely to go wrong, and it is a real
+attack rather than a formality. The verifier reconstructs
+$w = w_{\text{sent}}+\gamma_{lc}\hat S(\rho)$. If $\hat S(\rho)$ were an
+unbound scalar, a prover could pick it *after* $\rho$ is known and set it to
+$w_{\text{sent}} - \hat z(\rho)$ for whatever $\hat z(\rho)$ the witness
+commitment forces — absorbing an arbitrary defect and leaving the output
+claim unconstrained. Binding it to $S$'s commitment removes the freedom.
+`a1_tamper_matrix_rejected` covers `lincheck.s_eval`, `lincheck.sigma_lc`,
+`comm_s.root`, and the open_s/comm_s substitutions.
+
+**Knowledge soundness is unchanged.** $S$ enters no R1CS constraint; it is a
+term added to a claim, and the extractor still recovers $z$ from the witness
+commitment, whose opening is checked at the un-shifted claim $w$.
+
+**Measured outcome.** On the real BLAKE3 statement the lincheck classes go
+from an image of 9,728 of 10,240 bits with 128 bits of claim-preserving
+witness difference escaping, to 10,240 of 10,240 with nothing escaping. The
+amendment does what it was built to do, and the arithmetic confirms it does
+*only* that: the unrestricted joint image is 22,272 bits and the
+zerocheck-only joint image is 12,032, a difference of exactly the 10,240-bit
+lincheck subspace. An additive channel on a linear slot should contribute
+precisely that subspace and no other direction, and it does.
+
+**What A2 does not fix.** The unrestricted certificate still fails by one
+$\mathbb{F}_{2^{128}}$ direction, now attributed to `zerocheck.round1_c`
+alone — the univariate-skip C-side message, also linear in the witness, also
+covered by randomizer rows alone, and deliberately outside the degree-2
+channel because a mask there would not vanish on the constraint domain. The
+escape there is *joint, not marginal*: `round1_c` in isolation is fully
+covered (8,192/8,192), and the failure appears only when it must be covered
+simultaneously with every other coordinate — which is (★′) biting exactly as
+written. Repair specified in `docs/round1c-mask-channel.md`, not made.
+
+---
+
+## 5c. The amendment A3: masking the zerocheck's round 1
+
+A1′ masks the zerocheck's *multilinear* rounds and deliberately leaves round 1
+alone. The reason is structural, and it constrains the repair: the verifier
+reconstructs the AB running claim from the **zerocheck assumption**
+$P^{AB}(\lambda)+P^{C}(\lambda)=0$ for $\lambda\in S$, using the prover's
+$\ell$ evaluations on $\Lambda$ plus $\ell$ assumed zeros on $S$. A mask that
+does not vanish on $S$ destroys that reconstruction, and $\gamma\cdot P\cdot Q$
+does not vanish there.
+
+Measurement said the exclusion was not free: with the lincheck closed by A2,
+one $\mathbb{F}_{2^{128}}$ direction of claim-preserving witness difference
+still escaped, attributed to `zerocheck.round1_c` — the C-side message
+$P^C(\lambda)=\sum_x \mathrm{eq}(r_{rest},x)\hat z(\lambda,x)$, linear in the
+witness, of which one scalar ($c_{eval}$) is a public claim and the other 63
+field elements were covered by randomizer rows alone.
+
+**The construction.** Mask round 1 with a *pair* whose sum vanishes on $S$:
+
+$$P^{C}\ \mapsto\ P^{C}+M_c,\qquad P^{AB}\ \mapsto\ P^{AB}+M_c+V_S\cdot h,$$
+
+where $V_S=\prod_{s\in S}(X+s)$, and $M_c$, $h$ are the round-1 C-side
+messages of two witness-free cubes $S_c$, $S_h$ committed hidingly before any
+challenge. The combined polynomial then gains exactly $V_S\cdot h$, which is
+zero on $S$ and has degree $<2\ell$ — so the verifier's reconstruction is
+untouched.
+
+**Why the pair, and not a single mask.** A single mask added to both sides
+(the "diagonal") leaves the combined polynomial fixed too, and is much
+simpler. It is also provably insufficient here: the measured residual is
+supported on `round1_c` and *not* on `round1_ab`, and a diagonal mask moves
+both by the same amount, so it cannot produce a direction supported on one
+alone. This was settled from the existing attribution output before the
+construction was chosen, not after it failed.
+
+**The vanishing constraint costs no freedom.** $\Lambda$ and $S$ are disjoint,
+so $V_S$ has no zero on $\Lambda$; as $M_c|_\Lambda$ and $h|_\Lambda$ range
+over $\mathbb{F}^{\ell}$ the reachable pair
+$(M_c|_\Lambda,\ M_{ab}|_\Lambda)$ ranges over all of
+$\mathbb{F}^{\ell}\times\mathbb{F}^{\ell}$. The condition that looked like the
+obstacle only fixes the *shape* of the mask pair.
+
+**Completeness.** The verifier recovers
+$P^{AB}(z)$ by subtracting $M_{ab}(z)=M_c(z)+V_S(z)h(z)$, and the C-claim by
+subtracting $M_c(z)$. Staged test (`prove_verify_zk_round1_mask_roundtrip`):
+zero cubes reproduce the unmasked protocol exactly, diagonal, and the full
+pair.
+
+**Soundness.** A3 does not relax the zerocheck assumption — that is the whole
+point of the $V_S$ factor. The combined polynomial still vanishes on $S$, so
+a dishonest witness still fails the reconstruction exactly as before. The two
+scalars the prover supplies, $M_c(z)=\hat S_c(z,r_{rest})$ and
+$h(z)=\hat S_h(z,r_{rest})$, are evaluations at the c-claim point and are
+**bound by openings against their commitments**; unbound, they could be chosen
+after $z$ and would leave both the C-claim and the AB running claim
+unconstrained. Knowledge soundness is unchanged: $S_c,S_h$ enter no
+constraint.
+
+**Note on the ordering.** Unlike A1′ and A2, A3 needs *no* batching challenge.
+Those amendments add a prover-*claimed* sum ($\sigma_z$, $\sigma_{lc}$) that
+the verifier cannot recompute, so a challenge must batch it. A3 adds only
+committed evaluations, which the openings bind directly — there is no free
+scalar to batch away.
 
 ---
 
@@ -248,6 +509,47 @@ $\gamma\sigma$ and the combined sumcheck telescopes exactly (checked:
 from the real prover and verifies
 $\text{running}=\hat a(\rho)\hat b(\rho)+\gamma P(\rho)Q(\rho)$; tampering a
 masked round pair breaks it).
+
+**Lemma L6 (γ-batching: completeness and soundness of the amendment;
+[P]+[C]).** The amendment replaces the zerocheck claim
+$\sum_x \mathrm{eq}\cdot\hat a\hat b = \mathsf{ab\_init}$ by the random
+linear combination
+$\sum_x \mathrm{eq}\cdot(\hat a\hat b + \gamma PQ)
+ = \mathsf{ab\_init} + \gamma\sigma_z$.
+
+*Completeness.* For an honest prover both sides telescope through the same
+round schedule (the round messages are $G_j+\gamma M_j$ and the running
+target carries $\gamma$ times the mask sumcheck's), so the final check
+$\text{running} = \hat a(\rho)\hat b(\rho) + \gamma P(\rho)Q(\rho)$ holds
+identically.
+
+*Soundness.* Fix all prover messages. The verifier's final residual
+$R(\sigma_z) = \text{running} + \hat a(\rho)\hat b(\rho) + \gamma
+P(\rho)Q(\rho)$ is **affine in $\sigma_z$** over $\mathbb{F}_{2^{128}}$,
+with slope $\gamma\cdot\prod_j (1+\rho_j)/(1+r_{\mathrm{eq},j})$. Writing
+$\delta$ for the $\hat a\hat b$-side defect and $\delta'$ for the mask-side
+defect, acceptance requires $\delta + \gamma\delta' = 0$: for
+$(\delta,\delta')\neq(0,0)$ at most **one** $\gamma$ satisfies it, so a
+prover who must fix $(\delta,\delta')$ before seeing $\gamma$ is accepted
+with probability $\le 2^{-128}$, on top of the unchanged sumcheck error.
+The ordering is what supplies "before": the $P,Q$ commitment roots and
+$\sigma_z$ are absorbed into the transcript *before* $\gamma$ is sampled
+(`prove_r1cs_zk_a1` absorbs both roots; `prove_packed_padded_zk` observes
+$\sigma_z$ then samples $\gamma$).
+
+*Constructive check [C]* (`zerocheck.rs::zk_gamma_cancellation_unique_and_fs_ordering`):
+on an invalid witness the test measures the affine response, **solves** for
+the unique $\sigma^\star$ that cancels the defect, and shows (i) the patched
+proof is accepted by the real verifier when challenges are fixed in advance
+— i.e. the ordering attack genuinely works if $\sigma_z$ may be chosen after
+$\gamma$ — and (ii) the same proof is rejected under Fiat–Shamir, and at 100
+further challenge tuples. This exhibits the accept-set in $\gamma$ having
+size exactly one, which is the content of the $2^{-128}$ bound, on the real
+code. A small-field exhaustive port is **descoped**: $\mathbb{F}_{2^{128}}$
+is load-bearing throughout the kernels (GHASH, 128-bit packing, the $\varphi_8$
+skip basis), so a small-field variant would be an idealized duplicate of the
+protocol rather than the shipped one; the constructive test establishes the
+same fact on the real prover (review item #17).
 
 **Knowledge soundness UNCHANGED [P].** Every valid original witness extends to
 a valid randomized witness (fill the mask columns with any bits), and every
@@ -318,17 +620,45 @@ $m=15$, over multiple uniform draws, including the $G(\infty)$ coordinates). A
 constant $Q$ (measure $\approx 0$) gives $\Delta Q\equiv 0$ and covers only the
 $G(1)$ half — the test records exactly this, delimiting the bad set.
 
-**Lemma L8 (Schwartz–Zippel [P]/[S]).** Each matrix entry is a product of
-$\le m$ eq-factors (degree $\le 1$ per challenge variable) and the
-univariate-skip Lagrange factors (degree $\le 63$ in the round-1 challenge),
-so $\deg D \le d^\star$ with $d^\star = 63 + (m-7) + \dots = O(m)$
-(concretely $d^\star \lesssim 90$ at $m=22$). Over the uniform mask entries in
-$\mathbb{F}_{2^{128}}$, $\varepsilon_{\mathrm{rank}}\le d^\star/2^{128}$ per
-covered dimension — negligible ($\ll 2^{-100}$) at production sizes. (Mathlib
-carries a Schwartz–Zippel lemma; formalizing this instantiation is optional
-future work.) Note: masking a value "needs 128 bits" is only a heuristic
-unless the induced map has full rank; here rank is what is certified, and L8
-bounds the failure probability rather than inferring hiding from bit-count.
+**Lemma L8 — WITHDRAWN.** An earlier revision bounded
+$\varepsilon_{\mathrm{rank}}$ by Schwartz–Zippel: entries of degree
+$d^\star\lesssim 90$ over "uniform mask entries in $\mathbb{F}_{2^{128}}$"
+giving $d^\star/2^{128}$. That argument is unsound for the shipped prover, for
+three independent reasons. (i) **Wrong domain**: the implemented $P,Q$ are
+Boolean — `prover.rs::sample_mask_bits` draws one *bit* per cube entry — so
+the mask entries range over $\{0,1\}$, where Schwartz–Zippel gives
+$\deg/2 \ge 1$: vacuous. (ii) **Wrong degree object**: $d^\star$ bounds a
+single matrix *entry*; the covering minor $D$ is a determinant whose degree is
+the sum over rows (~$2304\times$ larger). (iii) **Mixed variable sets**: the
+degree count is over the challenge variables while the probability is taken
+over the mask entries.
+
+**Replacement (per-proof fail-closed self-check).** The map
+$P\mapsto\text{round pairs}$ at the prover's actual $(Q,\text{challenges})$ is
+$\mathbb{F}_2$-linear; the reference prover verifies surjectivity onto the
+round-pair block for its own draw by an exact $\mathbb{F}_2$ rank computation
+(random-probe spanning through the real fold kernels + Gaussian elimination)
+and **aborts and resamples on failure**, redrawing the complete mask set,
+witness randomizers included. (What the per-proof check certifies is the
+*marginal* round-pair image; the conditional accounting — conditioning on the
+leaked $L=\{P(\rho),\sigma_z\}$ removes exactly the public-claim direction —
+is established at the certificate level, §5, and composes with it.) The
+failure event depends only on $(Q,\text{challenges})$ — not on the witness
+directly. One caveat is load-bearing and is stated here rather than assumed:
+under Fiat–Shamir the challenges are themselves derived from the witness
+*commitment* (the check runs after `bind_statement` absorbs it), so the
+event's witness-independence is **computational**, resting on the hiding of
+the commitment in the ROM. This is an explicit lemma obligation for the
+composed theorem — the same commitment-hiding step the FS lift of §9 already
+relies on — not an unconditional fact; the certificates cannot observe it
+because they run a challenge-decoupled test challenger. Under that
+assumption, resampling leaks nothing. Consequence:
+$\varepsilon_{\mathrm{rank}} = 0$ for every *emitted* proof; the unproven
+quantity becomes the resample probability, which affects liveness, not
+privacy (measured 0 across all recorded runs; a closed-form bound over
+Boolean $Q$ remains open). Note: masking a value "needs 128 bits" is only a
+heuristic unless the induced map has full rank; here rank is what is
+*checked per proof*, not inferred from bit-count.
 
 ---
 
@@ -397,14 +727,14 @@ witness-free surjectivity argument.
 |---|------|--------|
 | 1 | Exact claim | **[P]** §1 |
 | 2 | Explicit simulator | **[P]+[C]** §2, `zk_simulator.rs` |
-| 3 | Replace sampled audits | **[C]+[P]** exact image cert §3/§8; full-rank on the amended prover is remaining |
-| 4 | Bilinear zerocheck | **[P]+[C]+[L]** §5, `a1_prime_*`, surjective corollary |
-| 5 | Joint hiding | **[P]+[L]+[C]** §3–§5 |
+| 3 | Replace sampled audits | partial **[C]** — exact image extraction; the complete-transcript joint certificate passes at the fixture and the real-statement certificate over the PIOP classes (§0); witness directions remain a structured family plus random draws, and challenge tuples remain sampled |
+| 4 | Bilinear zerocheck | **[P]+[C]** §5 (`a1_prime_*`); the Lean surjective corollary applies only once (★′) is certified — its hypothesis is a Rust measurement, not Lean |
+| 5 | Joint hiding | **[C]+[L]** — the complete-transcript joint conditional certificate passes at the certified fixture (§0) under the triangular composition (`MaskingTriangular.lean`, replacing the invalid coprod instantiation, §4 correction); remaining: all-tuple coverage and production-size transfer (§0, limitations) |
 | 6 | Fiat–Shamir ROM | **[P]+[S]** §9 |
 | 7 | Separate ZK/soundness | **[P]** §6 (separated theorems) |
 | 8 | Hash assumptions | **[A]** §7 (stated explicitly) |
 | 9 | Low-mask interpolation | **[P]**, encoder-test remaining §7 |
-| 10 | Mask entropy = rank | **[C]+[P]** §8 |
+| 10 | Mask entropy = rank | partial — rank certified at sampled draws; closed-form bound **withdrawn** (§8); the per-proof self-check (`prove_zk_a1_checked`) is implemented and makes ε_rank = 0 for emitted proofs; a closed form (or field-valued masks that admit one) remains open |
 | 11 | Leakage boundary | **[P]** §11 |
 | 12 | Repeated-proof | **[P]** §10 |
 | 13 | Randomness lifecycle | **[P]**, zeroization/fork-test remaining §10 |
@@ -416,13 +746,23 @@ witness-free surjectivity argument.
 | 19 | Every circuit family | **scoped out** — BLAKE3 batch only |
 | 20 | Compare prior work | **[P]** §12 (this section) |
 | 21 | Benchmarks | separate; median/variance/component breakdown remaining |
-| 22 | Release criteria | **not met** — candidate/experimental; needs the amendment wired, machine-checked bounds, and independent review |
+| 22 | Release criteria | **not met** — candidate/experimental (label B); needs a green run of the hardened certificate pipeline, a closed-form ε_rank (or field-valued masks), all-tuple coverage, production transfer beyond structural argument, optimized-prover equivalence, and independent review |
 
 **Bottom line.** For BLAKE3 batch statements, ZK reduces to full-transcript
-WI (proven, L1); the affine transcript is hidden exactly (Masking.lean +
-exact certificate); the round messages are hidden by the degree-2 $P\cdot Q$
-channel (surjective corollary + certificate), with a Schwartz–Zippel bad-mask
-bound; sibling hiding is computational under a stated hash assumption; the FS
-lift is unconditional via the non-programming simulator. The result is a
-candidate ZK mode with a proven core, pending the amendment's production wiring
-and independent review.
+WI (proven, L1). The affine transcript classes are hidden exactly
+(Masking.lean + exact certificates); the round messages are the hard class,
+targeted by the degree-2 $P\cdot Q$ channel with the *conditional* coverage
+condition (★′). The three closures an earlier revision listed as open have
+landed: the complete-transcript joint certificate passes at the certified
+fixture, the triangular composition lemma is machine-checked
+(`MaskingTriangular.lean`), and the per-proof rank self-check
+(`prove_zk_a1_checked`) replaces the withdrawn Schwartz–Zippel bound. What
+remains open before a WI *theorem* (rather than a certified instance) is
+established: coverage for all challenge tuples, production-size transfer
+beyond the structural argument, a closed-form ε_rank (or field-valued masks
+that admit one), the commitment-hiding lemma behind the resample event's
+witness-independence (§8), and the single composed top-level statement.
+Sibling hiding is computational under a stated hash assumption; the FS lift
+is unconditional via the non-programming simulator *given* WI. The result is
+a candidate ZK mode with a proven partial core, pending those closures and
+independent review.

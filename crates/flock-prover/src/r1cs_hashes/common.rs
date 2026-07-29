@@ -231,7 +231,7 @@ where
 }
 
 /// Random u64 words consumed per block by [`write_zk_randomizers`].
-pub(crate) fn zk_rand_words_per_block(layout: &flock_core::zk::ZkBlockLayout) -> usize {
+pub fn zk_rand_words_per_block(layout: &flock_core::zk::ZkBlockLayout) -> usize {
     layout.rand_bits_per_block() / 64
 }
 

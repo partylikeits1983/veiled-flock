@@ -44,12 +44,7 @@ struct Cell {
     proof_bytes: usize,
 }
 
-fn bench_mode(
-    zk: bool,
-    n: usize,
-    blocks: &[Compression],
-    runs: usize,
-) -> Cell {
+fn bench_mode(zk: bool, n: usize, blocks: &[Compression], runs: usize) -> Cell {
     let setup = if zk {
         Blake3Setup::with_zk(n)
     } else {
@@ -77,12 +72,9 @@ fn bench_mode(
         .verify(&commitment, &proof, &mut ch_v)
         .expect("warm-up proof must verify");
     let mut verify_s = t.elapsed().as_secs_f64();
-    let proof_bytes = R1csProofBundleLigerito {
-        commitment,
-        proof,
-    }
-    .to_bytes()
-    .len();
+    let proof_bytes = R1csProofBundleLigerito { commitment, proof }
+        .to_bytes()
+        .len();
 
     let mut prove_s = f64::INFINITY;
     for _ in 0..runs {
@@ -119,10 +111,17 @@ fn main() {
     println!("zk vs baseline — BLAKE3 batch proving ({threads} threads, best of {runs})\n");
     println!(
         "{:>7} {:>6} | {:>10} {:>10} {:>7} | {:>10} {:>10} {:>7} | {:>6} {:>6} {:>6}",
-        "batch", "m",
-        "base prove", "verify", "KiB",
-        "zk prove", "verify", "KiB",
-        "pr×", "vf×", "sz×"
+        "batch",
+        "m",
+        "base prove",
+        "verify",
+        "KiB",
+        "zk prove",
+        "verify",
+        "KiB",
+        "pr×",
+        "vf×",
+        "sz×"
     );
 
     let mut rng = Rng(0x2B3D_5EED);
@@ -134,9 +133,14 @@ fn main() {
         let m = Blake3Setup::new(n).m();
         println!(
             "{:>7} {:>6} | {:>10.3} {:>10.4} {:>7} | {:>10.3} {:>10.4} {:>7} | {:>6.2} {:>6.2} {:>6.2}",
-            n, m,
-            base.prove_s, base.verify_s, base.proof_bytes / 1024,
-            zk.prove_s, zk.verify_s, zk.proof_bytes / 1024,
+            n,
+            m,
+            base.prove_s,
+            base.verify_s,
+            base.proof_bytes / 1024,
+            zk.prove_s,
+            zk.verify_s,
+            zk.proof_bytes / 1024,
             zk.prove_s / base.prove_s,
             zk.verify_s / base.verify_s,
             zk.proof_bytes as f64 / base.proof_bytes as f64,

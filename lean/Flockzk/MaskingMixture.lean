@@ -37,6 +37,25 @@ Main results:
   * `pmf_mixture_simulator_exact` — the simulator reading: running the
     honest prover on any public reference witness for the statement
     reproduces the honest transcript distribution exactly.
+
+STATUS. Three caveats about this file's role in the audit:
+
+  (a) the proof only uses the *diagonal* instances of `h_coset` — the
+      `calc` step instantiates `h_coset w w' b b` — so the stated
+      cross-`b` hypothesis (`∀ b b'`) is strictly stronger than what the
+      argument needs;
+  (b) even the diagonal form is **disproved on the full Flock
+      transcript**: the exact certificate
+      `final_b_breaks_full_mixture_hcoset`
+      (`crates/flock-prover/tests/zk_leakage_certificate.rs`) shows the
+      b̂-side final evaluation has an identically-zero `u_A`-derivative
+      yet varies with `u_B`, so offset differences leave the `u_A`-image;
+  (c) the load-bearing replacement is `Flockzk.MaskingTriangular`
+      (`triangular_witness_indep`), which quotients out the inner image
+      and covers the escaped directions at the outer (`u_B`) stage. This
+      file survives as the single-slice toolbox
+      (`card_filter_prod_eq_sum`, `card_ker_eq_of_range_eq`,
+      `fiber_card_eq_of_range_eq`) that the triangular proof reuses.
 -/
 namespace FlockZk
 

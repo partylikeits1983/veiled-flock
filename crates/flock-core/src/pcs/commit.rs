@@ -114,15 +114,12 @@ impl PcsParams {
             "log_inv_rate must be ≥ 1 for a non-trivial RS code",
         );
         #[cfg(not(feature = "zk"))]
-        assert!(
-            !self.zk,
-            "PcsParams.zk requires the `zk` cargo feature",
-        );
+        assert!(!self.zk, "PcsParams.zk requires the `zk` cargo feature",);
     }
 }
 
 /// Public commitment (Merkle root + params).
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Commitment {
     pub root: Hash,
     pub params: PcsParams,
@@ -262,13 +259,7 @@ pub fn commit_zk<R: crate::zk::MaskSampler + ?Sized>(
     rng.fill_f128(&mut blind);
 
     let mut codeword = crate::scratch::take_f128(params.codeword_len_f128());
-    replicate_message_fill_zk(
-        &mut codeword,
-        &mask,
-        z_packed,
-        &blind,
-        params.num_ntts(),
-    );
+    replicate_message_fill_zk(&mut codeword, &mask, z_packed, &blind, params.num_ntts());
     let (commitment, mut pd) = finalize_commit(codeword, params);
     pd.zk_mask = mask;
     pd.zk_blind = blind;

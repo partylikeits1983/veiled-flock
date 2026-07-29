@@ -135,8 +135,8 @@ fn commit_dispatch(
     if pcs_params.zk {
         #[cfg(feature = "zk")]
         {
-            let rng = zk_rng
-                .expect("zk PcsParams require a mask sampler — use a *_zk prove entry point");
+            let rng =
+                zk_rng.expect("zk PcsParams require a mask sampler — use a *_zk prove entry point");
             if let Some(buf) = prefaulted_codeword {
                 flock_core::scratch::give_f128(buf);
             }
@@ -748,35 +748,69 @@ pub fn prove_fast_ligerito_timed<Ch: Challenger>(
 // hiding PCS. The whole thing verifies through `verify_r1cs_zk_a1`.
 // ===========================================================================
 
-/// The A1′ end-to-end proof: the masked zerocheck, lincheck, the witness PCS
-/// opening (`ab`,`c` claims), and the two hiding `P,Q` openings at ρ.
+/// The A1′+A2+A3 end-to-end proof: the masked zerocheck, the masked lincheck,
+/// the witness PCS opening (for the `ab`,`c` claims, which the verifier
+/// recomputes itself), and the five hiding mask openings — `P`,`Q` at ρ, `S`
+/// at the lincheck's output point, and A3's `S_c`,`S_h` at the c-claim point.
+///
+/// Deliberately carries **no** claim values: the verifier derives the `ab`/`c`
+/// claims from the transcript, so shipping copies in the proof would be
+/// unchecked malleable bytes. `sigma_lc`/`s_eval` are the exception and are
+/// not claims about the witness — both are witness-free values of the A2 mask
+/// channel, and both are bound (σ_lc by Fiat–Shamir ordering, s_eval by `S`'s
+/// commitment).
+///
+/// Every field of this struct is classified in [`crate::transcript_schema`];
+/// changing the shape here requires updating the flattener there (a compile
+/// error enforces it) and bumping the schema.
 #[cfg(feature = "zk")]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct R1csProofZkA1 {
     pub zerocheck: zerocheck::ZkZerocheckProof,
     pub lincheck: lincheck::LincheckProof,
     pub pcs_open: pcs::BatchOpeningProofLigerito,
-    pub ab: ZClaim,
-    pub c: ZClaim,
     pub open_p: pcs::BatchOpeningProofLigerito,
     pub open_q: pcs::BatchOpeningProofLigerito,
+    pub open_s: pcs::BatchOpeningProofLigerito,
+    pub open_s_c: pcs::BatchOpeningProofLigerito,
+    pub open_s_h: pcs::BatchOpeningProofLigerito,
     pub comm_p: Commitment,
     pub comm_q: Commitment,
+    pub comm_s: Commitment,
+    pub comm_s_c: Commitment,
+    pub comm_s_h: Commitment,
+    /// A2: `Σ_i comb[i]·S_vec[i]`, absorbed before `γ_lc` is drawn.
+    pub sigma_lc: F128,
+    /// A2: `Ŝ(ρ_lc)`, checked against `comm_s` at the lincheck output point.
+    pub s_eval: F128,
+    /// A3: `M_c(z) = Ŝ_c(z, r_rest)`, checked against `comm_s_c`.
+    pub mc_at_z: F128,
+    /// A3: `h(z) = Ŝ_h(z, r_rest)`, checked against `comm_s_h`.
+    pub h_at_z: F128,
 }
 
 /// Fill a length-`2^m` boolean cube from a mask sampler (one bit per entry),
 /// returned in F128-packed form (as the commit + zerocheck both consume).
 #[cfg(feature = "zk")]
-fn sample_mask_bits(rng: &mut flock_core::zk::ZkRng, m: usize) -> Vec<F128> {
-    use flock_core::zk::MaskSampler;
+fn sample_mask_bits(rng: &mut dyn flock_core::zk::MaskSampler, m: usize) -> Vec<F128> {
     let n = 1usize << m;
     let mut words = vec![0u64; n.div_ceil(64)];
     rng.fill_u64s(&mut words);
-    let bits: Vec<bool> = (0..n).map(|i| (words[i / 64] >> (i % 64)) & 1 == 1).collect();
+    let bits: Vec<bool> = (0..n)
+        .map(|i| (words[i / 64] >> (i % 64)) & 1 == 1)
+        .collect();
     pcs::pack_witness(&bits, m)
 }
 
 /// End-to-end A1′ prover. `zk_rng` is forked into independent streams for the
 /// witness mask, the two mask polynomials, and their commitments.
+///
+/// Uses the production Ligerito config ladder for the statement's shape and
+/// asserts the statement carries a zk randomizer layout (`r1cs.zk`): without
+/// randomizer rows the affine transcript classes are unmasked and the proof
+/// is NOT hiding. Audit fixtures with hand-rolled randomizer rows use
+/// [`prove_r1cs_zk_a1_with_config`], which leaves layout responsibility to
+/// the caller.
 #[cfg(feature = "zk")]
 #[allow(clippy::too_many_arguments)]
 pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
@@ -790,35 +824,239 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
     zk_rng: &mut flock_core::zk::ZkRng,
     challenger: &mut Ch,
 ) -> (R1csProofZkA1, Commitment) {
-    assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
-    let m = r1cs.m;
+    assert!(
+        r1cs.zk.is_some(),
+        "A1′ prove requires a zk randomizer layout (r1cs.zk); a statement \
+         without randomizer rows yields a non-hiding transcript"
+    );
     let log_n = pcs_params.log_msg_len();
     let lig_config =
         pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito config");
+    prove_r1cs_zk_a1_with_config(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        &lig_config,
+        zk_rng,
+        challenger,
+    )
+}
+
+/// The eleven independent mask streams the A1′ prover consumes — five
+/// bit-cube channels (`P`, `Q`, A2's `S`, A3's `S_c`/`S_h`), the witness
+/// commitment's μ/g stream, and one μ/g stream per mask commitment. Production
+/// builds these by domain-separated forks of one per-proof DRBG (see
+/// [`A1MaskSources::from_rng`]); the leakage certificates substitute
+/// playback samplers to unit-probe one channel at a time, which is how the
+/// mask→transcript maps are extracted from the **real** prover rather than
+/// from a re-implementation.
+#[cfg(feature = "zk")]
+pub struct A1MaskSources<'a> {
+    /// Low-half mask μ and blinder g of the witness commitment.
+    pub witness_commit: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the mask polynomial `P`.
+    pub p: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the mask polynomial `Q`.
+    pub q: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `P` commitment.
+    pub commit_p: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `Q` commitment.
+    pub commit_q: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the lincheck mask polynomial `S` (amendment A2).
+    pub s: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `S` commitment.
+    pub commit_s: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the round-1 C-side mask cube `S_c` (amendment A3).
+    pub s_c: &'a mut dyn flock_core::zk::MaskSampler,
+    /// Bits of the round-1 off-diagonal generator cube `S_h` (amendment A3).
+    pub s_h: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `S_c` commitment.
+    pub commit_s_c: &'a mut dyn flock_core::zk::MaskSampler,
+    /// μ and g of the `S_h` commitment.
+    pub commit_s_h: &'a mut dyn flock_core::zk::MaskSampler,
+}
+
+/// Owning form of [`A1MaskSources`] for the DRBG case (the forks must
+/// outlive the borrow).
+#[cfg(feature = "zk")]
+pub struct A1MaskForks {
+    pub witness_commit: flock_core::zk::ZkRng,
+    pub p: flock_core::zk::ZkRng,
+    pub q: flock_core::zk::ZkRng,
+    pub commit_p: flock_core::zk::ZkRng,
+    pub commit_q: flock_core::zk::ZkRng,
+    pub s: flock_core::zk::ZkRng,
+    pub commit_s: flock_core::zk::ZkRng,
+    pub s_c: flock_core::zk::ZkRng,
+    pub s_h: flock_core::zk::ZkRng,
+    pub commit_s_c: flock_core::zk::ZkRng,
+    pub commit_s_h: flock_core::zk::ZkRng,
+}
+
+#[cfg(feature = "zk")]
+impl A1MaskForks {
+    /// Derive the eleven streams from one per-proof DRBG. The labels are part
+    /// of the protocol: they make the channels independent, which is a
+    /// hypothesis of the composition argument.
+    pub fn from_rng(zk_rng: &mut flock_core::zk::ZkRng) -> Self {
+        Self {
+            witness_commit: zk_rng.fork(b"a1-witness-mask"),
+            p: zk_rng.fork(b"a1-P"),
+            q: zk_rng.fork(b"a1-Q"),
+            commit_p: zk_rng.fork(b"a1-commit-P"),
+            commit_q: zk_rng.fork(b"a1-commit-Q"),
+            s: zk_rng.fork(b"a2-S"),
+            commit_s: zk_rng.fork(b"a2-commit-S"),
+            s_c: zk_rng.fork(b"a3-Sc"),
+            s_h: zk_rng.fork(b"a3-Sh"),
+            commit_s_c: zk_rng.fork(b"a3-commit-Sc"),
+            commit_s_h: zk_rng.fork(b"a3-commit-Sh"),
+        }
+    }
+    pub fn sources(&mut self) -> A1MaskSources<'_> {
+        A1MaskSources {
+            witness_commit: &mut self.witness_commit,
+            p: &mut self.p,
+            q: &mut self.q,
+            commit_p: &mut self.commit_p,
+            commit_q: &mut self.commit_q,
+            s: &mut self.s,
+            commit_s: &mut self.commit_s,
+            s_c: &mut self.s_c,
+            s_h: &mut self.s_h,
+            commit_s_c: &mut self.commit_s_c,
+            commit_s_h: &mut self.commit_s_h,
+        }
+    }
+}
+
+/// [`prove_r1cs_zk_a1`] with an explicit Ligerito prover config, for audit
+/// fixtures at shapes outside the production config ladder (e.g. the m=15
+/// certificate fixture). Does NOT check `r1cs.zk` — the caller owns the
+/// randomizer-layout correctness of the statement.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_config: &pcs::ligerito::ProverConfig,
+    zk_rng: &mut flock_core::zk::ZkRng,
+    challenger: &mut Ch,
+) -> (R1csProofZkA1, Commitment) {
+    let mut forks = A1MaskForks::from_rng(zk_rng);
+    let (proof, comm, _) = prove_r1cs_zk_a1_with_masks(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        lig_config,
+        forks.sources(),
+        None,
+        challenger,
+    );
+    (proof, comm)
+}
+
+/// The A1′ prover with every mask channel supplied explicitly. This is the
+/// map the leakage certificates probe.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_config: &pcs::ligerito::ProverConfig,
+    masks: A1MaskSources<'_>,
+    coverage_probe_seed: Option<u64>,
+    challenger: &mut Ch,
+) -> (
+    R1csProofZkA1,
+    Commitment,
+    Option<crate::zk_rank_check::RankCheckReport>,
+) {
+    assert!(pcs_params.zk, "A1′ prove requires PcsParams.zk");
+    let m = r1cs.m;
     let padding = r1cs.padding_spec();
     let cast = |v: &[F128]| -> &[u8] {
         unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
     };
 
-    let mut wit_rng = zk_rng.fork(b"a1-witness-mask");
-    let mut p_rng = zk_rng.fork(b"a1-P");
-    let mut q_rng = zk_rng.fork(b"a1-Q");
-    let mut cp_rng = zk_rng.fork(b"a1-commit-P");
-    let mut cq_rng = zk_rng.fork(b"a1-commit-Q");
+    let A1MaskSources {
+        witness_commit,
+        p,
+        q,
+        commit_p,
+        commit_q,
+        s,
+        commit_s,
+        s_c,
+        s_h,
+        commit_s_c,
+        commit_s_h,
+    } = masks;
 
-    let p_f128 = sample_mask_bits(&mut p_rng, m);
-    let q_f128 = sample_mask_bits(&mut q_rng, m);
+    let p_f128 = sample_mask_bits(p, m);
+    let q_f128 = sample_mask_bits(q, m);
+    let mut s_f128 = sample_mask_bits(s, m);
+    // A2's mask enters the lincheck through the same partial fold the witness
+    // does, so it needs the lincheck packing of the very same cube that
+    // `comm_s` commits to — and the same honest zero padding, since the fold
+    // skips those rows while the committed `Ŝ` would not.
+    flock_core::lincheck::zero_lincheck_padding_rows(&mut s_f128, r1cs.k_log, r1cs.useful_bits);
+    let s_packed_lincheck =
+        flock_core::lincheck::pack_z_lincheck_from_packed(&s_f128, m, r1cs.k_log);
 
-    let (commitment, prover_data) = pcs::commit::commit_zk(&z_packed, pcs_params, &mut wit_rng);
-    let (comm_p, pd_p) = pcs::commit::commit_zk(&p_f128, pcs_params, &mut cp_rng);
-    let (comm_q, pd_q) = pcs::commit::commit_zk(&q_f128, pcs_params, &mut cq_rng);
+    let (commitment, prover_data) = pcs::commit::commit_zk(&z_packed, pcs_params, witness_commit);
+    let (comm_p, pd_p) = pcs::commit::commit_zk(&p_f128, pcs_params, commit_p);
+    let (comm_q, pd_q) = pcs::commit::commit_zk(&q_f128, pcs_params, commit_q);
+    let (comm_s, pd_s) = pcs::commit::commit_zk(&s_f128, pcs_params, commit_s);
+    // A3: the round-1 mask pair. Both are full-support witness-free cubes;
+    // the round-1 fold reads their whole support, so no padding surgery.
+    let s_c_f128 = sample_mask_bits(s_c, m);
+    let s_h_f128 = sample_mask_bits(s_h, m);
+    let (comm_s_c, pd_s_c) = pcs::commit::commit_zk(&s_c_f128, pcs_params, commit_s_c);
+    let (comm_s_h, pd_s_h) = pcs::commit::commit_zk(&s_h_f128, pcs_params, commit_s_h);
 
     bind_statement(challenger, r1cs, &commitment);
     challenger.observe_bytes(&comm_p.root);
     challenger.observe_bytes(&comm_q.root);
+    // Bound here, before every challenge of the run: the A2 batching argument
+    // needs `S` fixed before `γ_lc`, and this is the earliest safe point.
+    challenger.observe_bytes(&comm_s.root);
+    challenger.observe_bytes(&comm_s_c.root);
+    challenger.observe_bytes(&comm_s_h.root);
 
-    let (zk_zc, zc_claim) = zerocheck::prove_packed_padded_zk(
+    // Per-proof mask-coverage self-check (ε_rank): the challenger is now at
+    // exactly the position `prove_packed_padded_zk` starts from, so a clone
+    // sees the same challenge schedule the proof will use. Pure observer —
+    // it never touches `challenger` itself.
+    let coverage = coverage_probe_seed.map(|seed| {
+        crate::zk_rank_check::check_mask_coverage(cast(&q_f128), m, seed, &*challenger)
+    });
+    let coverage = match coverage {
+        None => None,
+        Some(Ok(report)) => Some(report),
+        Some(Err(failed)) => Some(failed.report),
+    };
+
+    let (zk_zc, zc_claim, zc_mask) = zerocheck::prove_packed_padded_zk_masked(
         cast(&a_packed_f128),
         cast(&b_packed_f128),
         cast(&z_packed),
@@ -826,13 +1064,18 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
         cast(&q_f128),
         m,
         &padding,
+        Some(zerocheck::Round1Mask {
+            s_c_packed: cast(&s_c_f128),
+            s_h_packed: cast(&s_h_f128),
+        }),
         challenger,
     );
+    let zc_mask = zc_mask.expect("mask=Some must produce a round-1 mask transcript");
     flock_core::scratch::give_f128(a_packed_f128);
     flock_core::scratch::give_f128(b_packed_f128);
 
     let x_ab = r1cs.x_ab_from_mlv(zc_claim.z, &zc_claim.mlv_challenges);
-    let (lc_proof, lc_claim, _z_vec_pre) = lincheck::prove_padded_capture_z_vec(
+    let (lc_proof, lc_claim, _z_vec_pre, lc_mask) = lincheck::prove_padded_masked_capture_z_vec(
         &z_packed_lincheck,
         m,
         r1cs.k_log,
@@ -840,9 +1083,13 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
         r1cs.useful_bits,
         lincheck_circuit,
         &x_ab,
+        lincheck::LincheckMask {
+            s_packed: &s_packed_lincheck,
+        },
         challenger,
     );
     drop(z_packed_lincheck);
+    drop(s_packed_lincheck);
 
     let ab = ZClaim {
         point: r1cs.ab_claim_point(lc_claim.r_inner_skip, &lc_claim.r_inner_rest, &x_ab.x_outer),
@@ -859,28 +1106,119 @@ pub fn prove_r1cs_zk_a1<Ch: Challenger + Clone>(
     let mut ch_p = challenger.clone();
     ch_p.observe_label(b"flock-a1-open-P");
     let open_p = pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v(
-        p_f128, &pd_p, &comm_p, &[x_point.as_slice()], &[], &[], &padding, &lig_config, &mut ch_p,
+        p_f128,
+        &pd_p,
+        &comm_p,
+        &[x_point.as_slice()],
+        &[],
+        &[],
+        &padding,
+        lig_config,
+        &mut ch_p,
     );
     let mut ch_q = challenger.clone();
     ch_q.observe_label(b"flock-a1-open-Q");
     let open_q = pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v(
-        q_f128, &pd_q, &comm_q, &[x_point.as_slice()], &[], &[], &padding, &lig_config, &mut ch_q,
+        q_f128,
+        &pd_q,
+        &comm_q,
+        &[x_point.as_slice()],
+        &[],
+        &[],
+        &padding,
+        lig_config,
+        &mut ch_q,
+    );
+
+    // A3: open both round-1 mask cubes at the c-claim point — the same point
+    // and shape as the C-claim, because that is where the un-shift happens.
+    let s_c_claim = ZClaim {
+        point: c.point.clone(),
+        value: zc_mask.mc_at_z,
+    };
+    let s_h_claim = ZClaim {
+        point: c.point.clone(),
+        value: zc_mask.h_at_z,
+    };
+    let mut ch_sc = challenger.clone();
+    ch_sc.observe_label(b"flock-a3-open-Sc");
+    let open_s_c = open_claims_with_precomputed_ligerito(
+        s_c_f128,
+        &pd_s_c,
+        &comm_s_c,
+        &[s_c_claim],
+        &[None],
+        &padding,
+        lig_config,
+        &mut ch_sc,
+    );
+    let mut ch_sh = challenger.clone();
+    ch_sh.observe_label(b"flock-a3-open-Sh");
+    let open_s_h = open_claims_with_precomputed_ligerito(
+        s_h_f128,
+        &pd_s_h,
+        &comm_s_h,
+        &[s_h_claim],
+        &[None],
+        &padding,
+        lig_config,
+        &mut ch_sh,
+    );
+
+    // A2: open S hidingly at the lincheck's output point — the same point and
+    // the same quirky shape as the `ab` claim, because `s_eval` un-shifts
+    // exactly that claim. Without this opening `s_eval` would be a free
+    // scalar chosen after ρ, and the output claim would be unconstrained.
+    let s_claim = ZClaim {
+        point: ab.point.clone(),
+        value: lc_mask.s_eval,
+    };
+    let mut ch_s = challenger.clone();
+    ch_s.observe_label(b"flock-a2-open-S");
+    let open_s = open_claims_with_precomputed_ligerito(
+        s_f128,
+        &pd_s,
+        &comm_s,
+        &[s_claim],
+        &[None],
+        &padding,
+        lig_config,
+        &mut ch_s,
     );
 
     let pcs_open = open_claims_with_precomputed_ligerito(
         z_packed,
         &prover_data,
         &commitment,
-        &[ab.clone(), c.clone()],
+        &[ab, c],
         &[None, None],
         &padding,
-        &lig_config,
+        lig_config,
         challenger,
     );
 
     (
-        R1csProofZkA1 { zerocheck: zk_zc, lincheck: lc_proof, pcs_open, ab, c, open_p, open_q, comm_p, comm_q },
+        R1csProofZkA1 {
+            zerocheck: zk_zc,
+            lincheck: lc_proof,
+            pcs_open,
+            open_p,
+            open_q,
+            open_s,
+            open_s_c,
+            open_s_h,
+            comm_p,
+            comm_q,
+            comm_s,
+            comm_s_c,
+            comm_s_h,
+            sigma_lc: lc_mask.sigma_lc,
+            s_eval: lc_mask.s_eval,
+            mc_at_z: zc_mask.mc_at_z,
+            h_at_z: zc_mask.h_at_z,
+        },
         commitment,
+        coverage,
     )
 }
 
@@ -894,22 +1232,70 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
-    use flock_core::verifier::VerifyError;
-    let m = r1cs.m;
     let log_n = pcs_params.log_msg_len();
     let lig_v =
         pcs::ligerito::verifier_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito verifier config");
+    verify_r1cs_zk_a1_with_config(
+        r1cs,
+        pcs_params,
+        proof,
+        commitment,
+        lincheck_circuit,
+        &lig_v,
+        challenger,
+    )
+}
+
+/// [`verify_r1cs_zk_a1`] with an explicit Ligerito verifier config, for audit
+/// fixtures at shapes outside the production config ladder.
+#[cfg(feature = "zk")]
+pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_v: &pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+) -> Result<(), flock_core::verifier::VerifyError> {
+    use flock_core::verifier::VerifyError;
+    let m = r1cs.m;
+
+    // The P,Q commitments' params are attacker-supplied proof data; the
+    // opening circuits key shapes and the zk branch off them, so they must
+    // equal the verifier-owned params exactly (the witness path gets the
+    // same check inside `verify_claims_ligerito`).
+    if proof.comm_p.params != *pcs_params
+        || proof.comm_q.params != *pcs_params
+        || proof.comm_s.params != *pcs_params
+        || proof.comm_s_c.params != *pcs_params
+        || proof.comm_s_h.params != *pcs_params
+    {
+        return Err(VerifyError::PcsAb(pcs::VerifyError::Ligerito));
+    }
 
     bind_statement(challenger, r1cs, commitment);
     challenger.observe_bytes(&proof.comm_p.root);
     challenger.observe_bytes(&proof.comm_q.root);
+    challenger.observe_bytes(&proof.comm_s.root);
+    challenger.observe_bytes(&proof.comm_s_c.root);
+    challenger.observe_bytes(&proof.comm_s_h.root);
 
-    let zc_claim =
-        zerocheck::verify_zk(m, &proof.zerocheck, challenger).map_err(VerifyError::Zerocheck)?;
+    // A3: `mc_at_z`/`h_at_z` are unchecked here — they only un-shift the
+    // C-claim and the AB running claim. The openings below bind them.
+    let zc_claim = zerocheck::verify_zk_masked(
+        m,
+        &proof.zerocheck,
+        Some((proof.mc_at_z, proof.h_at_z)),
+        challenger,
+    )
+    .map_err(VerifyError::Zerocheck)?;
 
     let x_ab = r1cs.x_ab_from_mlv(zc_claim.z, &zc_claim.mlv_challenges);
-    let lc_claim = lincheck::verify(
+    // A2: `s_eval` is still unchecked at this point — it only un-shifts the
+    // claim. The opening against `comm_s` below is what binds it.
+    let lc_claim = lincheck::verify_masked(
         m,
         r1cs.k_log,
         r1cs.k_skip,
@@ -918,6 +1304,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         zc_claim.a_eval,
         zc_claim.b_eval,
         &proof.lincheck,
+        Some((proof.sigma_lc, proof.s_eval)),
         challenger,
     )
     .map_err(VerifyError::Lincheck)?;
@@ -941,7 +1328,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         &[x_point.as_slice()],
         &[],
         &proof.open_p,
-        &lig_v,
+        lig_v,
         &mut ch_p,
     )
     .is_err()
@@ -957,7 +1344,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         &[x_point.as_slice()],
         &[],
         &proof.open_q,
-        &lig_v,
+        lig_v,
         &mut ch_q,
     )
     .is_err()
@@ -965,11 +1352,64 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         return Err(VerifyError::PcsAb(pcs::VerifyError::Ligerito));
     }
 
-    flock_core::verifier::verify_claims_ligerito(
+    // A2: bind `s_eval`. The lincheck already used it to un-shift `ab.value`,
+    // so a wrong `s_eval` yields a wrong `ab` claim — but that would only be
+    // caught by the witness opening below if the two errors failed to cancel.
+    // Checking S's own opening removes the freedom outright.
+    // A3: bind the two round-1 mask evaluations at the c-claim point.
+    for (label, comm, opening, value) in [
+        (
+            &b"flock-a3-open-Sc"[..],
+            &proof.comm_s_c,
+            &proof.open_s_c,
+            proof.mc_at_z,
+        ),
+        (
+            &b"flock-a3-open-Sh"[..],
+            &proof.comm_s_h,
+            &proof.open_s_h,
+            proof.h_at_z,
+        ),
+    ] {
+        let claim = ZClaim {
+            point: c.point.clone(),
+            value,
+        };
+        let mut ch = challenger.clone();
+        ch.observe_label(label);
+        flock_core::verifier::verify_claims_ligerito_with_config(
+            comm,
+            &[claim],
+            opening,
+            pcs_params,
+            lig_v,
+            &mut ch,
+        )
+        .map_err(VerifyError::PcsAb)?;
+    }
+
+    let s_claim = ZClaim {
+        point: ab.point.clone(),
+        value: proof.s_eval,
+    };
+    let mut ch_s = challenger.clone();
+    ch_s.observe_label(b"flock-a2-open-S");
+    flock_core::verifier::verify_claims_ligerito_with_config(
+        &proof.comm_s,
+        &[s_claim],
+        &proof.open_s,
+        pcs_params,
+        lig_v,
+        &mut ch_s,
+    )
+    .map_err(VerifyError::PcsAb)?;
+
+    flock_core::verifier::verify_claims_ligerito_with_config(
         commitment,
         &[ab, c],
         &proof.pcs_open,
         pcs_params,
+        lig_v,
         challenger,
     )
     .map_err(VerifyError::PcsAb)?;

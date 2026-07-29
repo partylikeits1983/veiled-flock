@@ -902,7 +902,9 @@ mod tests {
             rand_chunks_a: 2,
             ..cfg
         };
-        let zk_b = mk(Some(crate::zk::ZkBlockLayout::new(k_log, 128, None, &cfg_b)));
+        let zk_b = mk(Some(crate::zk::ZkBlockLayout::new(
+            k_log, 128, None, &cfg_b,
+        )));
         // zk layout is part of the statement; different layouts ⇒ different
         // digests, and None keeps the pre-zk digest formula.
         assert_ne!(plain.statement_digest(), zk_a.statement_digest());

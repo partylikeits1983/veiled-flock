@@ -19,3 +19,11 @@ pub mod merkle_path;
 pub mod proof_io;
 pub mod prover;
 pub mod r1cs_hashes;
+#[cfg(feature = "zk")]
+pub mod transcript_schema;
+#[cfg(feature = "zk")]
+pub mod zk_audit_support;
+#[cfg(feature = "zk")]
+pub mod zk_certificate;
+#[cfg(feature = "zk")]
+pub mod zk_rank_check;

@@ -1,6 +1,8 @@
-//! Round-1 prover message — fully optimized (shift_reduce + extract_c, scalar).
+//! Round-1 prover message — fully optimized (shift_reduce + extract_c).
 //!
-//! Scalar Rust implementation (no NEON). Three layered optimizations on top of
+//! Scalar orchestration whose inner primitives dispatch per architecture
+//! (aarch64 NEON / x86-64 GFNI+AVX512 / portable scalar) via the `kernels`
+//! module. Three layered optimizations on top of
 //! the [`super::round1_extract_c`] scaffold:
 //!
 //! 1. **Geometric small-eq + shift_reduce inner** (3 inner-most rest-dims).

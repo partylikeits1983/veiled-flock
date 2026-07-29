@@ -102,9 +102,8 @@ impl ZkRng {
 impl MaskSampler for ZkRng {
     fn fill_u64s(&mut self, out: &mut [u64]) {
         // One bulk XOF read; u64 has no invalid bit patterns.
-        let bytes: &mut [u8] = unsafe {
-            std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<u8>(), out.len() * 8)
-        };
+        let bytes: &mut [u8] =
+            unsafe { std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<u8>(), out.len() * 8) };
         self.reader.fill(bytes);
         // Canonicalize endianness so streams are platform-independent.
         for v in out.iter_mut() {
@@ -129,7 +128,10 @@ pub struct PlaybackSampler<'a> {
 
 impl MaskSampler for PlaybackSampler<'_> {
     fn fill_u64s(&mut self, out: &mut [u64]) {
-        assert!(out.len().is_multiple_of(2), "PlaybackSampler: odd u64 request");
+        assert!(
+            out.len().is_multiple_of(2),
+            "PlaybackSampler: odd u64 request"
+        );
         let n = out.len() / 2;
         for (i, chunk) in out.chunks_exact_mut(2).enumerate() {
             let v = self.data[self.pos + i];
