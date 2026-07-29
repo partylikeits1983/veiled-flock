@@ -26,14 +26,14 @@
 //! 1. **Choose the challenges.** In the ROM the simulator programs the oracle,
 //!    so the challenges are inputs rather than outputs. They are drawn from the
 //!    honest distribution (uniform).
-//! 2. **Sample the mask cubes honestly.** `P`, `Q`, `S`, `S_c`, `S_h` carry no
+//! 2. **Sample the masks honestly.** `P`, `S`, `S_c`, and `S_h` carry no
 //!    witness, so the simulator draws and commits them exactly as the prover
 //!    does — and their opened evaluations are then true evaluations of
 //!    committed data, not fabrications.
 //! 3. **Fill the zerocheck backwards.** Round-1 vectors are free; the C-side
 //!    evaluation is *determined* by the verifier's own interpolation; the
 //!    multilinear rounds are free except that the last round's `G(∞)` is solved
-//!    so the telescoped claim lands exactly on `â(ρ)b̂(ρ) + γ·P(ρ)Q(ρ)`.
+//!    so the telescoped claim lands exactly on `â(ρ)b̂(ρ) + γ·P(ρ)Q*(ρ)`.
 //! 4. **Fill the lincheck backwards.** Round messages are free; `z_partial` is
 //!    free except for one coordinate solved to hit the final inner product
 //!    against the verifier's own `comb_vec`.
@@ -219,7 +219,7 @@ impl std::error::Error for SimError {}
 /// * the AB initial claim is then whatever the reconstruction yields — the
 ///   simulator does not need it to be the honest one;
 /// * each multilinear round is free, except the last `G(∞)`, which is solved
-///   so the telescoped claim lands exactly on `â(ρ)b̂(ρ) + γ·P(ρ)Q(ρ)`.
+///   so the telescoped claim lands exactly on `â(ρ)b̂(ρ) + γ·P(ρ)Q*(ρ)`.
 ///
 /// That last solve is the crux: it is what lets a transcript with no valid
 /// witness behind it satisfy the verifier's terminal identity.

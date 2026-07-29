@@ -1,5 +1,10 @@
 # Memo: security definitions for the fixed-digest statement
 
+> **Historical design memo.** The definitions remain useful, but the status
+> discussion below predates the implemented field-valued simulator and
+> extractor. Current claim status is controlled by `docs/paper/zk-flock.tex`
+> and `docs/memos/knowledge-extraction.md`.
+
 **Intended theorem.** The Flock argument for
 `R = {((y_i), (x_i)) : BLAKE3(x_i) = y_i}` is a noninteractive zero-knowledge
 argument of knowledge in the classical random-oracle model.

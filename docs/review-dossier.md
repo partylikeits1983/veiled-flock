@@ -1,5 +1,10 @@
 # External review dossier — Flock zero-knowledge mode (A1′)
 
+> **Superseded review dossier.** This file indexes the withdrawn Boolean
+> $P\cdot Q$ protocol and is retained only as design history. It is not an
+> entry point for reviewing `flock-zk-fv-v3`. Review the current paper and the
+> S2, S3, simulator-game, and knowledge-extraction artifacts instead.
+
 This document is the entry point for an independent cryptographic review. It
 indexes what is claimed, what establishes each claim, how to reproduce it, and
 what is knowingly unresolved. It is not itself evidence.

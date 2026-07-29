@@ -1,5 +1,12 @@
 # Zero-knowledge for Flock (amended protocol A1′+A2): proof document
 
+> **Superseded design record.** This document describes the withdrawn Boolean
+> $P\cdot Q$ masking construction and must not be used to review the current
+> field-valued protocol. The current claim is in `docs/paper/zk-flock.tex`, with
+> supporting arguments in `docs/memos/s2-piop-coverage.md`,
+> `docs/memos/s3-pcs-translator.md`, and
+> `docs/memos/knowledge-extraction.md`.
+
 This document states and proves the zero-knowledge property of the `zk` mode
 for **BLAKE3 batch statements**, under two amendments: A1′ (a degree-2
 committed mask channel for the zerocheck round messages) and A2 (a committed

@@ -1,5 +1,10 @@
 # Formal proof that the zk-Flock masking design is zero-knowledge
 
+> **Instantiation note.** Several sections below explain the withdrawn Boolean
+> $P\cdot Q$ design. The Lean theorems remain generic and are still used, but
+> the current field-valued protocol mapping is documented in
+> `docs/paper/zk-flock.tex` and `docs/memos/s2-piop-coverage.md`.
+
 A Lean 4 + Mathlib development of the **masking theorems** behind Flock's
 `zk` mode. `Flockzk/Masking.lean`: if the prover's transcript is an affine
 function of uniform secret masks, and every witness-dependent direction

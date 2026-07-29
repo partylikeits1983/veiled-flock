@@ -31,32 +31,33 @@ July 2026}
 \begin{abstract}
 Flock's original BLAKE3 prover \cite{Flock} was not zero knowledge: its transcript exposed
 deterministic functions of the witness.  This paper gives a zero-knowledge
-variant for exactly two registered production profiles: a batch of 256 BLAKE3
+variant for exactly two registered implementation profiles: a batch of 256 BLAKE3
 instances and a batch of 256 fixed-digest statements
 \[
   y_i=\operatorname{BLAKE3}(x_i),
   \qquad |x_i|=64\text{ bytes}.
 \]
-Honest and simulated transcripts are checked by the same production verifier.
+Honest and simulated transcripts are checked by the same implementation verifier.
 
 The proof has two algebraic steps.  First, a field-valued mask makes the PIOP
 messages independent of the witness after conditioning on the two mask values
-that are later opened.  For the production shape, failure occurs on the zero
+that are later opened.  For the registered shape, failure occurs on the zero
 set of a nonzero polynomial of degree at most 720.  Second, an affine
 translation of the PCS blinders preserves every opened value and every
 recursive codeword.  These two translations reduce simulation to choosing the
 Fiat--Shamir challenges first, solving the dependent messages, and programming
 at most 18 fresh random-oracle points.  The simulator receives only the public
-statement, and its output is accepted by the production verifier.
+statement, and its output is accepted by the implementation verifier.
 
 In the classical programmable random-oracle model, the explicit algebraic and
 programming terms sum to less than $2^{-118.502}$ at a hash-query budget
 $Q_H=2^{64}$, before the ordinary 256-bit oracle-collision term.  Thus the two
 registered profiles are computationally zero knowledge under the assumptions
-stated here.  Knowledge security is separate: the available standalone
-Fiat--Shamir reduction over $\F_{2^{128}}$ gives 55.994 bits at the same query
-budget.  The stronger 100-bit deployment target is conjectural, not a theorem
-of this paper.  At the certified batch size of 256, the current unoptimized ZK
+stated here.  Knowledge security is separate: one L0 term caps the available
+standalone Fiat--Shamir reduction over $\F_{2^{128}}$ at 55.994 bits for the
+same query budget, before other knowledge-error terms are added.  The stronger
+100-bit deployment target is conjectural, not a theorem of this paper.  At the
+certified batch size of 256, the current unoptimized ZK
 prover is 6.78 times slower than the current non-ZK prover on twelve threads,
 and its encoded proof is 9.21 times larger.
 \end{abstract}
@@ -78,8 +79,12 @@ The fixed-digest relation is
   \right\}.
 \]
 The batch relation uses the same BLAKE3 circuit but has no externally fixed
-digest list.  In both cases the R1CS shape, packing convention, PCS parameters,
-and circuit digest are part of the registered statement family.
+digest list or hash output.  Its statement therefore exposes only the batch
+shape; the prover is free to choose the batch trace.  The fixed-digest profile
+is the stronger application statement: it proves knowledge of preimages for
+public digests while hiding those preimages.  In both cases the R1CS shape,
+packing convention, PCS parameters, and circuit digest are part of the
+registered statement family.
 
 Throughout the paper, \emph{computational zero knowledge} has its standard
 classical-ROM meaning: for every classical probabilistic polynomial-time
@@ -93,7 +98,7 @@ sumcheck \cite{CFS17}.
 
 \begin{table}[ht]
 \centering\small
-\caption{The complete production scope of the ZK claim.}
+\caption{The complete implementation scope of the ZK claim.}
 \label{tab:profiles}
 \begin{tabular}{@{}llll@{}}
 \toprule
@@ -163,7 +168,7 @@ Here $P$ is uniform over $\K$ on a translated subcube of the top
 $d_{\log}=12$ variables.  The affine polynomial $Q^\star$ is public,
 protocol-fixed, and nonzero on the Boolean cube.  The field-valued mask is
 essential: the withdrawn Boolean $P,Q$ construction did not support the
-Schwartz--Zippel argument needed for production parameters.  Protocol
+Schwartz--Zippel argument needed for the registered parameters.  Protocol
 \texttt{flock-zk-fv-v3} therefore has no $Q$ commitment, $Q$ opening, final
 $Q$ evaluation, or $Q$-randomness stream.
 
@@ -215,7 +220,7 @@ zero set of its selected minor,
   \qquad
   \dim R_c(\ker L_c)=2n-2.
 \]
-For the production shape $m=22$, the selected determinant is a nonzero
+For the registered shape $m=22$, the selected determinant is a nonzero
 polynomial of total degree at most 720 in the 32 challenge variables.  Hence
 \[
   \Pr_c[\text{coverage failure}]
@@ -289,7 +294,7 @@ Translation by these deltas is a bijection on uniform masks, so it preserves
 their distribution.
 \end{proof}
 
-The production opening queries 218 initial-level positions; each lane contains
+The registered opening queries 218 initial-level positions; each lane contains
 512 independent mask symbols.  After conditioning on all opened positions,
 each additional fresh wide leaf retains at least 16,384 bits of conditional
 entropy.  No recursive entropy charge is needed because Lemma~\ref{lem:pcs}
@@ -299,7 +304,7 @@ probability $2^{-128}$.
 The proof format contains twelve categories of opening fields.  The
 implementation exhaustively destructures and classifies them, so adding an
 unclassified field fails compilation.  The exact translator is tested against
-the production additive NTT and wide interleaving.  Its functional manifest
+the registered additive NTT and wide interleaving.  Its functional manifest
 and entropy table are pinned in
 \path{s3_opening_functionals.json} and
 \path{s3_minentropy_table.json}.
@@ -312,7 +317,7 @@ setup and digest list, but no witness type.  It constructs an unrelated trace,
 overwrites the public-output region, samples the terminal zerocheck values, and
 solves the dependent messages in one pass.  The patched trace is not an R1CS
 witness: running the honest prover on it is rejected.  After the simulator
-programs the required fresh oracle points, however, the production verifier
+programs the required fresh oracle points, however, the implementation verifier
 accepts the simulated proof.  The simulator programs at most 18 points.
 
 The hybrid argument is summarized in Table~\ref{tab:games}.
@@ -350,10 +355,12 @@ At $Q_H=2^{64}$,
   -\log_2\varepsilon_{\rm explicit}(2^{64})
   =118.502\ldots.
 \]
-The term $\varepsilon_{\rm RO}$ denotes the ordinary collision and binding
-term at the framed 256-bit oracle boundary.  It is negligible for the stated
-classical query regime, but it is not included in the quoted 118.502-bit
-figure.
+The term $\varepsilon_{\rm RO}$ denotes collision and binding error at the
+framed 256-bit oracle boundary.  It remains symbolic because a full count must
+include both adversarial queries and the protocol's own Merkle, transcript, and
+grinding queries.  It is not included in the quoted 118.502-bit figure, so that
+number is the explicit algebraic and programming ledger, not a complete
+standalone security level.
 
 \begin{theorem}[Scoped computational zero knowledge]\label{thm:zk}
 Assume the classical programmable random oracle of Assumption \ref{ass:rom},
@@ -366,8 +373,8 @@ queries,
   \Adv_{\rm ZK}
   \le \varepsilon_{\rm explicit}(Q_H)+\varepsilon_{\rm RO}.
 \]
-The simulator uses only the public statement, and the verifier is the
-production verifier.
+The simulator uses only the public statement, and the verifier is the same
+implementation verifier used for honest proofs.
 \end{theorem}
 
 This theorem is in the classical programmable-ROM.  It is not a QROM theorem,
@@ -463,13 +470,17 @@ The knowledge ledger contains an interactive L0 fold term
 \[
   \kappa_\Gamma=\frac{257}{2^{128}},
 \]
-or 119.994 bits.  The classical Fiat--Shamir reduction contributes the factor
-$Q_H+1$.  At $Q_H=2^{64}$ it therefore yields
+or 119.994 bits.  The classical Fiat--Shamir reduction multiplies this term by
+$Q_H+1$.  At $Q_H=2^{64}$ this term alone becomes
 \[
   -\log_2\bigl((Q_H+1)\kappa_\Gamma\bigr)
   =55.994\ldots\text{ bits}.
 \]
-This 64-bit loss already occurs in the classical reduction.  It comes from
+Thus 55.994 bits is a ceiling imposed by one term, not a completed lower
+guarantee for the whole argument.  Every additional positive knowledge-error
+term can only reduce the final number of provable bits.
+
+The 64-bit loss already occurs in the classical reduction.  It comes from
 guessing which of the adversary's $Q_H$ oracle queries carries the challenge
 used in the successful proof, which contributes the factor $Q_H+1$.  No
 quantum adversary is needed for this loss.  Thus ``classical loss'' means that
@@ -486,10 +497,10 @@ makes no knowledge-security claim against quantum adversaries.
                   >{\raggedright\arraybackslash}p{0.18\linewidth}
                   >{\raggedright\arraybackslash}p{0.41\linewidth}@{}}
 \toprule
-Profile & Reduction bound & Status \\
+Profile & Reduction ceiling & Status \\
 \midrule
 Standalone FS over $\F_{2^{128}}$
-  & 55.994 bits at $Q_H=2^{64}$
+  & at most 55.994 bits at $Q_H=2^{64}$
   & deployment label: 100-bit conjectured classical knowledge security \\
 Unbiased post-commitment beacon over $\F_{2^{128}}$
   & 119.994 bits
@@ -501,14 +512,43 @@ Standalone FS with challenge-only $\F_{2^{256}}$
 \end{tabular}
 \end{table}
 
-The shipped standalone profile must be labelled
-\emph{100-bit conjectured classical knowledge security}.  The theorem column
-remains 55.994 bits.  An unbiased post-commitment beacon removes the
+The standalone implementation profile must be labelled
+\emph{100-bit conjectured classical knowledge security}.  Its reduction
+ceiling is 55.994 bits before the remaining terms are added.  An unbiased
+post-commitment beacon removes the
 Fiat--Shamir query loss but changes the protocol model.  A challenge-only
 $\F_{2^{256}}$ profile would restore a wide standalone margin, but the required
 machinery does not exist in this implementation.  Grinding, a small-$Q_H$
 convention, generic parallel repetition, and deleting one fold challenge do
 not repair the standalone bound.
+
+\section{Extending the ZK construction}\label{sec:extension}
+
+The masking code is reusable, but the ZK claim does not transfer automatically
+to another hash, circuit, batch size, or PCS shape.  A new family such as
+SHA-256 or Keccak requires all of the following steps:
+\begin{enumerate}
+\item define the exact relation, public inputs, padding, and fixed hash
+      parameters;
+\item bind the circuit digest, witness layout, PCS parameters, and complete
+      transcript schema;
+\item regenerate the symbolic PIOP map and prove a nonzero determinant with an
+      explicit all-challenge degree bound;
+\item prove that the PCS mask translation is solvable for every query set the
+      implementation verifier can derive, and recompute the unopened-leaf entropy;
+\item construct a simulator whose API contains only the public statement and
+      whose output is accepted by the unchanged family verifier;
+\item enumerate every verifier-visible field and prove the hybrid composition,
+      including random-oracle programming and grinding order;
+\item implement the relation-specific extractor and recompute the complete ZK
+      and knowledge-error ledgers; and
+\item add a fail-closed certificate entry only after the family-specific
+      negative controls and end-to-end certification pass.
+\end{enumerate}
+
+The existing SHA-256 and Keccak encoders satisfy none of these obligations by
+their existence alone.  They remain non-ZK until their own artifacts,
+simulators, extractors, and certificate entries are reviewed.
 
 \section{Reproduction and limitations}\label{sec:implementation}
 
@@ -531,20 +571,24 @@ cargo clippy --workspace --all-targets --features zk,symbolic -- -D warnings
 cd lean && lake build
 \end{verbatim}
 It replays the symbolic artifacts, transcript schema, oracle framing,
-production rank gates, simulator, extractor, fixed-digest and batch
+registered-shape rank gates, simulator, extractor, fixed-digest and batch
 roundtrips, Lean adapters, knowledge ledger, and the ban on unframed direct
 SHA-256 calls.  Evidence names are compared with script test names in both
 directions.
 
 The executable evidence is useful because it ties each numerical claim to the
-shipped code.  It is not a substitute for a cryptographic proof or for
+implementation.  It is not a substitute for a cryptographic proof or for
 independent review.  The remaining limits are:
 \begin{itemize}
 \item The ZK theorem is classical-ROM only; there is no QROM analysis.
-\item The standalone knowledge reduction over $\F_{2^{128}}$ gives 55.994
-bits at $Q_H=2^{64}$, not a 100-bit theorem.
+\item The standalone knowledge reduction over $\F_{2^{128}}$ is capped at
+55.994 bits at $Q_H=2^{64}$ before other terms are added.  This is not a
+completed 100-bit theorem.
 \item The executable decoder validates candidates but does not implement
 general arbitrary-error Reed--Solomon decoding.
+\item The exact PCS translator is exercised on a fixture; a standalone proof
+for every query set derived by the implementation verifier remains a review
+obligation.
 \item Only the two exact registry entries are enabled.  Other Flock statement
 families remain non-ZK.
 \item Side-channel resistance, recursive composition, and same-prefix
@@ -555,7 +599,7 @@ review.
 
 Within these limits, the conclusion is precise: for the registered BLAKE3
 batch and fixed-digest relations, Flock now has a public-statement-only
-simulator whose proofs are accepted by the production verifier, together with
+simulator whose proofs are accepted by the implementation verifier, together with
 an explicit distribution argument for every witness-dependent part of the
 transcript.  That is the sense in which these Flock profiles are zero
 knowledge.

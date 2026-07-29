@@ -1,0 +1,259 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1.0in]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{array,booktabs,longtable}
+\usepackage[hidelinks]{hyperref}
+\usepackage{microtype}
+\usepackage{needspace}
+
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.45em}
+
+\newcommand{\term}[2]{\textbf{#1}: \textbf{#2}}
+\newcommand{\F}{\mathbb{F}}
+
+\title{Reader's Cheat Sheet for\\
+\large Zero Knowledge for Flock's BLAKE3 Prover}
+\author{Companion to the implementation-candidate paper}
+\date{}
+
+\begin{document}
+\maketitle
+
+\section*{How to use this sheet}
+
+This is a plain-language companion to \texttt{zk-flock.tex}. It explains the
+paper's acronyms, protocol labels, and recurring symbols. It does not add a
+security claim or replace the paper's definitions and assumptions.
+
+The shortest useful mental model is:
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash\bfseries}p{0.20\linewidth}
+                    >{\raggedright\arraybackslash}p{0.70\linewidth}@{}}
+\toprule
+Part & What it does \\
+\midrule
+BLAKE3 relation & States which hash computations the prover claims to know. \\
+R1CS & Rewrites those computations as algebraic constraints. \\
+PIOP & Checks the constraints through a sequence of polynomial messages. \\
+PCS & Commits to large vectors and opens only the locations the verifier asks for. \\
+Merkle and RO & Bind the commitments and derive unpredictable challenges. \\
+ZK masks & Randomize every witness-dependent value the verifier can observe. \\
+Simulator & Produces the same kind of accepted view from the public statement alone. \\
+Extractor & Recovers a witness from a successful prover in the knowledge analysis. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\section*{Core cryptography acronyms}
+
+\term{ZK}{Zero knowledge.}
+A proof is ZK when it reveals nothing about the secret witness beyond the
+truth of the public statement. In this paper the claim is computational ZK in
+the classical programmable random-oracle model, for two exact BLAKE3 profiles.
+
+\term{R1CS}{Rank-1 Constraint System.}
+An algebraic circuit format whose constraints have the form
+$(Az)\circ(Bz)=Cz$. The vector $z$ contains the encoded computation trace, and
+$A$, $B$, and $C$ describe the circuit.
+
+\term{IOP}{Interactive Oracle Proof.}
+A proof protocol in which the verifier receives large prover messages as
+oracles and reads only selected locations instead of reading every message in
+full.
+
+\term{PIOP}{Polynomial Interactive Oracle Proof.}
+An IOP whose large messages are represented by polynomials and checked through
+algebraic identities. Flock's zerocheck and lincheck form the PIOP layer that
+checks the R1CS computation.
+
+\term{PCS}{Polynomial Commitment Scheme.}
+A mechanism for committing to a polynomial or vector and later proving that
+selected evaluations are correct without revealing the entire object. Flock
+uses the Ligerito PCS with ring switching.
+
+\term{FS}{Fiat--Shamir.}
+The transformation that replaces an interactive verifier's random challenges
+with hashes of the transcript. It makes the proof noninteractive, but its
+security analysis depends on the random-oracle model.
+
+\term{RO}{Random oracle.}
+An idealized random function that returns a consistent, independent random
+output for each new input. The symbol $\varepsilon_{\rm RO}$ denotes error
+terms associated with this boundary.
+
+\term{ROM}{Random Oracle Model.}
+The security model in which the hash function is analyzed as a random oracle.
+The simulator may program an output only at a fresh input that the adversary
+has not already queried.
+
+\term{QROM}{Quantum Random Oracle Model.}
+The version of the ROM that permits quantum superposition queries. This paper
+does not provide a QROM proof and therefore makes no post-quantum theorem.
+
+\term{DRBG}{Deterministic Random Bit Generator.}
+A generator that expands one unpredictable seed into many pseudorandom values.
+The prover derives independently labelled mask streams and the proof nonce
+from a per-proof DRBG.
+
+\term{PoW}{Proof of work.}
+The grinding step that searches for a nonce satisfying a hash condition. In
+the source and transcript framing it appears as \texttt{ROLE\_POW}.
+
+\section*{Algorithms, formats, and implementation terms}
+
+\term{BLAKE3}{Name of the hash function used by the certified relations.}
+It is not expanded as an acronym. The paper proves batches of its compression
+function and a fixed-digest relation for exactly 64-byte messages.
+
+\term{SHA-256}{Secure Hash Algorithm with a 256-bit output.}
+The implementation uses injectively framed SHA-256 calls for Fiat--Shamir,
+Merkle nodes, and proof of work. The paper models these calls as one random
+oracle; it does not prove a standard-model theorem about SHA-256 itself.
+
+\term{IV}{Initialization Vector.}
+The fixed starting state of a hash computation. The fixed-digest BLAKE3 circuit
+pins the IV and the other compression parameters so that the relation means
+the intended 64-byte BLAKE3 hash.
+
+\term{NTT}{Number-Theoretic Transform.}
+A fast linear transform used to encode polynomial data efficiently. This
+implementation uses an additive NTT over a binary extension field.
+
+\term{SIMD}{Single Instruction, Multiple Data.}
+A processor technique that performs the same operation on several values at once.
+The paper mentions four-way SIMD hashing checked against a scalar reference.
+
+\term{L0}{Level zero.}
+The initial PCS codeword layer, before recursive folding. It is pronounced
+``level zero,'' not ``ell-zero norm.'' The L0 query count and mask dimension
+control the remaining entropy of unopened leaves.
+
+\Needspace{5\baselineskip}
+\term{API}{Application Programming Interface.}
+The boundary through which one software component is allowed to use another.
+The simulator API deliberately exposes the public statement but no witness.
+
+\term{I/O}{Input and output.}
+The proof I/O format is the serialized representation read and written by the
+prover and verifier.
+
+\section*{Security-model shorthand}
+
+\term{Classical ROM}{Classical Random Oracle Model.}
+The attacker makes ordinary classical oracle queries. The simulator may
+program fresh oracle points. This is the model of the paper's ZK theorem.
+
+\term{Standalone FS}{Standalone Fiat--Shamir.}
+The proof derives all challenges from its own transcript, with no external
+randomness beacon. This is the standalone implementation profile whose knowledge
+reduction is capped at about 55.994 bits when $Q_H=2^{64}$.
+
+\term{Knowledge soundness}{The accepting prover knows a witness.}
+This is separate from ZK. ZK protects witness privacy; knowledge soundness says
+that an accepted proof cannot normally be produced without a valid witness.
+
+\term{Simulation extractability}{Extraction after simulated proofs.}
+The implemented claim is the weaker fresh-prefix form: extraction is attempted
+only when the statement, proof nonce, and protocol prefix were not used by the
+simulator before.
+
+\section*{Symbols used repeatedly}
+
+\begin{longtable}{@{}>{\raggedright\arraybackslash}p{0.18\linewidth}
+                       >{\raggedright\arraybackslash}p{0.74\linewidth}@{}}
+\toprule
+Symbol & Meaning \\
+\midrule
+\endhead
+$\F_2$ & The field with two elements, represented by bits 0 and 1. \\
+$\F_{2^{128}}$ & A 128-bit binary extension field. Most protocol challenges and algebraic masks live here. \\
+$\F_{2^{256}}$ & A proposed wider challenge field that could improve the standalone knowledge bound; it is not implemented. \\
+$Q_H$ & The adversary's maximum number of random-oracle queries. The paper evaluates concrete bounds at $Q_H=2^{64}$. \\
+$\operatorname{Adv}_{\rm ZK}$ & The distinguisher's advantage in telling an honest proof from a simulated proof. Smaller is better. \\
+$\varepsilon_{\rm RO}$ & The separately accounted collision and binding error at the random-oracle boundary. \\
+$\kappa_\Gamma$ & The interactive knowledge-error term associated with the L0 fold access structure. \\
+$G_0,\ldots,G_5$ & The sequence of hybrid games that changes an honest proof into a simulated proof one controlled step at a time. \\
+$z$ & The packed R1CS assignment or computation trace. It contains witness and intermediate values. \\
+$A,B,C$ & The three R1CS matrices in $(Az)\circ(Bz)=Cz$. These are unrelated to author initials in the bibliography. \\
+$P$ & The field-valued zerocheck mask polynomial. \\
+$Q^\star$ & A public, protocol-fixed affine polynomial multiplied by $P$ in the zerocheck mask. It is not a secret mask or a commitment. \\
+$S,S_c,S_h$ & Independent mask sources for the lincheck and the first zerocheck round. \\
+$\mu,g$ & PCS hiding randomness: $\mu$ masks the low message half and $g$ is the full-support blinder. \\
+$c$ & The post-commitment challenge that combines the message and blinder as $F=(\mu\parallel z)+c g$. \\
+$\gamma$ & A verifier challenge that scales the zerocheck mask. \\
+$\rho$ & The final zerocheck evaluation point. \\
+$m$ & The logarithm of the main packed-vector size used by the PCS/R1CS shape. The registered shape has $m=22$. \\
+$d_{\log}$ & The logarithm of the translated subcube supporting the zerocheck mask. The registered value is 12. \\
+\bottomrule
+\end{longtable}
+
+\section*{Protocol and code labels}
+
+\term{\texttt{CHUNK\_START}, \texttt{CHUNK\_END}, \texttt{ROOT}}{BLAKE3 flags.}
+They specify that the single 64-byte block is both the start and end of a
+chunk and that the output is the root hash. They are part of the fixed-digest
+relation, not optional prover settings.
+
+\term{\texttt{ROLE\_POW}}{Random-oracle role tag for proof of work.}
+Role tags keep proof-of-work inputs separate from transcript and Merkle inputs.
+
+\term{\texttt{ZK\_BENCH\_THREADS}}{Benchmark thread-count setting.}
+It selects the Rayon thread count used by \texttt{scripts/zk-benchmark.sh}.
+
+\term{\texttt{ZK\_BENCH\_RUNS}}{Benchmark trial-count setting.}
+It selects how many measured trials the benchmark runs for each configuration.
+
+\section*{Units and publication abbreviations}
+
+\begin{longtable}{@{}>{\bfseries}p{0.16\linewidth}p{0.76\linewidth}@{}}
+\toprule
+Short form & Meaning \\
+\midrule
+KiB & Kibibyte, exactly 1,024 bytes. \\
+GB & Gigabyte. In the hardware description it reports installed memory. \\
+ms & Millisecond, one thousandth of a second. \\
+$\mu$s & Microsecond, one millionth of a second. \\
+ns & Nanosecond, one billionth of a second. \\
+ACM & Association for Computing Machinery. \\
+IACR & International Association for Cryptologic Research. Its ePrint Archive hosts cryptography preprints. \\
+TCC & Theory of Cryptography Conference. \\
+LNCS & Lecture Notes in Computer Science, Springer's proceedings and monograph series. \\
+EUROSAM & The name used for the 1979 International Symposium on Symbolic and Algebraic Manipulation. \\
+M4 & Apple's processor-family name. It is a product label, not a cryptographic acronym. \\
+\bottomrule
+\end{longtable}
+
+\section*{LaTeX source-only citation keys}
+
+These identifiers appear in \texttt{zk-flock.tex} but not as acronyms in the
+rendered prose:
+
+\begin{description}
+\item[\texttt{BCS}] Ben-Sasson, Chiesa, and Spooner, the cited IOP paper.
+\item[\texttt{CFS17}] Chiesa, Forbes, and Spooner, published in 2017.
+\item[\texttt{DP24}] Diamond and Posen, first posted in 2024.
+\end{description}
+
+\section*{The two numbers readers most often confuse}
+
+\begin{center}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.25\linewidth}
+                    >{\raggedright\arraybackslash}p{0.25\linewidth}
+                    >{\raggedright\arraybackslash}p{0.40\linewidth}@{}}
+\toprule
+Property & Paper's figure & What it means \\
+\midrule
+Zero knowledge & Explicit ledger: about 118.5 bits. The full bound also contains $\varepsilon_{\rm RO}$. & Difficulty of distinguishing an honest proof from a simulated proof in the classical programmable ROM. \\
+Knowledge security & Reduction ceiling: at most 55.994 bits before other terms. & Strength of the available theorem that an accepting prover knows a witness. This is not the ZK privacy bound. \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The paper does not establish QROM security, a standard-model theorem, or a
+100-bit standalone knowledge theorem. It covers only the two registered
+BLAKE3 profiles and deliberately rejects every uncertified configuration.
+
+\end{document}
