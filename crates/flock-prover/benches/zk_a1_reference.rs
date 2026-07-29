@@ -218,7 +218,7 @@ fn main() {
 
         // Warm-up: prove and verify once (also proves the config is
         // certificate-gated; an uncertified batch size errors here).
-        let zk_proof_bytes = {
+        {
             let mut zk_rng = ZkRng::from_entropy();
             let mut ch = FsChallenger::new(DOMAIN);
             let (proof, comm) = setup
@@ -228,16 +228,11 @@ fn main() {
             setup
                 .verify_zk_a1(&comm, &proof, &mut chv)
                 .expect("warm-up proof must verify");
-            R1csProofBundleZkA1 {
-                commitment: comm,
-                proof,
-            }
-            .to_bytes()
-            .len()
-        };
+        }
 
         let mut zk_prove_times = Vec::with_capacity(runs);
         let mut zk_verify_times = Vec::with_capacity(runs);
+        let mut zk_proof_sizes = Vec::with_capacity(runs);
         let mut zk_peak_heap = 0usize;
         for _ in 0..runs {
             let mut zk_rng = ZkRng::from_entropy();
@@ -254,9 +249,18 @@ fn main() {
             let t1 = Instant::now();
             setup.verify_zk_a1(&comm, &proof, &mut chv).expect("verify");
             zk_verify_times.push(t1.elapsed().as_secs_f64());
+            zk_proof_sizes.push(
+                R1csProofBundleZkA1 {
+                    commitment: comm,
+                    proof,
+                }
+                .to_bytes()
+                .len() as f64,
+            );
         }
         let zk_prove = stats(&zk_prove_times);
         let zk_verify = stats(&zk_verify_times);
+        let zk_size = stats(&zk_proof_sizes);
 
         // Witness generation alone, for attribution (the same call the
         // gated prove entry makes internally).
@@ -273,17 +277,15 @@ fn main() {
         let base_setup = Blake3Setup::new(n);
         let mut base_prove_times = Vec::with_capacity(runs);
         let mut base_verify_times = Vec::with_capacity(runs);
+        let mut base_proof_sizes = Vec::with_capacity(runs);
         let mut base_peak_heap = 0usize;
-        let base_proof_bytes = {
+        {
             let mut ch = FsChallenger::new(b"flock-zka1-bench-base");
             let (proof, commitment, _) = base_setup.prove_fast(&blocks, &mut ch);
             let mut chv = FsChallenger::new(b"flock-zka1-bench-base");
             base_setup
                 .verify(&commitment, &proof, &mut chv)
                 .expect("non-zk warm-up proof must verify");
-            let bytes = R1csProofBundleLigerito { commitment, proof }
-                .to_bytes()
-                .len();
             for _ in 0..runs {
                 let mut ch = FsChallenger::new(b"flock-zka1-bench-base");
                 reset_peak_heap();
@@ -297,12 +299,16 @@ fn main() {
                     .verify(&commitment, &proof, &mut chv)
                     .expect("non-zk proof must verify");
                 base_verify_times.push(t1.elapsed().as_secs_f64());
-                std::hint::black_box((&proof, &commitment));
+                base_proof_sizes.push(
+                    R1csProofBundleLigerito { commitment, proof }
+                        .to_bytes()
+                        .len() as f64,
+                );
             }
-            bytes
-        };
+        }
         let base_prove = stats(&base_prove_times);
         let base_verify = stats(&base_verify_times);
+        let base_size = stats(&base_proof_sizes);
 
         println!(
             "{n:>8} {m:>4} {:>10.4} | {:>10.4} {:>10.4} \
@@ -310,12 +316,12 @@ fn main() {
             witness.median,
             zk_prove.median,
             zk_verify.median,
-            zk_proof_bytes / 1024,
+            (zk_size.median / 1024.0).round() as usize,
             base_prove.median,
             base_verify.median,
-            base_proof_bytes / 1024,
+            (base_size.median / 1024.0).round() as usize,
             zk_prove.median / base_prove.median,
-            zk_proof_bytes as f64 / base_proof_bytes as f64,
+            zk_size.median / base_size.median,
         );
         println!(
             "dispersion (MAD): witness {:.3} ms, ZK prove {:.3} ms, ZK verify {:.3} ms, \
@@ -331,10 +337,8 @@ fn main() {
         print_stats(n, "verify", zk_verify);
         print_stats(n, "fast_nonzk_prove", base_prove);
         print_stats(n, "fast_nonzk_verify", base_verify);
-        println!("RESULT\tzk_a1_reference\tblake3\t{n}\tzk_proof_bytes\t{zk_proof_bytes}");
-        println!(
-            "RESULT\tzk_a1_reference\tblake3\t{n}\tfast_nonzk_proof_bytes\t{base_proof_bytes}"
-        );
+        print_stats(n, "zk_proof_bytes", zk_size);
+        print_stats(n, "fast_nonzk_proof_bytes", base_size);
         println!(
             "RESULT\tzk_a1_reference\tblake3\t{n}\tzk_peak_incremental_heap_bytes\t{zk_peak_heap}"
         );
