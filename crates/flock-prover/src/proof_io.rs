@@ -8,7 +8,7 @@
 //! On-disk format:
 //! ```text
 //!   bytes 0..5    "FLOCK"                  (5-byte magic)
-//!   byte  5       VERSION                  (currently 1)
+//!   byte  5       VERSION                  (currently 6)
 //!   bytes 6..7    flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
 //!   bytes 7..     bincode-serialized payload
 //! ```
@@ -41,12 +41,13 @@ use flock_core::pcs::Commitment;
 pub const MAGIC: [u8; 5] = *b"FLOCK";
 
 /// Format version. Bumped on incompatible serialization changes.
-/// v4 (current) adds `ood_values` + `fold_grinding_nonces` to
+/// v5 (current) adds the public proof nonce and framed random-oracle domains.
+/// v4 adds `ood_values` + `fold_grinding_nonces` to
 /// `LigeritoProof` and `profile` to `PcsParams` (Johnson+OOD profiles).
 /// v3 restructures `BaseFoldProof`: per-query Merkle paths are replaced by
 /// shared octopus multi-proofs (one per Merkle tree). v2 added `HashKind`
 /// to [`ChainProofBundle`].
-pub const VERSION: u8 = 4;
+pub const VERSION: u8 = 6;
 
 /// Which hash function a chain proof is over. Carried in
 /// [`ChainProofBundle`] so the verifier (e.g. the CLI) can pick the right
@@ -180,7 +181,7 @@ impl R1csProofBundleLigerito {
 
 /// Bundles an A1′ reference zk proof with its witness commitment. The
 /// verifier additionally needs the (public) statement setup and PCS params;
-/// `proof.comm_p` / `proof.comm_q` travel inside the proof itself.
+/// `proof.comm_p` travels inside the proof itself.
 ///
 /// The canonical field classification of everything in this bundle lives in
 /// [`crate::transcript_schema`]; `from_bytes` + `transcript_schema::flatten_a1`
@@ -472,6 +473,18 @@ mod tests {
         bytes[6] = FLAVOR_R1CS_LIGERITO;
         let res = R1csProofBundleLigerito::from_bytes(&bytes);
         assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(_))));
+    }
+
+    #[test]
+    fn old_version_proofs_fail_closed() {
+        for old in [4, 5] {
+            let mut bytes = vec![0u8; HEADER_LEN + 10];
+            bytes[0..5].copy_from_slice(&MAGIC);
+            bytes[5] = old;
+            bytes[6] = FLAVOR_R1CS_ZK_A1;
+            let res = R1csProofBundleZkA1::from_bytes(&bytes);
+            assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(v)) if v == old));
+        }
     }
 
     #[test]

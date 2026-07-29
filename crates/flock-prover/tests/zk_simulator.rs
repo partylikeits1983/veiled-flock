@@ -36,10 +36,62 @@ use flock_core::challenger::{FsChallenger, RandomChallenger};
 use flock_core::field::F128;
 use flock_core::lincheck::pack_z_lincheck_from_packed;
 use flock_core::zk::{MaskSampler, ZkRng};
-use flock_prover::prover::{A1MaskSources, prove_r1cs_zk_a1_with_masks};
+use flock_prover::prover::{
+    A1MaskForks, A1MaskSources, prove_r1cs_zk_a1_with_masks,
+    prove_r1cs_zk_a1_with_masks_pd_nonce_ro,
+};
 use flock_prover::r1cs_hashes::blake3::{Blake3Setup, Compression};
 use flock_prover::transcript_schema::{LeakageClass, SchemaIndex, algebraic_vector, flatten_a1};
 use flock_prover::zk_audit_support::FixtureA1M15;
+
+/// The external oracle is a model hook, not a second hash implementation: an
+/// empty table must reproduce the native proof byte for byte.
+#[test]
+fn unprogrammed_external_backend_reproduces_native_proof_bytes() {
+    use flock_prover::proof_io::R1csProofBundleZkA1;
+
+    let fx = FixtureA1M15::new();
+    let payload = vec![false; FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS];
+    let u_a = vec![false; FixtureA1M15::A_BITS];
+    let u_b = vec![false; FixtureA1M15::B_BITS];
+    let z = fx.witness(&payload, &u_a, &u_b);
+
+    let run = |external: bool| {
+        let a = fx.r1cs.apply_a_packed(&z);
+        let b = fx.r1cs.apply_b_packed(&z);
+        let stripe = pack_z_lincheck_from_packed(&z, FixtureA1M15::M, FixtureA1M15::K_LOG);
+        let circuit = fx.r1cs.sparse_lincheck_circuit();
+        let mut root_rng = ZkRng::from_seed([0x42; 32]);
+        let mut forks = A1MaskForks::from_rng(&mut root_rng);
+        let nonce = forks.proof_nonce;
+        let ro = if external {
+            flock_prover::sim_oracle::ro_context(nonce, flock_prover::sim_oracle::shared_oracle())
+        } else {
+            flock_core::ro::RoContext::native(nonce)
+        };
+        let mut ch = FsChallenger::new(b"flock-ro-backend-differential");
+        let (proof, commitment, _) = prove_r1cs_zk_a1_with_masks_pd_nonce_ro(
+            &fx.r1cs,
+            &fx.pcs_params,
+            z.clone(),
+            a,
+            b,
+            stripe,
+            &circuit,
+            &fx.lig_prover,
+            forks.sources(),
+            &mut |_: &mut FsChallenger| Vec::new(),
+            None,
+            None,
+            nonce,
+            &ro,
+            &mut ch,
+        );
+        R1csProofBundleZkA1 { commitment, proof }.to_bytes()
+    };
+
+    assert_eq!(run(false), run(true));
+}
 
 /// Deterministic PRNG so the test is reproducible; in production the
 /// simulator draws its self-generated witness and masks from OS entropy.
@@ -169,9 +221,9 @@ fn simulator_translation_exact_transcript_equality() {
         let circuit = fx.r1cs.sparse_lincheck_circuit();
         let mut s_w = VecSampler::f128(cw.clone());
         let mut s_p = VecSampler::bits(p_bits);
-        let mut s_q = VecSampler::bits(&q_bits);
+        let _s_q = VecSampler::bits(&q_bits);
         let mut s_cp = VecSampler::f128(cp.clone());
-        let mut s_cq = VecSampler::f128(cq.clone());
+        let _s_cq = VecSampler::f128(cq.clone());
         let mut s_s = VecSampler::bits(&s_bits);
         let mut s_cs = VecSampler::f128(cs.clone());
         let mut s_sc = VecSampler::bits(&sc_bits);
@@ -181,9 +233,7 @@ fn simulator_translation_exact_transcript_equality() {
         let masks = A1MaskSources {
             witness_commit: &mut s_w,
             p: &mut s_p,
-            q: &mut s_q,
             commit_p: &mut s_cp,
-            commit_q: &mut s_cq,
             s: &mut s_s,
             commit_s: &mut s_cs,
             s_c: &mut s_sc,

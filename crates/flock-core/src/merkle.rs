@@ -21,7 +21,6 @@
 //! pre-images and avoid second-preimage attacks via interpretation collision.
 
 use rayon::prelude::*;
-use sha2::{Digest, Sha256};
 
 pub type Hash = [u8; 32];
 
@@ -40,11 +39,7 @@ const SHA256_K: [u32; 64] = [
     0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
 ];
 
-#[cfg(any(
-    all(target_arch = "aarch64", target_feature = "sha2"),
-    all(target_arch = "x86_64", target_feature = "sha")
-))]
-const SHA256_IV: [u32; 8] = [
+pub(crate) const SHA256_IV: [u32; 8] = [
     0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
@@ -57,7 +52,7 @@ const SHA256_IV: [u32; 8] = [
 /// one stream at a time, so bulk Merkle hashing (independent leaves /
 /// independent nodes within a level) leaves that on the table.
 ///
-/// Digests are byte-identical to `Sha256::digest`.
+/// Digests are byte-identical to one-shot SHA-256.
 #[cfg(all(target_arch = "aarch64", target_feature = "sha2"))]
 #[path = "merkle/aarch64.rs"]
 mod sha256x4;
@@ -115,7 +110,7 @@ pub fn hash_leaf(data: &[u8]) -> Hash {
         hash_count::LEAF_CALLS.fetch_add(1, Relaxed);
         hash_count::LEAF_COMPRESSIONS.fetch_add(hash_count::sha256_blocks(data.len()), Relaxed);
     }
-    Sha256::digest(data).into()
+    crate::ro::hash_point(data)
 }
 
 /// Hash a pair of children into a parent node (64 B → 32 B).
@@ -123,10 +118,10 @@ pub fn hash_leaf(data: &[u8]) -> Hash {
 pub fn hash_pair(left: &Hash, right: &Hash) -> Hash {
     #[cfg(feature = "hash-count")]
     hash_count::PAIR_CALLS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut h = Sha256::new();
-    h.update(left);
-    h.update(right);
-    h.finalize().into()
+    let mut pair = [0u8; 64];
+    pair[..32].copy_from_slice(left);
+    pair[32..].copy_from_slice(right);
+    crate::ro::hash_point(&pair)
 }
 
 /// Compute the Merkle root of `data` split into `num_leaves` equal-sized leaves.
@@ -276,6 +271,341 @@ pub fn merkle_tree(data: &[u8], num_leaves: usize) -> Vec<Hash> {
     }
 
     tree
+}
+
+/// Domain-separated Merkle tree over the point-oracle framing ([`crate::ro`]).
+///
+/// Identical layout to [`merkle_tree`], but every leaf is hashed as a framed
+/// `ROLE_LEAF` point at `(level = depth of the whole tree, index = leaf pos)`
+/// and every internal node as a framed `ROLE_NODE` point at its `(level,
+/// index)`. This gives the leaf/node domain separation the ROM proofs require,
+/// carries the per-proof nonce, and — when `ctx` is external — routes every
+/// hash through the recording/programmable oracle.
+///
+/// Correctness-first: uses the scalar midstate hasher (`RoTreeHasher`) on every
+/// node. The 4-way SIMD midstate kernel is a follow-up optimization; digests
+/// are identical either way (both equal `SHA256` of the framed point).
+pub fn merkle_tree_framed(
+    data: &[u8],
+    num_leaves: usize,
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Vec<Hash> {
+    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
+    assert!(
+        num_leaves.is_power_of_two() && num_leaves > 0,
+        "num_leaves must be power of 2"
+    );
+    assert_eq!(
+        data.len() % num_leaves,
+        0,
+        "data length must be a multiple of num_leaves"
+    );
+
+    let leaf_size = data.len() / num_leaves;
+    assert!(leaf_size > 0, "framed Merkle leaves must be non-empty");
+    let total_nodes = 2 * num_leaves - 1;
+    let mut tree: Vec<Hash> = crate::alloc_uninit_vec(total_nodes);
+    let leaf_level = num_leaves.trailing_zeros();
+
+    // Leaves. Native backends use the four-way midstate kernel where available;
+    // external backends serialize through the shared oracle.
+    let leaf_hasher = RoTreeHasher::new(ctx, ROLE_LEAF, channel, tree_depth, leaf_size as u64);
+    if ctx.is_native() {
+        #[cfg(any(
+            all(target_arch = "aarch64", target_feature = "sha2"),
+            all(target_arch = "x86_64", target_feature = "sha")
+        ))]
+        {
+            let midstate = leaf_hasher
+                .native_midstate()
+                .expect("native context must expose a midstate");
+            tree[..num_leaves]
+                .par_chunks_mut(4)
+                .zip(data.par_chunks(4 * leaf_size))
+                .enumerate()
+                .for_each(|(chunk, (outs, leaves))| {
+                    let base_index = chunk * 4;
+                    if outs.len() == 4 {
+                        let prefixes = std::array::from_fn(|lane| {
+                            crate::ro::encode_location(leaf_level, (base_index + lane) as u64)
+                        });
+                        sha256x4::hash4_equal_len_from_midstate(
+                            midstate,
+                            64,
+                            prefixes,
+                            [
+                                &leaves[..leaf_size],
+                                &leaves[leaf_size..2 * leaf_size],
+                                &leaves[2 * leaf_size..3 * leaf_size],
+                                &leaves[3 * leaf_size..],
+                            ],
+                            outs,
+                        );
+                    } else {
+                        for (lane, (out, leaf)) in
+                            outs.iter_mut().zip(leaves.chunks(leaf_size)).enumerate()
+                        {
+                            *out = leaf_hasher.hash(leaf_level, (base_index + lane) as u64, leaf);
+                        }
+                    }
+                });
+        }
+        #[cfg(not(any(
+            all(target_arch = "aarch64", target_feature = "sha2"),
+            all(target_arch = "x86_64", target_feature = "sha")
+        )))]
+        {
+            tree[..num_leaves]
+                .par_iter_mut()
+                .zip(data.par_chunks(leaf_size))
+                .enumerate()
+                .for_each(|(i, (out, leaf))| {
+                    *out = leaf_hasher.hash(leaf_level, i as u64, leaf);
+                });
+        }
+    } else {
+        for (i, (out, leaf)) in tree[..num_leaves]
+            .iter_mut()
+            .zip(data.chunks(leaf_size))
+            .enumerate()
+        {
+            *out = leaf_hasher.hash(leaf_level, i as u64, leaf);
+        }
+    }
+
+    // Internal levels. Node payload is the 64-byte child pair; `level` is the
+    // node's own level (leaf_level - 1 down to 0), `index` its position.
+    let mut read_start = 0usize;
+    let mut read_len = num_leaves;
+    let mut node_level = leaf_level;
+    let node_hasher = RoTreeHasher::new(ctx, ROLE_NODE, channel, tree_depth, 64);
+    while read_len > 1 {
+        node_level -= 1;
+        let next_len = read_len >> 1;
+        let (read, rest) = tree[read_start..].split_at_mut(read_len);
+        let write = &mut rest[..next_len];
+        let hash_one = |i: usize| -> Hash {
+            let mut pair = [0u8; 64];
+            pair[..32].copy_from_slice(&read[2 * i]);
+            pair[32..].copy_from_slice(&read[2 * i + 1]);
+            node_hasher.hash(node_level, i as u64, &pair)
+        };
+        if ctx.is_native() {
+            #[cfg(any(
+                all(target_arch = "aarch64", target_feature = "sha2"),
+                all(target_arch = "x86_64", target_feature = "sha")
+            ))]
+            {
+                let midstate = node_hasher
+                    .native_midstate()
+                    .expect("native context must expose a midstate");
+                let read_bytes: &[u8] = unsafe {
+                    core::slice::from_raw_parts(read.as_ptr().cast::<u8>(), read.len() * 32)
+                };
+                write
+                    .par_chunks_mut(4)
+                    .zip(read_bytes.par_chunks(256))
+                    .enumerate()
+                    .for_each(|(chunk, (outs, children))| {
+                        let base_index = chunk * 4;
+                        if outs.len() == 4 {
+                            let prefixes = std::array::from_fn(|lane| {
+                                crate::ro::encode_location(node_level, (base_index + lane) as u64)
+                            });
+                            sha256x4::hash4_equal_len_from_midstate(
+                                midstate,
+                                64,
+                                prefixes,
+                                [
+                                    &children[..64],
+                                    &children[64..128],
+                                    &children[128..192],
+                                    &children[192..256],
+                                ],
+                                outs,
+                            );
+                        } else {
+                            for (lane, out) in outs.iter_mut().enumerate() {
+                                *out = hash_one(base_index + lane);
+                            }
+                        }
+                    });
+            }
+            #[cfg(not(any(
+                all(target_arch = "aarch64", target_feature = "sha2"),
+                all(target_arch = "x86_64", target_feature = "sha")
+            )))]
+            {
+                write
+                    .par_iter_mut()
+                    .enumerate()
+                    .for_each(|(i, out)| *out = hash_one(i));
+            }
+        } else {
+            for (i, out) in write.iter_mut().enumerate() {
+                *out = hash_one(i);
+            }
+        }
+        read_start += read_len;
+        read_len = next_len;
+    }
+
+    tree
+}
+
+/// Verify a framed Merkle opening (single leaf), recomputing the root through
+/// the point-oracle framing. Mirrors [`verify_merkle_proof`] but tags each hash.
+pub fn verify_merkle_proof_framed(
+    root: &Hash,
+    leaf_payload: &[u8],
+    index: usize,
+    num_leaves: usize,
+    proof: &[Hash],
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> bool {
+    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
+    if !num_leaves.is_power_of_two() || num_leaves == 0 || index >= num_leaves {
+        return false;
+    }
+    let leaf_level = num_leaves.trailing_zeros();
+    if proof.len() != leaf_level as usize {
+        return false;
+    }
+    let leaf_hasher = RoTreeHasher::new(
+        ctx,
+        ROLE_LEAF,
+        channel,
+        tree_depth,
+        leaf_payload.len() as u64,
+    );
+    let node_hasher = RoTreeHasher::new(ctx, ROLE_NODE, channel, tree_depth, 64);
+    let mut acc = leaf_hasher.hash(leaf_level, index as u64, leaf_payload);
+    let mut idx = index;
+    let mut node_level = leaf_level;
+    for sibling in proof {
+        node_level -= 1;
+        let (left, right) = if idx & 1 == 0 {
+            (acc, *sibling)
+        } else {
+            (*sibling, acc)
+        };
+        let mut pair = [0u8; 64];
+        pair[..32].copy_from_slice(&left);
+        pair[32..].copy_from_slice(&right);
+        acc = node_hasher.hash(node_level, (idx >> 1) as u64, &pair);
+        idx >>= 1;
+    }
+    &acc == root
+}
+
+/// Verify a framed Merkle multi-proof produced by [`merkle_multi_proof`].
+///
+/// Unlike [`verify_merkle_multi_proof`], this function receives the opened
+/// leaf payloads rather than pre-hashed leaves. It hashes every opened leaf and
+/// parent through the same point-oracle framing as [`merkle_tree_framed`],
+/// including the canonical `(level, index)` pair for each node.
+pub fn verify_merkle_multi_proof_framed(
+    root: &Hash,
+    num_leaves: usize,
+    sorted_unique_positions: &[usize],
+    leaf_payloads: &[&[u8]],
+    proof: &[Hash],
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> bool {
+    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
+
+    if !num_leaves.is_power_of_two() || num_leaves == 0 {
+        return false;
+    }
+    if sorted_unique_positions.len() != leaf_payloads.len() {
+        return false;
+    }
+    if sorted_unique_positions.is_empty() {
+        return proof.is_empty();
+    }
+    let leaf_len = leaf_payloads[0].len();
+    if leaf_len == 0
+        || leaf_payloads
+            .iter()
+            .any(|payload| payload.len() != leaf_len)
+    {
+        return false;
+    }
+    for (i, &position) in sorted_unique_positions.iter().enumerate() {
+        if position >= num_leaves {
+            return false;
+        }
+        if i > 0 && sorted_unique_positions[i - 1] >= position {
+            return false;
+        }
+    }
+
+    let leaf_level = num_leaves.trailing_zeros();
+    let leaf_hasher = RoTreeHasher::new(ctx, ROLE_LEAF, channel, tree_depth, leaf_len as u64);
+    let node_hasher = RoTreeHasher::new(ctx, ROLE_NODE, channel, tree_depth, 64);
+    let mut active: Vec<(usize, Hash)> = sorted_unique_positions
+        .iter()
+        .copied()
+        .zip(leaf_payloads.iter().copied())
+        .map(|(position, payload)| {
+            (
+                position,
+                leaf_hasher.hash(leaf_level, position as u64, payload),
+            )
+        })
+        .collect();
+
+    if num_leaves == 1 {
+        return proof.is_empty() && active[0].1 == *root;
+    }
+
+    let mut proof_iter = proof.iter().copied();
+    let mut node_level = leaf_level;
+    while node_level > 0 {
+        node_level -= 1;
+        let mut next = Vec::with_capacity(active.len());
+        let mut i = 0;
+        while i < active.len() {
+            let (position, hash) = active[i];
+            let sibling_active = i + 1 < active.len() && active[i + 1].0 == (position ^ 1);
+            let (left, right) = if sibling_active {
+                let sibling_hash = active[i + 1].1;
+                if position & 1 != 0 {
+                    return false;
+                }
+                i += 2;
+                (hash, sibling_hash)
+            } else {
+                let sibling = match proof_iter.next() {
+                    Some(sibling) => sibling,
+                    None => return false,
+                };
+                i += 1;
+                if position & 1 == 0 {
+                    (hash, sibling)
+                } else {
+                    (sibling, hash)
+                }
+            };
+            let mut pair = [0u8; 64];
+            pair[..32].copy_from_slice(&left);
+            pair[32..].copy_from_slice(&right);
+            let parent_index = position >> 1;
+            next.push((
+                parent_index,
+                node_hasher.hash(node_level, parent_index as u64, &pair),
+            ));
+        }
+        active = next;
+    }
+
+    proof_iter.next().is_none() && active.len() == 1 && active[0].1 == *root
 }
 
 /// Sequential (single-threaded) version of [`merkle_tree`]. Used for
@@ -638,6 +968,229 @@ mod tests {
         // Flip a byte in the first sibling.
         proof[0][0] ^= 1;
         assert!(!verify_merkle_proof(&root, &leaf_hash, 0, &proof));
+    }
+
+    #[test]
+    fn tree_root_separates_nonce_channel_depth_level_index() {
+        use crate::ro::{RoChannel, RoContext};
+
+        let (n_leaves, leaf_size) = (16, 33);
+        let data = random_data(n_leaves, leaf_size, 0x4652_414d_4544);
+        let ctx = RoContext::native([0xA5; 32]);
+        let tree = merkle_tree_framed(&data, n_leaves, &ctx, RoChannel::Witness, 0);
+        let root = *tree.last().unwrap();
+        let raw_root = *merkle_tree(&data, n_leaves).last().unwrap();
+        assert_ne!(root, raw_root, "framed and legacy roots must differ");
+
+        for index in 0..n_leaves {
+            let payload = &data[index * leaf_size..(index + 1) * leaf_size];
+            let proof = merkle_proof(&tree, n_leaves, index);
+            assert!(verify_merkle_proof_framed(
+                &root,
+                payload,
+                index,
+                n_leaves,
+                &proof,
+                &ctx,
+                RoChannel::Witness,
+                0,
+            ));
+        }
+
+        let other_nonce = RoContext::native([0xA4; 32]);
+        let other_nonce_root =
+            *merkle_tree_framed(&data, n_leaves, &other_nonce, RoChannel::Witness, 0)
+                .last()
+                .unwrap();
+        let other_channel_root = *merkle_tree_framed(&data, n_leaves, &ctx, RoChannel::MaskP, 0)
+            .last()
+            .unwrap();
+        let other_depth_root = *merkle_tree_framed(&data, n_leaves, &ctx, RoChannel::Witness, 1)
+            .last()
+            .unwrap();
+        assert_ne!(root, other_nonce_root);
+        assert_ne!(root, other_channel_root);
+        assert_ne!(root, other_depth_root);
+    }
+
+    #[test]
+    fn framed_merkle_proof_rejects_malformed_inputs() {
+        use crate::ro::{RoChannel, RoContext};
+
+        let (n_leaves, leaf_size) = (8, 19);
+        let data = random_data(n_leaves, leaf_size, 19);
+        let ctx = RoContext::native([7; 32]);
+        let tree = merkle_tree_framed(&data, n_leaves, &ctx, RoChannel::Witness, 0);
+        let root = *tree.last().unwrap();
+        let payload = &data[..leaf_size];
+        let proof = merkle_proof(&tree, n_leaves, 0);
+
+        assert!(!verify_merkle_proof_framed(
+            &root,
+            payload,
+            n_leaves,
+            n_leaves,
+            &proof,
+            &ctx,
+            RoChannel::Witness,
+            0,
+        ));
+        assert!(!verify_merkle_proof_framed(
+            &root,
+            payload,
+            0,
+            3,
+            &proof,
+            &ctx,
+            RoChannel::Witness,
+            0,
+        ));
+        assert!(!verify_merkle_proof_framed(
+            &root,
+            payload,
+            0,
+            n_leaves,
+            &proof[..proof.len() - 1],
+            &ctx,
+            RoChannel::Witness,
+            0,
+        ));
+        let mut too_long = proof.clone();
+        too_long.push([0; 32]);
+        assert!(!verify_merkle_proof_framed(
+            &root,
+            payload,
+            0,
+            n_leaves,
+            &too_long,
+            &ctx,
+            RoChannel::Witness,
+            0,
+        ));
+    }
+
+    #[test]
+    fn framed_merkle_multi_proof_roundtrips() {
+        use crate::ro::{RoChannel, RoContext};
+
+        let (n_leaves, leaf_size) = (16, 24);
+        let data = random_data(n_leaves, leaf_size, 0x4d55_4c54_49);
+        let ctx = RoContext::native([0x33; 32]);
+        let tree = merkle_tree_framed(&data, n_leaves, &ctx, RoChannel::MaskS, 2);
+        let root = *tree.last().unwrap();
+
+        for positions in [
+            vec![0],
+            vec![0, 1],
+            vec![1, 3, 7, 12],
+            (0..n_leaves).collect(),
+        ] {
+            let proof = merkle_multi_proof(&tree, n_leaves, &positions);
+            let payloads: Vec<&[u8]> = positions
+                .iter()
+                .map(|&position| &data[position * leaf_size..(position + 1) * leaf_size])
+                .collect();
+            assert!(verify_merkle_multi_proof_framed(
+                &root,
+                n_leaves,
+                &positions,
+                &payloads,
+                &proof,
+                &ctx,
+                RoChannel::MaskS,
+                2,
+            ));
+
+            if !proof.is_empty() {
+                let mut tampered = proof.clone();
+                tampered[0][0] ^= 1;
+                assert!(!verify_merkle_multi_proof_framed(
+                    &root,
+                    n_leaves,
+                    &positions,
+                    &payloads,
+                    &tampered,
+                    &ctx,
+                    RoChannel::MaskS,
+                    2,
+                ));
+            }
+        }
+    }
+
+    #[test]
+    fn external_framed_tree_matches_native_and_records_every_node() {
+        use std::sync::Arc;
+
+        use crate::ro::{RecordingOracle, RoChannel, RoContext};
+
+        let (n_leaves, leaf_size) = (32, 17);
+        let data = random_data(n_leaves, leaf_size, 0x4558_5445_524e_414c);
+        let nonce = [0x5C; 32];
+        let native = RoContext::native(nonce);
+        let recorder = Arc::new(RecordingOracle::new());
+        let external = RoContext::external(nonce, recorder.clone());
+        let native_tree = merkle_tree_framed(&data, n_leaves, &native, RoChannel::MaskP, 3);
+        let external_tree = merkle_tree_framed(&data, n_leaves, &external, RoChannel::MaskP, 3);
+
+        assert_eq!(external_tree, native_tree);
+        assert_eq!(recorder.queries().len(), 2 * n_leaves - 1);
+        let mut leaves = recorder.leaf_payloads(RoChannel::MaskP);
+        leaves.sort_unstable_by_key(|(index, _)| *index);
+        assert_eq!(leaves.len(), n_leaves);
+        for (index, payload) in leaves {
+            assert_eq!(
+                payload,
+                data[index as usize * leaf_size..(index as usize + 1) * leaf_size]
+            );
+        }
+    }
+
+    #[cfg(any(
+        all(target_arch = "aarch64", target_feature = "sha2"),
+        all(target_arch = "x86_64", target_feature = "sha")
+    ))]
+    #[test]
+    fn framed_midstate_simd_matches_scalar_all_tail_shapes() {
+        use crate::ro::{ROLE_LEAF, ROLE_NODE, RoChannel, RoContext, RoTreeHasher};
+
+        let ctx = RoContext::native([0x91; 32]);
+        for role in [ROLE_LEAF, ROLE_NODE] {
+            for len in [
+                0usize, 1, 31, 43, 44, 51, 52, 55, 56, 60, 64, 100, 107, 108, 116, 128, 129,
+            ] {
+                let payloads: [Vec<u8>; 4] = std::array::from_fn(|stream| {
+                    (0..len)
+                        .map(|i| (i as u8).wrapping_mul(37) ^ stream as u8)
+                        .collect()
+                });
+                let inputs = [
+                    payloads[0].as_slice(),
+                    payloads[1].as_slice(),
+                    payloads[2].as_slice(),
+                    payloads[3].as_slice(),
+                ];
+                let hasher = RoTreeHasher::new(&ctx, role, RoChannel::Witness, 4, len as u64);
+                let prefixes = std::array::from_fn(|stream| {
+                    crate::ro::encode_location(7, 100 + stream as u64)
+                });
+                let mut simd = [[0u8; 32]; 4];
+                sha256x4::hash4_equal_len_from_midstate(
+                    hasher.native_midstate().unwrap(),
+                    64,
+                    prefixes,
+                    inputs,
+                    &mut simd,
+                );
+                for stream in 0..4 {
+                    assert_eq!(
+                        simd[stream],
+                        hasher.hash(7, 100 + stream as u64, &payloads[stream]),
+                        "role={role} len={len} stream={stream}",
+                    );
+                }
+            }
+        }
     }
 
     fn random_data(n_leaves: usize, leaf_size: usize, seed: u64) -> Vec<u8> {

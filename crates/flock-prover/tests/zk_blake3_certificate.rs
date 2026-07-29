@@ -172,9 +172,9 @@ fn run(
     let circuit = setup.r1cs.csc_lincheck_circuit();
     let mut s_w = VecSampler::from_f128(cw);
     let mut s_p = VecSampler::from_words(p_words.to_vec());
-    let mut s_q = VecSampler::from_words(q_words.to_vec());
+    let _s_q = VecSampler::from_words(q_words.to_vec());
     let mut s_cp = VecSampler::from_f128(cp);
-    let mut s_cq = VecSampler::from_f128(cq);
+    let _s_cq = VecSampler::from_f128(cq);
     let mut s_s = VecSampler::from_words(s_words.to_vec());
     let mut s_cs = VecSampler::from_f128(cs);
     let mut s_sc = VecSampler::from_words(sc_words.to_vec());
@@ -184,9 +184,7 @@ fn run(
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
-        q: &mut s_q,
         commit_p: &mut s_cp,
-        commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
         s_c: &mut s_sc,
@@ -245,9 +243,9 @@ fn coords_and_paths(
     let circuit = setup.r1cs.csc_lincheck_circuit();
     let mut s_w = VecSampler::from_f128(cw);
     let mut s_p = VecSampler::from_words(p.to_vec());
-    let mut s_q = VecSampler::from_words(q.to_vec());
+    let _s_q = VecSampler::from_words(q.to_vec());
     let mut s_cp = VecSampler::from_f128(cp);
-    let mut s_cq = VecSampler::from_f128(cq);
+    let _s_cq = VecSampler::from_f128(cq);
     let mut s_s = VecSampler::from_words(s.to_vec());
     let mut s_cs = VecSampler::from_f128(cs);
     let mut s_sc = VecSampler::from_words(sc.to_vec());
@@ -257,9 +255,7 @@ fn coords_and_paths(
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
-        q: &mut s_q,
         commit_p: &mut s_cp,
-        commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
         s_c: &mut s_sc,
@@ -694,9 +690,9 @@ fn claims_of(
     let circuit = setup.r1cs.csc_lincheck_circuit();
     let mut s_w = VecSampler::from_f128(cw);
     let mut s_p = VecSampler::from_words(p.to_vec());
-    let mut s_q = VecSampler::from_words(q.to_vec());
+    let _s_q = VecSampler::from_words(q.to_vec());
     let mut s_cp = VecSampler::from_f128(cp);
-    let mut s_cq = VecSampler::from_f128(cq);
+    let _s_cq = VecSampler::from_f128(cq);
     let mut s_s = VecSampler::from_words(s.to_vec());
     let mut s_cs = VecSampler::from_f128(cs);
     let mut s_sc = VecSampler::from_words(sc.to_vec());
@@ -706,9 +702,7 @@ fn claims_of(
     let masks = A1MaskSources {
         witness_commit: &mut s_w,
         p: &mut s_p,
-        q: &mut s_q,
         commit_p: &mut s_cp,
-        commit_q: &mut s_cq,
         s: &mut s_s,
         commit_s: &mut s_cs,
         s_c: &mut s_sc,
@@ -856,9 +850,9 @@ fn control_same_procedure_on_the_passing_fixture() {
         let circuit = fx.r1cs.sparse_lincheck_circuit();
         let mut s_w = VecSampler::from_f128(cw);
         let mut s_p = VecSampler::from_words(bits_to_words(p));
-        let mut s_q = VecSampler::from_words(bits_to_words(&q_bits));
+        let _s_q = VecSampler::from_words(bits_to_words(&q_bits));
         let mut s_cp = VecSampler::from_f128(cp);
-        let mut s_cq = VecSampler::from_f128(&cq);
+        let _s_cq = VecSampler::from_f128(&cq);
         let mut s_s = VecSampler::from_words(bits_to_words(sb));
         let mut s_cs = VecSampler::from_f128(cs_a);
         let mut s_sc = VecSampler::from_words(bits_to_words(sb));
@@ -868,9 +862,7 @@ fn control_same_procedure_on_the_passing_fixture() {
         let masks = A1MaskSources {
             witness_commit: &mut s_w,
             p: &mut s_p,
-            q: &mut s_q,
             commit_p: &mut s_cp,
-            commit_q: &mut s_cq,
             s: &mut s_s,
             commit_s: &mut s_cs,
             s_c: &mut s_sc,

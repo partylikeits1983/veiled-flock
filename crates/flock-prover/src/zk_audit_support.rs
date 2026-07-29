@@ -39,7 +39,7 @@ pub enum RecordedOp {
 /// through it while forwarding to the wrapped challenger unchanged.
 ///
 /// Clones share the same log (`Arc`), so the domain-separated challenger
-/// forks the A1′ prover makes for the P/Q openings append to one sequential
+/// forks the A1′ prover makes for the mask openings append to one sequential
 /// record — the prover is sequential, so the combined order is
 /// deterministic.
 pub struct RecordingChallenger<C> {
@@ -202,7 +202,7 @@ pub fn tiny_zk_configs_for(log_n: usize) -> (ProverConfig, VerifierConfig) {
 
 /// The m=15 "masked identity" statement used by the PIOP leakage
 /// certificates, packaged to run the **complete** A1′ pipeline
-/// (hiding commits, masked zerocheck, lincheck, hiding witness/P/Q
+/// (hiding commits, masked zerocheck, lincheck, hiding witness/P
 /// openings) rather than the zerocheck layer alone.
 ///
 /// Layout per 2^12-slot block: slot 0 = constant one; 128 payload bits (the

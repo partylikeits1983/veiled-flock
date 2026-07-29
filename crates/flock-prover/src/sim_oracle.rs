@@ -35,12 +35,12 @@
 //! a function, and pretending otherwise is exactly the error the freshness
 //! argument exists to rule out.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
-use sha2::{Digest, Sha256};
+use flock_core::ro::{ByteOracle, encode_pow_point};
 
 // Transcript op tags — must match `flock_core::challenger`'s encoding, since
 // this challenger has to be byte-identical to the honest one.
@@ -61,6 +61,8 @@ pub struct ProgrammableOracle {
     /// extractor would read, and the audit trail for which programmed points
     /// were actually reached.
     queries: Vec<Vec<u8>>,
+    seen: HashSet<[u8; 32]>,
+    record_roles: Option<Vec<u8>>,
 }
 
 impl ProgrammableOracle {
@@ -71,13 +73,18 @@ impl ProgrammableOracle {
     /// Answer at `point`: the programmed value if there is one, else the real
     /// hash. Records the query.
     fn answer(&mut self, point: &[u8]) -> [u8; 32] {
-        self.queries.push(point.to_vec());
+        self.seen.insert(flock_core::ro::hash_point(point));
+        if self
+            .record_roles
+            .as_ref()
+            .is_none_or(|roles| point.first().is_some_and(|role| roles.contains(role)))
+        {
+            self.queries.push(point.to_vec());
+        }
         if let Some(v) = self.table.get(point) {
             return *v;
         }
-        let mut h = Sha256::new();
-        h.update(point);
-        h.finalize().into()
+        flock_core::ro::hash_point(point)
     }
 
     /// Program the oracle at `point`. Returns the previous value if this
@@ -93,7 +100,7 @@ impl ProgrammableOracle {
     /// distinguisher has already seen answered honestly is detectable. The
     /// simulator should assert this is false for every point it programs.
     pub fn was_queried(&self, point: &[u8]) -> bool {
-        self.queries.iter().any(|q| q == point)
+        self.seen.contains(&flock_core::ro::hash_point(point))
     }
 
     pub fn is_empty(&self) -> bool {
@@ -104,6 +111,14 @@ impl ProgrammableOracle {
         self.table.len()
     }
 
+    /// Programmed points in deterministic byte order. This is the executable
+    /// audit surface for the G4/G5 simulator-game transition.
+    pub fn programmed_points(&self) -> Vec<Vec<u8>> {
+        let mut points = self.table.keys().cloned().collect::<Vec<_>>();
+        points.sort();
+        points
+    }
+
     pub fn query_count(&self) -> usize {
         self.queries.len()
     }
@@ -111,6 +126,36 @@ impl ProgrammableOracle {
     /// The recorded query transcript.
     pub fn queries(&self) -> &[Vec<u8>] {
         &self.queries
+    }
+
+    /// Restrict retained query bytes to the listed first-byte roles. Prior
+    /// query detection remains active for every role.
+    pub fn set_record_roles(&mut self, roles: Option<Vec<u8>>) {
+        self.record_roles = roles;
+    }
+
+    /// Recorded depth-0 leaf payloads for a commitment channel, keyed by leaf
+    /// index. Recording order is intentionally irrelevant under rayon.
+    pub fn leaf_queries(&self, channel: flock_core::ro::RoChannel) -> Vec<(u64, Vec<u8>)> {
+        let mut leaves = self
+            .queries
+            .iter()
+            .filter_map(|point| {
+                if point.len() < 76
+                    || point[0] != flock_core::ro::ROLE_LEAF
+                    || point[1..8] != flock_core::ro::RO_MAGIC
+                    || point[8] != channel.as_u8()
+                    || point[9] != 0
+                {
+                    return None;
+                }
+                let index = u64::from_le_bytes(point[68..76].try_into().ok()?);
+                Some((index, point[76..].to_vec()))
+            })
+            .collect::<Vec<_>>();
+        leaves.sort_unstable_by_key(|(index, _)| *index);
+        leaves.dedup_by_key(|(index, _)| *index);
+        leaves
     }
 }
 
@@ -120,6 +165,32 @@ pub type SharedOracle = Arc<Mutex<ProgrammableOracle>>;
 
 pub fn shared_oracle() -> SharedOracle {
     Arc::new(Mutex::new(ProgrammableOracle::new()))
+}
+
+/// Point-oracle adapter sharing the simulator's programmed table and query
+/// transcript. Merkle queries and Fiat-Shamir/PoW queries therefore inhabit
+/// one oracle, distinguished only by their injective encodings.
+#[derive(Clone)]
+pub struct ProgrammableByteOracle {
+    oracle: SharedOracle,
+}
+
+impl ProgrammableByteOracle {
+    pub fn new(oracle: SharedOracle) -> Self {
+        Self { oracle }
+    }
+}
+
+impl ByteOracle for ProgrammableByteOracle {
+    fn answer(&self, point: &[u8]) -> [u8; 32] {
+        self.oracle.lock().expect("oracle poisoned").answer(point)
+    }
+}
+
+/// Construct a point-oracle context backed by the same programmable oracle
+/// used by [`OracleChallenger`].
+pub fn ro_context(nonce: [u8; 32], oracle: SharedOracle) -> flock_core::ro::RoContext {
+    flock_core::ro::RoContext::external(nonce, Arc::new(ProgrammableByteOracle::new(oracle)))
 }
 
 /// Fiat–Shamir over a [`ProgrammableOracle`]. Byte-identical to
@@ -175,22 +246,20 @@ impl OracleChallenger {
         point
     }
 
-    /// One proof-of-work query: `SHA256(state_digest ‖ nonce)`, routed
+    /// One domain-separated proof-of-work query, routed
     /// through the oracle so grind queries appear in its transcript.
     fn pow_answer(&self, state: &[u8; 32], nonce: u64) -> [u8; 32] {
-        let mut point = Vec::with_capacity(40);
-        point.extend_from_slice(state);
-        point.extend_from_slice(&nonce.to_le_bytes());
+        let point = encode_pow_point(state, nonce);
         self.oracle.lock().expect("oracle poisoned").answer(&point)
     }
 
-    /// The proof-of-work state digest, mirroring `FsChallenger`: the hash of
-    /// the bare transcript prefix, which grind points then extend with a
-    /// nonce.
+    /// The proof-of-work state digest, mirroring `FsChallenger`, but routed
+    /// through the programmable oracle so no point query bypasses the game.
     fn pow_state_digest(&self) -> [u8; 32] {
-        let mut h = Sha256::new();
-        h.update(&self.absorbed);
-        h.finalize().into()
+        self.oracle
+            .lock()
+            .expect("oracle poisoned")
+            .answer(&self.absorbed)
     }
 
     /// Squeeze through the oracle, mirroring `FsChallenger::squeeze_into`.
@@ -480,15 +549,51 @@ mod tests {
         assert_eq!(a.sample_f128(), b.sample_f128());
     }
 
-    /// Grinding works through the oracle and agrees with verification.
+    /// PoW points carry their role byte, are recorded by the oracle, and the
+    /// unprogrammed result is byte-identical to production Fiat-Shamir.
     #[test]
-    fn grind_and_verify_agree() {
+    fn pow_points_are_framed_and_oracle_visible() {
         let oracle = shared_oracle();
         let mut p = OracleChallenger::new(b"pow", oracle.clone());
         p.observe_bytes(b"state");
         let nonce = p.grind_pow(8);
+        let mut honest = FsChallenger::new(b"pow");
+        honest.observe_bytes(b"state");
+        assert_eq!(nonce, honest.grind_pow(8));
+        let queries = oracle.lock().unwrap().queries().to_vec();
+        assert!(
+            queries
+                .iter()
+                .any(|point| point.len() == 41 && point[0] == flock_core::ro::ROLE_POW),
+            "grinding must expose domain-separated PoW queries"
+        );
         let mut v = OracleChallenger::new(b"pow", oracle);
         v.observe_bytes(b"state");
         assert!(v.verify_pow(nonce, 8), "honest grind must verify");
+    }
+
+    /// Regression for the former direct-SHA bypass: the bare transcript
+    /// prefix is itself an oracle query, and programming it controls the state
+    /// embedded in every subsequent PoW point.
+    #[test]
+    fn oracle_pow_state_digest_is_an_oracle_query() {
+        let oracle = shared_oracle();
+        let mut ch = OracleChallenger::new(b"pow-state", oracle.clone());
+        ch.observe_bytes(b"prefix");
+        let state_point = ch.absorbed.clone();
+        let programmed_state = [0x5au8; 32];
+        oracle
+            .lock()
+            .unwrap()
+            .program(state_point.clone(), programmed_state);
+
+        let _ = ch.grind_pow(2);
+        let guard = oracle.lock().unwrap();
+        assert!(guard.was_queried(&state_point));
+        assert!(guard.queries().iter().any(|point| {
+            point.len() == 41
+                && point[0] == flock_core::ro::ROLE_POW
+                && point[1..33] == programmed_state
+        }));
     }
 }

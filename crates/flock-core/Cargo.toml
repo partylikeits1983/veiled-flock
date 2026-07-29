@@ -25,6 +25,10 @@ unsound-challenger = []
 # disabled. Pulls in `getrandom` for OS entropy.
 zk = ["dep:getrandom"]
 
+# Exact symbolic execution used to generate and reverify ZK theorem
+# artifacts. This is not needed by production provers or verifiers.
+symbolic = []
+
 [dependencies]
 rayon = { workspace = true }
 sha2 = { workspace = true }

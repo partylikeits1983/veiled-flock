@@ -24,12 +24,17 @@ pub mod jagged;
 pub mod ligerito;
 pub mod pack;
 pub mod ring_switch;
+#[cfg(feature = "symbolic")]
+pub mod symbolic_opening;
 pub mod tensor_algebra;
 #[cfg(all(test, feature = "zk"))]
 mod zk_audit;
 
+#[cfg(feature = "zk")]
+pub use commit::commit_zk_with_ro;
 pub use commit::{
-    Commitment, PcsParams, ProverData, commit, commit_into, prefault_codeword_during,
+    Commitment, PcsParams, ProverData, commit, commit_into, commit_into_with_ro, commit_with_ro,
+    prefault_codeword_during,
 };
 pub use pack::{LOG_PACKING, pack_witness, unpack_witness};
 pub use ring_switch::{RingSwitchProof, SparseEqTensor};
@@ -108,6 +113,16 @@ pub struct PackedDirectClaim {
     pub eq_ind: DirectEqInd,
 }
 
+/// A claim against an arbitrary public linear functional of the packed
+/// message. This is the general form of [`PackedDirectClaim`]: `basis` has
+/// exactly the packed-message length and the claim asserts
+/// `dot(packed_witness, basis) = value`.
+#[derive(Clone, Debug)]
+pub struct PackedLinearClaim {
+    pub basis: Vec<F128>,
+    pub value: F128,
+}
+
 /// Mixed-claim batched open: supports both **ring-switched** claims (bit-MLE
 /// openings reduced via `ring_switch::prove_batched`, with optional per-claim
 /// precomputed `s_hat_v`) and **packed-direct** claims (packed-MLE openings
@@ -129,6 +144,69 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
     lig_config: &ligerito::ProverConfig,
     challenger: &mut Ch,
 ) -> BatchOpeningProofLigerito {
+    let ro = crate::ro::RoContext::plain();
+    open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
+        packed_witness,
+        prover_data,
+        commitment,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        padding,
+        lig_config,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+}
+
+/// Mixed batch opening with an explicit point-oracle context and channel.
+#[allow(clippy::too_many_arguments)]
+pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro<Ch: Challenger>(
+    packed_witness: Vec<F128>,
+    prover_data: &ProverData,
+    commitment: &Commitment,
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[PackedDirectClaim],
+    padding: &PaddingSpec,
+    lig_config: &ligerito::ProverConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> BatchOpeningProofLigerito {
+    open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro(
+        packed_witness,
+        prover_data,
+        commitment,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        &[],
+        padding,
+        lig_config,
+        ro,
+        channel,
+        challenger,
+    )
+}
+
+/// Mixed batch opening with additional arbitrary public linear claims.
+#[allow(clippy::too_many_arguments)]
+pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challenger>(
+    packed_witness: Vec<F128>,
+    prover_data: &ProverData,
+    commitment: &Commitment,
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[PackedDirectClaim],
+    packed_linear: &[PackedLinearClaim],
+    padding: &PaddingSpec,
+    lig_config: &ligerito::ProverConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> BatchOpeningProofLigerito {
     let trace = std::env::var("PCS_TRACE").is_ok();
     let t_total = std::time::Instant::now();
 
@@ -148,6 +226,7 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
         x_outers,
         precomputed_s_hat_v,
         packed_direct,
+        packed_linear,
         padding,
         challenger,
         trace,
@@ -171,6 +250,8 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
                 target_combined,
                 round0_prime,
                 lig_config,
+                ro,
+                channel,
                 challenger,
             );
             (p, Some(b))
@@ -178,7 +259,7 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
         #[cfg(not(feature = "zk"))]
         unreachable!("PcsParams.zk requires the `zk` cargo feature")
     } else {
-        let p = ligerito::recursive_prover_with_basis_precomputed_round0(
+        let p = ligerito::recursive_prover_with_basis_precomputed_round0_with_ro(
             lig_config,
             packed_witness,
             b_combined,
@@ -186,6 +267,8 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
             &prover_data.codeword,
             &prover_data.merkle_tree,
             round0_prime,
+            ro,
+            channel,
             challenger,
         );
         (p, None)
@@ -225,6 +308,8 @@ fn open_zk_blinded<Ch: Challenger>(
     target_combined: F128,
     round0_prime: (F128, F128),
     lig_config: &ligerito::ProverConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> (ligerito::LigeritoProof, ZkBlindOpening) {
     use rayon::prelude::*;
@@ -285,7 +370,7 @@ fn open_zk_blinded<Ch: Challenger>(
     let target_prime = target_combined + c * y_g;
     let prime_wide = (round0_prime.0 + c * u0g, round0_prime.1 + c * u2g);
 
-    let proof = ligerito::recursive_prover_with_basis_precomputed_round0_zk(
+    let proof = ligerito::recursive_prover_with_basis_precomputed_round0_zk_with_ro(
         lig_config,
         f_blinded,
         b_wide,
@@ -294,6 +379,8 @@ fn open_zk_blinded<Ch: Challenger>(
         &prover_data.merkle_tree,
         prime_wide,
         ligerito::ZkL0 { c },
+        ro,
+        channel,
         challenger,
     );
     (proof, ZkBlindOpening { y_g, c_grind_nonce })
@@ -320,13 +407,18 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     x_outers: &[&[F128]],
     precomputed_s_hat_v: &[Option<&[F128]>],
     packed_direct: &[PackedDirectClaim],
+    packed_linear: &[PackedLinearClaim],
     padding: &PaddingSpec,
     challenger: &mut Ch,
     trace: bool,
 ) -> CombinedClaim {
     let n_rs = x_outers.len();
     let n_pd = packed_direct.len();
-    assert!(n_rs + n_pd > 0, "open_batch_mixed: need at least one claim");
+    let n_pl = packed_linear.len();
+    assert!(
+        n_rs + n_pd + n_pl > 0,
+        "open_batch_mixed: need at least one claim"
+    );
     assert!(
         precomputed_s_hat_v.is_empty() || precomputed_s_hat_v.len() == n_rs,
         "precomputed_s_hat_v: must be empty or length {n_rs}, got {}",
@@ -364,20 +456,31 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-packed-direct-v0");
         challenger.observe_f128(pd.value);
     }
+    for pl in packed_linear {
+        challenger.observe_label(b"flock-pcs-packed-linear-v0");
+        challenger.observe_f128(pl.value);
+    }
     let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
+    let gammas_pl: Vec<F128> = (0..n_pl).map(|_| challenger.sample_f128()).collect();
 
     let t = std::time::Instant::now();
     use rayon::prelude::*;
 
     let l = if let Some((_, out)) = rs_results.first() {
         out.rs_eq_ind.len()
+    } else if let Some(pd) = packed_direct.first() {
+        1usize << pd.point.len()
     } else {
-        1usize << packed_direct[0].point.len()
+        packed_linear[0].basis.len()
     };
     debug_assert!(rs_results.iter().all(|(_, o)| o.rs_eq_ind.len() == l));
     debug_assert!(
         packed_direct.iter().all(|pd| 1usize << pd.point.len() == l),
         "all packed-direct claims must share L (= packed witness length)"
+    );
+    debug_assert!(
+        packed_linear.iter().all(|pl| pl.basis.len() == l),
+        "all packed-linear claims must share L (= packed witness length)"
     );
 
     let mut target_combined = F128::ZERO;
@@ -386,6 +489,9 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     }
     for (pd, g) in packed_direct.iter().zip(gammas_pd.iter()) {
         target_combined += *g * pd.value;
+    }
+    for (pl, g) in packed_linear.iter().zip(gammas_pl.iter()) {
+        target_combined += *g * pl.value;
     }
 
     let rs_baked: Vec<&[F128]> = rs_results
@@ -423,6 +529,11 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
             _ => None,
         })
         .collect();
+    let pl_dense: Vec<(&[F128], F128)> = packed_linear
+        .iter()
+        .zip(gammas_pl.iter())
+        .map(|(pl, g)| (pl.basis.as_slice(), *g))
+        .collect();
 
     // ---- Build b_combined (γ-weighted sum of all rs_eq_ind + eq_ind) and the
     //      round-0 prime (u_0, u_2 over packed_witness · b_combined).
@@ -441,8 +552,10 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     // incremental round-0 prime adjustment), so they only require
     // `pd_dense.is_empty()`, not `packed_direct.is_empty()`. This keeps the two
     // big ab/c claims on the fused fold instead of materializing them.
-    let use_fast =
-        !rs_deferred.is_empty() && rs_deferred.len() == rs_results.len() && pd_dense.is_empty();
+    let use_fast = !rs_deferred.is_empty()
+        && rs_deferred.len() == rs_results.len()
+        && pd_dense.is_empty()
+        && pl_dense.is_empty();
 
     let (mut round0_u0, mut round0_u2) = if use_fast {
         let b = rs_deferred[0].0.len(); // eq_lo.len(); shared across claims (same split)
@@ -516,6 +629,10 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
                     b0 += *g * v[2 * i];
                     b1 += *g * v[2 * i + 1];
                 }
+                for (v, g) in pl_dense.iter() {
+                    b0 += *g * v[2 * i];
+                    b1 += *g * v[2 * i + 1];
+                }
                 chunk[0] = b0;
                 chunk[1] = b1;
                 let a0 = packed_witness[2 * i];
@@ -562,10 +679,11 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     }
     if trace {
         eprintln!(
-            "  [open_batch] combine rs_eq_ind (L={}, rs×{}, pd×{}): {:6.2} ms",
+            "  [open_batch] combine rs_eq_ind (L={}, rs×{}, pd×{}, pl×{}): {:6.2} ms",
             l,
             n_rs,
             n_pd,
+            n_pl,
             t.elapsed().as_secs_f64() * 1e3
         );
     }
@@ -688,6 +806,12 @@ pub struct PackedDirectClaimRef<'a> {
     pub value: F128,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct PackedLinearClaimRef<'a> {
+    pub basis: &'a [F128],
+    pub value: F128,
+}
+
 /// Verify a mixed-claim batched opening (mirror of
 /// [`open_batch_mixed_ligerito_with_precomputed_s_hat_v`]). Uses
 /// `ring_switch::verify_succinct` per claim (no dense `rs_eq_ind`
@@ -704,12 +828,75 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
     lig_config: &ligerito::VerifierConfig,
     challenger: &mut Ch,
 ) -> Result<(), VerifyError> {
+    let ro = crate::ro::RoContext::plain();
+    verify_opening_batch_ligerito_mixed_ro(
+        commitment,
+        claims,
+        z_skips,
+        x_outers,
+        packed_direct,
+        proof,
+        lig_config,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+}
+
+/// Mixed batch-opening verifier with an explicit point-oracle context and channel.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_opening_batch_ligerito_mixed_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[F128],
+    z_skips: &[F128],
+    x_outers: &[&[F128]],
+    packed_direct: &[PackedDirectClaimRef<'_>],
+    proof: &BatchOpeningProofLigerito,
+    lig_config: &ligerito::VerifierConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), VerifyError> {
+    verify_opening_batch_ligerito_mixed_linear_ro(
+        commitment,
+        claims,
+        z_skips,
+        x_outers,
+        packed_direct,
+        &[],
+        proof,
+        lig_config,
+        ro,
+        channel,
+        challenger,
+    )
+}
+
+/// Verify a mixed opening with additional arbitrary public linear claims.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[F128],
+    z_skips: &[F128],
+    x_outers: &[&[F128]],
+    packed_direct: &[PackedDirectClaimRef<'_>],
+    packed_linear: &[PackedLinearClaimRef<'_>],
+    proof: &BatchOpeningProofLigerito,
+    lig_config: &ligerito::VerifierConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), VerifyError> {
     let n_rs = claims.len();
     let n_pd = packed_direct.len();
-    assert_eq!(z_skips.len(), n_rs);
-    assert_eq!(x_outers.len(), n_rs);
-    assert_eq!(proof.ring_switches.len(), n_rs);
-    assert!(n_rs + n_pd > 0);
+    let n_pl = packed_linear.len();
+    if z_skips.len() != n_rs
+        || x_outers.len() != n_rs
+        || proof.ring_switches.len() != n_rs
+        || n_rs + n_pd + n_pl == 0
+    {
+        return Err(VerifyError::Ligerito);
+    }
 
     challenger.observe_label(b"flock-pcs-open-batch-v0");
 
@@ -735,7 +922,12 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-packed-direct-v0");
         challenger.observe_f128(pd.value);
     }
+    for pl in packed_linear {
+        challenger.observe_label(b"flock-pcs-packed-linear-v0");
+        challenger.observe_f128(pl.value);
+    }
     let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
+    let gammas_pl: Vec<F128> = (0..n_pl).map(|_| challenger.sample_f128()).collect();
 
     // 3. target_combined from succinct rs claims + PD values.
     let mut target_combined = F128::ZERO;
@@ -744,6 +936,9 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
     }
     for (pd, g) in packed_direct.iter().zip(gammas_pd.iter()) {
         target_combined += *g * pd.value;
+    }
+    for (pl, g) in packed_linear.iter().zip(gammas_pl.iter()) {
+        target_combined += *g * pl.value;
     }
 
     // 3b. zk: mirror the blinder combination — observe y_g, check its PoW,
@@ -797,6 +992,30 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
             .map(|pd| eq_eval(&pd.point[..prefix_len], ris))
             .collect();
 
+        // Arbitrary bases are folded over the residual prefix once. The
+        // remaining suffix is queried only at Boolean points, so entry `y`
+        // is exactly the required multilinear evaluation.
+        let pl_prefixes: Vec<Vec<F128>> = packed_linear
+            .iter()
+            .map(|pl| {
+                assert_eq!(
+                    pl.basis.len(),
+                    1usize << commitment.params.witness_log_msg_len()
+                );
+                let mut folded = pl.basis.to_vec();
+                for challenge in ris {
+                    let half = folded.len() / 2;
+                    for i in 0..half {
+                        folded[i] = folded[2 * i] * (F128::ONE + *challenge)
+                            + folded[2 * i + 1] * *challenge;
+                    }
+                    folded.truncate(half);
+                }
+                debug_assert_eq!(folded.len(), yr_len);
+                folded
+            })
+            .collect();
+
         // ---- Per-y assembly (parallel over yr positions; each y is independent).
         //      y_suffix is binary (bits of y), so we use the binary-query
         //      specializations of eval_rs_eq_finish / eq_eval — each suffix
@@ -834,6 +1053,13 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
                             y_bits,
                         );
                 }
+                for ((_, g), prefix) in packed_linear
+                    .iter()
+                    .zip(gammas_pl.iter())
+                    .zip(pl_prefixes.iter())
+                {
+                    sum += *g * prefix[y];
+                }
                 sum
             })
             .collect()
@@ -861,7 +1087,7 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
 
     // 5. Drive ligerito SUCCINCT verifier — eval_b_residual is called ONCE
     //    at the residual check (returns all yr_len values in one batch).
-    let ok = ligerito::recursive_verifier_with_basis_succinct(
+    let ok = ligerito::recursive_verifier_with_basis_succinct_with_ro(
         lig_config,
         &proof.ligerito,
         log_n,
@@ -869,6 +1095,8 @@ pub fn verify_opening_batch_ligerito_mixed<Ch: Challenger>(
         &commitment.root,
         eval_b_residual,
         zk_l0,
+        ro,
+        channel,
         challenger,
     );
     if !ok {
@@ -971,6 +1199,9 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn pcs_zk_roundtrip_and_negatives() {
+        use std::sync::Arc;
+
+        use crate::ro::{RecordingOracle, RoChannel, RoContext};
         use crate::zerocheck::univariate_skip::build_eq;
         use crate::zk::ZkRng;
         let m = 13usize;
@@ -999,15 +1230,18 @@ mod tests {
             .fold(F128::ZERO, |a, b| a + b);
 
         let (lig_p_cfg, lig_v_cfg) = tiny_zk_configs();
+        let recorder = Arc::new(RecordingOracle::new());
+        let ro = RoContext::external([0x42; 32], recorder.clone());
 
         let prove = |mask_seed: [u8; 32], tamper_mask: bool, tamper_y_g: bool| {
             let mut zk_rng = ZkRng::from_seed(mask_seed);
-            let (commitment, mut prover_data) = commit::commit_zk(&z_packed, &params, &mut zk_rng);
+            let (commitment, mut prover_data) =
+                commit::commit_zk_with_ro(&z_packed, &params, &mut zk_rng, &ro, RoChannel::Witness);
             if tamper_mask {
                 prover_data.zk_mask[0] += F128::ONE;
             }
             let mut ch_p = FsChallenger::new(b"flock-test-lig-zk-v0");
-            let mut proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
+            let mut proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
                 z_packed.clone(),
                 &prover_data,
                 &commitment,
@@ -1020,6 +1254,8 @@ mod tests {
                 }],
                 &PaddingSpec::dense(m),
                 &lig_p_cfg,
+                &ro,
+                RoChannel::Witness,
                 &mut ch_p,
             );
             if tamper_y_g {
@@ -1030,7 +1266,7 @@ mod tests {
         };
         let verify = |commitment: &Commitment, proof: &BatchOpeningProofLigerito| {
             let mut ch_v = FsChallenger::new(b"flock-test-lig-zk-v0");
-            verify_opening_batch_ligerito_mixed(
+            verify_opening_batch_ligerito_mixed_ro(
                 commitment,
                 &[rs_claim],
                 &[z_skip],
@@ -1041,6 +1277,8 @@ mod tests {
                 }],
                 proof,
                 &lig_v_cfg,
+                &ro,
+                RoChannel::Witness,
                 &mut ch_v,
             )
         };
@@ -1050,6 +1288,7 @@ mod tests {
         verify(&commitment, &proof)
             .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
         assert!(proof.zk_blind.is_some());
+        assert!(!recorder.leaf_payloads(RoChannel::Witness).is_empty());
         // L0 opened rows must be wide (f′ + g lanes).
         assert!(
             proof.ligerito.initial_proof.opened_rows[0].len() == 2 * (1 << 2),
@@ -1083,32 +1322,22 @@ mod tests {
         );
     }
 
-    /// **Z2: hiding P,Q commitment + opening at the zerocheck point ρ.**
-    ///
-    /// The A1′ amendment commits two fresh witness-free multilinears P,Q and
-    /// reveals P(ρ),Q(ρ) at the zerocheck point. To keep the joint-coverage
-    /// leakage L = {P(ρ),Q(ρ)} (not the codeword rows), P,Q are opened via the
-    /// HIDING opening (`open_zk_blinded`). This test wires it end to end:
-    ///   1. commit P,Q with `commit_zk` (hiding);
-    ///   2. observe their roots BEFORE the zerocheck (so γ/ρ bind them);
-    ///   3. run the amended zerocheck (`prove_packed_padded_zk`);
-    ///   4. open P,Q at ρ = (z, mlv_challenges) as RS claims;
-    ///   5. verifier re-derives ρ via `verify_zk` and authenticates
-    ///      `final_p_eval`/`final_q_eval` against the P,Q commitments.
-    /// The honest roundtrip verifies; a tampered `final_p_eval` is rejected
-    /// (either by the combined sumcheck check or by the opening).
+    /// Field-valued P commitment + general-linear opening at the zerocheck
+    /// terminal point. The diagonal support is not an ordinary subcube MLE,
+    /// so the PCS binds `P(rho)` through its public coefficient vector.
     #[cfg(feature = "zk")]
     #[test]
-    fn zk_pq_hiding_open_roundtrip() {
+    fn zk_field_mask_hiding_open_roundtrip() {
         use crate::zerocheck::univariate_skip::pack_bits;
+        use crate::zerocheck::{SmallMaskSpec, univariate_skip::build_eq};
         use crate::zk::ZkRng;
         let m = 13usize;
         let mut rng = Rng::new(0x9A2B);
         let a = rng.bits(1 << m);
         let b = rng.bits(1 << m);
         let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let p = rng.bits(1 << m);
-        let q = rng.bits(1 << m);
+        let spec = SmallMaskSpec::default();
+        let p_small = (0..spec.d(m)).map(|_| rng.f128()).collect::<Vec<_>>();
 
         let params = PcsParams {
             m,
@@ -1117,115 +1346,108 @@ mod tests {
             profile: Default::default(),
             zk: true,
         };
-        let p_packed = pack_witness(&p, m);
-        let q_packed = pack_witness(&q, m);
+        let p_packed = p_small.clone();
         let (lig_p, lig_v) = tiny_zk_configs();
         let pad = PaddingSpec::dense(m);
         let (ap, bp, cp) = (pack_bits(&a), pack_bits(&b), pack_bits(&c));
-        let (pbp, qbp) = (pack_bits(&p), pack_bits(&q));
+        let ro = crate::ro::RoContext::plain();
 
         let run = |tamper_pr: bool| {
             let mut zk_p = ZkRng::from_seed([3u8; 32]);
-            let mut zk_q = ZkRng::from_seed([4u8; 32]);
-            let (comm_p, pd_p) = commit::commit_zk(&p_packed, &params, &mut zk_p);
-            let (comm_q, pd_q) = commit::commit_zk(&q_packed, &params, &mut zk_q);
+            let (comm_p, pd_p) = commit::commit_zk_with_ro(
+                &p_packed,
+                &params,
+                &mut zk_p,
+                &ro,
+                crate::ro::RoChannel::MaskP,
+            );
             let mut ch = FsChallenger::new(b"flock-z2-v0");
             ch.observe_bytes(&comm_p.root);
-            ch.observe_bytes(&comm_q.root);
-            let (mut zkproof, claim) = crate::zerocheck::prove_packed_padded_zk(
-                &ap, &bp, &cp, &pbp, &qbp, m, &pad, &mut ch,
-            );
+            let (mut zkproof, claim) =
+                crate::zerocheck::prove_packed_padded_zk(&ap, &bp, &cp, &p_small, m, &pad, &mut ch);
             if tamper_pr {
                 zkproof.final_p_eval += F128::ONE;
             }
-            let x_point = claim.mlv_challenges.clone();
-            // P and Q openings are independent claims, each bound to the
-            // post-zerocheck transcript (which includes both roots and every
-            // zerocheck message). Fork the challenger per opening with a domain
-            // tag so the two openings don't chain-desync (an opening need not
-            // leave the challenger in a verify-matching state).
+            let eq_terminal = build_eq(&claim.mlv_challenges);
+            let mut basis = vec![F128::ZERO; p_packed.len()];
+            for (i, value) in basis.iter_mut().enumerate().take(spec.d(m)) {
+                *value = eq_terminal[spec.support_index(i, m)];
+            }
+            if !tamper_pr {
+                assert_eq!(
+                    p_packed
+                        .iter()
+                        .zip(&basis)
+                        .fold(F128::ZERO, |acc, (p, b)| acc + *p * *b),
+                    zkproof.final_p_eval,
+                    "general-linear basis must encode P(rho)"
+                );
+            }
             let mut ch_p = ch.clone();
-            ch_p.observe_label(b"flock-pq-open-P");
-            let proof_p = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
+            ch_p.observe_label(b"flock-p-open-P");
+            let proof_p = open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro(
                 p_packed.clone(),
                 &pd_p,
                 &comm_p,
-                &[x_point.as_slice()],
                 &[],
                 &[],
+                &[],
+                &[PackedLinearClaim {
+                    basis,
+                    value: zkproof.final_p_eval,
+                }],
                 &pad,
                 &lig_p,
+                &ro,
+                crate::ro::RoChannel::MaskP,
                 &mut ch_p,
             );
-            let mut ch_q = ch.clone();
-            ch_q.observe_label(b"flock-pq-open-Q");
-            let proof_q = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
-                q_packed.clone(),
-                &pd_q,
-                &comm_q,
-                &[x_point.as_slice()],
-                &[],
-                &[],
-                &pad,
-                &lig_p,
-                &mut ch_q,
-            );
-            (comm_p, comm_q, zkproof, proof_p, proof_q)
+            (comm_p, zkproof, proof_p)
         };
 
         let verify = |comm_p: &Commitment,
-                      comm_q: &Commitment,
                       zkproof: &crate::zerocheck::ZkZerocheckProof,
-                      proof_p: &BatchOpeningProofLigerito,
-                      proof_q: &BatchOpeningProofLigerito|
+                      proof_p: &BatchOpeningProofLigerito|
          -> bool {
             let mut ch = FsChallenger::new(b"flock-z2-v0");
             ch.observe_bytes(&comm_p.root);
-            ch.observe_bytes(&comm_q.root);
             let claim = match crate::zerocheck::verify_zk(m, zkproof, &mut ch) {
                 Ok(c) => c,
                 Err(_) => return false,
             };
-            let x_point = claim.mlv_challenges.clone();
+            let eq_terminal = build_eq(&claim.mlv_challenges);
+            let mut basis = vec![F128::ZERO; p_packed.len()];
+            for (i, value) in basis.iter_mut().enumerate().take(spec.d(m)) {
+                *value = eq_terminal[spec.support_index(i, m)];
+            }
             let mut ch_p = ch.clone();
-            ch_p.observe_label(b"flock-pq-open-P");
-            let ok_p = verify_opening_batch_ligerito_mixed(
+            ch_p.observe_label(b"flock-p-open-P");
+            verify_opening_batch_ligerito_mixed_linear_ro(
                 comm_p,
-                &[zkproof.final_p_eval],
-                &[claim.z],
-                &[x_point.as_slice()],
                 &[],
+                &[],
+                &[],
+                &[],
+                &[PackedLinearClaimRef {
+                    basis: &basis,
+                    value: zkproof.final_p_eval,
+                }],
                 proof_p,
                 &lig_v,
+                &ro,
+                crate::ro::RoChannel::MaskP,
                 &mut ch_p,
             )
-            .is_ok();
-            let mut ch_q = ch.clone();
-            ch_q.observe_label(b"flock-pq-open-Q");
-            let ok_q = verify_opening_batch_ligerito_mixed(
-                comm_q,
-                &[zkproof.final_q_eval],
-                &[claim.z],
-                &[x_point.as_slice()],
-                &[],
-                proof_q,
-                &lig_v,
-                &mut ch_q,
-            )
-            .is_ok();
-            ok_p && ok_q
+            .is_ok()
         };
 
-        let (cp_, cq_, pf, pp, pq) = run(false);
+        let (cp_, pf, pp) = run(false);
         assert!(
-            verify(&cp_, &cq_, &pf, &pp, &pq),
-            "honest P,Q hiding openings at ρ must verify"
+            verify(&cp_, &pf, &pp),
+            "honest field-mask hiding opening must verify"
         );
-        let (cp2, cq2, pf2, pp2, pq2) = run(true);
-        assert!(
-            !verify(&cp2, &cq2, &pf2, &pp2, &pq2),
-            "tampered P(ρ) must be rejected"
-        );
+        let (cp2, pf2, pp2) = run(true);
+        assert!(!verify(&cp2, &pf2, &pp2), "tampered P(ρ) must be rejected");
     }
 
     /// End-to-end Ligerito backend roundtrip through pcs::open_batch_mixed_ligerito

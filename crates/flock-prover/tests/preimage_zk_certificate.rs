@@ -16,9 +16,10 @@
 //!
 //! That is a rank statement, and it is what these tests measure:
 //!
-//! * the degree-2 `P·Q` channel spans the zerocheck round-pair block **in
-//!   full**, so the honest round messages are uniform exactly as the simulated
-//!   ones are;
+//! * the field-valued `P` channel, multiplied by the public affine Q-star,
+//!   spans the conditioned zerocheck round-pair block, so the honest round
+//!   messages have the simulator's law outside the emitted determinant's bad
+//!   set;
 //! * a degenerate mask spans strictly less, so the measurement is not vacuous;
 //! * the randomizer rows move the terminal evaluations, which is what makes
 //!   the simulator's freedom to choose them legitimate.
@@ -47,7 +48,7 @@ use flock_prover::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_zk_pinned
 use flock_prover::r1cs_hashes::blake3_preimage::{
     Blake3PreimageSetup, Blake3PreimageZkSetup, MESSAGE_BYTES,
 };
-use flock_prover::zk_rank_check::check_mask_coverage;
+use flock_prover::zk_rank_check::check_mask_coverage_fv;
 
 /// The certified production shape: 256 instances, m = 22.
 const N: usize = 256;
@@ -66,21 +67,9 @@ fn msgs(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
         .collect()
 }
 
-fn random_cube_bytes(seed: u64, m: usize) -> Vec<u8> {
-    let mut s = seed | 1;
-    let mut out = vec![0u8; (1usize << m) / 8];
-    for b in out.iter_mut() {
-        s ^= s << 13;
-        s ^= s >> 7;
-        s ^= s << 17;
-        *b = (s & 0xFF) as u8;
-    }
-    out
-}
-
 /// **The load-bearing measurement.** For the fixed-digest circuit at the
-/// production shape, the degree-2 `P·Q` channel spans the entire zerocheck
-/// round-pair block.
+/// production shape, the field-valued `P` / public Q-star channel spans the
+/// conditioned zerocheck round-pair block.
 ///
 /// This is what licenses the simulator's round messages. The simulator draws
 /// them uniformly (solving one coordinate for the terminal identity); the
@@ -90,45 +79,47 @@ fn random_cube_bytes(seed: u64, m: usize) -> Vec<u8> {
 /// on this class rather than merely looking similar.
 #[test]
 #[ignore = "production-shape rank measurement; run explicitly"]
-fn pq_channel_spans_the_round_block_for_the_fixed_digest_circuit() {
+fn field_mask_spans_conditioned_round_block_for_fixed_digest() {
     let setup = Blake3PreimageZkSetup::new(N);
     let m = setup.r1cs.m;
     assert_eq!(m, 22, "production shape");
 
-    let q = random_cube_bytes(0xC0FF_EE01, m);
-    let ch = flock_core::challenger::FsChallenger::new(b"preimage-cert");
-    let report = check_mask_coverage(&q, m, 0xA11CE, &ch).expect("channel must cover the block");
+    let report =
+        check_mask_coverage_fv(flock_core::zerocheck::SmallMaskSpec::default(), m, 0xA11CE)
+            .expect("channel must cover the conditioned block");
     println!(
-        "P·Q channel on the fixed-digest circuit: rank {} / {} bits, {} probes",
+        "field-mask channel on the fixed-digest circuit: rank {} / {} bits, {} probes",
         report.rank, report.target_bits, report.probes
     );
     assert_eq!(
         report.rank, report.target_bits,
-        "the degree-2 channel must span the round-pair block IN FULL — without \
+        "the field-mask channel must span the conditioned round-pair block — without \
          that, the honest round messages are not uniform and the simulator's \
          uniform ones would be distinguishable"
     );
 }
 
-/// **The non-vacuity control.** A degenerate `Q` (constant cube) cannot reach
-/// the degree-2 half of each round message, so it must span strictly less. If
-/// this passed at full rank the measurement above would be meaningless.
+/// **The non-vacuity control.** An undersized translated-subcube support cannot
+/// reach the conditioned round-message space, so it must span strictly less.
+/// If this passed at full rank the measurement above would be meaningless.
 #[test]
 #[ignore = "production-shape rank measurement; run explicitly"]
-fn degenerate_mask_does_not_span_the_round_block() {
+fn undersized_mask_does_not_span_the_round_block() {
     let setup = Blake3PreimageZkSetup::new(N);
     let m = setup.r1cs.m;
-    let q_const = vec![0xFFu8; (1usize << m) / 8];
-    let ch = flock_core::challenger::FsChallenger::new(b"preimage-cert");
-    match check_mask_coverage(&q_const, m, 0xA11CE, &ch) {
+    let spec = flock_core::zerocheck::SmallMaskSpec {
+        d_log: 1,
+        ..flock_core::zerocheck::SmallMaskSpec::default()
+    };
+    match check_mask_coverage_fv(spec, m, 0xA11CE) {
         Ok(r) => panic!(
-            "a constant Q spanned the whole block ({}/{}) — the coverage check \
+            "an undersized support spanned the whole block ({}/{}) — the coverage check \
              is not measuring what it claims",
             r.rank, r.target_bits
         ),
         Err(failed) => {
             println!(
-                "constant Q: rank {} / {} bits (must be strictly short)",
+                "undersized support: rank {} / {} bits (must be strictly short)",
                 failed.report.rank, failed.report.target_bits
             );
             assert!(failed.report.rank < failed.report.target_bits);

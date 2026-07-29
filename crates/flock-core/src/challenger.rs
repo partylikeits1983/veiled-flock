@@ -59,7 +59,8 @@ pub trait Challenger: Send {
     }
 
     /// Prover-side PoW grinding: snapshot the current transcript state,
-    /// search for a `u64` nonce such that `SHA256(state || nonce)` has at
+    /// search for a `u64` nonce such that
+    /// `SHA256(ROLE_POW || state || nonce)` has at
     /// least `bits` leading zero bits, then absorb the nonce into the
     /// transcript so subsequent challenges bind to it.
     ///
@@ -165,7 +166,7 @@ pub mod fs_count {
     /// Number of XOF finalizations (one per `sample_f128` /
     /// `sample_f128_vec` / PoW state-digest extraction).
     pub static SQUEEZES: AtomicU64 = AtomicU64::new(0);
-    /// Number of SHA-256 PoW evaluations (1 compression each; 40 B input).
+    /// Number of SHA-256 PoW evaluations (1 compression each; 41 B input).
     pub static POW_SHA256: AtomicU64 = AtomicU64::new(0);
 
     pub fn reset() {
@@ -318,7 +319,8 @@ impl Challenger for FsChallenger {
             0
         } else if (1u64 << bits.min(63)) < PARALLEL_GRIND_MIN_HASHES {
             // Sequential search: try u64 nonces until
-            // SHA256(state_digest || nonce_le) has `bits` leading zeros.
+            // SHA256(ROLE_POW || state_digest || nonce_le) has `bits` leading
+            // zeros.
             let mut nonce: u64 = 0;
             loop {
                 if sha256_has_leading_zero_bits(&state_digest, nonce, bits) {
@@ -386,17 +388,13 @@ fn fs_pow_state_digest(hasher: &Sha256) -> [u8; 32] {
     hasher.clone().finalize().into()
 }
 
-/// Check whether `SHA256(state_digest || nonce.to_le_bytes())` has at least
-/// `bits` leading zero bits. Uses the `sha2` crate (hardware-accelerated on
-/// aarch64). Matches the grinding semantics from the benches.
+/// Check whether the domain-separated PoW point has at least `bits` leading
+/// zero bits. Uses the same injective framing as external oracle challengers.
 #[inline]
 fn sha256_has_leading_zero_bits(state_digest: &[u8; 32], nonce: u64, bits: u32) -> bool {
     #[cfg(feature = "hash-count")]
     fs_count::POW_SHA256.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    let mut hasher = Sha256::new();
-    hasher.update(state_digest);
-    hasher.update(nonce.to_le_bytes());
-    let h: [u8; 32] = hasher.finalize().into();
+    let h: [u8; 32] = Sha256::digest(crate::ro::encode_pow_point(state_digest, nonce)).into();
     let full_bytes = (bits / 8) as usize;
     let extra = bits % 8;
     for &b in h.iter().take(full_bytes) {

@@ -1,3 +1,7 @@
+//! LEGACY P/Q regression fixture. This file is retained to detect accidental
+//! changes in the old audit vehicle; it is not evidence for the field-valued
+//! P / public Q-star protocol and is not run by `scripts/zk-certify.sh`.
+//!
 //! WS-0 tripwire: EXACT (not sampled) leakage certificate for the PIOP
 //! transcript, and the decisive check of whether the *shipped* conditional
 //! (mixture) certificate actually covers the full transcript.
@@ -435,26 +439,25 @@ fn zk_zerocheck_transcript(
     r1cs: &BlockR1cs,
     z_packed: &[F128],
     p_bits: &[bool],
-    q_bits: &[bool],
+    _q_bits: &[bool],
 ) -> (Vec<F128>, F128, F128, F128, F128, F128) {
     let a_packed = r1cs.apply_a_packed(z_packed);
     let b_packed = r1cs.apply_b_packed(z_packed);
-    let mut zp = vec![false; 1 << M];
-    zp.copy_from_slice(p_bits);
-    let mut zq = vec![false; 1 << M];
-    zq.copy_from_slice(q_bits);
-    let p_packed = pcs::pack_witness(&zp, M);
-    let q_packed = pcs::pack_witness(&zq, M);
+    let spec = zerocheck::SmallMaskSpec::default();
+    let p_small = p_bits
+        .iter()
+        .take(spec.d(M))
+        .map(|bit| if *bit { F128::ONE } else { F128::ZERO })
+        .collect::<Vec<_>>();
     let cast = |v: &[F128]| -> &[u8] {
         unsafe { std::slice::from_raw_parts(v.as_ptr() as *const u8, std::mem::size_of_val(v)) }
     };
     let mut ch = RandomChallenger::new(CH_SEED);
-    let (proof, _claim) = zerocheck::prove_packed_padded_zk(
+    let (proof, claim) = zerocheck::prove_packed_padded_zk(
         cast(&a_packed),
         cast(&b_packed),
         cast(z_packed),
-        cast(&p_packed),
-        cast(&q_packed),
+        &p_small,
         M,
         &r1cs.padding_spec(),
         &mut ch,
@@ -468,7 +471,7 @@ fn zk_zerocheck_transcript(
         pairs,
         proof.mask_init,
         proof.final_p_eval,
-        proof.final_q_eval,
+        spec.q_star_at(&claim.mlv_challenges),
         proof.final_a_eval,
         proof.final_b_eval,
     )

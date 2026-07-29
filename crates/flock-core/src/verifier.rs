@@ -88,6 +88,7 @@ pub fn verify_claims_ligerito<Ch: Challenger>(
     pcs_params: &crate::pcs::PcsParams,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
+    let ro = crate::ro::RoContext::plain();
     // Verification is single-threaded; run the body on the dedicated 1-thread pool.
     verifier_pool().install(move || {
         verify_claims_ligerito_inner(
@@ -97,6 +98,8 @@ pub fn verify_claims_ligerito<Ch: Challenger>(
             pcs_open,
             pcs_params,
             None,
+            &ro,
+            crate::ro::RoChannel::Witness,
             challenger,
         )
     })
@@ -114,13 +117,40 @@ pub fn verify_claims_ligerito_with_config<Ch: Challenger>(
     lig_v_config: &crate::pcs::ligerito::VerifierConfig,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
-    verify_claims_ligerito_with_config_pd(
+    let ro = crate::ro::RoContext::plain();
+    verify_claims_ligerito_with_config_ro(
+        commitment,
+        claims,
+        pcs_open,
+        pcs_params,
+        lig_v_config,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+}
+
+/// Configured claim verification with an explicit point-oracle context.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_claims_ligerito_with_config_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    pcs_open: &pcs::BatchOpeningProofLigerito,
+    pcs_params: &crate::pcs::PcsParams,
+    lig_v_config: &crate::pcs::ligerito::VerifierConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), pcs::VerifyError> {
+    verify_claims_ligerito_with_config_pd_ro(
         commitment,
         claims,
         &[],
         pcs_open,
         pcs_params,
         lig_v_config,
+        ro,
+        channel,
         challenger,
     )
 }
@@ -143,6 +173,33 @@ pub fn verify_claims_ligerito_with_config_pd<Ch: Challenger>(
     lig_v_config: &crate::pcs::ligerito::VerifierConfig,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
+    let ro = crate::ro::RoContext::plain();
+    verify_claims_ligerito_with_config_pd_ro(
+        commitment,
+        claims,
+        packed_direct,
+        pcs_open,
+        pcs_params,
+        lig_v_config,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+}
+
+/// Packed-direct configured verification with an explicit point-oracle context.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_claims_ligerito_with_config_pd_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    packed_direct: &[pcs::PackedDirectClaimRef<'_>],
+    pcs_open: &pcs::BatchOpeningProofLigerito,
+    pcs_params: &crate::pcs::PcsParams,
+    lig_v_config: &crate::pcs::ligerito::VerifierConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), pcs::VerifyError> {
     verifier_pool().install(move || {
         verify_claims_ligerito_inner(
             commitment,
@@ -151,6 +208,8 @@ pub fn verify_claims_ligerito_with_config_pd<Ch: Challenger>(
             pcs_open,
             pcs_params,
             Some(lig_v_config),
+            ro,
+            channel,
             challenger,
         )
     })
@@ -163,6 +222,8 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
     pcs_open: &pcs::BatchOpeningProofLigerito,
     pcs_params: &crate::pcs::PcsParams,
     lig_v_config: Option<&crate::pcs::ligerito::VerifierConfig>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> Result<(), pcs::VerifyError> {
     // The commitment carries a params copy for shape bookkeeping, but the
@@ -199,7 +260,7 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
             &derived
         }
     };
-    pcs::verify_opening_batch_ligerito_mixed(
+    pcs::verify_opening_batch_ligerito_mixed_ro(
         commitment,
         &values,
         &z_skips,
@@ -207,6 +268,8 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
         packed_direct,
         pcs_open,
         lig_v_config,
+        ro,
+        channel,
         challenger,
     )
 }
@@ -256,7 +319,7 @@ fn verify_core_inner<Ch: Challenger>(
 
     // ---- Bind FS transcript to the statement (mirrors prover::prove).
     let t = std::time::Instant::now();
-    crate::proof::bind_statement(challenger, r1cs, commitment);
+    crate::proof::bind_statement(challenger, r1cs, commitment, &[0u8; 32]);
     if trace {
         eprintln!(
             "      [vco] bind_statement: {}",

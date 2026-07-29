@@ -1,23 +1,13 @@
 //! **Production-configuration measurements** for the certified BLAKE3 batch
 //! shape (`Blake3Setup::with_zk(256)`, m = 22).
 //!
-//! The complete-transcript joint certificate is computed at a reduced
-//! fixture, because exact full-support probing at m = 22 would need millions
-//! of prover runs. What can be measured *at the production shape* — and is
-//! measured here rather than assumed — are the facts the transfer argument
-//! actually rests on:
+//! These production-shape regressions exercise facts now established by the
+//! symbolic S2 coverage artifact and S3 translator through the shipped m=22
+//! fold kernels.
 //!
-//! 1. the degree-2 mask channel is **surjective onto the round-pair block**
-//!    at the production configuration, established by random-probe spanning
-//!    through the real fold kernels (random probing can only under-estimate
-//!    a rank, so reaching full output rank is a proof of surjectivity, not
-//!    evidence for it);
-//! 2. the same measurement **fails for a degenerate `Q`**, so it is not
-//!    vacuous at this size either;
-//! 3. the per-proof coverage self-check — the construct that replaces the
-//!    withdrawn ε_rank bound — **passes at the production configuration**,
-//!    which is what makes ε_rank = 0 a statement about proofs that would
-//!    actually be emitted;
+//! 1. the field-mask channel reaches the conditioned round block;
+//! 2. an undersized translated support fails, so the check is non-vacuous;
+//! 3. the optional per-proof coverage self-check passes;
 //! 4. the randomizer margin that binds the `s_hat_v` slices is far larger
 //!    here than at the fixture, quantified.
 
@@ -26,7 +16,7 @@
 use flock_core::challenger::FsChallenger;
 use flock_core::field::F128;
 use flock_prover::r1cs_hashes::blake3::Blake3Setup;
-use flock_prover::zk_rank_check::check_mask_coverage;
+use flock_prover::zk_rank_check::check_mask_coverage_fv;
 
 struct Rng(u64);
 impl Rng {
@@ -39,48 +29,33 @@ impl Rng {
     }
 }
 
-fn pack_bits(n: usize, mut f: impl FnMut(usize) -> bool) -> Vec<u8> {
-    let mut out = vec![0u8; n / 8];
-    for i in 0..n {
-        if f(i) {
-            out[i / 8] |= 1 << (i % 8);
-        }
-    }
-    out
-}
-
-/// (1)+(2)+(3): the mask channel covers the round-pair block at m = 22, a
-/// degenerate `Q` does not, and the per-proof self-check passes there.
+/// (1)+(2)+(3): the mask channel covers the conditioned round block at m = 22,
+/// an undersized support does not, and the optional self-check passes there.
 #[test]
 #[ignore = "production shape (m=22): thousands of full-cube fold passes"]
 fn production_mask_channel_covers_round_block() {
     let setup = Blake3Setup::with_zk(256);
     let m = setup.m();
     assert_eq!(m, 22, "the certified production configuration is m = 22");
-    let n = 1usize << m;
-
-    let mut rng = Rng(0x9C0D_E22);
-    let q_random = pack_bits(n, |_| rng.next_u64() & 1 == 1);
-    let q_const = pack_bits(n, |_| true);
-    let ch = FsChallenger::new(b"flock-prod-cert");
-
-    let ok = check_mask_coverage(&q_random, m, 0xBEEF, &ch)
-        .expect("at the production configuration a uniform Q must cover the round-pair block");
+    let ok = check_mask_coverage_fv(flock_core::zerocheck::SmallMaskSpec::default(), m, 0xBEEF)
+        .expect("the production field mask must cover the conditioned block");
     println!(
         "production m={m}: round-pair block {} bits, spanned {} with {} probes",
         ok.target_bits, ok.rank, ok.probes
     );
     assert!(ok.covered());
 
-    let bad = check_mask_coverage(&q_const, m, 0xBEEF, &ch)
-        .expect_err("a constant Q must NOT cover the degree-2 half at production size either");
+    let undersized = flock_core::zerocheck::SmallMaskSpec {
+        d_log: 1,
+        ..flock_core::zerocheck::SmallMaskSpec::default()
+    };
+    let bad = check_mask_coverage_fv(undersized, m, 0xBEEF)
+        .expect_err("an undersized support must not cover production rounds");
     println!(
-        "production m={m}: constant Q spans only {} of {} bits",
+        "production m={m}: undersized support spans only {} of {} bits",
         bad.report.rank, bad.report.target_bits
     );
     assert!(bad.report.rank < ok.target_bits);
-    // It reaches about the G(1) half and no more.
-    assert!(bad.report.rank * 2 <= ok.target_bits + 256);
 }
 
 /// (4) The randomizer margin that binds the `s_hat_v` bit-slices. Slice `r`
@@ -218,7 +193,7 @@ fn blake3_witness_has_no_linear_difference_family() {
 
 /// **Lemma L3 (round-1 region alignment), verified.**
 ///
-/// Round-1 is deliberately left unmasked by the degree-2 channel; its
+/// Round 1 uses its dedicated paired mask rather than the P/Q-star channel; its
 /// hiding rests on the univariate-skip fold groups being 64 consecutive rows
 /// that never mix A-species randomizer rows, B-species rows and real rows.
 /// The proof document asserted this ("a runtime layout assertion enforces

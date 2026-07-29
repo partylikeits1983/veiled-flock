@@ -16,6 +16,7 @@ pub use flock_core::*;
 
 pub mod chain;
 pub mod digest_bind;
+pub mod ligerito_decode;
 pub mod merkle_path;
 pub mod preimage_extractor;
 #[cfg(feature = "zk")]
@@ -23,7 +24,13 @@ pub mod preimage_simulator;
 pub mod proof_io;
 pub mod prover;
 pub mod r1cs_hashes;
+#[cfg(feature = "zk")]
+pub mod sim_ext;
+#[cfg(feature = "zk")]
+pub mod sim_game;
 pub mod sim_oracle;
+#[cfg(feature = "zk")]
+pub mod sim_seal;
 #[cfg(feature = "zk")]
 pub mod transcript_schema;
 #[cfg(feature = "zk")]
