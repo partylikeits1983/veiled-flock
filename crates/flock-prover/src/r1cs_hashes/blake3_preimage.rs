@@ -803,6 +803,66 @@ mod tests {
             .expect("the UNMODIFIED verifier must accept the simulated proof");
     }
 
+    /// Record every production-shape oracle call made by the simulator and
+    /// verifier. The artifact pins deterministic non-grinding counts; the
+    /// security ledger replaces the observed geometric PoW attempts with an
+    /// analytical 128-bit-tail budget.
+    #[test]
+    fn production_random_oracle_ledger_matches_artifact() {
+        use crate::preimage_simulator::simulate;
+        use crate::sim_game::{
+            OracleQueryCounts, SimGameLedger, production_grinding_candidate_bound,
+        };
+        use crate::sim_oracle::{OracleChallenger, shared_oracle};
+        use crate::sim_seal::{SealedStatement, SimCoins};
+
+        let setup = Blake3PreimageZkSetup::new(N_TEST);
+        let secret = msgs_of(0xA11C_E5E5, N_TEST);
+        let digests = Blake3PreimageSetup::digests_of(&secret);
+        let sealed = SealedStatement::new(&setup, &digests).expect("public statement");
+        let oracle = shared_oracle();
+        let sim = simulate(
+            &sealed,
+            SimCoins::new(0x51A7_E001),
+            &oracle,
+            b"b3-preimage-zk",
+        )
+        .expect("simulate");
+        assert_eq!(sim.programmed, 18);
+
+        let prover_points = oracle.lock().unwrap().queries().to_vec();
+        let prover = OracleQueryCounts::classify(&prover_points);
+        let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
+        let ro = crate::sim_oracle::ro_context(sim.proof.proof_nonce, oracle.clone());
+        setup
+            .verify_with_ro(&sim.commitment, &sim.proof, &digests, &ro, &mut chv)
+            .expect("simulated proof verifies");
+        let all_points = oracle.lock().unwrap().queries().to_vec();
+        let verifier = OracleQueryCounts::classify(&all_points[prover_points.len()..]);
+
+        println!("prover oracle counts: {prover:?}");
+        println!("verifier oracle counts: {verifier:?}");
+        let pow_bound = production_grinding_candidate_bound(128);
+        let protocol_bound = prover.non_pow_calls() + pow_bound + verifier.total_calls;
+        println!("pow candidate bound: {pow_bound}");
+        println!("protocol query bound: {protocol_bound}");
+        println!(
+            "final zk bits: {:.15}",
+            SimGameLedger::production(64, protocol_bound).final_bits()
+        );
+
+        let artifact: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../../docs/artifacts/sim_game_error_table.json"
+        ))
+        .expect("game artifact");
+        let pinned = &artifact["random_oracle_ledger"];
+        assert_eq!(pinned["prover_total_calls"], prover.total_calls);
+        assert_eq!(pinned["prover_non_pow_calls"], prover.non_pow_calls());
+        assert_eq!(pinned["verifier_total_calls"], verifier.total_calls);
+        assert_eq!(pinned["grinding_candidate_bound"], pow_bound);
+        assert_eq!(pinned["protocol_query_bound"], protocol_bound);
+    }
+
     /// **Control 1: the vector the simulator commits is not a witness.**
     /// Overwriting the output region destroys the compression relation, so
     /// the patched vector fails the R1CS — which is the whole reason the

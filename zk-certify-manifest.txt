@@ -8,6 +8,7 @@ flock-core::symbolic_kernels::toy_exact_polynomials_match_evaluation_and_degree_
 flock-core::symbolic_kernels::challenge_dependent_inversion_is_not_part_of_sym_scalar ok 1s
 flock-core::symbolic_mask_coverage::symbolic_mask_matrix_matches_native_and_has_100_bit_margin ok 1s
 flock-core::symbolic_pcs_translator::closed_form_translation_preserves_open_rows_and_combined_vector ok 1s
+flock-core::symbolic_pcs_translator::structural_l0_rank_certificate_matches_actual_ntt_on_every_small_query_set ok 0s
 flock-core::symbolic_pcs_translator::l0_entropy_counting_gate_holds_for_fixture_and_production ok 0s
 flock-prover::zk_qstar_rank::qstar_functional_matrix_matches_dense_schedule ok 6s
 flock-prover::zk_qstar_rank::affine_linear_qstar_has_full_conditioned_rank_across_certified_shapes ok 1s
@@ -26,6 +27,7 @@ flock-prover::preimage_zk_certificate::fixed_digest_circuit_is_not_the_batch_cir
 flock-prover::preimage_zk_certificate::extractor_recovers_the_preimages_from_an_honest_commitment ok 0s
 flock-prover::preimage_zk_certificate::extraction_fails_on_the_simulators_commitment ok 0s
 flock-prover::--lib::r1cs_hashes::blake3_preimage::tests::simulator_produces_an_accepting_proof_without_any_preimage ok 1s
+flock-prover::--lib::r1cs_hashes::blake3_preimage::tests::production_random_oracle_ledger_matches_artifact ok 1s
 flock-prover::--lib::r1cs_hashes::blake3_preimage::tests::honest_prover_on_the_patched_vector_is_rejected ok 0s
 flock-prover::--lib::r1cs_hashes::blake3_preimage::tests::zk_preimage_roundtrip ok 1s
 flock-prover::--lib::r1cs_hashes::blake3::tests::prove_verify_r1cs_zk_a1_roundtrip ok 0s

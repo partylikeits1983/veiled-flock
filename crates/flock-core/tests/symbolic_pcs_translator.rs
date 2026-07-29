@@ -1,10 +1,12 @@
 #![cfg(feature = "symbolic")]
 
 use flock_core::field::F128;
+use flock_core::linalg::F128Mat;
 use flock_core::pcs::commit::PcsParams;
 use flock_core::pcs::ligerito::{LigeritoProfile, ProverConfig, prover_config_for};
 use flock_core::pcs::symbolic_opening::{
-    OPENING_FUNCTIONAL_MANIFEST, encode_zk_linear, l0_entropy_bound, translate_mask_for_queries,
+    OPENING_FUNCTIONAL_MANIFEST, certify_l0_query_rank, encode_zk_linear, l0_entropy_bound,
+    translate_mask_for_queries,
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
@@ -32,6 +34,64 @@ fn tiny_config() -> ProverConfig {
         fold_grinding_bits: vec![0; 3],
         ood_samples: vec![0; 3],
     }
+}
+
+fn rank_test_params() -> PcsParams {
+    PcsParams {
+        m: 9,
+        log_inv_rate: 1,
+        log_batch_size: 0,
+        profile: LigeritoProfile::Fast,
+        zk: true,
+    }
+}
+
+fn low_mask_evaluation_matrix(params: &PcsParams, queries: &[usize]) -> F128Mat {
+    let witness_slots = 1usize << params.witness_log_msg_len();
+    let mask_symbols = witness_slots / params.num_ntts();
+    assert_eq!(params.num_ntts(), 1, "test helper is single-lane");
+    let zero_witness = vec![F128::ZERO; witness_slots];
+    let zero_blinder = vec![F128::ZERO; 2 * witness_slots];
+    let mut data = vec![F128::ZERO; queries.len() * mask_symbols];
+    for column in 0..mask_symbols {
+        let mut mask = vec![F128::ZERO; witness_slots];
+        mask[column] = F128::ONE;
+        let encoded = encode_zk_linear(params, &mask, &zero_witness, &zero_blinder);
+        for (row, &query) in queries.iter().enumerate() {
+            data[row * mask_symbols + column] = encoded[query * 2];
+        }
+    }
+    F128Mat::new(queries.len(), mask_symbols, data)
+}
+
+#[test]
+fn structural_l0_rank_certificate_matches_actual_ntt_on_every_small_query_set() {
+    let params = rank_test_params();
+    let domain = params.n_positions();
+    let mask_symbols = (1usize << params.witness_log_msg_len()) / params.num_ntts();
+    assert_eq!((domain, mask_symbols), (16, 4));
+
+    for subset in 0usize..(1usize << domain) {
+        if subset.count_ones() as usize > mask_symbols {
+            continue;
+        }
+        let queries = (0..domain)
+            .filter(|index| (subset >> index) & 1 == 1)
+            .collect::<Vec<_>>();
+        let certificate = certify_l0_query_rank(&params, &queries)
+            .expect("every distinct query set below the dimension is certified");
+        assert_eq!(certificate.opened_positions, queries.len());
+        assert_eq!(certificate.mask_symbols_per_lane, mask_symbols);
+        assert_eq!(
+            low_mask_evaluation_matrix(&params, &queries).rank(),
+            queries.len(),
+            "actual additive-NTT matrix disagrees for {queries:?}"
+        );
+    }
+
+    assert!(certify_l0_query_rank(&params, &[1, 1]).is_none());
+    assert!(certify_l0_query_rank(&params, &[domain]).is_none());
+    assert!(certify_l0_query_rank(&params, &[0, 1, 2, 3, 4]).is_none());
 }
 
 #[test]
@@ -113,6 +173,11 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
         .expect("production L0 queries must fit below the mask subcode dimension");
     assert_eq!(bound.mask_symbols_per_lane, 512);
     assert!(bound.conditional_bits_per_fresh_leaf >= 128);
+    let representative_queries = (0..config.queries[0]).collect::<Vec<_>>();
+    let rank_certificate = certify_l0_query_rank(&production, &representative_queries)
+        .expect("every registered distinct query set must satisfy the structural rank criterion");
+    assert_eq!(rank_certificate.opened_positions, 218);
+    assert_eq!(rank_certificate.mask_symbols_per_lane, 512);
 
     let manifest: serde_json::Value = serde_json::from_str(include_str!(
         "../../../docs/artifacts/s3_opening_functionals.json"
@@ -125,6 +190,9 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
         assert_eq!(pinned["category"], current.category);
         assert_eq!(pinned["disposition"], current.disposition);
     }
+    assert_eq!(manifest["l0_query_rank"]["status"], "structural");
+    assert_eq!(manifest["l0_query_rank"]["registered_queries"], 218);
+    assert_eq!(manifest["l0_query_rank"]["mask_symbols_per_lane"], 512);
 
     let entropy: serde_json::Value = serde_json::from_str(include_str!(
         "../../../docs/artifacts/s3_minentropy_table.json"

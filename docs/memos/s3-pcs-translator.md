@@ -47,10 +47,20 @@ algebraic field functionals.
 
 ## L0 entropy
 
-The low mask subcode has `w / num_ntts` free field symbols per lane. Evaluation
-at any smaller set of distinct positions has full row rank in the degree-graded
-novel basis. Therefore an additional fresh wide leaf retains two field symbols
-per lane, one in `f'` and one in `g`.
+The low mask subcode has `w / num_ntts` free field symbols per lane.  Its first
+`K` normalized LCH novel-basis elements have degrees `0,...,K-1`, so they span
+all polynomials of degree below `K`.  For any `q <= K` distinct evaluation
+points, polynomial interpolation gives a preimage for every vector of `q`
+target values.  The evaluation matrix therefore has full row rank for every
+such query set.  The verifier samples without replacement; in the registered
+profile `q=218 < K=512`.  This closes the query-solvability obligation
+structurally, rather than for one transcript fixture.  The executable
+certificate rejects duplicate, out-of-domain, or oversized query sets and is
+differentially checked against the actual additive NTT on every admissible
+query subset of a small domain.
+
+Therefore an additional fresh wide leaf retains two field symbols per lane,
+one in `f'` and one in `g`.
 
 For the BLAKE3-256 production fast profile:
 
@@ -61,7 +71,7 @@ wide lanes                  128
 conditional bits per leaf   128 * 128 = 16384
 ```
 
-The gate and fixture values are pinned in
+The gate and registered values are pinned in
 `docs/artifacts/s3_minentropy_table.json`. No recursive-level sibling entropy
 term is needed: `delta_F = 0` makes every recursive codeword, root, and
 authentication sibling identical. Only L0 commits to the separately changing

@@ -1,5 +1,7 @@
 #!/bin/bash
-# Compare the certified ZK prover with current non-ZK Flock and native hashing.
+# Compare the registered Flock-ZK prover with current non-ZK Flock and native
+# hashing. The reference bench reports medians, MAD, ranges, proof sizes, peak
+# incremental heap, commit, compiler, flags, and thread count.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -19,12 +21,12 @@ fi
 printf '=== Native scalar hash baseline (one thread) ===\n'
 RAYON_NUM_THREADS=1 cargo bench --bench native_hash
 
-printf '\n=== Certified ZK versus non-ZK Flock (one thread) ===\n'
+printf '\n=== Flock-ZK versus non-ZK Flock (one thread) ===\n'
 RAYON_NUM_THREADS=1 ZKA1_NS=256 ZKA1_RUNS="$runs" \
   cargo bench --features zk,symbolic --bench zk_a1_reference
 
 if [ "$threads" -ne 1 ]; then
-  printf '\n=== Certified ZK versus non-ZK Flock (%s threads) ===\n' "$threads"
+  printf '\n=== Flock-ZK versus non-ZK Flock (%s threads) ===\n' "$threads"
   RAYON_NUM_THREADS="$threads" ZKA1_NS=256 ZKA1_RUNS="$runs" \
     cargo bench --features zk,symbolic --bench zk_a1_reference
 fi

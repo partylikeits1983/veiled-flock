@@ -28,6 +28,21 @@ pub struct L0EntropyBound {
     pub conditional_bits_per_fresh_leaf: usize,
 }
 
+/// Structural certificate for the initial low-mask encoding system.
+///
+/// The first `mask_symbols_per_lane` LCH novel-basis elements have degrees
+/// `0, ..., mask_symbols_per_lane - 1` and therefore span all polynomials
+/// below that degree bound. Evaluation at `q` distinct field points is
+/// surjective whenever `q <= mask_symbols_per_lane`, by interpolation. Thus
+/// these purely combinatorial checks certify full row rank for every query set
+/// satisfying them; no challenge-specific matrix rank computation is needed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct L0QueryRankCertificate {
+    pub domain_positions: usize,
+    pub opened_positions: usize,
+    pub mask_symbols_per_lane: usize,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OpeningFunctionalEntry {
     pub proof_path: &'static str,
@@ -201,6 +216,7 @@ pub fn translate_mask_for_queries(
     if c == F128::ZERO {
         return None;
     }
+    certify_l0_query_rank(params, queries)?;
     let w = 1usize << params.witness_log_msg_len();
     assert_eq!(witness_delta.len(), w);
     let zero_w = vec![F128::ZERO; w];
@@ -247,6 +263,38 @@ pub fn translate_mask_for_queries(
         return None;
     }
     Some(translation)
+}
+
+/// Certify full row rank of the low-mask evaluation system for an arbitrary
+/// L0 query set. The registered verifier's sampler returns distinct positions,
+/// so every set it can generate passes whenever its configured query count is
+/// at most the per-lane mask dimension.
+pub fn certify_l0_query_rank(
+    params: &PcsParams,
+    queries: &[usize],
+) -> Option<L0QueryRankCertificate> {
+    if !params.zk {
+        return None;
+    }
+    let domain_positions = params.n_positions();
+    let mask_symbols_per_lane = (1usize << params.witness_log_msg_len()) / params.num_ntts();
+    if queries.len() > mask_symbols_per_lane
+        || queries.iter().any(|&query| query >= domain_positions)
+    {
+        return None;
+    }
+    let distinct = queries
+        .iter()
+        .copied()
+        .collect::<std::collections::HashSet<_>>();
+    if distinct.len() != queries.len() {
+        return None;
+    }
+    Some(L0QueryRankCertificate {
+        domain_positions,
+        opened_positions: queries.len(),
+        mask_symbols_per_lane,
+    })
 }
 
 /// Structural RS-subcode counting gate used by the L0 replacement theorem.

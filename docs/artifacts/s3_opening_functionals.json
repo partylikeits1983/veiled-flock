@@ -3,9 +3,15 @@
   "translator": "delta_g_top=c^-1*d; solve E_mu(delta_mu)|S=E_z(d)|S; delta_g_lo=c^-1*delta_mu",
   "bad_events": [
     "c=0",
-    "l0 query count >= mask symbols per lane",
     "random-oracle collision or sibling preimage event"
   ],
+  "l0_query_rank": {
+    "basis": "normalized LCH novel basis with basis element j of degree j",
+    "criterion": "query positions are distinct and registered_queries <= mask_symbols_per_lane",
+    "registered_queries": 218,
+    "mask_symbols_per_lane": 512,
+    "status": "structural"
+  },
   "functionals": [
     {"proof_path":"ligerito.initial_proof.opened_rows","category":"l0_opened_rows","disposition":"translated_exactly"},
     {"proof_path":"ligerito.recursive_proofs[*].opened_rows","category":"recursive_opened_rows","disposition":"determined_by_invariant_F"},

@@ -17,8 +17,8 @@
 //! A non-zk `prove_fast` run at the same batch size is included as a
 //! context row, clearly labelled as a different pipeline.
 //!
-//! Machine-parseable lines:
-//!   RESULT\tzk_a1_reference\tblake3\t{batch}\t{phase}\t{secs}
+//! Machine-parseable lines report median, median absolute deviation (MAD),
+//! min, max, proof bytes, and peak incremental heap.
 //!
 //! Env: ZKA1_NS (default "256", the certified configuration), ZKA1_RUNS
 //! (default 5). Run alone:
@@ -28,7 +28,123 @@ use flock_core::challenger::FsChallenger;
 use flock_core::zk::ZkRng;
 use flock_prover::proof_io::{R1csProofBundleLigerito, R1csProofBundleZkA1};
 use flock_prover::r1cs_hashes::blake3::{Blake3Setup, Compression};
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+
+struct PeakAlloc;
+static CURRENT_HEAP: AtomicUsize = AtomicUsize::new(0);
+static PEAK_HEAP: AtomicUsize = AtomicUsize::new(0);
+static BASE_HEAP: AtomicUsize = AtomicUsize::new(0);
+
+unsafe impl GlobalAlloc for PeakAlloc {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let ptr = unsafe { System.alloc(layout) };
+        if !ptr.is_null() {
+            let current = CURRENT_HEAP.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
+            PEAK_HEAP.fetch_max(current, Ordering::Relaxed);
+        }
+        ptr
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        unsafe { System.dealloc(ptr, layout) };
+        CURRENT_HEAP.fetch_sub(layout.size(), Ordering::Relaxed);
+    }
+
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
+        let out = unsafe { System.realloc(ptr, layout, new_size) };
+        if !out.is_null() {
+            if new_size >= layout.size() {
+                let delta = new_size - layout.size();
+                let current = CURRENT_HEAP.fetch_add(delta, Ordering::Relaxed) + delta;
+                PEAK_HEAP.fetch_max(current, Ordering::Relaxed);
+            } else {
+                CURRENT_HEAP.fetch_sub(layout.size() - new_size, Ordering::Relaxed);
+            }
+        }
+        out
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: PeakAlloc = PeakAlloc;
+
+fn reset_peak_heap() {
+    let current = CURRENT_HEAP.load(Ordering::Relaxed);
+    BASE_HEAP.store(current, Ordering::Relaxed);
+    PEAK_HEAP.store(current, Ordering::Relaxed);
+}
+
+fn peak_incremental_heap_bytes() -> usize {
+    PEAK_HEAP
+        .load(Ordering::Relaxed)
+        .saturating_sub(BASE_HEAP.load(Ordering::Relaxed))
+}
+
+#[derive(Clone, Copy)]
+struct Stats {
+    median: f64,
+    mad: f64,
+    min: f64,
+    max: f64,
+}
+
+fn median(values: &mut [f64]) -> f64 {
+    values.sort_by(f64::total_cmp);
+    let mid = values.len() / 2;
+    if values.len().is_multiple_of(2) {
+        (values[mid - 1] + values[mid]) * 0.5
+    } else {
+        values[mid]
+    }
+}
+
+fn stats(values: &[f64]) -> Stats {
+    assert!(!values.is_empty());
+    let mut sorted = values.to_vec();
+    let median_value = median(&mut sorted);
+    let mut deviations = values
+        .iter()
+        .map(|value| (value - median_value).abs())
+        .collect::<Vec<_>>();
+    Stats {
+        median: median_value,
+        mad: median(&mut deviations),
+        min: sorted[0],
+        max: *sorted.last().unwrap(),
+    }
+}
+
+fn command_output(program: &str, args: &[&str]) -> String {
+    Command::new(program)
+        .args(args)
+        .output()
+        .ok()
+        .filter(|output| output.status.success())
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim().to_owned())
+        .unwrap_or_else(|| "unavailable".to_owned())
+}
+
+fn print_stats(batch: usize, phase: &str, stats: Stats) {
+    println!(
+        "RESULT\tzk_a1_reference\tblake3\t{batch}\t{phase}_median\t{:.9}",
+        stats.median
+    );
+    println!(
+        "RESULT\tzk_a1_reference\tblake3\t{batch}\t{phase}_mad\t{:.9}",
+        stats.mad
+    );
+    println!(
+        "RESULT\tzk_a1_reference\tblake3\t{batch}\t{phase}_min\t{:.9}",
+        stats.min
+    );
+    println!(
+        "RESULT\tzk_a1_reference\tblake3\t{batch}\t{phase}_max\t{:.9}",
+        stats.max
+    );
+}
 
 struct Rng(u64);
 impl Rng {
@@ -65,8 +181,19 @@ fn main() {
         .unwrap_or(5);
 
     println!("Certified ZK prover for a BLAKE3 batch");
+    println!("commit: {}", command_output("git", &["rev-parse", "HEAD"]));
+    println!(
+        "rustc: {}",
+        command_output("rustc", &["-Vv"]).replace('\n', "; ")
+    );
+    println!("cargo: {}", command_output("cargo", &["-V"]));
+    println!(
+        "RUSTFLAGS: {}",
+        std::env::var("RUSTFLAGS").unwrap_or_else(|_| "<unset>".to_owned())
+    );
+    println!("profile: Cargo bench (optimized, debug assertions disabled)");
     println!("threads: {}", rayon::current_num_threads());
-    println!("runs per cell: {runs} (best-of), after one verified warm-up");
+    println!("runs per cell: {runs} (median and MAD), after one verified warm-up");
     println!();
     println!(
         "{:>8} {:>4} {:>10} | {:>10} {:>10} {:>8} | {:>10} {:>10} {:>8} | {:>7} {:>7}",
@@ -109,37 +236,44 @@ fn main() {
             .len()
         };
 
-        let mut best_prove = f64::MAX;
-        let mut best_verify = f64::MAX;
+        let mut zk_prove_times = Vec::with_capacity(runs);
+        let mut zk_verify_times = Vec::with_capacity(runs);
+        let mut zk_peak_heap = 0usize;
         for _ in 0..runs {
             let mut zk_rng = ZkRng::from_entropy();
             let mut ch = FsChallenger::new(DOMAIN);
+            reset_peak_heap();
             let t0 = Instant::now();
             let (proof, comm) = setup
                 .prove_zk_a1_with_rng(&blocks, &mut zk_rng, &mut ch)
                 .expect("certified");
-            best_prove = best_prove.min(t0.elapsed().as_secs_f64());
+            zk_prove_times.push(t0.elapsed().as_secs_f64());
+            zk_peak_heap = zk_peak_heap.max(peak_incremental_heap_bytes());
 
             let mut chv = FsChallenger::new(DOMAIN);
             let t1 = Instant::now();
             setup.verify_zk_a1(&comm, &proof, &mut chv).expect("verify");
-            best_verify = best_verify.min(t1.elapsed().as_secs_f64());
+            zk_verify_times.push(t1.elapsed().as_secs_f64());
         }
+        let zk_prove = stats(&zk_prove_times);
+        let zk_verify = stats(&zk_verify_times);
 
         // Witness generation alone, for attribution (the same call the
         // gated prove entry makes internally).
-        let mut best_witness = f64::MAX;
+        let mut witness_times = Vec::with_capacity(runs);
         for _ in 0..runs {
             let t0 = Instant::now();
             let w = setup.generate_witness(&blocks);
-            best_witness = best_witness.min(t0.elapsed().as_secs_f64());
+            witness_times.push(t0.elapsed().as_secs_f64());
             std::hint::black_box(&w);
         }
+        let witness = stats(&witness_times);
 
         // Context row: the optimized NON-zk pipeline at the same batch.
         let base_setup = Blake3Setup::new(n);
-        let mut best_fast = f64::MAX;
-        let mut best_fast_verify = f64::MAX;
+        let mut base_prove_times = Vec::with_capacity(runs);
+        let mut base_verify_times = Vec::with_capacity(runs);
+        let mut base_peak_heap = 0usize;
         let base_proof_bytes = {
             let mut ch = FsChallenger::new(b"flock-zka1-bench-base");
             let (proof, commitment, _) = base_setup.prove_fast(&blocks, &mut ch);
@@ -152,41 +286,65 @@ fn main() {
                 .len();
             for _ in 0..runs {
                 let mut ch = FsChallenger::new(b"flock-zka1-bench-base");
+                reset_peak_heap();
                 let t0 = Instant::now();
                 let (proof, commitment, _) = base_setup.prove_fast(&blocks, &mut ch);
-                best_fast = best_fast.min(t0.elapsed().as_secs_f64());
+                base_prove_times.push(t0.elapsed().as_secs_f64());
+                base_peak_heap = base_peak_heap.max(peak_incremental_heap_bytes());
                 let mut chv = FsChallenger::new(b"flock-zka1-bench-base");
                 let t1 = Instant::now();
                 base_setup
                     .verify(&commitment, &proof, &mut chv)
                     .expect("non-zk proof must verify");
-                best_fast_verify = best_fast_verify.min(t1.elapsed().as_secs_f64());
+                base_verify_times.push(t1.elapsed().as_secs_f64());
                 std::hint::black_box((&proof, &commitment));
             }
             bytes
         };
+        let base_prove = stats(&base_prove_times);
+        let base_verify = stats(&base_verify_times);
 
         println!(
-            "{n:>8} {m:>4} {best_witness:>10.4} | {best_prove:>10.4} {best_verify:>10.4} \
-             {:>8} | {best_fast:>10.4} {best_fast_verify:>10.4} {:>8} | {:>7.2} {:>7.2}",
+            "{n:>8} {m:>4} {:>10.4} | {:>10.4} {:>10.4} \
+             {:>8} | {:>10.4} {:>10.4} {:>8} | {:>7.2} {:>7.2}",
+            witness.median,
+            zk_prove.median,
+            zk_verify.median,
             zk_proof_bytes / 1024,
+            base_prove.median,
+            base_verify.median,
             base_proof_bytes / 1024,
-            best_prove / best_fast,
+            zk_prove.median / base_prove.median,
             zk_proof_bytes as f64 / base_proof_bytes as f64,
         );
-        println!("RESULT\tzk_a1_reference\tblake3\t{n}\twitness\t{best_witness:.6}");
-        println!("RESULT\tzk_a1_reference\tblake3\t{n}\tprove\t{best_prove:.6}");
-        println!("RESULT\tzk_a1_reference\tblake3\t{n}\tverify\t{best_verify:.6}");
-        println!("RESULT\tzk_a1_reference\tblake3\t{n}\tfast_nonzk_prove\t{best_fast:.6}");
-        println!("RESULT\tzk_a1_reference\tblake3\t{n}\tfast_nonzk_verify\t{best_fast_verify:.6}");
+        println!(
+            "dispersion (MAD): witness {:.3} ms, ZK prove {:.3} ms, ZK verify {:.3} ms, \
+             non-ZK prove {:.3} ms, non-ZK verify {:.3} ms",
+            witness.mad * 1e3,
+            zk_prove.mad * 1e3,
+            zk_verify.mad * 1e3,
+            base_prove.mad * 1e3,
+            base_verify.mad * 1e3,
+        );
+        print_stats(n, "witness", witness);
+        print_stats(n, "prove", zk_prove);
+        print_stats(n, "verify", zk_verify);
+        print_stats(n, "fast_nonzk_prove", base_prove);
+        print_stats(n, "fast_nonzk_verify", base_verify);
         println!("RESULT\tzk_a1_reference\tblake3\t{n}\tzk_proof_bytes\t{zk_proof_bytes}");
         println!(
             "RESULT\tzk_a1_reference\tblake3\t{n}\tfast_nonzk_proof_bytes\t{base_proof_bytes}"
         );
         println!(
+            "RESULT\tzk_a1_reference\tblake3\t{n}\tzk_peak_incremental_heap_bytes\t{zk_peak_heap}"
+        );
+        println!(
+            "RESULT\tzk_a1_reference\tblake3\t{n}\tfast_nonzk_peak_incremental_heap_bytes\t{base_peak_heap}"
+        );
+        println!(
             "  certified/non-zk prove ratio: {:.2}x  (the certified path is \
              unoptimized by design)",
-            best_prove / best_fast
+            zk_prove.median / base_prove.median
         );
     }
 }

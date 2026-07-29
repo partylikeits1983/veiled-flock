@@ -55,6 +55,7 @@ run flock-core symbolic_kernels toy_exact_polynomials_match_evaluation_and_degre
 run flock-core symbolic_kernels challenge_dependent_inversion_is_not_part_of_sym_scalar
 run flock-core symbolic_mask_coverage symbolic_mask_matrix_matches_native_and_has_100_bit_margin
 run flock-core symbolic_pcs_translator closed_form_translation_preserves_open_rows_and_combined_vector
+run flock-core symbolic_pcs_translator structural_l0_rank_certificate_matches_actual_ntt_on_every_small_query_set
 run flock-core symbolic_pcs_translator l0_entropy_counting_gate_holds_for_fixture_and_production
 
 # Public affine Q-star parity/rank and exhaustive transcript schema.
@@ -80,6 +81,7 @@ run flock-prover preimage_zk_certificate fixed_digest_circuit_is_not_the_batch_c
 run flock-prover preimage_zk_certificate extractor_recovers_the_preimages_from_an_honest_commitment
 run flock-prover preimage_zk_certificate extraction_fails_on_the_simulators_commitment
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::simulator_produces_an_accepting_proof_without_any_preimage
+run flock-prover --lib r1cs_hashes::blake3_preimage::tests::production_random_oracle_ledger_matches_artifact
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::honest_prover_on_the_patched_vector_is_rejected
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::zk_preimage_roundtrip
 
