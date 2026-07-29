@@ -48,6 +48,13 @@ fn verifier_pool() -> &'static rayon::ThreadPool {
     })
 }
 
+/// Run a complete verifier wrapper under the repository's single-thread
+/// verification convention. Higher-level protocol variants must use this for
+/// work performed before they enter the shared PCS verification helpers.
+pub fn run_serial<R: Send>(op: impl FnOnce() -> R + Send) -> R {
+    verifier_pool().install(op)
+}
+
 /// Verify an R1CS proof: replay zerocheck + lincheck → the two base z-claims,
 /// then verify the batched Ligerito PCS opening covering both.
 pub fn verify_ligerito<Ch: Challenger>(

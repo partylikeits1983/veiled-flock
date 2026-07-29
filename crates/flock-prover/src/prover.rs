@@ -1638,7 +1638,7 @@ pub fn verify_r1cs_zk_a1_pd<Ch: Challenger + Clone>(
     proof: &R1csProofZkA1,
     commitment: &Commitment,
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
-    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
     let log_n = pcs_params.log_msg_len();
@@ -1667,7 +1667,7 @@ pub fn verify_r1cs_zk_a1_pd_ro<Ch: Challenger + Clone>(
     commitment: &Commitment,
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     ro: &flock_core::ro::RoContext,
-    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
     let log_n = pcs_params.log_msg_len();
@@ -1722,7 +1722,7 @@ pub fn verify_r1cs_zk_a1_with_config_pd<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_v: &pcs::ligerito::VerifierConfig,
     challenger: &mut Ch,
-    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
 ) -> Result<(), flock_core::verifier::VerifyError> {
     let ro = flock_core::ro::RoContext::native(proof.proof_nonce);
     verify_r1cs_zk_a1_with_config_pd_ro(
@@ -1750,7 +1750,35 @@ pub fn verify_r1cs_zk_a1_with_config_pd_ro<Ch: Challenger + Clone>(
     lig_v: &pcs::ligerito::VerifierConfig,
     ro: &flock_core::ro::RoContext,
     challenger: &mut Ch,
-    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
+) -> Result<(), flock_core::verifier::VerifyError> {
+    flock_core::verifier::run_serial(move || {
+        verify_r1cs_zk_a1_with_config_pd_ro_inner(
+            r1cs,
+            pcs_params,
+            proof,
+            commitment,
+            lincheck_circuit,
+            lig_v,
+            ro,
+            challenger,
+            packed_direct,
+        )
+    })
+}
+
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+fn verify_r1cs_zk_a1_with_config_pd_ro_inner<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_v: &pcs::ligerito::VerifierConfig,
+    ro: &flock_core::ro::RoContext,
+    challenger: &mut Ch,
+    packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
 ) -> Result<(), flock_core::verifier::VerifyError> {
     use flock_core::verifier::VerifyError;
     let m = r1cs.m;
