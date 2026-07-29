@@ -65,6 +65,34 @@ pub(crate) fn open_claims_with_precomputed_ligerito<Ch: Challenger>(
     lig_config: &pcs::ligerito::ProverConfig,
     challenger: &mut Ch,
 ) -> pcs::BatchOpeningProofLigerito {
+    open_claims_with_precomputed_ligerito_pd(
+        z_packed,
+        prover_data,
+        commitment,
+        claims,
+        precomputed_s_hat_v,
+        &[],
+        padding,
+        lig_config,
+        challenger,
+    )
+}
+
+/// [`open_claims_with_precomputed_ligerito`] plus packed-direct claims, which
+/// ride the same batched opening. Used to bind public digests to the
+/// witness's output region (see `crate::digest_bind`).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn open_claims_with_precomputed_ligerito_pd<Ch: Challenger>(
+    z_packed: Vec<F128>,
+    prover_data: &pcs::ProverData,
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[pcs::PackedDirectClaim],
+    padding: &zerocheck::PaddingSpec,
+    lig_config: &pcs::ligerito::ProverConfig,
+    challenger: &mut Ch,
+) -> pcs::BatchOpeningProofLigerito {
     let x_fulls: Vec<Vec<F128>> = claims
         .iter()
         .map(|c| quirky_x_outer_full(&c.point))
@@ -76,7 +104,7 @@ pub(crate) fn open_claims_with_precomputed_ligerito<Ch: Challenger>(
         commitment,
         &x_refs,
         precomputed_s_hat_v,
-        &[],
+        packed_direct,
         padding,
         lig_config,
         challenger,
@@ -970,6 +998,39 @@ pub fn prove_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     (proof, comm)
 }
 
+/// Where the A1′ prover's zerocheck sub-proof comes from.
+///
+/// This exists so a **simulator** can supply zerocheck messages of its own
+/// while every other part of the proof — the six hiding commitments, the
+/// masked lincheck, the batched opening — runs the production code
+/// unmodified. The alternative, a second orchestration maintained alongside
+/// this one, would drift; and a simulator that runs different code from the
+/// prover demonstrates nothing about the prover.
+///
+/// Production never constructs one: the prove entry points pass `None`.
+#[cfg(feature = "zk")]
+pub trait ZerocheckSource<Ch: Challenger> {
+    /// Emit a zerocheck sub-proof, absorbing exactly what the honest prover
+    /// would absorb, and return it with the claim the verifier will
+    /// reconstruct and the A3 round-1 mask transcript.
+    fn emit(
+        &mut self,
+        m: usize,
+        challenger: &mut Ch,
+        honest: &mut dyn FnMut(
+            &mut Ch,
+        ) -> (
+            zerocheck::ZkZerocheckProof,
+            zerocheck::ZerocheckClaim,
+            zerocheck::Round1MaskTranscript,
+        ),
+    ) -> (
+        zerocheck::ZkZerocheckProof,
+        zerocheck::ZerocheckClaim,
+        zerocheck::Round1MaskTranscript,
+    );
+}
+
 /// The A1′ prover with every mask channel supplied explicitly. This is the
 /// map the leakage certificates probe.
 #[cfg(feature = "zk")]
@@ -984,6 +1045,57 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_config: &pcs::ligerito::ProverConfig,
     masks: A1MaskSources<'_>,
+    coverage_probe_seed: Option<u64>,
+    challenger: &mut Ch,
+) -> (
+    R1csProofZkA1,
+    Commitment,
+    Option<crate::zk_rank_check::RankCheckReport>,
+) {
+    prove_r1cs_zk_a1_with_masks_pd(
+        r1cs,
+        pcs_params,
+        z_packed,
+        a_packed_f128,
+        b_packed_f128,
+        z_packed_lincheck,
+        lincheck_circuit,
+        lig_config,
+        masks,
+        &mut |_: &mut Ch| Vec::new(),
+        None,
+        coverage_probe_seed,
+        challenger,
+    )
+}
+
+/// [`prove_r1cs_zk_a1_with_masks`] with **public packed-direct claims**.
+///
+/// `packed_direct` is a callback rather than a slice because the claims'
+/// challenges must be drawn from the live transcript, at a position both
+/// prover and verifier agree on: after the zerocheck and lincheck, immediately
+/// before the batched opening. The callback receives the challenger at exactly
+/// that point and returns the claims it built.
+///
+/// This is the seam the fixed-digest statement uses: the callback samples the
+/// digest-binding point and returns one claim whose value is a public function
+/// of the statement (see `crate::digest_bind`). Because the value is public,
+/// the verifier recomputes it rather than reading it from the proof, and the
+/// hiding argument may condition on it legitimately.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn prove_r1cs_zk_a1_with_masks_pd<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed_f128: Vec<F128>,
+    b_packed_f128: Vec<F128>,
+    z_packed_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_config: &pcs::ligerito::ProverConfig,
+    masks: A1MaskSources<'_>,
+    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<pcs::PackedDirectClaim>,
+    zerocheck_source: Option<&mut dyn ZerocheckSource<Ch>>,
     coverage_probe_seed: Option<u64>,
     challenger: &mut Ch,
 ) -> (
@@ -1056,21 +1168,37 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         Some(Err(failed)) => Some(failed.report),
     };
 
-    let (zk_zc, zc_claim, zc_mask) = zerocheck::prove_packed_padded_zk_masked(
-        cast(&a_packed_f128),
-        cast(&b_packed_f128),
-        cast(&z_packed),
-        cast(&p_f128),
-        cast(&q_f128),
-        m,
-        &padding,
-        Some(zerocheck::Round1Mask {
-            s_c_packed: cast(&s_c_f128),
-            s_h_packed: cast(&s_h_f128),
-        }),
-        challenger,
-    );
-    let zc_mask = zc_mask.expect("mask=Some must produce a round-1 mask transcript");
+    // The zerocheck seam. Production passes `None` and the honest masked
+    // zerocheck runs. A *simulator* passes a source that emits its own
+    // messages here — and only here — so that everything else (the
+    // commitments, the lincheck, the openings) stays on this exact code path
+    // rather than a copy of it that could drift out of agreement with the
+    // prover it is supposed to be indistinguishable from.
+    let mut honest = |ch: &mut Ch| {
+        let (p, c, mk) = zerocheck::prove_packed_padded_zk_masked(
+            cast(&a_packed_f128),
+            cast(&b_packed_f128),
+            cast(&z_packed),
+            cast(&p_f128),
+            cast(&q_f128),
+            m,
+            &padding,
+            Some(zerocheck::Round1Mask {
+                s_c_packed: cast(&s_c_f128),
+                s_h_packed: cast(&s_h_f128),
+            }),
+            ch,
+        );
+        (
+            p,
+            c,
+            mk.expect("mask=Some must produce a round-1 mask transcript"),
+        )
+    };
+    let (zk_zc, zc_claim, zc_mask) = match zerocheck_source {
+        Some(src) => src.emit(m, challenger, &mut honest),
+        None => honest(challenger),
+    };
     flock_core::scratch::give_f128(a_packed_f128);
     flock_core::scratch::give_f128(b_packed_f128);
 
@@ -1186,12 +1314,16 @@ pub fn prove_r1cs_zk_a1_with_masks<Ch: Challenger + Clone>(
         &mut ch_s,
     );
 
-    let pcs_open = open_claims_with_precomputed_ligerito(
+    // Public packed-direct claims (e.g. the fixed-digest binding) are built
+    // here: after every PIOP message is bound, immediately before the open.
+    let pd = packed_direct(challenger);
+    let pcs_open = open_claims_with_precomputed_ligerito_pd(
         z_packed,
         &prover_data,
         &commitment,
         &[ab, c],
         &[None, None],
+        &pd,
         &padding,
         lig_config,
         challenger,
@@ -1232,11 +1364,39 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
+    verify_r1cs_zk_a1_pd(
+        r1cs,
+        pcs_params,
+        proof,
+        commitment,
+        lincheck_circuit,
+        &mut |_: &mut Ch| Vec::new(),
+        challenger,
+    )
+}
+
+/// [`verify_r1cs_zk_a1`] with public packed-direct claims. Mirror of
+/// [`prove_r1cs_zk_a1_with_masks_pd`]: the callback runs at the same
+/// transcript position and must rebuild the same claims — from public data
+/// only, since the verifier has no witness. A claim whose value the verifier
+/// recomputes cannot be forged by the prover; a claim it fails to reproduce
+/// makes the opening's combined target disagree and the proof is rejected.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_r1cs_zk_a1_pd<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    challenger: &mut Ch,
+) -> Result<(), flock_core::verifier::VerifyError> {
     let log_n = pcs_params.log_msg_len();
     let lig_v =
         pcs::ligerito::verifier_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
             .expect("Ligerito verifier config");
-    verify_r1cs_zk_a1_with_config(
+    verify_r1cs_zk_a1_with_config_pd(
         r1cs,
         pcs_params,
         proof,
@@ -1244,6 +1404,7 @@ pub fn verify_r1cs_zk_a1<Ch: Challenger + Clone>(
         lincheck_circuit,
         &lig_v,
         challenger,
+        packed_direct,
     )
 }
 
@@ -1258,6 +1419,31 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_v: &pcs::ligerito::VerifierConfig,
     challenger: &mut Ch,
+) -> Result<(), flock_core::verifier::VerifyError> {
+    verify_r1cs_zk_a1_with_config_pd(
+        r1cs,
+        pcs_params,
+        proof,
+        commitment,
+        lincheck_circuit,
+        lig_v,
+        challenger,
+        &mut |_: &mut Ch| Vec::new(),
+    )
+}
+
+/// [`verify_r1cs_zk_a1_with_config`] with public packed-direct claims.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn verify_r1cs_zk_a1_with_config_pd<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &R1csProofZkA1,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn lincheck::LincheckCircuit,
+    lig_v: &pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
 ) -> Result<(), flock_core::verifier::VerifyError> {
     use flock_core::verifier::VerifyError;
     let m = r1cs.m;
@@ -1404,9 +1590,18 @@ pub fn verify_r1cs_zk_a1_with_config<Ch: Challenger + Clone>(
     )
     .map_err(VerifyError::PcsAb)?;
 
-    flock_core::verifier::verify_claims_ligerito_with_config(
+    let pd = packed_direct(challenger);
+    let pd_refs: Vec<pcs::PackedDirectClaimRef<'_>> = pd
+        .iter()
+        .map(|(point, value)| pcs::PackedDirectClaimRef {
+            point: point.as_slice(),
+            value: *value,
+        })
+        .collect();
+    flock_core::verifier::verify_claims_ligerito_with_config_pd(
         commitment,
         &[ab, c],
+        &pd_refs,
         &proof.pcs_open,
         pcs_params,
         lig_v,

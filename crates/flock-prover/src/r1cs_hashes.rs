@@ -8,6 +8,7 @@
 //! [`common`].
 
 pub mod blake3;
+pub mod blake3_preimage;
 /// Generic hash-chain glue ([`ChainLayout`]-parameterized prove/verify) shared
 /// by the per-hash `*_chain` modules.
 ///
