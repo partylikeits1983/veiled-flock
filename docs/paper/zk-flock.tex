@@ -405,8 +405,9 @@ therefore takes about 14.97 $\mu$s, giving measured single-thread overheads of
 about $836\times$ for current non-ZK Flock and $2{,}965\times$ for the
 certified ZK path at this small batch.
 
-The original Flock paper reported less than $250\times$ native overhead at the
-batch size that maximized throughput.  It benchmarked powers of two through
+The original Flock paper \cite{Flock} reported less than $250\times$ native
+overhead at the batch size that maximized throughput.  It benchmarked powers
+of two through
 $2^{18}=262{,}144$ BLAKE3 compressions and reached its peak single-thread
 throughput at $2^{16}$; the construction did not state a hard maximum batch
 size.  Those figures use much larger batches, different hardware, and an
@@ -594,7 +595,8 @@ EUROSAM 1979, LNCS 72, 216--226.
 \bibitem{Flock}
 Succinct Labs.
 \emph{Flock}.
-\url{https://github.com/succinctlabs/flock}.
+Historical paper at repository commit \texttt{73f7202}.
+\url{https://github.com/succinctlabs/flock/blob/73f7202/paper/flock-paper.pdf}.
 \end{thebibliography}
 
 \end{document}
