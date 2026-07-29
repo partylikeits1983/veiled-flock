@@ -110,32 +110,32 @@ memory bandwidth, and thermal headroom on a single chip. See
 [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) for the full set and the
 competitor comparisons.
 
-## Zero-knowledge mode (research PoC)
+## Zero-knowledge mode (implementation candidate)
 
-The `zk` cargo feature adds honest-verifier zero-knowledge on top of the
-succinct argument: STARK-style randomizer witness rows mask every PIOP
-message, and a hiding Ligerito commitment (low-half mask block + a blinder
-codeword `g` folded in as `F = message′ + c·g`) masks the opened rows, the
-internal sumcheck messages, and the final residual. The non-zk path is
-byte-identical with the feature off. Currently implemented for **BLAKE3
-batch statements** (`Blake3Setup::with_zk` + `prove_fast_zk`; the verifier
-is unchanged).
+The `zk` feature provides a certified path for exactly two registered profiles:
+a batch of 256 BLAKE3 compressions and 256 public-digest preimage statements
+whose messages are exactly 64 bytes. The construction uses field-valued PIOP
+masks, hiding Ligerito commitments, a framed random oracle, and a fresh proof
+nonce. Other batch sizes, parameters, and statement families fail closed.
+
+The scoped result is computational zero knowledge in the classical
+programmable-random-oracle model. The standalone Fiat-Shamir knowledge bound
+is 55.994 bits at `Q_H = 2^64`; the 100-bit classical deployment target remains
+conjectural. No QROM or post-quantum knowledge claim is made. See
+[`docs/paper/zk-flock.pdf`](docs/paper/zk-flock.pdf) for the construction,
+assumptions, and concrete bounds.
 
 ```sh
-# ZK evidence: rank-audit certificates + differentials + roundtrips
-cargo test --release -p flock-core  --features zk zk_audit
-cargo test --release -p flock-prover --features zk --test zk_piop_audit
-cargo test --release -p flock-prover --features zk --test zk_affinity_probe
-cargo test --release -p flock-prover --features zk prove_fast_zk_ligerito_roundtrip -- --ignored
+scripts/zk-certify.sh
 
-# zk vs baseline benchmark (BLAKE3 batch proving)
-cargo bench --features zk --bench zk_vs_baseline
+# Native, non-ZK Flock, and certified ZK-Flock on one and all CPU threads
+scripts/zk-benchmark.sh
 ```
 
-Measured on 8 threads (min of 5): zk proving costs 2.2× / 3.0× / 3.8×
-the baseline at batches 2^10 / 2^12 / 2^14, verify time is unchanged, proof
-sizes are 1.64–1.82×. Design, leakage map, machine-checked ZK certificates,
-and soundness accounting: [`docs/zk-leakage.md`](docs/zk-leakage.md).
+Set `ZK_BENCH_THREADS` or `ZK_BENCH_RUNS` to override the detected CPU count or
+the default ten trials. The benchmark reports prove and verify latency,
+throughput, encoded proof size, and ZK-to-non-ZK ratios for the certified batch
+of 256.
 
 ## Acknowledgments and third-party code
 

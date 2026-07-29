@@ -21,7 +21,9 @@
 \title{Zero Knowledge for Flock's BLAKE3 Prover:\\
 \large Construction, simulation, and concrete bounds}
 \author{Alexander Lee}
-\date{v7.1, July 2026 --- implementation and security note}
+\date{Zero-Knowledge Flock Implementation Candidate\\
+\small Work in progress; not independently reviewed\\
+July 2026}
 
 \begin{document}
 \maketitle
@@ -35,7 +37,7 @@ instances and a batch of 256 fixed-digest statements
   y_i=\operatorname{BLAKE3}(x_i),
   \qquad |x_i|=64\text{ bytes}.
 \]
-The verifier is unchanged.
+Honest and simulated transcripts are checked by the same production verifier.
 
 The proof has two algebraic steps.  First, a field-valued mask makes the PIOP
 messages independent of the witness after conditioning on the two mask values
@@ -54,7 +56,9 @@ registered profiles are computationally zero knowledge under the assumptions
 stated here.  Knowledge security is separate: the available standalone
 Fiat--Shamir reduction over $\F_{2^{128}}$ gives 55.994 bits at the same query
 budget.  The stronger 100-bit deployment target is conjectural, not a theorem
-of this paper.
+of this paper.  At the certified batch size of 256, the current unoptimized ZK
+prover is 6.78 times slower than the current non-ZK prover on twelve threads,
+and its encoded proof is 9.21 times larger.
 \end{abstract}
 
 \section{Result and scope}\label{sec:scope}
@@ -167,7 +171,7 @@ $Q$ evaluation, or $Q$-randomness stream.
 
 Fiat--Shamir, Merkle commitments, and proof of work use one oracle, but never
 the same input.  Each input begins with a role byte.  A Merkle input also binds
-the protocol version, proof nonce, commitment channel, recursion depth, node
+the wire-protocol identifier, proof nonce, commitment channel, recursion depth, node
 level, node index, payload length, and payload.  A proof-of-work input is
 \[
   \texttt{ROLE\_POW}\parallel\textit{state}\parallel\textit{nonce}.
@@ -370,12 +374,60 @@ This theorem is in the classical programmable-ROM.  It is not a QROM theorem,
 and it does not turn the ideal-oracle argument into a standard-model theorem
 for SHA-256.
 
+\section{Performance}\label{sec:performance}
+
+Table~\ref{tab:performance} compares the certified ZK path with the current
+non-ZK Flock path at their common supported batch size.  Both use the same 256
+BLAKE3 compression inputs and the same repository revision.  Measurements were
+taken on a 12-core Apple M4 Pro with 24 GB of memory, using twelve Rayon threads
+and the best of ten trials after one verified warm-up.
+
+\begin{table}[ht]
+\centering\small
+\caption{Measured cost for a batch of 256 BLAKE3 compressions.}
+\label{tab:performance}
+\begin{tabular}{@{}lrrr@{}}
+\toprule
+Metric & Non-ZK Flock & Certified ZK-Flock & ZK / non-ZK \\
+\midrule
+Prover time per batch & 4.378 ms & 29.674 ms & $6.78\times$ \\
+Prover throughput & 58,474/s & 8,627/s & $0.148\times$ \\
+Verifier time per batch & 9.257 ms & 5.306 ms & $0.57\times$ \\
+Encoded proof size & 265.7 KiB & 2,447.9 KiB & $9.21\times$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+On one thread, the same harness measured 12.506 ms for non-ZK proving and
+44.372 ms for certified ZK proving, a factor of $3.55\times$.  Native scalar
+BLAKE3 took 58.5 ns per compression on this machine.  A native batch of 256
+therefore takes about 14.97 $\mu$s, giving measured single-thread overheads of
+about $836\times$ for current non-ZK Flock and $2{,}965\times$ for the
+certified ZK path at this small batch.
+
+The original Flock paper reported less than $250\times$ native overhead at the
+batch size that maximized throughput.  It benchmarked powers of two through
+$2^{18}=262{,}144$ BLAKE3 compressions and reached its peak single-thread
+throughput at $2^{16}$; the construction did not state a hard maximum batch
+size.  Those figures use much larger batches, different hardware, and an
+earlier implementation, so they are context rather than a direct baseline for
+Table~\ref{tab:performance}.  In particular, multiplying $250$ by $6.78$ would
+not be a measured ZK-Flock overhead.
+
+The certified path is deliberately oriented toward auditability and still
+uses naive round-pair kernels.  The table measures the implementation
+candidate as it exists; it does not claim that the observed factor is an
+intrinsic cost of zero knowledge.  The matched benchmark is reproduced by:
+\begin{verbatim}
+ZK_BENCH_THREADS=12 ZK_BENCH_RUNS=10 scripts/zk-benchmark.sh
+\end{verbatim}
+
 \section{Extraction and simulation extractability}\label{sec:extract}
 
-Zero knowledge says that a proof reveals no witness.  Knowledge soundness asks
-the complementary question: can a successful prover be used to recover one?
-The two properties use different arguments and have different concrete
-bounds.
+Zero knowledge means that a proof reveals nothing about the witness beyond the
+truth of the statement.  Knowledge soundness asks the complementary question:
+can a successful prover be used to recover a witness?  The two properties use
+different arguments and have different concrete bounds.
 
 The recording oracle observes the framed leaf queries used to construct the
 witness commitment.  Given a complete valid codeword, the extractor rebuilds
@@ -397,7 +449,7 @@ routine.
 
 For simulation extractability, the simulator records
 \[
-  (\textit{statement digest},\textit{proof nonce},\textit{protocol version})
+  (\textit{statement digest},\textit{proof nonce},\textit{protocol identifier})
 \]
 for each simulated proof.  Extraction refuses every recorded prefix and is
 attempted only on a fresh one.  The implemented property is therefore
@@ -416,7 +468,14 @@ $Q_H+1$.  At $Q_H=2^{64}$ it therefore yields
   -\log_2\bigl((Q_H+1)\kappa_\Gamma\bigr)
   =55.994\ldots\text{ bits}.
 \]
-This loss is classical; it is not a post-quantum penalty.
+This 64-bit loss already occurs in the classical reduction.  It comes from
+guessing which of the adversary's $Q_H$ oracle queries carries the challenge
+used in the successful proof, which contributes the factor $Q_H+1$.  No
+quantum adversary is needed for this loss.  Thus ``classical loss'' means that
+the stated standalone knowledge theorem is already only 55.994 bits against
+classical attackers.  It does not mean that the protocol is post-quantum
+secure.  The paper gives no quantum-random-oracle reduction and therefore
+makes no knowledge-security claim against quantum adversaries.
 
 \begin{table}[ht]
 \centering\small
@@ -452,8 +511,8 @@ not repair the standalone bound.
 
 \section{Reproduction and limitations}\label{sec:implementation}
 
-The wire protocol is \texttt{flock-zk-fv-v3}; proof I/O version 6 and
-transcript schema version 5 bind the nonce, oracle frames, and field-mask
+The wire protocol is \texttt{flock-zk-fv-v3}; proof I/O format 6 and
+transcript schema 5 bind the nonce, oracle frames, and field-mask
 schema.  The two registered circuit digests are:
 \begin{verbatim}
 BLAKE3 batch:
