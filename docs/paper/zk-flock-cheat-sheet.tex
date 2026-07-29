@@ -37,8 +37,10 @@ Part & What it does \\
 \midrule
 BLAKE3 relation & States which hash computations the prover claims to know. \\
 R1CS & Rewrites those computations as algebraic constraints. \\
-PIOP & Checks the constraints through a sequence of polynomial messages. \\
-PCS & Commits to large vectors and opens only the locations the verifier asks for. \\
+Zerocheck & Checks that the multiplication constraints hold. \\
+Lincheck & Connects those constraints to one committed computation trace. \\
+Ring switching & Bridges the bit-level trace and the packed extension-field PCS. \\
+Ligerito PCS & Commits to the trace and proves selected polynomial evaluations. \\
 Merkle and RO & Bind the commitments and derive unpredictable challenges. \\
 ZK masks & Randomize every witness-dependent value the verifier can observe. \\
 Simulator & Produces the same kind of accepted view from the public statement alone. \\
@@ -90,8 +92,11 @@ The simulator may program an output only at a fresh input that the adversary
 has not already queried.
 
 \term{QROM}{Quantum Random Oracle Model.}
-The version of the ROM that permits quantum superposition queries. This paper
-does not provide a QROM proof and therefore makes no post-quantum theorem.
+The version of the ROM in which a quantum adversary may query a superposition
+of many inputs at once. QROM does not automatically turn a classical ROM proof
+into a post-quantum proof. The protocol needs a separate QROM analysis, and its
+other assumptions and concrete primitives must also withstand quantum attacks.
+This paper provides no such analysis and makes no post-quantum theorem.
 
 \term{DRBG}{Deterministic Random Bit Generator.}
 A generator that expands one unpredictable seed into many pseudorandom values.
@@ -131,15 +136,64 @@ The initial PCS codeword layer, before recursive folding. It is pronounced
 ``level zero,'' not ``ell-zero norm.'' The L0 query count and mask dimension
 control the remaining entropy of unopened leaves.
 
-\Needspace{5\baselineskip}
-\term{API}{Application Programming Interface.}
-The boundary through which one software component is allowed to use another.
-The simulator API deliberately exposes the public statement but no witness.
+\section*{The proof algorithms at a high level}
 
-\term{I/O}{Input and output.}
-The proof I/O format is the serialized representation read and written by the
-prover and verifier.
+\Needspace{9\baselineskip}
+\term{Zerocheck}{Checks the nonlinear R1CS constraints.}
+From the assignment $z$, define $a=Az$, $b=Bz$, and $c=Cz$. A valid assignment
+satisfies $a(i)b(i)=c(i)$ at every constraint position $i$. Zerocheck proceeds
+in three conceptual steps:
+\begin{enumerate}
+\item interpret the residuals $a(i)b(i)-c(i)$ as evaluations of a polynomial
+      on the Boolean cube;
+\item use verifier challenges to fold the claim one variable at a time; and
+\item check the final folded claim using evaluations of $a$, $b$, and $c$ at
+      one transcript-derived point.
+\end{enumerate}
+If any residual is nonzero, a false polynomial identity can survive the random
+folds only on a small exceptional set of challenges. Flock-ZK masks the round
+messages so those messages do not reveal the witness.
 
+\Needspace{9\baselineskip}
+\term{Lincheck}{Checks that the linear images came from the committed trace.}
+Zerocheck would be insufficient if a prover could invent unrelated vectors
+$a$, $b$, and $c$ that happen to satisfy $a\circ b=c$. Lincheck prevents this:
+\begin{enumerate}
+\item the verifier randomly combines the public matrix relations
+      $a=Az$, $b=Bz$, and $c=Cz$;
+\item the prover supplies a partial evaluation of the committed assignment
+      $z$; and
+\item the check is reduced to polynomial openings of that same committed $z$.
+\end{enumerate}
+Zerocheck handles multiplication; lincheck establishes that the multiplied
+values are the correct linear functions of the committed computation.
+
+\Needspace{7\baselineskip}
+\term{Ligero}{The code-based ancestor used by Ligerito.}
+Ligero reshapes data as a matrix, error-correcting-code encodes it, commits to
+the encoded rows, and opens a random sample of rows. A false matrix relation
+must corrupt many encoded rows, so random sampling detects it with high
+probability. It is transparent: it requires no trusted setup.
+
+\term{Ligerito}{A recursive polynomial commitment based on Ligero.}
+Ligerito uses the Ligero-style encoded-matrix check as its basic consistency
+test, combines it with partial sumcheck, and recursively reduces a large
+polynomial-evaluation claim to smaller ones. This preserves a fast,
+parallel code-based prover while making the proof substantially smaller than a
+single plain Ligero matrix opening. Flock uses a Ligerito-derived PCS with
+Reed--Solomon codes, additive NTT encoding, and Merkle commitments.
+
+\Needspace{6\baselineskip}
+\term{Ring switching}{Bridges the fields used by the circuit and the PCS.}
+The BLAKE3 computation is naturally a polynomial over bits in $\F_2$, while
+Flock packs 128 bits into one element of $\F_{2^{128}}$ for efficient
+commitment. Ring switching reduces an evaluation claim about the original
+bit-valued polynomial to linked claims about the packed extension-field
+polynomial. The linking check prevents the prover from treating a packed word
+as an unrelated field element. It changes the representation used for opening;
+it does not change the BLAKE3 relation being proved.
+
+\Needspace{8\baselineskip}
 \section*{Security-model shorthand}
 
 \term{Classical ROM}{Classical Random Oracle Model.}
@@ -170,14 +224,14 @@ Symbol & Meaning \\
 \endhead
 $\F_2$ & The field with two elements, represented by bits 0 and 1. \\
 $\F_{2^{128}}$ & A 128-bit binary extension field. Most protocol challenges and algebraic masks live here. \\
-$\F_{2^{256}}$ & A proposed wider challenge field that could improve the standalone knowledge bound; it is not implemented. \\
+$\mathcal{R}_{\rm fd}$ & The fixed-digest relation: 256 public 32-byte digests $y_i$ and secret 64-byte messages $x_i$ satisfying $y_i=\operatorname{BLAKE3}(x_i)$. \\
 $Q_H$ & The adversary's maximum number of random-oracle queries. The paper evaluates concrete bounds at $Q_H=2^{64}$. \\
 $\operatorname{Adv}_{\rm ZK}$ & The distinguisher's advantage in telling an honest proof from a simulated proof. Smaller is better. \\
 $\varepsilon_{\rm RO}$ & The separately accounted collision and binding error at the random-oracle boundary. \\
 $\kappa_\Gamma$ & The interactive knowledge-error term associated with the L0 fold access structure. \\
 $G_0,\ldots,G_5$ & The sequence of hybrid games that changes an honest proof into a simulated proof one controlled step at a time. \\
 $z$ & The packed R1CS assignment or computation trace. It contains witness and intermediate values. \\
-$A,B,C$ & The three R1CS matrices in $(Az)\circ(Bz)=Cz$. These are unrelated to author initials in the bibliography. \\
+$A,B,C$ & The three R1CS matrices in $(Az)\circ(Bz)=Cz$. \\
 $P$ & The field-valued zerocheck mask polynomial. \\
 $Q^\star$ & A public, protocol-fixed affine polynomial multiplied by $P$ in the zerocheck mask. It is not a secret mask or a commitment. \\
 $S,S_c,S_h$ & Independent mask sources for the lincheck and the first zerocheck round. \\
@@ -200,42 +254,19 @@ relation, not optional prover settings.
 \term{\texttt{ROLE\_POW}}{Random-oracle role tag for proof of work.}
 Role tags keep proof-of-work inputs separate from transcript and Merkle inputs.
 
-\term{\texttt{ZK\_BENCH\_THREADS}}{Benchmark thread-count setting.}
-It selects the Rayon thread count used by \texttt{scripts/zk-benchmark.sh}.
-
-\term{\texttt{ZK\_BENCH\_RUNS}}{Benchmark trial-count setting.}
-It selects how many measured trials the benchmark runs for each configuration.
-
-\section*{Units and publication abbreviations}
+\section*{Units}
 
 \begin{longtable}{@{}>{\bfseries}p{0.16\linewidth}p{0.76\linewidth}@{}}
 \toprule
 Short form & Meaning \\
 \midrule
-KiB & Kibibyte, exactly 1,024 bytes. \\
+KiB & Kibibyte, exactly $2^{10}=1{,}024$ bytes. Unlike KiB, kB conventionally denotes 1,000 bytes. \\
 GB & Gigabyte. In the hardware description it reports installed memory. \\
 ms & Millisecond, one thousandth of a second. \\
 $\mu$s & Microsecond, one millionth of a second. \\
 ns & Nanosecond, one billionth of a second. \\
-ACM & Association for Computing Machinery. \\
-IACR & International Association for Cryptologic Research. Its ePrint Archive hosts cryptography preprints. \\
-TCC & Theory of Cryptography Conference. \\
-LNCS & Lecture Notes in Computer Science, Springer's proceedings and monograph series. \\
-EUROSAM & The name used for the 1979 International Symposium on Symbolic and Algebraic Manipulation. \\
-M4 & Apple's processor-family name. It is a product label, not a cryptographic acronym. \\
 \bottomrule
 \end{longtable}
-
-\section*{LaTeX source-only citation keys}
-
-These identifiers appear in \texttt{zk-flock.tex} but not as acronyms in the
-rendered prose:
-
-\begin{description}
-\item[\texttt{BCS}] Ben-Sasson, Chiesa, and Spooner, the cited IOP paper.
-\item[\texttt{CFS17}] Chiesa, Forbes, and Spooner, published in 2017.
-\item[\texttt{DP24}] Diamond and Posen, first posted in 2024.
-\end{description}
 
 \section*{The two numbers readers most often confuse}
 
