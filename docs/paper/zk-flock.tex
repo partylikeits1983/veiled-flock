@@ -815,15 +815,10 @@ certificates, simulators, extractors, and error ledgers are established.
 
 \section{Implementation evidence and limitations}\label{sec:evidence}
 
-The paper is tied to an immutable
-\href{https://github.com/partylikeits1983/flock/commit/6846d8bd022a45b803a5dd01601c78cdc20034bb}{implementation commit}:
+The companion implementation and evidence suite is available here:
 \begin{center}
-\small\texttt{6846d8bd022a45b803a5dd01601c78cdc20034bb}.
+\small\url{https://github.com/partylikeits1983/flock}.
 \end{center}
-The annotated tag
-\href{https://github.com/partylikeits1983/flock/archive/refs/tags/flock-zk-candidate-paper-artifact-2026-07-29.tar.gz}{\texttt{flock-zk-candidate-paper-artifact-2026-07-29}}
-provides a downloadable source archive of that exact tree.  Later maintenance
-does not change the artifact considered here.
 
 The registered PCS parameters are $m=22$, rate $1/2$, batch log 6, and 218
 initial queries.  The benchmark-only batch circuit digest is
@@ -836,33 +831,14 @@ and the fixed-digest circuit digest is
 \end{center}
 The registry rejects any other digest or parameter tuple before proving.
 
-Table~\ref{tab:artifact-hashes} pins the evidence files by SHA-256.  The single
-reproduction command is
+The single reproduction command is
 \begin{center}
 \small\texttt{scripts/zk-paper-reproduce.sh}.
 \end{center}
 It runs the certificate suite and benchmark harness.  Performance numbers
 remain hardware-dependent; the harness prints the commit, machine, compiler,
-flags, medians, dispersion, and ranges needed to interpret a rerun.
-
-\begin{table}[ht]
-\centering\scriptsize
-\caption{SHA-256 identities of the executable evidence.}
-\label{tab:artifact-hashes}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\linewidth}
-                  >{\ttfamily\raggedright\arraybackslash}p{0.65\linewidth}@{}}
-\toprule
-File & SHA-256 \\
-\midrule
-s2\_mask\_coverage.json & 46b985d12d195045112eb7660ca5b2fe453f288c43f722cb19c7ba7de0fb03b3 \\
-s3\_opening\_functionals.json & 8cb61c5a8b33fdbaa671bf456fd87f8a3b4fb35cf0321ee8edc66adb92223c2b \\
-s3\_minentropy\_table.json & 9d2a0de06f9301b0326ef728fc923b40788813cd51fcb00f88f2818fe3390676 \\
-sim\_game\_error\_table.json & b045be9de8b7a773019d43980eb68bb5d5d8729af9bacc70b0f5852271424e30 \\
-knowledge-ledger.json & 1efce12e5fd6429f550e2d283960d0bb33a261b0ef97e94b29610f89eef6c188 \\
-zk\_benchmark\_256.json & 8ba17b9c0920c7f6356342cd5b78623f154f7440739bc69b7aebf6fb80c95c83 \\
-\bottomrule
-\end{tabular}
-\end{table}
+flags, medians, dispersion, and ranges needed to interpret a rerun.  The
+certificate artifacts are kept under \texttt{docs/artifacts} in the repository.
 
 The evidence is deliberately layered.  Lean proves reusable mathematical
 statements.  Rust constructs and replays the matrices and translations for the
