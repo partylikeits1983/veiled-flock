@@ -19,68 +19,85 @@
 \newcommand{\Adv}{\operatorname{Adv}}
 \newcommand{\rank}{\operatorname{rank}}
 
-\title{Zero Knowledge for Flock's BLAKE3 Prover:\\
-\large Construction, simulation, and concrete bounds}
+\title{Flock-ZK: A Candidate Zero-Knowledge Extension\\
+for Batched BLAKE3}
 \author{Alexander Lee}
-\date{Zero-Knowledge Flock Implementation Candidate\\
-July 2026}
+\date{July 2026}
 
 \begin{document}
 \maketitle
 
 \begin{abstract}
-The original Flock paper and implementation provide succinct proofs for
-batched BLAKE3 computation, but do not provide zero knowledge: the proof
-transcript contains deterministic functions of the witness \cite{Flock}.  This
-paper develops Flock-ZK for the same BLAKE3 circuit.  BLAKE3 is the first target
-because it is Flock's original benchmark and therefore gives a direct comparison
-between the ZK and non-ZK provers.  A companion implementation provides a Rust
-prover, verifier, simulator, and extractor, together with Lean lemmas and
-replayable evidence.
-
-The implementation registers two statements over the same batch of 256
-single-block circuit instances.  The batch statement preserves Flock's benchmark
-shape but does not bind the trace to public hash outputs.  The fixed-digest
-statement proves the relation
+We present Flock-ZK, a candidate zero-knowledge extension of Flock for two
+registered 256-instance BLAKE3 relations.  The primary relation proves that
+256 hidden 64-byte messages hash to 256 public 32-byte digests:
 \[
   y_i=\operatorname{BLAKE3}(x_i),
   \qquad |x_i|=64\text{ bytes},
   \qquad |y_i|=32\text{ bytes},
 \]
-for 256 public digests while hiding the messages.  Honest and simulated proofs
-have the same format and are accepted by the same Flock-ZK verifier.  There is
-no simulator-only verification rule; this is not the original non-ZK verifier.
+while revealing nothing about those messages beyond what the statement itself
+implies.  The second relation is a benchmark-only batch profile with no public
+digest binding.  BLAKE3 is the first target because it is Flock's original
+benchmark, has the most mature circuit in the implementation, and permits a
+direct comparison with non-ZK Flock \cite{Flock}.  A companion Rust artifact
+contains the prover, the unchanged family verifier used for both honest and
+simulated proofs, a public-statement-only simulator, an extractor, Lean lemmas,
+and replayable certificates.
 
-The proof has two algebraic steps.  First, a field-valued mask makes the PIOP
-messages independent of the witness after conditioning on the two mask values
-that are later opened.  For the registered shape, the relevant determinant has
-degree at most 720, as derived in Section~\ref{sec:s2}.  Second, an affine
-translation of the PCS blinders preserves every opened value and every
-recursive codeword.  These two translations reduce simulation to choosing the
-Fiat--Shamir challenges first, solving the dependent messages, and programming
-18 fresh random-oracle points: one point for $z$, one for $\gamma$, and sixteen
-fold challenges.  The simulator receives only the public statement.
+In the classical programmable random-oracle model, we construct the simulator
+and derive a complete indistinguishability bound.  The earlier polynomial
+commitment query-rank obligation is closed for every verifier-generated query
+set: the initial mask columns span all polynomials of degree below 512, so
+evaluation at any 218 distinct verifier points is surjective by interpolation.
+For an adversary making at most $Q_H=2^{64}$ oracle queries, the final bound is
+$\Adv_{\rm ZK}<2^{-118.499}$.  This count includes protocol and Merkle queries,
+transcript hashes, all sixty grinding sites, oracle collisions, and programming
+freshness.  The claim applies only to the registered relations and Flock-ZK
+verifier.  It does not apply to the original Flock verifier, other circuits, or
+quantum random-oracle attackers.
 
-In the classical programmable random-oracle model, the explicit algebraic and
-programming terms sum to less than $2^{-118.502}$ at a hash-query budget
-$Q_H=2^{64}$, plus a separately stated oracle-boundary term.  Thus the two
-registered profiles are computationally zero knowledge under the assumptions
-stated here.  Knowledge security is separate: one L0 term caps the available
-standalone Fiat--Shamir reduction over $\F_{2^{128}}$ at 55.994 bits for the
-same query budget, before other knowledge-error terms are added.  The stronger
-100-bit deployment target is conjectural, not a theorem of this paper.  At the
-registered batch size of 256, the current unoptimized ZK
-prover is 6.78 times slower than the current non-ZK prover on twelve threads,
-and its encoded proof is 9.21 times larger.
+Knowledge security is separate and incomplete.  One term in the available
+standalone Fiat--Shamir reduction already limits it to at most 55.994 bits at
+$Q_H=2^{64}$, before other knowledge errors are added.  At the registered batch
+size, the median twelve-thread Flock-ZK prover time is $6.48\times$ the matched
+non-ZK path, the median verifier time is $1.28\times$, and the encoded proof is
+$9.22\times$ larger.
 \end{abstract}
 
 \section{Result and scope}\label{sec:scope}
 
 \paragraph{Result in one sentence.}
-For the two parameter sets in Table~\ref{tab:profiles}, a proof generated from
-a valid witness is computationally indistinguishable from a proof generated
-from the public statement alone, in the classical programmable-random-oracle
-model.
+For the two registry entries in Table~\ref{tab:profiles}, and under the
+classical programmable-random-oracle model, the view produced from a valid
+witness is computationally indistinguishable from one produced from the public
+statement alone, with the concrete bound of Theorem~\ref{thm:zk}.
+
+Table~\ref{tab:claim-status} states the proof status before the construction is
+introduced.  In particular, the PCS query-rank condition is no longer a
+fixture-only assumption.  Lemma~\ref{lem:l0-rank} proves it for every query set
+the registered verifier can generate.  The full protocol composition remains a
+paper proof supported by executable tests, rather than one end-to-end Lean
+theorem, and the knowledge theorem remains incomplete.
+
+\begin{table}[ht]
+\centering\small
+\caption{Claim status for the registered Flock-ZK artifact.}
+\label{tab:claim-status}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.35\linewidth}
+                  >{\raggedright\arraybackslash}p{0.56\linewidth}@{}}
+\toprule
+Component & Status \\
+\midrule
+Generic affine masking lemmas & Proved in Lean \\
+Registered PIOP determinant & Replayable executable certificate \\
+PCS opening translation & Structural interpolation proof; exhaustive small-domain NTT differential test \\
+Random-oracle ledger & Complete executable count and analytic grinding tail \\
+Full simulator composition & Paper proof and tests; not end-to-end formalized \\
+Knowledge security & Incomplete; current reduction ceiling is below 56 bits \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 Flock-ZK starts with BLAKE3 for scope, not because the masking method is
 incompatible with other hashes.  A zero-knowledge theorem attaches to an exact
@@ -89,7 +106,7 @@ Flock's most mature circuit and non-ZK benchmark, so it was the smallest target
 that permits both a complete implementation and a meaningful performance
 comparison.
 
-The fixed-digest relation is
+The application relation, and the main subject of this paper, is
 \[
   \mathcal{R}_{\rm fd}
   =\left\{
@@ -98,13 +115,13 @@ The fixed-digest relation is
     \ |y_i|=32\text{ bytes}
   \right\}.
 \]
-The batch relation uses the same BLAKE3 circuit but has no externally fixed
-digest list or hash output.  Its statement therefore exposes only the batch
-shape; the prover is free to choose the batch trace.  The fixed-digest profile
-is the stronger application statement: it proves knowledge of preimages for
-public digests while hiding those preimages.  In both cases the R1CS shape,
-packing convention, PCS parameters, and circuit digest are part of the
-registered statement family.
+The benchmark-only batch relation uses the same BLAKE3 circuit but has no
+externally fixed digest list or hash output.  Its statement exposes only the
+batch shape, so the prover is free to choose the trace.  It is retained solely
+to measure the cost of adding masking to Flock's original path.  Application
+claims in the rest of the paper concern $\mathcal{R}_{\rm fd}$.  In both
+profiles the R1CS shape, packing convention, PCS parameters, and circuit digest
+are fixed by the registry.
 
 Throughout the paper, \emph{computational zero knowledge} has its standard
 classical-ROM meaning: for every classical probabilistic polynomial-time
@@ -120,14 +137,17 @@ sumcheck \cite{CFS17}.
 \centering\small
 \caption{The complete implementation scope of the ZK claim.}
 \label{tab:profiles}
-\begin{tabular}{@{}llll@{}}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.25\linewidth}
+                  >{\raggedright\arraybackslash}p{0.21\linewidth}
+                  >{\raggedright\arraybackslash}p{0.27\linewidth}
+                  >{\raggedright\arraybackslash}p{0.18\linewidth}@{}}
 \toprule
-Family & Public input & Circuit / PCS & Status \\
+Profile & Public input & Circuit / PCS & Role \\
 \midrule
-BLAKE3 batch & batch size 256
-  & $m=22$, rate $1/2$, batch log 6 & computational ZK \\
-BLAKE3 preimage & 256 digests
-  & $m=22$, rate $1/2$, batch log 6 & computational ZK \\
+Fixed-digest preimage & 256 digests
+  & $m=22$, rate $1/2$, batch log 6 & Application profile \\
+Benchmark-only batch & batch size 256
+  & $m=22$, rate $1/2$, batch log 6 & Performance control \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -349,8 +369,33 @@ where $c\in\K$ is sampled after commitment.  Let $d$ be a witness difference
 that preserves every public opening claim.  The aim is to replace $z$ by
 $z+d$ without changing anything the verifier opens.
 
+\begin{lemma}[Initial query rank]\label{lem:l0-rank}
+Let $K$ be the number of low-mask symbols in one initial encoding lane.  For
+any set $S$ of $q\le K$ distinct positions in the additive-NTT domain, the map
+from those $K$ symbols to the evaluations at $S$ has row rank $q$.  The
+registered verifier has $K=512$, samples without replacement, and opens
+$q=218$ positions.  Hence every query set it can generate has full row rank.
+\end{lemma}
+
+\begin{proof}
+The first $K$ normalized LCH novel-basis elements have degrees
+$0,1,\ldots,K-1$.  They therefore form a basis for the polynomials of degree
+less than $K$.  Given arbitrary target values at the $q$ distinct domain
+points, interpolation produces a polynomial of degree less than $q\le K$ with
+exactly those values.  Its coordinates in the novel basis give a preimage of
+the target vector.  Thus the evaluation map is surjective and its matrix has
+row rank $q$.
+\end{proof}
+
+Concretely, the registered initial domain has 1,024 positions.  The verifier's
+sampler returns exactly 218 indices from this domain without replacement, and
+the low mask contributes 512 coefficients to each of the 64 encoding lanes.
+Thus its output always satisfies $S\subseteq\{0,\ldots,1023\}$ and
+$|S|=218<512$.  The rank statement is about all such sets, not a sampled
+transcript.
+
 \begin{lemma}[Opening-preserving translation]\label{lem:pcs}
-Suppose $c\ne0$ and the initial-level query system has full row rank.  There is
+Suppose $c\ne0$ and the registered verifier produces the query set.  There is
 an affine bijection on the uniform PCS masks such that replacing $z$ by $z+d$
 leaves the queried initial rows and the entire combined vector $F$ unchanged.
 Consequently every recursive codeword, root, authentication path, sumcheck
@@ -362,7 +407,8 @@ Set
 \[
   \delta g_{\rm top}=c^{-1}d.
 \]
-Choose $\delta\mu$ to solve the queried initial-level encoding equations, and
+By Lemma~\ref{lem:l0-rank}, choose $\delta\mu$ to solve the queried
+initial-level encoding equations, and
 set
 \[
   \delta g_{\rm lo}=c^{-1}\delta\mu.
@@ -375,37 +421,134 @@ Translation by these deltas is a bijection on uniform masks, so it preserves
 their distribution.
 \end{proof}
 
-The registered verifier opens 218 initial-level positions.  Each encoded lane
-starts with 512 independent mask symbols, so the query system is strictly
-underdetermined.  There are 128 wide lanes, and the conservative rank audit
-leaves at least one independent element of $\K$ per lane in every relevant
-fresh leaf.  Hence the minimum conditional entropy used at the Merkle boundary
-is $128\cdot128=16{,}384$ bits.  No recursive entropy charge is needed because
+The registered initial leaf contains 64 pairs of field elements, one element
+from the masked message and one from its blinder.  Since $218<512$, conditioning
+on all opened positions leaves a fresh leaf with 128 independent elements of
+$\K$.  The minimum conditional entropy used at the Merkle boundary is therefore
+$128\cdot128=16{,}384$ bits.  No recursive entropy charge is needed because
 Lemma~\ref{lem:pcs} makes the recursive codewords identical.  The exceptional
-event $c=0$ has probability $2^{-128}$.  Section~\ref{sec:evidence} describes
-the executable query-rank and opening-field checks.
+event $c=0$ has probability $2^{-128}$.  The implementation rejects duplicate,
+out-of-domain, and oversized query sets, and an exhaustive small-domain test
+compares the structural certificate with the actual additive-NTT matrices for
+every admissible query subset.
 
 \section{Simulator and concrete ZK bound}\label{sec:simulation}
 
-Once Proposition~\ref{prop:coverage} and Lemma~\ref{lem:pcs} are separated, the
-simulator is direct.  It receives a public-statement capability containing the
-setup and digest list, but no witness type.  It constructs an unrelated trace,
-overwrites the public-output region, samples the terminal zerocheck values, and
-solves the dependent messages in one pass.  The patched trace is not an R1CS
-witness: running the honest prover on it is rejected.  After the simulator
-programs the required fresh oracle points, however, the Flock-ZK verifier
-accepts the simulated proof.
+The simulator is an explicit algorithm, not an existence claim.  Its input is
+the registered setup and public digest list.  Its type contains no messages or
+other witness-bearing object.  It has private coins and access to the
+programmable oracle of Assumption~\ref{ass:rom}.
 
-For $m=22$, zerocheck has $m-6=16$ multilinear fold rounds.  The simulator
-programs one oracle point for the univariate fold challenge $z$, one for the
-masking challenge $\gamma$, and one for each of the sixteen fold challenges
-$\rho_j$.  This accounts for the bound of 18 programmed points.
+\paragraph{Simulator $\mathsf{Sim}(x;\omega,\RO)$.}
+For public statement $x$ and private coins $\omega$:
+\begin{enumerate}
+\item Sample 256 unrelated 64-byte messages and compute their ordinary BLAKE3
+      trace.  Replace only the public-output words by the digests in $x$, then
+      recompute the $A$-, $B$-, and lincheck vectors from this patched
+      assignment.  This assignment satisfies the public digest opening but is
+      not an R1CS witness.
+\item From independently labelled streams, sample the 32-byte proof nonce,
+      the masks $P,S,S_c,S_h$, the commitment masks $\mu,g$, and the challenges
+      $z,\gamma,\rho_1,\ldots,\rho_{16}$.  Restart if
+      $\rho_{16}\in\{0,1\}$.
+\item Absorb the registered statement and proof nonce and emit commitments in
+      verifier order.  All commitment and Merkle calls use the framing of
+      Section~\ref{sec:ro}.
+\item Emit the zerocheck in one pass.  Sample every free round coordinate,
+      solve one coordinate of the first $C$-message so that its interpolation
+      equals the committed $C$-evaluation, and solve the last
+      $G(\infty)$ coordinate so that the terminal identity holds.  Immediately
+      before each corresponding Fiat--Shamir sample, program the current
+      framed oracle input to return $z$, then $\gamma$, then
+      $\rho_1,\ldots,\rho_{16}$.  Restart if any input was previously queried.
+\item Run lincheck, ring switching, and the Ligerito opening honestly on the
+      patched committed vector.  Perform proof of work in transcript order at
+      all sixty registered sites.  Assemble and return the ordinary Flock-ZK
+      commitment and proof.
+\end{enumerate}
+The unmodified Flock-ZK verifier accepts the output.  The implementation also
+checks the negative control: sending the same patched assignment through the
+honest prover is rejected.
 
-A hybrid argument compares two distributions through intermediate thought
-experiments.  Each row of Table~\ref{tab:games} replaces one part of the honest
-proof by its simulated counterpart.  The charge bounds the additional
-distinguishing advantage introduced by that replacement.  Adding the charges
-bounds the distance between the first and last hybrids.
+For $m=22$, zerocheck has $m-6=16$ multilinear fold rounds.  The points for
+$z$, $\gamma$, and the sixteen values $\rho_j$ are the only programmed inputs,
+which explains the constant 18.  Lincheck and the PCS challenges remain honest
+oracle samples.
+
+Let $\mathsf{View}_0(x,w)$ be the joint distribution of an honest proof and all
+oracle answers for valid witness $w$, and let $\mathsf{View}_i$ denote the
+distribution after hybrid $G_i$.  The following lemmas identify each change.
+
+\begin{lemma}[Hybrid $G_0$ to $G_1$: PIOP translation]
+Outside the zero set of the registered determinant,
+$\mathsf{View}_0$ and $\mathsf{View}_1$ are identical after translating the
+PIOP mask coins from the honest assignment to the patched assignment.  The
+translation is a bijection on each affine fibre determined by the two opened
+mask values.  The exceptional probability is at most $720/2^{128}$.
+\end{lemma}
+
+\begin{proof}
+Proposition~\ref{prop:coverage} gives every unexposed round-message direction
+after conditioning on the two exposed values.  Translation in this full image
+is a bijection on uniform mask coins, so the resulting messages have exactly
+the same distribution.  Schwartz--Zippel charges the determinant's zero set.
+\end{proof}
+
+\begin{lemma}[Hybrid $G_1$ to $G_2$: PCS translation]
+Conditioned on $c\ne0$, $\mathsf{View}_1$ and $\mathsf{View}_2$ have identical
+algebraic openings after the affine translation of $\mu$ and $g$.  The charge
+is $1/2^{128}$.
+\end{lemma}
+
+\begin{proof}
+Lemma~\ref{lem:l0-rank} makes the initial system solvable for every verifier
+query set, and Lemma~\ref{lem:pcs} gives the bijection.  It fixes the queried
+initial rows and $F$ globally, hence every recursive algebraic value.  Only
+$c=0$ prevents the translation.
+\end{proof}
+
+\begin{lemma}[Hybrid $G_2$ to $G_3$: Merkle boundary]
+Replace the hidden initial codeword leaves by their translated values and
+resample the corresponding framed oracle outputs lazily.  The two views are
+identical unless an oracle query guesses a hidden sibling input or two oracle
+outputs collide.  For total oracle budget $Q_T$, the charge is at most
+$Q_T/2^{16384}+\binom{Q_T}{2}/2^{256}$.
+\end{lemma}
+
+\begin{proof}
+Every opened initial row is fixed and every recursive codeword is identical.
+An unopened initial leaf has at least 16,384 bits of conditional entropy, so a
+union bound charges $Q_T/2^{16384}$.  Lazy sampling of a 256-bit function adds
+the stated collision term.
+\end{proof}
+
+\begin{lemma}[Hybrid $G_3$ to $G_4$: programmed challenges]
+Replace the eighteen honest Fiat--Shamir samples by eighteen uniform values
+chosen in advance and program their exact framed inputs in transcript order.
+The distributions are identical unless the adversary queried one of those
+inputs first.  The charge is at most $18Q_H/2^{256}$.
+\end{lemma}
+
+\begin{proof}
+A fresh random-oracle answer is uniform whether sampled on demand or chosen
+first and installed later.  The proof nonce makes each programmed transcript
+prefix a fresh 256-bit target.  A union bound over eighteen points and $Q_H$
+adversarial queries gives the claim.
+\end{proof}
+
+\begin{lemma}[Hybrid $G_4$ to $G_5$: public-statement simulator]
+Outside $\rho_{16}\in\{0,1\}$, the one-pass solve above produces exactly
+$\mathsf{View}_4$ using only the public statement.  The charge is
+$2/2^{128}$, and $\mathsf{View}_5$ is the output of $\mathsf{Sim}$.
+\end{lemma}
+
+\begin{proof}
+Each solved message is one affine constraint with a nonzero pivot.  Choosing
+the remaining coordinates uniformly and solving the pivot is a bijection with
+the corresponding conditioned honest distribution.  The final denominator is
+$\rho_{16}(1+\rho_{16})$, which vanishes only at zero and one.  The first-round
+Lagrange weights cannot all vanish because they sum to one.
+\end{proof}
 
 \begin{table}[ht]
 \centering\small
@@ -418,49 +561,98 @@ Hybrid & Replacement & Charge \\
 $G_0$ & honest proof & $0$ \\
 $G_1$ & translate the PIOP mask & $720/2^{128}$ \\
 $G_2$ & translate $\mu$ and $g$ & $1/2^{128}$ \\
-$G_3$ & cross the Merkle boundary & $Q_H/2^{16384}+\varepsilon_{\rm RO}$ \\
+$G_3$ & cross the Merkle boundary & $Q_T/2^{16384}+\binom{Q_T}{2}/2^{256}$ \\
 $G_4$ & program fresh challenges & $18Q_H/2^{256}$ \\
 $G_5$ & solve the terminal messages & $2/2^{128}$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-The three algebraic numerators are $720$, $1$, and $2$: the symbolic bad set,
-$c=0$, and the two rejected values of the terminal challenge.  Thus the part
-of the bound tracked explicitly by the executable ledger is
+The oracle ledger counts calls made by one simulator proof and one verification
+of that proof.  The deterministic counts come from a recording backend.  The
+geometric number of prover grinding attempts is replaced by an analytic cap,
+so the security statement does not depend on one lucky benchmark run.
+
+\begin{table}[ht]
+\centering\small
+\caption{Random-oracle ledger for one registered proof.}
+\label{tab:ro-ledger}
+\begin{tabular}{@{}lr@{}}
+\toprule
+Call class & Bound \\
+\midrule
+Simulator Merkle leaves / internal nodes & $13{,}440 / 13{,}425$ \\
+Simulator transcript and state calls & $2{,}554$ \\
+Verifier Merkle leaves / internal nodes & $1{,}975 / 5{,}915$ \\
+Verifier transcript and state calls & $2{,}579$ \\
+Verifier grinding checks & $60$ \\
+Prover grinding candidates, outside the tail event & $957{,}910$ \\
+\midrule
+Total protocol queries $Q_P$ & $997{,}858$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+There are twelve nonzero grinding sites per PCS opening and five openings.  The
+per-opening difficulties are
 \[
-  \varepsilon_{\rm explicit}(Q_H)
+  (10,9,8,7,6,5,4,4,3,2,1,1).
+\]
+For a site of difficulty $b_s$, cap its trials at
+\[
+  A_s=\left\lceil 2^{b_s}\bigl(128\ln2+\ln60\bigr)\right\rceil.
+\]
+Since $(1-2^{-b_s})^{A_s}\le e^{-A_s/2^{b_s}}$, a union bound over the sixty
+sites gives failure probability at most $2^{-128}$.  Summing the caps gives
+$957{,}910$ candidate hashes.  Together with the non-grinding calls in
+Table~\ref{tab:ro-ledger}, this gives $Q_P=997{,}858$.  Set
+\[
+  Q_T=Q_H+Q_P.
+\]
+The honest and simulated provers traverse the same transcript, commitment, and
+opening schema, so $Q_P$ bounds either experiment and its verification.
+Programming writes are not counted as queries; each programmed point is later
+read by the transcript and is already included in the 2,554 state calls.  The
+term $\binom{Q_T}{2}/2^{256}$ ranges over every pair of adversarial and protocol
+queries, including cross-collisions between them.  Domain separation prevents
+role aliasing at the input level.  The collision term covers equal 256-bit
+outputs, while the programming term separately covers an adversary that
+queries a programmed input before the simulator does.
+
+The three algebraic numerators are $720$, $1$, and $2$: the determinant bad
+set, $c=0$, and the two rejected terminal challenges.  Adding the grinding
+tail, programming, sibling, and collision terms gives the complete bound
+\[
+  \varepsilon_{\rm ZK}(Q_H)
   =
   \frac{723}{2^{128}}
   +\frac{18Q_H}{2^{256}}
-  +\frac{Q_H}{2^{16384}}.
+  +\frac{Q_T}{2^{16384}}
+  +\frac{\binom{Q_T}{2}}{2^{256}}
+  +\frac{1}{2^{128}}.
 \]
 At $Q_H=2^{64}$,
 \[
-  -\log_2\varepsilon_{\rm explicit}(2^{64})
-  =118.502\ldots.
+  -\log_2\varepsilon_{\rm ZK}(2^{64})
+  =118.499158\ldots.
 \]
-The term $\varepsilon_{\rm RO}$ denotes collision and binding error at the
-framed 256-bit oracle boundary.  It remains symbolic because a full count must
-include both adversarial queries and the protocol's own Merkle, transcript, and
-grinding queries.  It is not included in the quoted 118.502-bit figure, so that
-number is the explicit algebraic and programming ledger, not a complete
-standalone security level.
+If the Merkle, collision, and grinding-tail terms are omitted, the algebraic
+and programming component alone is 118.502 bits.  It is not the final ZK
+figure; 118.499 bits is the result after the complete classical-ROM ledger is
+included.
 
-\begin{theorem}[Scoped computational zero knowledge]\label{thm:zk}
-Assume the classical programmable random oracle of Assumption \ref{ass:rom},
-the conditioned coverage of Proposition \ref{prop:coverage}, the opening
-translation of Lemma \ref{lem:pcs}, and freshness of the programmed points.
-Then both profiles in Table \ref{tab:profiles} are computationally zero
-knowledge.  For every classical distinguisher making at most $Q_H$ oracle
-queries,
+\begin{theorem}[Registered classical-ROM ZK bound]\label{thm:zk}
+Under Assumption~\ref{ass:rom}, for either registry entry in
+Table~\ref{tab:profiles} and every classical distinguisher making at most $Q_H$
+oracle queries,
 \[
   \Adv_{\rm ZK}
-  \le \varepsilon_{\rm explicit}(Q_H)+\varepsilon_{\rm RO}.
+  \le \varepsilon_{\rm ZK}(Q_H).
 \]
 The simulator uses only the public statement, and the verifier is the same
 Flock-ZK verifier used for honest proofs.  The original non-ZK Flock verifier
-is a different protocol path and is not meant to accept these proofs.
+is a different protocol and is not covered.  In particular, at $Q_H=2^{64}$,
+$\Adv_{\rm ZK}<2^{-118.499}$.
 \end{theorem}
 
 This theorem is in the classical programmable-ROM.  It is not a QROM theorem,
@@ -469,34 +661,45 @@ for SHA-256.
 
 \section{Performance}\label{sec:performance}
 
-Table~\ref{tab:performance} compares the registered Flock-ZK path with the current
-non-ZK Flock path at their common supported batch size.  Both use the same 256
-BLAKE3 compression inputs and the same repository revision.  Measurements were
-taken on a 12-core Apple M4 Pro with 24 GB of memory, using twelve Rayon threads
-and the best of ten trials after one verified warm-up.
+Table~\ref{tab:performance} compares the registered Flock-ZK path with the
+non-ZK Flock path at their common supported batch size.  Both paths use the same
+256 BLAKE3 compression inputs and benchmark commit
+\texttt{a3da544ea88042ab14e69cdf0dc5663efa0cc1c3}.  Measurements used an Apple
+M4 Pro with 12 logical CPUs and 24 GiB of memory, Rust 1.97.1, LLVM 22.1.6,
+the optimized Cargo benchmark profile, and no \texttt{RUSTFLAGS}.  Each number
+is the median of twenty trials after one verified warm-up; the value in
+parentheses is the median absolute deviation.
 
 \begin{table}[ht]
 \centering\small
-\caption{Measured cost for a batch of 256 BLAKE3 compressions.}
+\caption{Twelve-thread cost for 256 BLAKE3 compressions.  Times are median
+(median absolute deviation).}
 \label{tab:performance}
 \begin{tabular}{@{}lrrr@{}}
 \toprule
 Metric & Non-ZK Flock & Flock-ZK & ZK / non-ZK \\
 \midrule
-Prover time per batch & 4.378 ms & 29.674 ms & $6.78\times$ \\
-Prover throughput & 58,474/s & 8,627/s & $0.148\times$ \\
-Verifier time per batch & 9.257 ms & 5.306 ms & $0.57\times$ \\
-Encoded proof size & 265.7 KiB & 2,447.9 KiB & $9.21\times$ \\
+Prover time per batch & 4.511 (0.180) ms & 29.225 (0.215) ms & $6.48\times$ \\
+Prover throughput & 56,745/s & 8,760/s & $0.154\times$ \\
+Verifier time per batch & 9.368 (0.082) ms & 11.979 (0.104) ms & $1.28\times$ \\
+Encoded proof size & 265.67 KiB & 2,448.98 KiB & $9.22\times$ \\
+Peak incremental heap & 2.70 MiB & 9.02 MiB & $3.34\times$ \\
 \bottomrule
 \end{tabular}
 \end{table}
 
-On one thread, the same harness measured 12.506 ms for non-ZK proving and
-44.372 ms for Flock-ZK proving, a factor of $3.55\times$.  Native scalar
-BLAKE3 took 58.5 ns per compression on this machine.  A native batch of 256
-therefore takes about 14.97 $\mu$s, giving measured single-thread overheads of
-about $836\times$ for current non-ZK Flock and $2{,}965\times$ for the
-Flock-ZK path at this small batch.
+The prover ranges were 4.255--4.870 ms for non-ZK Flock and 28.254--29.770 ms
+for Flock-ZK.  The verifier ranges were 9.086--9.520 ms and 11.825--12.559 ms.
+On one thread, median proving took 12.121 ms and 43.998 ms respectively, a
+factor of $3.63\times$.  The benchmark reports incremental live heap allocated
+by the measured prover, not whole-process resident memory.
+
+Both verifier measurements run in the same dedicated serial worker pool.  This
+constraint matters: allowing only the Flock-ZK wrapper to use the global Rayon
+pool can make it appear faster than non-ZK verification even though the paths
+are not being measured under the same concurrency policy.  Under the matched
+policy, Flock-ZK verification is $1.28\times$ slower.  Its additional work
+comes from the masked transcript, framed commitments, and blinded PCS opening.
 
 The original Flock paper \cite{Flock} reported less than $250\times$ native
 overhead at the batch size that maximized throughput.  It benchmarked powers
@@ -505,14 +708,13 @@ $2^{18}=262{,}144$ BLAKE3 compressions and reached its peak single-thread
 throughput at $2^{16}$; the construction did not state a hard maximum batch
 size.  Those figures use much larger batches, different hardware, and an
 earlier implementation, so they are context rather than a direct baseline for
-Table~\ref{tab:performance}.  In particular, multiplying $250$ by $6.78$ would
+Table~\ref{tab:performance}.  In particular, multiplying $250$ by $6.48$ would
 not be a measured Flock-ZK overhead.
 
-The Flock-ZK path is deliberately oriented toward auditability and still
-uses naive round-pair kernels.  The table measures the implementation
-candidate as it exists; it does not claim that the observed factor is an
-intrinsic cost of zero knowledge.  The implementation companion documents the
-matched benchmark procedure.
+The table measures the implementation candidate as it exists; it does not claim
+that the observed factor is an intrinsic cost of zero knowledge.  The pinned
+benchmark artifact contains all twenty samples' summary statistics, compiler
+identity, flags, hardware, and the exact commit for both paths.
 
 \section{Extraction and simulation extractability}\label{sec:extract}
 
@@ -613,13 +815,54 @@ certificates, simulators, extractors, and error ledgers are established.
 
 \section{Implementation evidence and limitations}\label{sec:evidence}
 
-The paper is accompanied by a
-\href{https://github.com/partylikeits1983/flock/tree/ajl/zk-flock}{Flock-ZK
-implementation and evidence suite}.  The repository documentation records
-exact wire identifiers, circuit digests, schema numbers, artifact paths, build
-commands, and benchmark commands.  Those details are kept out of the
-mathematical argument because they change with implementation maintenance,
-while the claims below depend on their audited contents.
+The paper is tied to an immutable
+\href{https://github.com/partylikeits1983/flock/commit/6846d8bd022a45b803a5dd01601c78cdc20034bb}{implementation commit}:
+\begin{center}
+\small\texttt{6846d8bd022a45b803a5dd01601c78cdc20034bb}.
+\end{center}
+The annotated tag
+\href{https://github.com/partylikeits1983/flock/archive/refs/tags/flock-zk-candidate-paper-artifact-2026-07-29.tar.gz}{\texttt{flock-zk-candidate-paper-artifact-2026-07-29}}
+provides a downloadable source archive of that exact tree.  Later maintenance
+does not change the artifact considered here.
+
+The registered PCS parameters are $m=22$, rate $1/2$, batch log 6, and 218
+initial queries.  The benchmark-only batch circuit digest is
+\begin{center}
+\small\texttt{4a398ca2e73d9d1f70611bd6a2a408b0404aabddcf6cf75c29cfa412f72f8423},
+\end{center}
+and the fixed-digest circuit digest is
+\begin{center}
+\small\texttt{e71bde2b053b1b697412d2d30c2e2e57f7b5f1822484fcbcc15c89ea202890d5}.
+\end{center}
+The registry rejects any other digest or parameter tuple before proving.
+
+Table~\ref{tab:artifact-hashes} pins the evidence files by SHA-256.  The single
+reproduction command is
+\begin{center}
+\small\texttt{scripts/zk-paper-reproduce.sh}.
+\end{center}
+It runs the certificate suite and benchmark harness.  Performance numbers
+remain hardware-dependent; the harness prints the commit, machine, compiler,
+flags, medians, dispersion, and ranges needed to interpret a rerun.
+
+\begin{table}[ht]
+\centering\scriptsize
+\caption{SHA-256 identities of the executable evidence.}
+\label{tab:artifact-hashes}
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.27\linewidth}
+                  >{\ttfamily\raggedright\arraybackslash}p{0.65\linewidth}@{}}
+\toprule
+File & SHA-256 \\
+\midrule
+s2\_mask\_coverage.json & 46b985d12d195045112eb7660ca5b2fe453f288c43f722cb19c7ba7de0fb03b3 \\
+s3\_opening\_functionals.json & 8cb61c5a8b33fdbaa671bf456fd87f8a3b4fb35cf0321ee8edc66adb92223c2b \\
+s3\_minentropy\_table.json & 9d2a0de06f9301b0326ef728fc923b40788813cd51fcb00f88f2818fe3390676 \\
+sim\_game\_error\_table.json & b045be9de8b7a773019d43980eb68bb5d5d8729af9bacc70b0f5852271424e30 \\
+knowledge-ledger.json & 1efce12e5fd6429f550e2d283960d0bb33a261b0ef97e94b29610f89eef6c188 \\
+zk\_benchmark\_256.json & 8ba17b9c0920c7f6356342cd5b78623f154f7440739bc69b7aebf6fb80c95c83 \\
+\bottomrule
+\end{tabular}
+\end{table}
 
 The evidence is deliberately layered.  Lean proves reusable mathematical
 statements.  Rust constructs and replays the matrices and translations for the
@@ -647,8 +890,11 @@ Registered PIOP coverage
   & Symbolic Rust matrix, nonzero minor, and replayed degree vector
   & Protocol-specific certificate, not an end-to-end Lean theorem \\
 PCS opening translation
-  & Paper lemma and exact Rust translator tests
-  & Registered fixture checked; general verifier-derived query proof remains open \\
+  & Structural interpolation lemma, exact Rust translator, and NTT differential tests
+  & Proved for every distinct registered query set with $q\le512$ \\
+Random-oracle ledger
+  & Recording backend, framed-call classifier, and analytic grinding cap
+  & Complete for the registered profile at the stated query budget \\
 Full ZK composition
   & Simulator tests, hybrid ledger, and paper argument
   & Classical-ROM theorem under the stated assumptions; not one Lean theorem \\
@@ -673,21 +919,18 @@ does not replace cryptographic review.  The remaining limits are:
 completed 100-bit theorem.
 \item The executable decoder validates candidates but does not implement
 general arbitrary-error Reed--Solomon decoding.
-\item The exact PCS translator is exercised on a fixture; a standalone proof
-for every query set derived by the Flock-ZK verifier remains a review
-obligation.
 \item Only the two exact registry entries are enabled.  Other Flock statement
 families remain non-ZK.
 \item Side-channel resistance, recursive composition, and same-prefix
 simulation extractability are out of scope.
 \end{itemize}
 
-Within these limits, the conclusion is precise: for the registered BLAKE3
-batch and fixed-digest relations, Flock now has a public-statement-only
-simulator whose proofs are accepted by the Flock-ZK verifier, together with
-an explicit distribution argument for every witness-dependent part of the
-transcript.  That is the sense in which these Flock profiles are zero
-knowledge.
+Within these limits, the conclusion is precise.  Flock-ZK is a credible,
+implemented, narrowly scoped ZK candidate for the registered BLAKE3 relations.
+It has a public-statement-only simulator whose proofs are accepted by the
+ordinary Flock-ZK verifier, a structural proof of PCS query solvability, and a
+complete classical-ROM error ledger.  It is not a blanket result that Flock,
+arbitrary Flock circuits, or the original Flock verifier are zero knowledge.
 
 \begin{thebibliography}{9}
 \bibitem{Flock}

@@ -14,7 +14,7 @@
 \newcommand{\F}{\mathbb{F}}
 
 \title{Reader's Cheat Sheet for\\
-\large Zero Knowledge for Flock's BLAKE3 Prover}
+\large Flock-ZK: A Candidate Zero-Knowledge Extension for Batched BLAKE3}
 \author{Companion to the implementation-candidate paper}
 \date{}
 
@@ -83,8 +83,9 @@ security analysis depends on the random-oracle model.
 
 \term{RO}{Random oracle.}
 An idealized random function that returns a consistent, independent random
-output for each new input. The symbol $\varepsilon_{\rm RO}$ denotes error
-terms associated with this boundary.
+output for each new input. The paper counts the protocol's oracle calls and
+includes programming, collision, Merkle-sibling, and grinding-tail terms in its
+final bound.
 
 \term{ROM}{Random Oracle Model.}
 The security model in which the hash function is analyzed as a random oracle.
@@ -226,8 +227,10 @@ $\F_2$ & The field with two elements, represented by bits 0 and 1. \\
 $\F_{2^{128}}$ & A 128-bit binary extension field. Most protocol challenges and algebraic masks live here. \\
 $\mathcal{R}_{\rm fd}$ & The fixed-digest relation: 256 public 32-byte digests $y_i$ and secret 64-byte messages $x_i$ satisfying $y_i=\operatorname{BLAKE3}(x_i)$. \\
 $Q_H$ & The adversary's maximum number of random-oracle queries. The paper evaluates concrete bounds at $Q_H=2^{64}$. \\
+$Q_P$ & The protocol's oracle-query bound for one simulated proof and verification, including the analytic grinding cap. The registered value is 997,858. \\
+$Q_T$ & The total oracle budget $Q_H+Q_P$ used in collision and Merkle-boundary terms. \\
 $\operatorname{Adv}_{\rm ZK}$ & The distinguisher's advantage in telling an honest proof from a simulated proof. Smaller is better. \\
-$\varepsilon_{\rm RO}$ & The separately accounted collision and binding error at the random-oracle boundary. \\
+$\varepsilon_{\rm ZK}$ & The complete classical-ROM distinguishing bound, including algebraic, programming, Merkle, collision, and grinding-tail terms. \\
 $\kappa_\Gamma$ & The interactive knowledge-error term associated with the L0 fold access structure. \\
 $G_0,\ldots,G_5$ & The sequence of hybrid games that changes an honest proof into a simulated proof one controlled step at a time. \\
 $z$ & The packed R1CS assignment or computation trace. It contains witness and intermediate values. \\
@@ -269,6 +272,7 @@ ns & Nanosecond, one billionth of a second. \\
 \end{longtable}
 
 \section*{The two numbers readers most often confuse}
+\enlargethispage{2\baselineskip}
 
 \begin{center}
 \begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.25\linewidth}
@@ -277,7 +281,7 @@ ns & Nanosecond, one billionth of a second. \\
 \toprule
 Property & Paper's figure & What it means \\
 \midrule
-Zero knowledge & Explicit ledger: about 118.5 bits. The full bound also contains $\varepsilon_{\rm RO}$. & Difficulty of distinguishing an honest proof from a simulated proof in the classical programmable ROM. \\
+Zero knowledge & Complete registered bound: 118.499 bits at $Q_H=2^{64}$. & Difficulty of distinguishing an honest proof from a simulated proof in the classical programmable ROM. \\
 Knowledge security & Reduction ceiling: at most 55.994 bits before other terms. & Strength of the available theorem that an accepting prover knows a witness. This is not the ZK privacy bound. \\
 \bottomrule
 \end{tabular}

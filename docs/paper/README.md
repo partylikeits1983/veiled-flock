@@ -1,4 +1,4 @@
-# Zero Knowledge for Flock's BLAKE3 Prover
+# Flock-ZK: A Candidate Zero-Knowledge Extension for Batched BLAKE3
 
 The active paper is `zk-flock.tex`. It states the covered relation and
 zero-knowledge experiment on the first page, presents the proof as two
@@ -14,9 +14,9 @@ result is **computational zero knowledge in the classical programmable-random-
 oracle model**, subject to the paper's explicit assumptions. The first profile
 has no public digest binding and preserves the benchmark circuit shape. The
 second binds 256 secret 64-byte messages to 256 public 32-byte BLAKE3 digests.
-At `Q = 2^64` oracle
-queries, the dominant ZK term is `720 / 2^128` (118.508 bits) and the explicit
-listed union bound is 118.502 bits.
+At `Q = 2^64` adversarial oracle queries, the complete classical-ROM bound is
+118.499 bits. It includes the protocol and Merkle calls, transcript hashes,
+grinding tail, oracle collisions, and programming freshness.
 
 Knowledge is separate. One term caps the available standalone Fiat-Shamir
 reduction over `F2^128` at 55.994 bits for `Q = 2^64`, before other
@@ -25,10 +25,11 @@ labelled **100-bit conjectured classical knowledge security**; it is not a
 100-bit theorem of the paper. This loss is present in the classical reduction;
 the paper has no QROM reduction and makes no post-quantum knowledge claim.
 
-At the certified batch size of 256, the current unoptimized ZK prover is 6.78
-times slower than the current non-ZK prover on twelve threads and 3.55 times
-slower on one thread. Its encoded proof is 9.21 times larger. The paper keeps
-these matched measurements separate from the original Flock paper's
+At the registered batch size of 256, the median ZK prover is 6.48 times slower
+than the matched non-ZK Flock path on twelve threads and 3.63 times slower on
+one thread. Its median verifier is 1.28 times slower, its encoded proof is 9.22
+times larger, and its measured incremental heap is 3.34 times larger. The paper
+keeps these matched measurements separate from the original Flock paper's
 large-batch, less-than-250-times-native headline.
 
 ## Registered implementation shape
