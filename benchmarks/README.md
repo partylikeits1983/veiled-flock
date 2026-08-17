@@ -12,4 +12,3 @@ Required comparisons:
 2. transparent compiler plumbing;
 3. interactive zk-FLOCK with VEIL; and
 4. Fiat-Shamir zk-FLOCK, when implemented.
-
