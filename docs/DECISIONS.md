@@ -1,37 +1,47 @@
 # Decision log
 
-## D001 — Integration repository, not an immediate FLOCK fork
+## D001 — Fork the working zk-FLOCK branch
 
-Keep the experiment separate and use a pinned local FLOCK dependency. This makes
-baseline comparisons straightforward and prevents experimental proof formats from
-being mistaken for upstream FLOCK. If invasive verifier refactoring becomes
-necessary, maintain a narrow patch queue and record it here.
+The experiment is a FLOCK fork rather than a thin integration repository. This
+keeps the fixed-digest relation, programmable oracle, field implementation, and
+witness generator available in one build while the new VEIL path remains behind
+the `veil` feature.
 
-## D002 — `F128` is the VEIL protocol field
+## D002 — Use `F128` directly
 
-FLOCK's algebraic transcript already uses `F128`. Using it directly avoids a
-128-fold exposed-message expansion. The concrete two-adic VEIL implementation is
-therefore reference material rather than a reusable backend.
+FLOCK's algebraic values already live in `GF(2^128)`. The new crate uses an
+additive-domain Reed--Solomon code because binary extension fields have no
+two-adic multiplicative subgroup. Upstream VEIL Rust is reference material, not
+a reusable backend for this field.
 
-## D003 — First relation is fixed-digest BLAKE3-64 × 256
+## D003 — Ship a direct block-R1CS reference before a succinct compiler
 
-This matches the requested batch-hash privacy goal and reuses relation-binding
-ideas from the old `zk-flock` branch. Hash chains remain a later profile.
+The first working mode proves FLOCK's Boolean R1CS directly. It is larger than
+FLOCK's normal proof but isolates the new code, Hadamard, dot-product, and
+simulation machinery. The optimized follow-up will compile the existing
+zerocheck/lincheck/Ligerito verifier transcript.
 
-## D004 — Secure/UDR before Fast/Johnson-OOD
+## D004 — Keep sparse binary matrices native
 
-The first protocol-aligned implementation uses the simpler, conservative profile.
-Fast mode is enabled only after its proximity/binding behavior is captured in the
-compiler assumptions and simulator.
+Generic `F128` linear combinations expanded the BLAKE3 matrices beyond 10 GB.
+The specialized compiler computes transpose challenges directly from the sparse
+column lists and uses FLOCK's fast generator for `z`, `A z`, and `B z`.
 
-## D005 — Terminal and ring-switch values are exposed initially
+## D005 — Make VEIL's six padding values private
 
-Mask and constrain the final Ligerito residual and ring-switch partial evaluations
-through VEIL's intermediate compiler. An extra recursive commitment does not remove
-the existence of a terminal residual.
+Sending `(r,s,rs,r+1,t,(r+1)t)` in the clear would reveal the unpadded Hadamard
+claims after subtraction. They are appended to the privately committed witness;
+the Hadamard proof enforces the two products and the dot link enforces
+`r + (r+1) = 1`.
 
-## D006 — Interactive theorem target before Fiat-Shamir
+## D006 — Use framed programmable-RO simulation
 
-Build and test the statement-only simulator for the public-coin protocol first.
-Fiat-Shamir gets a separate proof format, simulator, and security label.
+The simulator samples the hidden transcript distribution and programs fresh
+Merkle points. It does not force degenerate Fiat--Shamir challenges and does not
+claim to forge a native-SHA proof. Real and simulated transcripts use the same
+algebraic verifier with different random-oracle backends.
 
+## D007 — Label the rate-1/2 profile experimental
+
+The 128-query rate-1/2 profile is an iteration profile with roughly a 53-bit
+basic proximity term. A reviewed 100-bit parameter registration is future work.

@@ -163,6 +163,31 @@ pub(crate) fn build_block_r1cs_with_matrices(
         n_blocks_log >= 3,
         "lincheck needs n_outer ≥ 8 — pick n_blocks_log ≥ 3"
     );
+    build_block_r1cs_with_matrices_any_outer(
+        n_blocks_log,
+        k_log,
+        k_skip,
+        useful_bits,
+        a_0,
+        b_0,
+        const_pin,
+    )
+}
+
+/// Build the algebraic block relation without the `n_outer >= 8` floor that
+/// FLOCK's lincheck requires.  This is used by the direct VEIL compiler,
+/// which proves the same matrices through its own code-based argument and
+/// therefore supports a one-item experimental batch.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn build_block_r1cs_with_matrices_any_outer(
+    n_blocks_log: usize,
+    k_log: usize,
+    k_skip: usize,
+    useful_bits: usize,
+    a_0: SparseBinaryMatrix,
+    b_0: SparseBinaryMatrix,
+    const_pin: Option<usize>,
+) -> BlockR1cs {
     let k = 1usize << k_log;
     assert!(
         useful_bits <= k,

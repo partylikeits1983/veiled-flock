@@ -1,97 +1,87 @@
-# Architecture
+# Architecture of the working experiment
 
-## Protocol composition
+## What is implemented
 
-```text
-secret preimages
-      |
-FLOCK witness + R1CS
-      |
-      +-- witness MLE --> stacked F128 ZK PCS --> shielded oracle view
-      |
-      +-- zerocheck / lincheck / ring switch / Ligerito messages --> v
-                                                                    |
-uniform h ----------------------------------------------------------+
-                                                                    v
-                                                               v' = v + h
-                                                                    |
-                   VEIL ZK R1CS eval proves C(v' - h) = 0 ---------+
-                                                                    |
-                     public statement + shielded view + v' + inner proof
-```
-
-The verifier never receives `v` and does not rerun the original decision directly
-on unmasked messages.
-
-## Field choice
-
-The integration treats FLOCK's packed field `F128` as VEIL's protocol field. This
-avoids expanding one exposed message into 128 separate base-field symbols and
-matches the field in which zerocheck, lincheck, and ring-switch messages already
-live.
-
-VEIL's abstract protocols are field-generic, but its available Rust implementation
-uses a two-adic prime field. `veil-f128` therefore implements the required
-additive-NTT code and protocol kernels directly. It is a port of the construction,
-not a type alias around the existing implementation.
-
-## Repository boundaries
-
-### `veil-f128`
-
-Owns code-theoretic primitives, ZK dot product, ZK Hadamard, ZK R1CS evaluation,
-query-budget types, and their simulators. It must not depend on BLAKE3 statement
-semantics.
-
-### `zk-flock-veil`
-
-Owns the FLOCK adapter: public statement encoding, typed transcript events,
-generic verifier contexts, stacked PCS integration, and compiled prove/verify
-APIs. It is the only crate that depends directly on FLOCK internals.
-
-### `zk-flock-sim`
-
-Owns end-to-end simulation and distinguishing/negative-control experiments. Its
-normal dependency graph must not include witness-generation or real-prover entry
-points. Test-only attack fixtures live behind an explicit feature.
-
-### `zk-flock-cli`
-
-Owns reproducibility commands. It contains no protocol logic.
-
-## Transcript ownership
-
-Every event is exactly one of:
-
-- **Public:** statement, profile, circuit digest, and deterministic metadata.
-- **Shielded:** commitment/oracle data covered by the partially ZK PCS simulator.
-- **Exposed:** witness-dependent `F128` values masked by the intermediate compiler.
-- **Derived:** verifier challenges deterministically derived from prior events or
-  sampled as public verifier coins.
-
-No catch-all byte writes are allowed. Serialization must require a typed event and
-classification.
-
-For the first experiment, ring-switch partial evaluations and Ligerito's terminal
-residual are exposed. This may increase the inner decision circuit, but it gives a
-clear simulation story without changing recursion semantics. A later optimized
-design may absorb them into the shielded PCS only after proving the corresponding
-simulator and binding properties.
-
-## Public API target
-
-The eventual top-level API should distinguish security models in its types:
+The current end-to-end mode proves the fixed-digest statement
 
 ```text
-prove_interactive(params, statement, witness, verifier_coins, prover_coins)
-verify_interactive(params, statement, proof, verifier_coins)
-simulate_interactive(params, statement, verifier_coins, simulator_coins)
-
-prove_fs(params, statement, witness, prover_coins)
-verify_fs(params, statement, proof)
-simulate_fs_rom(params, statement, simulator_coins, programmable_oracle)
+public:  BLAKE3 digests y_0, ..., y_(b-1)
+private: 64-byte messages x_0, ..., x_(b-1)
+claim:   BLAKE3(x_i) = y_i for every i
 ```
 
-The transparent/debug inner system must use a different proof/profile type so it
-cannot be confused with a zero-knowledge proof.
+It reuses FLOCK's pinned BLAKE3 Boolean R1CS and optimized witness generator,
+but replaces FLOCK's zerocheck/lincheck/Ligerito proof with a direct native
+`F128` VEIL proof. This is the memory-linear reference implementation. Compiling
+FLOCK's existing succinct verifier transcript through VEIL is the next
+performance phase, not something the current artifact claims to have done.
 
+## Proof flow
+
+```text
+64-byte messages
+      |
+FLOCK BLAKE3 generator -> Boolean z, a = A z, b = B z
+      |
+      +-- Hadamard vector 1: [a | z | r | r+1]
+      +-- Hadamard vector 2: [b | z | s | t]
+      +-- Hadamard vector 3: [z | z | rs | (r+1)t]
+      |                      proves R1CS and z^2 = z
+      |
+      +-- extended witness: [z | r | s | rs | r+1 | t | (r+1)t]
+                             (the six padding values remain private)
+      |
+VEIL Hadamard proof + VEIL dot-product proof
+      |
+public digest equalities, constant pin, and A/B transpose links are batched
+into one random linear dot claim against the same extended witness commitment
+```
+
+The two commitments use an additive-domain Reed--Solomon code over
+`GF(2^128)`. Each message has 128 random padding symbols, the verifier opens 128
+positions, and Merkle leaves/nodes are domain-separated by channel and a fresh
+per-proof nonce.
+
+## Why the specialized compiler exists
+
+FLOCK's substituted BLAKE3 matrices contain roughly 21 million nonzero column
+indices. Expanding every index into a generic `(usize, F128)` linear-combination
+term exceeded 10 GB for the smallest padded experiment. The specialized compiler
+computes `A^T q` and `B^T q` directly from the sparse binary matrices, so proof
+memory is linear in the 16,384 witness slots plus the existing matrix storage.
+
+## Native characteristic-two VEIL crate
+
+`crates/veil-f128` contains:
+
+- affine additive LCH NTTs over `F128`;
+- the base and square Reed--Solomon codes and reduction map;
+- framed row-Merkle commitments;
+- VEIL dot-product and Hadamard protocols;
+- a generic arithmetic-constraint compiler used by unit tests;
+- the specialized FLOCK block-R1CS compiler; and
+- the statement-only programmable-RO simulator.
+
+Upstream VEIL's Rust implementation is two-adic/prime-field-specific. This crate
+ports the protocol structure to an additive code; it does not pretend the
+KoalaBear implementation can be instantiated over a binary field.
+
+## Simulator
+
+The simulator receives the public matrices, public equalities, public statement,
+simulator coins, and a programmable random oracle. It never receives `z`, a
+message, or a preimage.
+
+It samples random commitment roots, algebraic messages from their VEIL masking
+distributions, and queried code rows conditioned on the two verifier equations.
+It then programs only fresh framed Merkle leaf/node points so those rows open to
+the already sampled roots. The ordinary algebraic verifier accepts through the
+external oracle. Native SHA-256 rejects the same transcript, as required: a ROM
+simulator is not a real-hash proof forgery.
+
+## User-facing entry points
+
+- `VeiledBlake3Setup::{prove,verify}`: real native-SHA proof path.
+- `VeiledBlake3Setup::{simulate,verify_with_oracle}`: executable ROM game.
+- `veiled_flock demo`: prove and verify one 64-byte BLAKE3 preimage.
+- `veiled_flock prove/verify`: file-based proof bundle workflow.

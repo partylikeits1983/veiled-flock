@@ -33,6 +33,8 @@ pub mod sim_oracle;
 pub mod sim_seal;
 #[cfg(feature = "zk")]
 pub mod transcript_schema;
+#[cfg(feature = "veil")]
+pub mod veiled_preimage;
 #[cfg(feature = "zk")]
 pub mod zk_audit_support;
 #[cfg(feature = "zk")]

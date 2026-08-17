@@ -867,6 +867,22 @@ pub fn build_block_r1cs_pinned(n_blocks_log: usize, pinning: ParamPinning) -> Bl
     )
 }
 
+/// The same pinned Boolean relation as [`build_block_r1cs_pinned`], without
+/// FLOCK's `n_outer >= 8` lincheck floor.  Intended only for the direct VEIL
+/// experiment, whose inner proof does not invoke lincheck.
+pub fn build_block_r1cs_veil_pinned(n_blocks_log: usize, pinning: ParamPinning) -> BlockR1cs {
+    let (a_0, b_0) = build_matrices_zk_pinned(None, pinning);
+    super::common::build_block_r1cs_with_matrices_any_outer(
+        n_blocks_log,
+        K_LOG,
+        K_SKIP,
+        USEFUL_BITS,
+        a_0,
+        b_0,
+        Some(Z_CONST_POS),
+    )
+}
+
 // ---------------------------------------------------------------------------
 // Lincheck circuit walker — mirrors `build_matrices`. Same structure as
 // `blake3::Blake3LincheckCircuit` but uses this module's I/O-aligned slot

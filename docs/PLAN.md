@@ -1,270 +1,108 @@
-# End-to-end experimental plan
+# zk-FLOCK with VEIL: implementation plan and status
 
-## Objective
+## Current milestone: working end-to-end reference
 
-Build a reproducible experimental zk-FLOCK proving 256 fixed-digest BLAKE3
-evaluations with secret 64-byte preimages. Use VEIL's two relevant compilations:
+The repository now has an experimental proof mode that:
 
-1. the final compilation, via a partially zero-knowledge multilinear PCS; and
-2. the intermediate compilation, by masking exposed messages and proving the
-   shifted verifier decision circuit with ZK R1CS evaluation.
+- proves a FLOCK pinned BLAKE3-64 Boolean R1CS over `GF(2^128)`;
+- binds a public digest and hides the 64-byte preimage;
+- uses native characteristic-two VEIL dot-product and Hadamard protocols;
+- uses additive-domain base and square Reed--Solomon codes;
+- proves Booleanity, R1CS satisfaction, constant pins, and public outputs;
+- serializes and verifies through a CLI;
+- rejects changed statements and mutated proofs; and
+- includes a statement-only programmable-RO simulator accepted by the same
+  algebraic verifier.
 
-The protocol must ship with an explicit statement-only simulator. The initial
-security claim is for the interactive, non-adaptive-query model. A Fiat-Shamir
-artifact may be produced afterward, but its claim must be stated separately.
+The working release command is:
 
-Planning estimates below are for one engineer already familiar with FLOCK. The
-cryptographic proof work can dominate them.
-
-## Work graph
-
-```text
-P0 statement + baseline
-        |
-P1 transcript IR + audit
-      /   \
-P2 F128 code   P3 generic verifier circuit
-      \         /
-       P4 stacked ZK PCS
-             |
-       P5 VEIL inner protocols
-             |
-       P6 compiled interactive proof
-             |
-       P7 simulator + attacks
-             |
-       P8 Fiat-Shamir experiment
-             |
-       P9 benchmark + report
+```sh
+cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
 ```
 
-P2 and P3 can proceed independently after the transcript schema is frozen.
+The current proof is a direct proof of FLOCK's R1CS, not yet a VEIL compilation
+of FLOCK's succinct zerocheck/lincheck/Ligerito verifier.
 
-## P0 — Freeze the statement and baseline
+## Completed phases
 
-**Deliverables**
+### 1. Fixed statement and native relation
 
-- Port the fixed-digest, 64-byte BLAKE3 relation builder from the old `zk-flock`
-  branch without porting its masking construction.
-- Define canonical public input encoding: profile ID, batch size, circuit digest,
-  and the ordered 256-digest vector.
-- Bind that encoding to the initial transcript before any commitment or challenge.
-- Add deterministic witness-generation and baseline prove/verify fixtures.
-- Record current FLOCK proof time, verification time, proof size, peak memory, and
-  transcript byte count on tiny, 256, and at least one large-batch profile.
+- Reused the `RootHash64` parameter pinning and fixed-digest output layout.
+- Added a one-item relation constructor that bypasses only the normal lincheck
+  batch floor; the matrices and statement digest remain the FLOCK relation.
+- Reused FLOCK's optimized packed generator for `z`, `A z`, and `B z`.
 
-**Exit gate:** changing any digest, order, profile ID, or circuit digest makes
-verification fail; baseline measurements are reproducible.
+### 2. Characteristic-two VEIL kernel
 
-## P1 — Introduce a typed transcript IR and complete the leak audit
+- Implemented affine additive LCH NTTs.
+- Implemented a disjoint-coset RS code, product code, decoding, and reduction.
+- Implemented row-Merkle commitments with nonce/role/channel framing.
+- Implemented VEIL ZK dot-product and Hadamard protocols.
+- Implemented a generic arithmetic constraint compiler for small circuits.
 
-Implement one transcript event stream shared by proving, verification, constraint
-generation, mask counting, and simulation. Each event carries:
+### 3. Memory-linear FLOCK compiler
 
-- protocol phase and round;
-- type and length;
-- public, shielded, or exposed classification;
-- whether it is absorbed before a challenge;
-- query-budget charge; and
-- simulator owner.
+- Combined R1CS and Booleanity into one Hadamard instance.
+- Kept the six VEIL multiplication-padding values private.
+- Batched `A^T q`, `B^T q`, padding links, constant pins, and digest equalities
+  into one dot proof against the same extended witness.
+- Avoided the failed >10 GB generic-matrix expansion.
 
-Instrument current FLOCK and reconcile every serialized value against
-[TRANSCRIPT.md](TRANSCRIPT.md). Do not estimate `s`; compute it from the same
-generic verifier execution used by the compiled protocol.
+### 4. Simulator and executable artifact
 
-**Exit gate:** every proof byte and verifier challenge has one schema entry, and
-the audit fails on an unclassified event or a length mismatch.
+- Added a straight-line statement-only simulator.
+- Programmed only fresh framed Merkle leaf/node points.
+- Verified simulated proofs through the shared programmable oracle.
+- Confirmed simulated proofs fail under native SHA-256.
+- Added a CLI and canonical proof bundle.
 
-## P2 — Implement the `F128` ZK-code kernel
+## Hardening still required before any production claim
 
-Build the code layer needed by VEIL using FLOCK's additive-NTT Reed–Solomon code.
-The message layout is:
+1. Write or cite full proofs for the additive code's MDS projection,
+   multiplicative reduction, proximity generator, and concrete soundness.
+2. Register a reviewed 100-bit profile; the current memory-oriented profile is
+   about 53 bits in its basic proximity term.
+3. Audit transcript distribution correspondence against VEIL's paper and Lean
+   trusted base, especially the characteristic-two six-value bijection.
+4. Add exact small-domain real/simulated distribution enumeration and larger
+   witness-pair distinguishing experiments.
+5. Replace remaining proof `Vec` decoding with explicit size caps before parsing
+   untrusted multi-megabyte bundles.
+6. Obtain an independent cryptographic and implementation audit.
 
-```text
-[FLOCK data rows | random padding rows]
-[data lanes      | one F128 masking lane]
-```
+## Performance phase: succinct VEIL-FLOCK
 
-For each registered parameter profile, establish:
+The next research implementation should recover FLOCK-like proof size and batch
+throughput by compiling the existing succinct verifier rather than the full hash
+R1CS.
 
-- minimum distance;
-- surjectivity of random padding onto every allowed query set of size at most `q`;
-- the proximity-generator property and the required nonzero-coordinate property;
-- the product/square code and reduction map used by ZK Hadamard; and
-- exact row, lane, query, and entropy accounting.
+### A. Typed verifier transcript
 
-The first implementation may use a slower, obviously correct additive-NTT path.
-Optimization waits until its output matches FLOCK's existing encoder.
+Refactor one verifier program so it can verify, emit arithmetic constraints,
+count masks, and drive simulation. Classify every zerocheck, lincheck,
+ring-switch, and Ligerito value as public, shielded, or exposed.
 
-Runtime rank checks are diagnostic only. Registration requires a theorem or an
-exact finite linear-algebra certificate covering all permitted query sets—not
-empirical uniformity samples.
+### B. Partially ZK Ligerito commitment
 
-**Exit gate:** exhaustive tiny-code tests and profile certificates demonstrate the
-required projection surjectivity; violating `num_queries <= q` fails before proof
-generation.
+Apply constrained-interleaved-code padding per CFW26/VEIL, resolve recursive
+query accounting, mask the terminal residual, and retain the framed Merkle
+simulator. Prove the exact query projection rank for every round.
 
-## P3 — Refactor the FLOCK verifier into a VEIL-compatible decision circuit
+### C. VEIL transcript compiler
 
-Create context-generic transcript operations analogous to VEIL's reading,
-sending, constraint, and mask-counting contexts. One verifier program must:
+Mask the exposed vector `v` with committed `h`, send `v+h`, and prove the shifted
+verifier decision `C(v+h-h)=0` using the native inner system. The direct R1CS
+mode remains the correctness oracle.
 
-- parse the transcript;
-- derive challenges;
-- perform ordinary verification;
-- emit `F128` arithmetic constraints;
-- emit MLE-evaluation assertions; and
-- count masks and materialized products.
+### D. Benchmarks and profiles
 
-Move non-arithmetic checks into public/shielded validation or express them as
-registered constraints. Avoid a second hand-written verifier circuit.
+Re-run FLOCK's parameter search with ZK padding costs, benchmark batches from
+`2^10` through `2^18`, and compare against both normal FLOCK and this direct
+reference proof.
 
-Start with the Secure/UDR Ligerito profile. Add Fast/Johnson-OOD only after its
-binding assumptions and transcript are represented explicitly.
+## Release gate
 
-**Exit gate:** native and constraint-mode verification accept and reject the same
-generated corpus, including corrupted proofs in every phase.
-
-## P4 — Implement the partially ZK stacked PCS
-
-Adapt FLOCK's 64 interleaved `F128` lanes to a stacked commitment with one masking
-lane and random padding rows. Preserve wide Merkle leaves; do not blind the
-Boolean witness MLE itself.
-
-Classification for the first experiment:
-
-- Merkle roots, paths, code-query positions, and uniformly masked query responses
-  form the shielded PCS view.
-- Ring-switch `s_hat_v` values are exposed VEIL messages.
-- Ligerito's final residual `yr`, sumcheck messages, and OOD field values are
-  exposed VEIL messages.
-
-This explicitly handles the terminal residual; adding recursion rounds is not a
-solution because each recursion still has a terminal value.
-
-Implement the PCS simulator at the same time as the real prover. It must generate
-opened columns and authentication data with the real distribution subject only to
-the public evaluation claim.
-
-**Exit gate:** the partially ZK FLOCK proof accepts, its shielded-view simulator
-does not receive the witness, and removing padding enables a regression attack.
-
-## P5 — Port VEIL's inner protocols to `F128`
-
-Implement, in order:
-
-1. ZK dot product;
-2. ZK Hadamard, including the square code and reduction function;
-3. ZK R1CS evaluation; and
-4. each protocol's explicit simulator.
-
-Use the VEIL formalization as the protocol specification and the Rust reference
-implementation only as engineering guidance. Do not import its KoalaBear/two-adic
-assumptions into the `F128` implementation.
-
-Every protocol gets completeness tests, malformed-proof tests, query-budget tests,
-and real/simulated tiny-domain distribution tests.
-
-**Exit gate:** the inner system proves the decision circuit from P3 at toy and 256
-parameters with documented soundness and ZK assumptions.
-
-## P6 — Apply VEIL's intermediate compilation
-
-Let `v` be the complete exposed-message vector produced by P1 and let `h` be a
-uniform `F128^s` mask committed through the inner system. Send `v' = v + h` and
-prove:
-
-```text
-C_shielded,public(v' - h) = 0.
-```
-
-The compiled verifier must not execute the original checks directly on `v`; the
-inner proof subsumes those checks. Challenges and transcript order must match the
-multi-round VEIL construction rather than treating the protocol as a single
-post-hoc vector.
-
-**Exit gate:** one command proves and verifies the 256-statement interactive
-profile, and all old unmasked transcript fields have disappeared from serialization.
-
-## P7 — Make the simulator and attacks first-class artifacts
-
-Implement a simulator API whose inputs are exactly:
-
-```text
-public parameters + public statement + verifier coins + simulator coins
-```
-
-It composes the shielded PCS simulator, uniform `v'`, and the ZK R1CS-evaluation
-simulator. Add:
-
-- exhaustive equality tests at very small fields/parameters where practical;
-- symbolic/rank checks for real `F128` parameters;
-- deterministic transcript-shape comparisons;
-- witness-pair indistinguishability experiments; and
-- negative controls that remove each masking component and recover a witness
-  functional or distinguish two witnesses.
-
-Statistical tests are regression tools, not the security justification.
-
-**Exit gate:** the simulator cannot import prover or witness modules, consumes no
-witness-derived bytes, and every negative control detects its intentionally
-unblinded protocol.
-
-## P8 — Add an experimental Fiat-Shamir layer
-
-Keep an explicit public-coin transcript implementation as the reference. Then add
-a duplex Fiat-Shamir challenger with domain separation for:
-
-- statement and circuit digest;
-- each base FLOCK phase;
-- stacked-PCS commitments and queries;
-- exposed-message masks; and
-- inner VEIL proofs.
-
-Implement a programmable-random-oracle simulator harness, borrowing transcript
-and oracle infrastructure—not masks—from the old `zk-flock` branch. Label this
-mode computational and experimental. Do not claim that VEIL's interactive perfect
-ZK theorem automatically covers it.
-
-**Exit gate:** native FS proofs are deterministic under fixed coins, transcript
-forks are domain-separated, and the programmed-oracle simulation passes all
-shape and negative-control tests.
-
-## P9 — Register profiles and publish an experimental report
-
-Initially register only:
-
-- tiny deterministic test parameters;
-- `blake3-64x256-secure-udr-v0`; and
-- one large-batch profile to measure asymptotic overhead.
-
-Each profile records code dimensions, query limit, security estimate, circuit
-digest, transcript version, and simulator version. Unknown profiles fail closed.
-
-Benchmark baseline versus interactive ZK versus FS ZK. Report absolute numbers
-and ratios for proving, verification, proof bytes, commitment bytes, and peak
-memory. In particular, report the 256-instance padding cost rather than projecting
-large-batch VEIL overhead onto it.
-
-**Exit gate:** an experimental security/benchmark report states exactly what is
-hidden, simulator model, unresolved assumptions, and measured overhead.
-
-## Expected sequence and risk
-
-A plumbing-only prototype through P3 should take roughly 2–4 weeks. An end-to-end
-interactive experiment through P7 is more plausibly 8–14 engineer-weeks. The
-largest uncertainty is not Rust integration; it is establishing the `F128`
-ZK/product-code properties and ensuring recursive Ligerito fits the partial-ZK PCS
-assumptions.
-
-Stop and revisit the architecture if any of these occur:
-
-- an allowed query set is not covered by the padding projection argument;
-- the verifier circuit requires hashing witness-dependent exposed data inside the
-  inner arithmetic proof at prohibitive cost;
-- recursive Ligerito query choices are adaptive in a way excluded by the model;
-- terminal or ring-switch values cannot be represented consistently as exposed
-  messages; or
-- the inner proof dominates the 256-instance baseline beyond the experiment's
-  utility.
-
+An experimental release is complete when formatting, unit tests, release
+prove/verify, release simulation, CLI demo, mutation tests, and documentation all
+pass from a clean checkout. Publishing to GitHub is a separate user-approved
+mutation.

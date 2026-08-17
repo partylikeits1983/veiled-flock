@@ -1,62 +1,72 @@
-# Experimental security model
+# Security scope of the experiment
 
-## Intended statement privacy
+This code is experimental, unaudited, and not production-safe.
 
-For the first profile, the ordered digest vector, batch size, circuit identity,
-and parameter profile are public. The 256 64-byte preimages and every other R1CS
-witness value are secret.
+## Public and private data
 
-The protocol does not attempt to hide batch size, circuit shape, proof length,
-parameter schedule, timing, memory access, or prover-side hardware behavior.
+Public data consists of the ordered BLAKE3 digest vector, actual batch size,
+padded power-of-two shape, pinned circuit digest, proof profile, and proof nonce.
+Private data consists of the 64-byte messages and every FLOCK witness wire.
+Circuit shape, proof length, timing, and memory behavior are not hidden.
 
-## Three deliberately separate modes
+## Zero-knowledge claim being tested
 
-### Interactive ZK target
+The construction follows VEIL's bounded-query code masking over `F128`:
 
-The primary research target is perfect zero-knowledge in VEIL's public-coin IOP
-model, for non-adaptive code queries within a hard registered query budget. The
-simulator receives the public statement and verifier randomness but no witness.
+- 128 random message symbols cover 128 non-adaptive code queries;
+- one random masking codeword hides each revealed linear combination;
+- a product-code mask hides the Hadamard reduction;
+- two private tautological multiplication triples make the three Hadamard dot
+  claims uniform when the batching challenge is neither 0 nor 1; and
+- every Merkle tree uses a fresh nonce and disjoint leaf/node/channel framing.
 
-### Fiat-Shamir experiment
+The executable simulator is straight-line in the programmable random-oracle
+model and aborts on the negligible bad challenges or a programming collision.
+Its API accepts no witness. The simulator test also checks that its transcript
+fails against native SHA-256.
 
-The noninteractive artifact is computational and uses a programmable-random-oracle
-simulation. This is not covered merely by completing the interactive VEIL port.
-The report must identify its hash, domain separation, programming interface, and
-any rewinding or abort behavior.
+This is engineering evidence, not a completed cryptographic proof. In particular,
+the additive-code instantiation and correspondence to VEIL's formal statements
+need independent human review.
 
-### Transparent debug mode
+## Soundness profile
 
-A transparent inner checker may be used while plumbing the compiler. It provides
-neither transcript privacy nor a ZK claim and must serialize under a distinct
-profile identifier.
+The currently registered `experimental()` parameters use a rate-1/2 code and
+128 queries to keep the one-block reference proof small enough to iterate on.
+The basic unique-decoding proximity term is only about 53 bits. This is not a
+100-bit production profile. Fiat--Shamir knowledge soundness, QROM security,
+adaptive-query ZK, and post-quantum knowledge extraction are not claimed.
 
-## Required invariants
+The fixed statement is nevertheless bound fail-closed in the implementation:
 
-1. Statement binding precedes every witness commitment and challenge.
-2. The circuit digest commits to the exact relation and matrix layout.
-3. Every witness-dependent transcript value is shielded or exposed-and-masked.
-4. Query counts never exceed the randomness dimension certified for the code.
-5. Random padding is independent across commitments/rounds where the proof needs
-   independence.
-6. The simulator's module graph cannot call witness generation or the real prover.
-7. Registered profiles are immutable; unknown dimensions fail closed.
-8. Proof decoding rejects trailing bytes, wrong event order, and wrong lengths.
-9. Real and simulated transcripts have identical public shape.
-10. The FS and interactive claims are never represented by the same profile ID.
+- changing a public digest rejects;
+- changing the circuit digest, proof nonce, parameters, or batch shape rejects;
+- mutating the Hadamard reduction or a Merkle opening rejects; and
+- non-Boolean witnesses and unsatisfied R1CS rows are rejected by the prover and
+  enforced by the proof.
 
-## What tests can and cannot establish
+## Code assumptions still requiring review
 
-Distribution tests, witness-pair distinguishers, and negative controls are
-essential regression tests. They do not prove zero-knowledge over `F128`.
-Security relies on exact projection/rank or code theorems, the VEIL simulator
-composition, the PCS binding assumptions, and a separate FS argument where used.
+1. The additive NTT evaluates the interpolating polynomial on the intended
+   disjoint affine coset for all registered dimensions.
+2. Any 128 queried coordinates have full-rank projection from the 128 random
+   message symbols (the Reed--Solomon/MDS argument).
+3. The square code, decode, and restriction map implement VEIL's required
+   multiplicative code and reduction property.
+4. Query selection is non-adaptive and never exceeds the padding dimension.
+5. The six-private-value bijection and all conditioned simulator distributions
+   match the real transcript, including the characteristic-two signs.
 
-## Experimental release label
+Tiny exhaustive/rank and multiplicativity tests cover regressions, but do not
+replace proofs of these statements.
 
-Until the code properties, compiler adaptation, and trusted-base correspondence
-have been reviewed, every binary and proof format must display:
+## Current measured reference point
 
-```text
-EXPERIMENTAL: not audited, not production-safe, no protection for real secrets
-```
+On the development machine, a one-item release build measured approximately:
 
+- prove: 0.35 seconds;
+- verify: 0.30 seconds;
+- serialized proof: 2.98 MB;
+- statement-only simulation plus verification: 3.2 seconds.
+
+These are smoke-test measurements, not benchmark claims.

@@ -10,7 +10,7 @@ BLAKE3, SHA-256, and Keccak-f[1600].
 
 ## Layout
 
-Two crates, split along the prove/verify boundary:
+The original two crates are joined by one experimental VEIL crate:
 
 - **`crates/flock-core`** — the protocol library and verifier (field arithmetic,
   NTT, zerocheck, lincheck, PCS, Merkle, R1CS). Carries everything needed to
@@ -18,6 +18,9 @@ Two crates, split along the prove/verify boundary:
 - **`crates/flock-prover`** — the end-to-end prover: prove orchestration, the
   hash R1CS encoders, the hash-chain / Merkle-path statements, and the
   `flock_chain` CLI. Depends on `flock-core` and re-exports it.
+- **`crates/veil-f128`** — native characteristic-two VEIL building blocks:
+  additive RS base/square codes, dot-product and Hadamard arguments, the
+  memory-linear FLOCK block-R1CS compiler, and its ROM simulator.
 
 The heavy NEON kernels live in the shared `flock-core` layer, so the verifier
 runs on the same code as the prover; `flock-core` still compiles off-ARM via the
@@ -49,6 +52,39 @@ cargo run --release -p flock-prover --bin flock_chain -- verify --in /tmp/chain.
 
 `--hash` accepts `blake3`, `sha2`, or `keccak`. `--steps` must be a power of two
 ≥ 8. Run `flock_chain help` for the full flag list (`--mode`, `--backend`, …).
+
+## Experimental VEIL zk-FLOCK
+
+The `veil` feature adds a working reference proof for a batch of statements “I
+know a 64-byte message whose BLAKE3 digest is this public value.” It proves FLOCK's
+pinned Boolean R1CS directly with VEIL dot-product and Hadamard protocols over
+`GF(2^128)`. It also includes a statement-only programmable-random-oracle
+simulator.
+
+```sh
+# Build and run an in-memory prove/verify demonstration.
+cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
+
+# Prove a file containing concatenated 64-byte messages, then verify the bundle.
+cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
+  prove --message /path/to/message.bin --out /tmp/veiled-flock.bin
+cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
+  verify --in /tmp/veiled-flock.bin
+
+# Full release proof and statement-only simulator tests.
+cargo test --release -p flock-prover --features veil \
+  veiled_preimage::tests::veiled_preimage_proof_roundtrip -- --ignored
+cargo test --release -p flock-prover --features veil \
+  veiled_preimage::tests::statement_only_simulator_is_accepted_by_programmed_oracle -- --ignored
+```
+
+This mode is experimental and unaudited. Its rate-1/2, 128-query profile is an
+iteration profile with only about a 53-bit basic proximity term; it is not a
+100-bit production parameter set. The current ~2.98 MB one-item proof is the
+correctness/simulation reference. The next phase is to apply VEIL to FLOCK's
+succinct verifier transcript to recover FLOCK-like proof sizes. See
+[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
+[`docs/SECURITY.md`](docs/SECURITY.md), and [`docs/PLAN.md`](docs/PLAN.md).
 
 ## Benchmarks
 
@@ -110,9 +146,9 @@ memory bandwidth, and thermal headroom on a single chip. See
 [`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) for the full set and the
 competitor comparisons.
 
-## Zero-knowledge mode (implementation candidate)
+## Earlier custom-mask ZK mode (not VEIL)
 
-The `zk` feature provides a certified path for exactly two registered profiles:
+The inherited `zk` feature provides the earlier, non-VEIL path for exactly two registered profiles:
 a batch of 256 BLAKE3 compressions and 256 public-digest preimage statements
 whose messages are exactly 64 bytes. The construction uses field-valued PIOP
 masks, hiding Ligerito commitments, a framed random oracle, and a fresh proof
@@ -139,9 +175,15 @@ of 256.
 
 ## Acknowledgments and third-party code
 
-Flock incorporates code from the projects below; see the individual file
-headers for the exact upstream paths and copyright notices. Both projects are
-dual-licensed under Apache-2.0 OR MIT, matching Flock's own license.
+Flock incorporates or adapts ideas and code from the projects below; see the
+individual file headers for exact upstream paths and copyright notices. These
+sources are dual-licensed under Apache-2.0 OR MIT, matching Flock's own license.
+
+**[VEIL / slop-veil](https://github.com/succinctlabs/sp1/tree/main/slop/crates/veil)**
+— protocol reference for the new `veil-f128` dot-product, Hadamard, six-value
+multiplication padding, and constraint-composition structure. The implementation
+here is rewritten for additive codes over `GF(2^128)`; upstream version 6.2.2 is
+MIT OR Apache-2.0 licensed.
 
 **[binius64](https://github.com/binius-zk/binius64)** — Irreducible's
 binary-tower field framework; the basis for our F₁₂₈ / ring-switch design.
