@@ -1,14 +1,10 @@
 # Benchmarks
 
-Generated results go in `benchmarks/results/` and are ignored by Git.
+Run the zk-FLOCK comparison from the repository root:
 
-Every result record must include source revisions, dirty-state flags, profile ID,
-host/CPU, thread count, compiler version, iteration count, and median plus raw
-samples for proving time, verification time, proof bytes, and peak memory.
+```sh
+VEIL_BENCH_BATCH=256 VEIL_BENCH_RUNS=10 \
+  cargo bench -p flock-prover --features veil --bench veil_vs_flock
+```
 
-Required comparisons:
-
-1. current FLOCK baseline;
-2. transparent compiler plumbing;
-3. interactive zk-FLOCK with VEIL; and
-4. Fiat-Shamir zk-FLOCK, when implemented.
+Generated results belong in `benchmarks/results/`, which is ignored by Git.
