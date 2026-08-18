@@ -31,6 +31,8 @@ pub mod sim_game;
 pub mod sim_oracle;
 #[cfg(feature = "zk")]
 pub mod sim_seal;
+#[cfg(feature = "veil")]
+pub mod succinct_veil;
 #[cfg(feature = "zk")]
 pub mod transcript_schema;
 #[cfg(feature = "veil")]

@@ -1,23 +1,25 @@
-//! Minimal end-to-end CLI for the experimental native-VEIL FLOCK mode.
+//! Minimal end-to-end CLI for succinct experimental VEIL-FLOCK.
 
 use std::{env, fs, process::ExitCode, time::Instant};
 
 use flock_prover::{
     challenger::FsChallenger,
-    r1cs_hashes::blake3_preimage::{DIGEST_BYTES, MESSAGE_BYTES},
-    veiled_preimage::{VeiledBlake3Proof, VeiledBlake3Setup},
+    pcs::Commitment,
+    r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, DIGEST_BYTES, MESSAGE_BYTES},
+    succinct_veil::SuccinctVeilProof,
     zk::ZkRng,
 };
 use serde::{Deserialize, Serialize};
 
-const DOMAIN: &[u8] = b"veiled-flock-cli-v0";
-const MAGIC: [u8; 8] = *b"VFLK0001";
+const DOMAIN: &[u8] = b"veiled-flock-cli-succinct-v0";
+const MAGIC: [u8; 8] = *b"VFLK0003";
 
 #[derive(Serialize, Deserialize)]
 struct Bundle {
     magic: [u8; 8],
     digests: Vec<[u8; DIGEST_BYTES]>,
-    proof: VeiledBlake3Proof,
+    commitment: Commitment,
+    proof: SuccinctVeilProof,
 }
 
 const USAGE: &str = "\
@@ -44,7 +46,8 @@ fn main() -> ExitCode {
 }
 
 fn run() -> Result<(), String> {
-    eprintln!("EXPERIMENTAL: not audited; do not use to protect production secrets");
+    flock_prover::init_perf_thread_pool();
+    eprintln!("EXPERIMENTAL: not independently audited; do not use for production secrets");
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("prove") => {
@@ -116,17 +119,18 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
         .iter()
         .map(|message| *blake3::hash(message).as_bytes())
         .collect::<Vec<_>>();
-    let setup = VeiledBlake3Setup::new(messages.len());
+    let setup = Blake3PreimageZkSetup::new_succinct(messages.len());
     let mut rng = ZkRng::from_entropy();
     let mut challenger = FsChallenger::new(DOMAIN);
     let started = Instant::now();
-    let proof = setup
-        .prove(&messages, &digests, &mut rng, &mut challenger)
+    let (proof, commitment) = setup
+        .prove_succinct(&messages, &digests, &mut rng, &mut challenger)
         .map_err(|error| format!("proof generation failed: {error:?}"))?;
     eprintln!("proved in {:.3}s", started.elapsed().as_secs_f64());
     Ok(Bundle {
         magic: MAGIC,
         digests,
+        commitment,
         proof,
     })
 }
@@ -135,11 +139,16 @@ fn verify(bundle: &Bundle) -> Result<(), String> {
     if bundle.magic != MAGIC || bundle.digests.is_empty() {
         return Err("invalid bundle header or statement shape".to_string());
     }
-    let setup = VeiledBlake3Setup::new(bundle.digests.len());
+    let setup = Blake3PreimageZkSetup::new_succinct(bundle.digests.len());
     let mut challenger = FsChallenger::new(DOMAIN);
     let started = Instant::now();
     setup
-        .verify(&bundle.proof, &bundle.digests, &mut challenger)
+        .verify_succinct(
+            &bundle.commitment,
+            &bundle.proof,
+            &bundle.digests,
+            &mut challenger,
+        )
         .map_err(|error| format!("verification failed: {error:?}"))?;
     eprintln!("verified in {:.3}s", started.elapsed().as_secs_f64());
     Ok(())

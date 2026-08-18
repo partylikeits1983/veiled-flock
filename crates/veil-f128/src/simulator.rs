@@ -17,11 +17,13 @@ use flock_core::{
 use crate::{
     block_r1cs::{
         BlockR1csError, BlockR1csParameters, BlockR1csProof, PublicEquality, build_link_claim,
-        powers, validate_public, vector_parameters,
+        powers, sample_not_zero_or_one, validate_public, vector_parameters,
     },
     code::{AdditiveRsCode, CodeError, CodeParameters},
     commitment::MerkleMatrixOpening,
-    dot_product::{DotProductProof, VectorParameters, dot_product, sample_unique_positions},
+    dot_product::{
+        DotProductProof, VectorParameters, dot_product, sample_nonzero, sample_unique_positions,
+    },
     hadamard::HadamardProof,
 };
 
@@ -71,15 +73,10 @@ pub fn simulate_block_r1cs<C: Challenger, R: MaskSampler + ?Sized>(
     let witness_root = random_hash(rng);
     let hadamard_root = random_hash(rng);
 
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v0");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
     challenger.observe_bytes(&witness_root);
     challenger.observe_bytes(&hadamard_root);
-    let multiplication_rlc = challenger.sample_f128();
-    // The six private padding values give a bijection except at these two
-    // field points (the statistical bad event in VEIL's simulator).
-    if multiplication_rlc.is_zero() || multiplication_rlc == F128::ONE {
-        return Err(SimulationError::DegenerateChallenge);
-    }
+    let multiplication_rlc = sample_not_zero_or_one(challenger);
     let dot_vector = powers(multiplication_rlc, 2 * n + 2);
     let hadamard = simulate_hadamard(
         &dot_vector,
@@ -132,15 +129,12 @@ fn simulate_dot_product<C: Challenger, R: MaskSampler + ?Sized>(
     programmer: &dyn OracleProgrammer,
 ) -> Result<DotProductProof, SimulationError> {
     let mask_dot_product = random_field(rng);
-    challenger.observe_label(b"veil-f128-dot-product-v0");
+    challenger.observe_label(b"veil-f128-dot-product-v1");
     challenger.observe_f128_slice(dot_vector);
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = challenger.sample_f128();
-    if rho.is_zero() {
-        return Err(SimulationError::DegenerateChallenge);
-    }
+    let rho = sample_nonzero(challenger);
 
     let target = claimed_dot_products
         .iter()
@@ -206,15 +200,12 @@ fn simulate_hadamard<C: Challenger, R: MaskSampler + ?Sized>(
     programmer: &dyn OracleProgrammer,
 ) -> Result<HadamardProof, SimulationError> {
     let code = code_for(parameters)?;
-    challenger.observe_label(b"veil-f128-hadamard-v0");
+    challenger.observe_label(b"veil-f128-hadamard-v1");
     challenger.observe_bytes(&root);
     let evaluation_point = challenger.sample_f128();
     let gamma = random_field(rng);
     challenger.observe_f128(gamma);
-    let product_mask_coefficient = challenger.sample_f128();
-    if product_mask_coefficient.is_zero() {
-        return Err(SimulationError::DegenerateChallenge);
-    }
+    let product_mask_coefficient = sample_nonzero(challenger);
 
     let phi_length = 2 * parameters.message_length().next_power_of_two();
     let reduction_weights = powers(evaluation_point, parameters.vector_length);
@@ -229,10 +220,7 @@ fn simulate_hadamard<C: Challenger, R: MaskSampler + ?Sized>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = challenger.sample_f128();
-    if rho.is_zero() {
-        return Err(SimulationError::DegenerateChallenge);
-    }
+    let rho = sample_nonzero(challenger);
     let target = claimed_dot_products
         .iter()
         .chain(std::iter::once(&mask_dot_product))

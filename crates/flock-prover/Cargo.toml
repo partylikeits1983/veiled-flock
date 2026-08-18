@@ -226,5 +226,10 @@ name = "zk_a1_reference"
 harness = false
 required-features = ["zk"]
 
+[[bench]]
+name = "veil_vs_flock"
+harness = false
+required-features = ["veil"]
+
 [lints]
 workspace = true

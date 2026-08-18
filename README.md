@@ -1,233 +1,90 @@
-# Flock
+# zk-FLOCK with VEIL
 
-A Rust implementation of the **Flock** proving system: a prover and verifier for
-R1CS-over-GF(2) statements, built on a zerocheck + lincheck PIOP with a
-multilinear PCS (Ligerito) over the binary field F₂₁₂₈. Tuned for
-Apple silicon (M-series) and AVX-512-capable x86-64 CPUs.
+This repository is an experimental implementation of FLOCK with VEIL to make
+FLOCK zero knowledge.
 
-It ships end-to-end provers for hash-chain and Merkle-path statements over
-BLAKE3, SHA-256, and Keccak-f[1600].
+It proves knowledge of one or more 64-byte BLAKE3 preimages without revealing
+the preimages. The public statement is the ordered list of BLAKE3 digests.
 
-## Layout
+> This code is experimental, unaudited, and not suitable for production
+> secrets.
 
-The original two crates are joined by one experimental VEIL crate:
+## Design
 
-- **`crates/flock-core`** — the protocol library and verifier (field arithmetic,
-  NTT, zerocheck, lincheck, PCS, Merkle, R1CS). Carries everything needed to
-  verify; portable, with scalar fallbacks for the NEON kernels.
-- **`crates/flock-prover`** — the end-to-end prover: prove orchestration, the
-  hash R1CS encoders, the hash-chain / Merkle-path statements, and the
-  `flock_chain` CLI. Depends on `flock-core` and re-exports it.
-- **`crates/veil-f128`** — native characteristic-two VEIL building blocks:
-  additive RS base/square codes, dot-product and Hadamard arguments, the
-  memory-linear FLOCK block-R1CS compiler, and its ROM simulator.
+The implementation keeps FLOCK's succinct zerocheck, lincheck, and Ligerito
+pipeline.
 
-The heavy NEON kernels live in the shared `flock-core` layer, so the verifier
-runs on the same code as the prover; `flock-core` still compiles off-ARM via the
-scalar fallbacks.
+- FLOCK commits to a randomized witness using a hiding Ligerito commitment.
+- Zerocheck and lincheck messages are masked over `GF(2^128)`.
+- The masks are committed before dependent Fiat--Shamir challenges.
+- VEIL proves that the masked FLOCK transcript is valid.
+- The VEIL output claims and Ligerito opening refer to the same commitment.
 
-## Build
+The upstream VEIL code uses a two-adic prime field. This repository implements
+the required VEIL dot-product, Hadamard-product, and constraint protocols over
+`GF(2^128)` using additive Reed--Solomon codes. See
+[`crates/veil-f128`](crates/veil-f128) and
+[`succinct_veil.rs`](crates/flock-prover/src/succinct_veil.rs).
+
+## Simulator
+
+The repository includes a programmable-random-oracle simulator. It accepts
+public digests, a random seed, and an oracle. It does not accept messages or
+preimages.
+
+The test `succinct_veil_public_only_simulator_is_accepted` verifies that the
+simulator can produce an accepted proof for arbitrary digest targets. This is
+useful implementation evidence, but it is not a formal zero-knowledge proof.
+See [the security audit](docs/SECURITY.md) and
+[formal verification plan](docs/FORMAL_VERIFICATION.md).
+
+## Benchmark
+
+Batch 256, release build, median of 10 runs. Setup time and public digests are
+excluded from the measurements.
+
+| Mode | Prove | Verify | Proof size |
+|---|---:|---:|---:|
+| FLOCK | 7.59 ms | 13.52 ms | 272,013 bytes |
+| zk-FLOCK with VEIL | 11.74 ms | 5.21 ms | 579,999 bytes |
+
+In this run, zk-FLOCK proving was 1.55x slower and its proof was 2.13x larger.
+Short batches use the same 256-slot hiding-PCS floor, so their proof size is
+also about 580 KB.
+
+Reproduce the benchmark with:
 
 ```sh
-cargo build --release
-cargo test --release
+VEIL_BENCH_BATCH=256 VEIL_BENCH_RUNS=10 \
+  cargo bench -p flock-prover --features veil --bench veil_vs_flock
 ```
 
-Requires a recent stable Rust toolchain (edition 2024). Optimized kernels target
-ARM64 NEON and x86-64 AVX-512/VPCLMULQDQ, with portable fallbacks for other
-targets.
-
-## CLI — hash-chain prover
+## Run
 
 ```sh
-cargo build --release -p flock-prover --bin flock_chain
-
-# Prove an 8-step BLAKE3 chain:
-cargo run --release -p flock-prover --bin flock_chain -- prove \
-    --hash blake3 --steps 8 --out /tmp/chain.bin
-
-# Verify:
-cargo run --release -p flock-prover --bin flock_chain -- verify --in /tmp/chain.bin
-```
-
-`--hash` accepts `blake3`, `sha2`, or `keccak`. `--steps` must be a power of two
-≥ 8. Run `flock_chain help` for the full flag list (`--mode`, `--backend`, …).
-
-## Experimental VEIL zk-FLOCK
-
-The `veil` feature adds a working reference proof for a batch of statements “I
-know a 64-byte message whose BLAKE3 digest is this public value.” It proves FLOCK's
-pinned Boolean R1CS directly with VEIL dot-product and Hadamard protocols over
-`GF(2^128)`. It also includes a statement-only programmable-random-oracle
-simulator.
-
-```sh
-# Build and run an in-memory prove/verify demonstration.
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
+```
 
-# Prove a file containing concatenated 64-byte messages, then verify the bundle.
+To prove and verify a file of concatenated 64-byte messages:
+
+```sh
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
-  prove --message /path/to/message.bin --out /tmp/veiled-flock.bin
+  prove --message messages.bin --out proof.bin
+
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
-  verify --in /tmp/veiled-flock.bin
-
-# Full release proof and statement-only simulator tests.
-cargo test --release -p flock-prover --features veil \
-  veiled_preimage::tests::veiled_preimage_proof_roundtrip -- --ignored
-cargo test --release -p flock-prover --features veil \
-  veiled_preimage::tests::statement_only_simulator_is_accepted_by_programmed_oracle -- --ignored
+  verify --in proof.bin
 ```
 
-This mode is experimental and unaudited. Its rate-1/2, 128-query profile is an
-iteration profile with only about a 53-bit basic proximity term; it is not a
-100-bit production parameter set. The current ~2.98 MB one-item proof is the
-correctness/simulation reference. The next phase is to apply VEIL to FLOCK's
-succinct verifier transcript to recover FLOCK-like proof sizes. See
-[`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md),
-[`docs/SECURITY.md`](docs/SECURITY.md), and [`docs/PLAN.md`](docs/PLAN.md).
+The proof file contains the public digests, commitment, and proof. It does not
+contain the messages or raw witness.
 
-## Benchmarks
+## Documentation
 
-Hash proving throughput on an **AMD Ryzen Threadripper 7970X** (32 physical
-cores / 64 hardware threads, 256 GB RAM), measured on Linux x86-64 on
-2026-07-17. The build uses `-C target-cpu=native`; the active optimized path is
-**AVX-512 + VPCLMULQDQ** (the CPU also supports AVX and AVX2). Multi-threaded
-runs use the 32 physical cores, without SMT.
-
-Throughput in thousands of hashes per second (`k hashes/s`; higher is better):
-
-| Hash | Batch | 1T row-major | 1T batch-major | 32T row-major | 32T batch-major |
-|---|---:|---:|---:|---:|---:|
-| SHA-256 | 1024 | 30.3 | 30.2 | 58.7 | 85.0 |
-| SHA-256 | 4096 | 34.0 | 33.5 | 135.8 | 145.1 |
-| SHA-256 | 16384 | 33.0 | 32.3 | 200.3 | 240.3 |
-| SHA-256 | 65536 | 32.3 | 32.0 | 249.2 | 271.3 |
-| SHA-256 | 262144 | 31.5 | 31.0 | 296.9 | 305.3 |
-| BLAKE3 | 1024 | 34.5 | 34.1 | 105.3 | 109.0 |
-| BLAKE3 | 4096 | 54.7 | 54.0 | 217.7 | 227.1 |
-| BLAKE3 | 16384 | 61.4 | 62.7 | 394.7 | 411.7 |
-| BLAKE3 | 65536 | 62.4 | 64.8 | 541.0 | 540.4 |
-| BLAKE3 | 262144 | 64.1 | 64.8 | 633.9 | 629.8 |
-| Keccak-f[1600] | 1024 | 17.9 | 19.2 | 57.5 | 54.9 |
-| Keccak-f[1600] | 4096 | 18.7 | 19.9 | 109.5 | 106.9 |
-| Keccak-f[1600] | 16384 | 18.1 | 19.0 | 135.4 | 141.6 |
-| Keccak-f[1600] | 65536 | 18.4 | 18.6 | 156.1 | 164.1 |
-| Keccak-f[1600] | 262144 | 18.3 | 17.6 | 159.9 | 164.3 |
-
-The figures measure the full default Ligerito `prove_fast` path, including
-witness generation and proof construction. SHA-256 and BLAKE3 count compression
-functions; Keccak counts Keccak-f[1600] permutations. “Batch” is the number of
-independent hash operations proved together. Each value is the best of three
-measured proofs after one untimed warm-up; the warm-up proof is also verified.
-Row-major stores each hash witness contiguously, while batch-major groups
-corresponding witness chunks across the batch. The Keccak rows use the
-single-permutation encoder so the two layouts are directly comparable; the
-separate 3-wide Keccak benchmark remains available for maximum Keccak
-throughput.
-
-Regenerate the complete table with:
-
-```sh
-benchmarks/bench_hash_throughput.sh
-```
-
-Override `LOG2S`, `RUNS`, or `MT_THREADS` to change the batches, trial count,
-or multi-threaded pool size. There are no Criterion harnesses; each Rust bench
-is a no-harness binary that prints its own results. Run an individual bench
-with:
-
-```sh
-cargo bench --bench blake3_proof
-cargo bench --bench e2e_zerocheck
-```
-
-Always run benches **one at a time** — concurrent benches contend for cache,
-memory bandwidth, and thermal headroom on a single chip. See
-[`benchmarks/BENCHMARKS.md`](benchmarks/BENCHMARKS.md) for the full set and the
-competitor comparisons.
-
-## Earlier custom-mask ZK mode (not VEIL)
-
-The inherited `zk` feature provides the earlier, non-VEIL path for exactly two registered profiles:
-a batch of 256 BLAKE3 compressions and 256 public-digest preimage statements
-whose messages are exactly 64 bytes. The construction uses field-valued PIOP
-masks, hiding Ligerito commitments, a framed random oracle, and a fresh proof
-nonce. Other batch sizes, parameters, and statement families fail closed.
-
-The scoped result is computational zero knowledge in the classical
-programmable-random-oracle model. The standalone Fiat-Shamir knowledge bound
-is 55.994 bits at `Q_H = 2^64`; the 100-bit classical deployment target remains
-conjectural. No QROM or post-quantum knowledge claim is made. See
-[`docs/paper/zk-flock.pdf`](docs/paper/zk-flock.pdf) for the construction,
-assumptions, and concrete bounds.
-
-```sh
-scripts/zk-certify.sh
-
-# Native, non-ZK Flock, and certified ZK-Flock on one and all CPU threads
-scripts/zk-benchmark.sh
-```
-
-Set `ZK_BENCH_THREADS` or `ZK_BENCH_RUNS` to override the detected CPU count or
-the default ten trials. The benchmark reports prove and verify latency,
-throughput, encoded proof size, and ZK-to-non-ZK ratios for the certified batch
-of 256.
-
-## Acknowledgments and third-party code
-
-Flock incorporates or adapts ideas and code from the projects below; see the
-individual file headers for exact upstream paths and copyright notices. These
-sources are dual-licensed under Apache-2.0 OR MIT, matching Flock's own license.
-
-**[VEIL / slop-veil](https://github.com/succinctlabs/sp1/tree/main/slop/crates/veil)**
-— protocol reference for the new `veil-f128` dot-product, Hadamard, six-value
-multiplication padding, and constraint-composition structure. The implementation
-here is rewritten for additive codes over `GF(2^128)`; upstream version 6.2.2 is
-MIT OR Apache-2.0 licensed.
-
-**[binius64](https://github.com/binius-zk/binius64)** — Irreducible's
-binary-tower field framework; the basis for our F₁₂₈ / ring-switch design.
-Dual-licensed Apache-2.0 OR MIT; Copyright 2025 The Binius Developers and
-Irreducible, Inc. Derived files:
-
-- `crates/flock-core/src/field/phi8.rs` — `PHI_8_TABLE`, a verbatim copy from
-  `crates/field/src/ghash.rs`.
-- `crates/flock-core/src/field/gf2_128.rs` — the default `Mul`
-  (`ghash_mul_binius`) ports `mul_clmul` from
-  `crates/field/src/arch/shared/ghash.rs`.
-- `crates/flock-core/src/field/gf2_8.rs` — the NEON 16-wide multiplier
-  (`gf8_mul_vec16` / `gf8_reduce_vec16`) ports `packed_aes_16x8b_multiply` from
-  `crates/field/src/arch/aarch64/simd_arithmetic.rs`.
-- `crates/flock-core/src/ntt/additive_ntt_f128.rs` — algorithm skeleton
-  (iterative LCH NTT, neighbors-last ordering) derived from
-  `NeighborsLastReference` in `crates/math/src/ntt/reference.rs`; the
-  interleaved SoA layout, fused 2-layer butterfly, and parallelization are
-  original to Flock.
-- `crates/flock-core/src/pcs/tensor_algebra.rs` — port of
-  `crates/math/src/tensor_algebra.rs`, specialized to `F = F_2`, `FE = F_{2^128}`.
-- `crates/flock-core/src/pcs/ring_switch.rs` — the verifier's polylog
-  `eval_rs_eq` helper ports `crates/verifier/src/ring_switch.rs`; the rest of
-  the module is original to Flock.
-
-**[bolt-rs](https://github.com/bcc-research/bolt-rs)** — BCC Research's Ligerito
-implementation; reference for our integrated Ligerito PCS backend.
-Dual-licensed MIT OR Apache-2.0; Copyright (c) 2026 Bain Capital Crypto, LP and
-Ron Rothblum. Derived files:
-
-- `crates/flock-core/src/pcs/ligerito.rs` — port of `ligerito_recursive.rs` onto
-  Flock primitives.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security audit](docs/SECURITY.md)
+- [Formal verification plan](docs/FORMAL_VERIFICATION.md)
+- [Transcript](docs/TRANSCRIPT.md)
 
 ## License
 
-Licensed under either of
-
-- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE) or <http://www.apache.org/licenses/LICENSE-2.0>)
-- MIT license ([LICENSE-MIT](LICENSE-MIT) or <http://opensource.org/licenses/MIT>)
-
-at your option.
-
-### Contribution
-
-Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in the work by you, as defined in the Apache-2.0 license, shall be
-dual licensed as above, without any additional terms or conditions.
+Apache-2.0 or MIT.

@@ -1,31 +1,38 @@
-# Implemented transcript (version 0)
+# Succinct VEIL-FLOCK transcript (version 0)
 
-All observations below are absorbed in order by FLOCK's duplex SHA-256
-challenger. Merkle hashing is separately framed by role, channel, position, and
-the proof nonce.
+1. Absorb the fixed-digest statement.
+2. Commit hidingly to the randomized FLOCK witness and bind the proof nonce,
+   circuit shape, and witness root.
+3. Precommit to the VEIL mask vector `h` plus its six private multiplication
+   pads; absorb that root under `veil-flock-mask-root-v0`.
+4. Run FLOCK zerocheck. Every prover F128 message is observed and serialized as
+   `value + h_i`. Scalar and slice Fiat--Shamir framing is preserved exactly.
+5. Run FLOCK lincheck with the same treatment for every round pair and the
+   final `z_partial` vector.
+6. Send the AB and C opening values and absorb them under
+   `veil-flock-output-claims-v0`. These values are tied to randomized witness
+   rows and are checked in both the shifted circuit and PCS.
+7. Sample the public digest batching challenge and run one hiding
+   ring-switch/Ligerito opening for AB, C, and the digest claim.
+8. From the pre-opening transcript fork, absorb
+   `veil-flock-inner-fork-v0` and finish the VEIL proof of the shifted verifier
+   circuit. This fork avoids relying on an unused historical invariant that
+   Ligerito's prover and verifier leave identical states after their terminal
+   opening; all linkage data is already bound before the fork.
 
-1. Top-level label, batch size, pinned R1CS digest, commitment nonce, and public
-   digest vector.
-2. Block-R1CS label, extended-witness commitment root, and Hadamard commitment
-   root.
-3. Batching challenge for the R1CS and Booleanity multiplication triples.
-4. Hadamard label and root; evaluation challenge; `gamma`; product-mask
-   challenge; `phi`.
-5. Hadamard dot vector; three claimed dot products; additive-mask dot product;
-   root; linear-combination challenge; revealed masked vector and random message
-   padding; 128 derived query positions and one framed Merkle multiproof.
-6. Link batching challenge. The verifier computes `A^T q`, `B^T q`, the private
-   six-value links, the `r + (r+1) = 1` equality, constant pins, and public digest
-   equalities.
-7. Dot-product label; computed link vector; expected claim; mask dot product;
-   extended-witness root; linear-combination challenge; revealed masked vector
-   and random message padding; 128 derived query positions and one framed Merkle
-   multiproof.
+At the batch-256 shape the mask vector has 242 F128 values:
 
-No message bytes, witness bits, `A z`, `B z`, or the six multiplicative padding
-values are serialized directly. The three Hadamard dot claims are masked by the
-private tautological triples.
+```text
+2*64 zerocheck round-1 values
++ 2*(22-6) zerocheck multilinear values
++ 2 zerocheck terminal values (a,b)
++ 2*(14-6) lincheck round values
++ 64 lincheck z_partial values
+= 242
+```
 
-The current mode does not serialize FLOCK zerocheck, lincheck, ring-switching, or
-Ligerito transcripts: it proves FLOCK's native block R1CS directly. Those phases
-re-enter the transcript only in the future succinct-verifier compilation.
+`final_c_eval` is not an observed FLOCK message. The proof stores the public C
+PCS claim in that duplicate field, while the shifted circuit reconstructs it
+from the masked round-1 C vector.
+
+No mask, preimage, witness bit, or unmasked PIOP round message is serialized.

@@ -136,6 +136,34 @@ impl std::fmt::Display for PreimageError {
 
 impl std::error::Error for PreimageError {}
 
+#[cfg(feature = "veil")]
+#[derive(Debug, PartialEq, Eq)]
+pub enum SuccinctPreimageError {
+    Statement(PreimageError),
+    Protocol(crate::succinct_veil::SuccinctVeilError),
+}
+
+#[cfg(feature = "veil")]
+pub struct SimulatedSuccinctPreimage {
+    pub proof: crate::succinct_veil::SuccinctVeilProof,
+    pub commitment: Commitment,
+    pub programmed_points: usize,
+}
+
+#[cfg(feature = "veil")]
+impl From<PreimageError> for SuccinctPreimageError {
+    fn from(value: PreimageError) -> Self {
+        Self::Statement(value)
+    }
+}
+
+#[cfg(feature = "veil")]
+impl From<crate::succinct_veil::SuccinctVeilError> for SuccinctPreimageError {
+    fn from(value: crate::succinct_veil::SuccinctVeilError) -> Self {
+        Self::Protocol(value)
+    }
+}
+
 impl Blake3PreimageSetup {
     /// Build a setup for `n_blocks` preimage instances.
     pub fn new(n_blocks: usize) -> Self {
@@ -147,7 +175,10 @@ impl Blake3PreimageSetup {
         let pcs_params = PcsParams {
             m: r1cs.m,
             log_inv_rate: 1,
-            log_batch_size: 6,
+            // Small direct-preimage batches fall below the registered m=22
+            // profile floor. Keep at least seven message-column bits so the
+            // ad-hoc UDR query schedule remains feasible.
+            log_batch_size: 6.min((r1cs.m - flock_core::pcs::LOG_PACKING) - 7),
             profile: flock_core::pcs::ligerito::LigeritoProfile::Fast,
             zk: false,
         };
@@ -225,12 +256,7 @@ impl Blake3PreimageSetup {
             );
         let lc_circuit = self.r1cs.csc_lincheck_circuit();
         let log_n = self.pcs_params.log_msg_len();
-        let lig_config = flock_core::pcs::ligerito::prover_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .expect("Ligerito prover config");
+        let lig_config = self.ligerito_prover_config(log_n);
 
         // The public digests enter the transcript BEFORE anything else, so
         // every challenge in the proof — and therefore the proof itself — is
@@ -296,12 +322,7 @@ impl Blake3PreimageSetup {
         let stmt = self.statement(digests);
         stmt.validate();
         let log_n = self.pcs_params.log_msg_len();
-        let lig_v = flock_core::pcs::ligerito::verifier_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .expect("Ligerito verifier config");
+        let lig_v = self.ligerito_verifier_config(log_n);
 
         absorb_statement(challenger, &stmt);
 
@@ -332,6 +353,49 @@ impl Blake3PreimageSetup {
         )
         .map_err(flock_core::verifier::VerifyError::PcsAb)
     }
+
+    fn ligerito_prover_config(&self, log_n: usize) -> flock_core::pcs::ligerito::ProverConfig {
+        match flock_core::pcs::ligerito::prover_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        ) {
+            Ok(config) => config,
+            Err(_) if self.pcs_params.m < 22 => {
+                // Explicitly limited to the below-registry benchmark/test
+                // range. Missing production-sized profiles still fail closed.
+                #[allow(deprecated)]
+                flock_core::pcs::ligerito::default_config(
+                    log_n,
+                    self.pcs_params.log_batch_size,
+                    self.pcs_params.profile.log_inv_rate(),
+                )
+                .expect("small-batch ad-hoc Ligerito prover config")
+            }
+            Err(error) => panic!("Ligerito prover config: {error}"),
+        }
+    }
+
+    fn ligerito_verifier_config(&self, log_n: usize) -> flock_core::pcs::ligerito::VerifierConfig {
+        match flock_core::pcs::ligerito::verifier_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        ) {
+            Ok(config) => config,
+            Err(_) if self.pcs_params.m < 22 =>
+            {
+                #[allow(deprecated)]
+                flock_core::pcs::ligerito::default_verifier_config(
+                    log_n,
+                    self.pcs_params.log_batch_size,
+                    self.pcs_params.profile.log_inv_rate(),
+                )
+                .expect("small-batch ad-hoc Ligerito verifier config")
+            }
+            Err(error) => panic!("Ligerito verifier config: {error}"),
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -356,6 +420,20 @@ impl Blake3PreimageZkSetup {
     pub fn new(n_blocks: usize) -> Self {
         assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
         let n_log = min_n_blocks_log(n_blocks);
+        Self::with_outer_log(n_blocks, n_log)
+    }
+
+    /// Succinct VEIL setup padded to the hiding-Ligerito production floor.
+    /// This lets applications prove a short list while the public statement
+    /// deterministically fills the remaining slots with the fixed padding
+    /// digest.
+    #[cfg(feature = "veil")]
+    pub fn new_succinct(n_blocks: usize) -> Self {
+        assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
+        Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
+    }
+
+    fn with_outer_log(n_blocks: usize, n_log: usize) -> Self {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
@@ -374,11 +452,57 @@ impl Blake3PreimageZkSetup {
     }
 
     pub fn n_blocks_log(&self) -> usize {
-        min_n_blocks_log(self.n_blocks)
+        self.r1cs.n_log()
     }
 
     pub fn n_block_slots(&self) -> usize {
         1usize << self.n_blocks_log()
+    }
+
+    #[cfg(feature = "veil")]
+    fn succinct_ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
+        let log_n = self.pcs_params.log_msg_len();
+        match flock_core::pcs::ligerito::prover_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        ) {
+            Ok(config) => config,
+            Err(_) if self.pcs_params.m < 22 =>
+            {
+                #[allow(deprecated)]
+                flock_core::pcs::ligerito::default_config(
+                    log_n,
+                    self.pcs_params.log_batch_size,
+                    self.pcs_params.profile.log_inv_rate(),
+                )
+                .expect("small-batch succinct-VEIL Ligerito prover config")
+            }
+            Err(error) => panic!("Ligerito prover config: {error}"),
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    fn succinct_ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
+        let log_n = self.pcs_params.log_msg_len();
+        match flock_core::pcs::ligerito::verifier_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        ) {
+            Ok(config) => config,
+            Err(_) if self.pcs_params.m < 22 =>
+            {
+                #[allow(deprecated)]
+                flock_core::pcs::ligerito::default_verifier_config(
+                    log_n,
+                    self.pcs_params.log_batch_size,
+                    self.pcs_params.profile.log_inv_rate(),
+                )
+                .expect("small-batch succinct-VEIL Ligerito verifier config")
+            }
+            Err(error) => panic!("Ligerito verifier config: {error}"),
+        }
     }
 
     /// The public statement for a digest list (same rule as the non-zk path).
@@ -395,6 +519,237 @@ impl Blake3PreimageZkSetup {
             padding: PaddingDigest::Constant,
             padding_bits: digest_to_bits(&pad),
         }
+    }
+
+    /// Experimental succinct VEIL mode. Unlike the older A1 reference path,
+    /// this makes one hiding witness opening and proves only FLOCK's small
+    /// algebraic verifier transcript inside VEIL.
+    #[cfg(feature = "veil")]
+    pub fn prove_succinct<Ch: Challenger + Clone>(
+        &self,
+        msgs: &[[u8; MESSAGE_BYTES]],
+        digests: &[[u8; DIGEST_BYTES]],
+        rng: &mut flock_core::zk::ZkRng,
+        challenger: &mut Ch,
+    ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
+        use flock_core::zk::MaskSampler;
+
+        if digests.len() != self.n_blocks || msgs.len() != self.n_blocks {
+            return Err(PreimageError::BatchSizeMismatch {
+                expected: self.n_blocks,
+                got: digests.len().max(msgs.len()),
+            }
+            .into());
+        }
+        for (index, (message, digest)) in msgs.iter().zip(digests).enumerate() {
+            if ::blake3::hash(message).as_bytes() != digest {
+                return Err(PreimageError::DigestMismatch { index }.into());
+            }
+        }
+        let statement = self.statement(digests);
+        statement.validate();
+        let layout = self
+            .r1cs
+            .zk
+            .expect("succinct setup carries randomizer rows");
+        let mut witness_rng = rng.fork(b"succinct-preimage-witness-randomizers");
+        let mut random_words =
+            vec![
+                0u64;
+                self.n_block_slots() * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+            ];
+        witness_rng.fill_u64s(&mut random_words);
+        let blocks = msgs.iter().map(message_compression).collect::<Vec<_>>();
+        let (z, a, b, z_lincheck) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+            &blocks,
+            self.n_blocks_log(),
+            &layout,
+            &random_words,
+            ParamPinning::RootHash64,
+        );
+        let lig_config = self.succinct_ligerito_prover_config();
+        absorb_statement(challenger, &statement);
+        let statement_for_claim = statement.clone();
+        Ok(crate::succinct_veil::prove_succinct_veil_r1cs(
+            &self.r1cs,
+            &self.pcs_params,
+            z,
+            a,
+            b,
+            z_lincheck,
+            self.r1cs.csc_lincheck_circuit(),
+            &lig_config,
+            rng,
+            &mut |ch: &mut Ch| {
+                let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
+                vec![digest_claim(
+                    &statement_for_claim,
+                    self.r1cs.layout,
+                    &digest_challenges,
+                )]
+            },
+            None,
+            challenger,
+        )?)
+    }
+
+    #[cfg(feature = "veil")]
+    pub fn verify_succinct<Ch: Challenger + Clone>(
+        &self,
+        commitment: &Commitment,
+        proof: &crate::succinct_veil::SuccinctVeilProof,
+        digests: &[[u8; DIGEST_BYTES]],
+        challenger: &mut Ch,
+    ) -> Result<(), SuccinctPreimageError> {
+        if digests.len() != self.n_blocks {
+            return Err(PreimageError::BatchSizeMismatch {
+                expected: self.n_blocks,
+                got: digests.len(),
+            }
+            .into());
+        }
+        let statement = self.statement(digests);
+        statement.validate();
+        let lig_config = self.succinct_ligerito_verifier_config();
+        absorb_statement(challenger, &statement);
+        let layout = self.r1cs.layout;
+        crate::succinct_veil::verify_succinct_veil_r1cs(
+            &self.r1cs,
+            &self.pcs_params,
+            proof,
+            commitment,
+            self.r1cs.csc_lincheck_circuit(),
+            &lig_config,
+            &mut |ch: &mut Ch| {
+                let digest_challenges = DigestChallenges::sample(&statement, ch);
+                vec![(
+                    digest_claim_point(&statement, layout, &digest_challenges),
+                    digest_claim_value(&statement, &digest_challenges),
+                )]
+            },
+            challenger,
+        )?;
+        Ok(())
+    }
+
+    /// Programmable-ROM simulator for the succinct composition. The API has
+    /// no preimage parameter: it builds an unrelated pseudo-witness, patches
+    /// only its public digest cells, and simulates the zerocheck that would
+    /// otherwise reject that vector. Lincheck, the hiding PCS opening, and
+    /// the VEIL shifted-verifier proof all run through their production code.
+    #[cfg(feature = "veil")]
+    pub fn simulate_succinct(
+        &self,
+        digests: &[[u8; DIGEST_BYTES]],
+        seed: [u8; 32],
+        oracle: crate::sim_oracle::SharedOracle,
+        domain: &[u8],
+    ) -> Result<SimulatedSuccinctPreimage, SuccinctPreimageError> {
+        use flock_core::zk::MaskSampler;
+
+        if digests.len() != self.n_blocks {
+            return Err(PreimageError::BatchSizeMismatch {
+                expected: self.n_blocks,
+                got: digests.len(),
+            }
+            .into());
+        }
+        let statement = self.statement(digests);
+        statement.validate();
+        let mut rng = flock_core::zk::ZkRng::from_seed(seed);
+        let mut message_rng = rng.fork(b"succinct-simulator-pseudo-messages");
+        let mut message_words = vec![0u64; self.n_blocks * MESSAGE_BYTES / 8];
+        message_rng.fill_u64s(&mut message_words);
+        let own_messages = message_words
+            .chunks_exact(MESSAGE_BYTES / 8)
+            .map(|words| {
+                let mut message = [0u8; MESSAGE_BYTES];
+                for (chunk, word) in message.chunks_exact_mut(8).zip(words) {
+                    chunk.copy_from_slice(&word.to_le_bytes());
+                }
+                message
+            })
+            .collect::<Vec<_>>();
+        let blocks = own_messages
+            .iter()
+            .map(message_compression)
+            .collect::<Vec<_>>();
+        let layout = self
+            .r1cs
+            .zk
+            .expect("succinct simulator needs randomizer rows");
+        let mut randomizer_rng = rng.fork(b"succinct-simulator-randomizer-rows");
+        let mut randomizer_words =
+            vec![
+                0u64;
+                self.n_block_slots() * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)
+            ];
+        randomizer_rng.fill_u64s(&mut randomizer_words);
+        let (mut z, _, _, _) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
+            &blocks,
+            self.n_blocks_log(),
+            &layout,
+            &randomizer_words,
+            ParamPinning::RootHash64,
+        );
+
+        // The BLAKE3 layout stores the two packed digest halves in aligned
+        // words 2 and 3 of every witness block (the same public region used by
+        // `digest_claim`).
+        let words_per_block = (1usize << self.r1cs.k_log) / 128;
+        for (instance, digest) in digests.iter().enumerate() {
+            for half in 0..2usize {
+                let mut packed = flock_core::field::F128::ZERO;
+                for bit_in_half in 0..128usize {
+                    let bit = half * 128 + bit_in_half;
+                    if (digest[bit / 8] >> (bit % 8)) & 1 == 1 {
+                        if bit_in_half < 64 {
+                            packed.lo |= 1u64 << bit_in_half;
+                        } else {
+                            packed.hi |= 1u64 << (bit_in_half - 64);
+                        }
+                    }
+                }
+                z[instance * words_per_block + 2 + half] = packed;
+            }
+        }
+        let a = self.r1cs.apply_a_packed(&z);
+        let b = self.r1cs.apply_b_packed(&z);
+        let z_lincheck =
+            flock_core::lincheck::pack_z_lincheck_from_packed(&z, self.r1cs.m, self.r1cs.k_log);
+        let lig_config = self.succinct_ligerito_prover_config();
+        let mut challenger = crate::sim_oracle::OracleChallenger::new(domain, oracle.clone());
+        absorb_statement(&mut challenger, &statement);
+        let source_seed = *::blake3::keyed_hash(&seed, b"succinct-veil-zc-simulator").as_bytes();
+        let mut source = crate::succinct_veil::RomZerocheckSimulator::new(self.r1cs.m, source_seed);
+        let statement_for_claim = statement.clone();
+        let (proof, commitment) = crate::succinct_veil::prove_succinct_veil_r1cs(
+            &self.r1cs,
+            &self.pcs_params,
+            z,
+            a,
+            b,
+            z_lincheck,
+            self.r1cs.csc_lincheck_circuit(),
+            &lig_config,
+            &mut rng,
+            &mut |ch: &mut crate::sim_oracle::OracleChallenger| {
+                let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
+                vec![digest_claim(
+                    &statement_for_claim,
+                    self.r1cs.layout,
+                    &digest_challenges,
+                )]
+            },
+            Some(&mut source),
+            &mut challenger,
+        )?;
+        let programmed_points = oracle.lock().expect("oracle poisoned").programmed_len();
+        Ok(SimulatedSuccinctPreimage {
+            proof,
+            commitment,
+            programmed_points,
+        })
     }
 
     /// Prove, with masking, that the committed messages hash to `digests`.
@@ -566,6 +921,133 @@ mod tests {
             .collect()
     }
 
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_veil_preimage_roundtrip_and_mutations() {
+        // The hiding Ligerito layer's registered production geometry starts
+        // at m=22, i.e. 256 BLAKE3 blocks.
+        let n = N_TEST;
+        let setup = Blake3PreimageZkSetup::new(n);
+        let messages = msgs_of(0x51_CC_1C_7, n);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+        let mut rng = flock_core::zk::ZkRng::from_seed([0x51; 32]);
+        let mut prover_challenger = FsChallenger::new(b"succinct-veil-preimage-test");
+        let (proof, commitment) = setup
+            .prove_succinct(&messages, &digests, &mut rng, &mut prover_challenger)
+            .expect("prove succinct VEIL");
+
+        let mut verifier_challenger = FsChallenger::new(b"succinct-veil-preimage-test");
+        setup
+            .verify_succinct(&commitment, &proof, &digests, &mut verifier_challenger)
+            .expect("verify succinct VEIL");
+
+        let rejects = |candidate: &crate::succinct_veil::SuccinctVeilProof,
+                       candidate_commitment: &Commitment,
+                       candidate_digests: &[[u8; DIGEST_BYTES]]| {
+            let mut challenger = FsChallenger::new(b"succinct-veil-preimage-test");
+            assert!(
+                setup
+                    .verify_succinct(
+                        candidate_commitment,
+                        candidate,
+                        candidate_digests,
+                        &mut challenger,
+                    )
+                    .is_err()
+            );
+        };
+
+        let mut changed_message = proof.clone();
+        changed_message.masked_zerocheck.round1_ab[0] += flock_core::field::F128::ONE;
+        rejects(&changed_message, &commitment, &digests);
+
+        let mut changed_lincheck = proof.clone();
+        changed_lincheck.masked_lincheck.z_partial[0] += flock_core::field::F128::ONE;
+        rejects(&changed_lincheck, &commitment, &digests);
+
+        let mut changed_claim = proof.clone();
+        changed_claim.ab_value += flock_core::field::F128::ONE;
+        rejects(&changed_claim, &commitment, &digests);
+
+        let mut changed_veil = proof.clone();
+        changed_veil.veil.linear.rlc_vector[0] += flock_core::field::F128::ONE;
+        rejects(&changed_veil, &commitment, &digests);
+
+        let mut changed_hadamard = proof.clone();
+        changed_hadamard
+            .veil
+            .hadamard
+            .as_mut()
+            .expect("padding always creates Hadamard rows")
+            .phi[0] += flock_core::field::F128::ONE;
+        rejects(&changed_hadamard, &commitment, &digests);
+
+        let mut changed_pcs = proof.clone();
+        changed_pcs.pcs_open.ligerito.initial_proof.opened_rows[0][0] +=
+            flock_core::field::F128::ONE;
+        rejects(&changed_pcs, &commitment, &digests);
+
+        let mut changed_nonce = proof.clone();
+        changed_nonce.proof_nonce[0] ^= 1;
+        rejects(&changed_nonce, &commitment, &digests);
+
+        let mut changed_commitment = commitment.clone();
+        changed_commitment.root[0] ^= 1;
+        rejects(&proof, &changed_commitment, &digests);
+
+        let mut wrong_digests = digests.clone();
+        wrong_digests[0][0] ^= 1;
+        rejects(&proof, &commitment, &wrong_digests);
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_output_claims_move_with_fresh_randomizers() {
+        let setup = Blake3PreimageZkSetup::new_succinct(2);
+        let messages = msgs_of(0x5A17, 2);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+        let prove = |seed: u8| {
+            let mut rng = flock_core::zk::ZkRng::from_seed([seed; 32]);
+            let mut challenger = FsChallenger::new(b"succinct-veil-claim-mask-test");
+            setup
+                .prove_succinct(&messages, &digests, &mut rng, &mut challenger)
+                .expect("prove")
+                .0
+        };
+        let first = prove(0x31);
+        let second = prove(0x32);
+        assert_ne!(first.ab_value, second.ab_value);
+        assert_ne!(first.c_value, second.c_value);
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_veil_public_only_simulator_is_accepted() {
+        const DOMAIN: &[u8] = b"succinct-veil-public-only-simulator-test";
+        let setup = Blake3PreimageZkSetup::new_succinct(2);
+        // Arbitrary public targets; the simulator API receives no messages
+        // and makes no attempt to invert them.
+        let digests = vec![[0x42; DIGEST_BYTES], [0xA7; DIGEST_BYTES]];
+        let oracle = crate::sim_oracle::shared_oracle();
+        let simulated = setup
+            .simulate_succinct(&digests, [0x93; 32], oracle.clone(), DOMAIN)
+            .expect("simulate without a preimage");
+        assert_eq!(
+            simulated.programmed_points,
+            1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
+        );
+
+        let mut verifier = crate::sim_oracle::OracleChallenger::new(DOMAIN, oracle.clone());
+        setup
+            .verify_succinct(
+                &simulated.commitment,
+                &simulated.proof,
+                &digests,
+                &mut verifier,
+            )
+            .expect("the production verifier accepts the simulated proof");
+    }
+
     /// End to end: prove knowledge of preimages of real BLAKE3 digests, and
     /// verify against the digests alone.
     #[test]
@@ -585,6 +1067,20 @@ mod tests {
         setup
             .verify(&comm, &proof, &digests, &mut chv)
             .expect("honest preimage proof must verify");
+    }
+
+    #[test]
+    fn small_preimage_roundtrip_uses_explicit_ad_hoc_config() {
+        let setup = Blake3PreimageSetup::new(1);
+        assert_eq!(setup.pcs_params.log_batch_size, 3);
+        let msgs = msgs_of(0x51_4d_41_4c_4c, 1);
+        let digests = Blake3PreimageSetup::digests_of(&msgs);
+        let mut prover = FsChallenger::new(b"b3-preimage-small");
+        let (proof, commitment) = setup.prove(&msgs, &digests, &mut prover).unwrap();
+        let mut verifier = FsChallenger::new(b"b3-preimage-small");
+        setup
+            .verify(&commitment, &proof, &digests, &mut verifier)
+            .unwrap();
     }
 
     /// A proof is bound to its digest list: flipping one bit of one public

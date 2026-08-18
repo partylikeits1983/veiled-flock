@@ -1,6 +1,11 @@
 //! VEIL's inner arithmetic-constraint compiler over `F128`.
 //!
-//! Transcript masks and materialized products form a private witness vector.
+//! Transcript masks form a private witness vector. Two dummy products mask
+//! the three Hadamard dot claims, following VEIL's R1CS compiler: for random
+//! `r,s,t` we append
+//! `(r,s,rs)` and `(r+1,t,(r+1)t)`. Their two product rows make every exposed
+//! multiplication claim witness-independent, while the linear relation
+//! `r + (r+1) + 1 = 0` ties the padding together.
 //! Linear constraints are batched into one ZK dot-product proof. Multiplicative
 //! constraints are batched into one ZK Hadamard-plus-dot proof, and the three
 //! resulting dot claims are linked back to the same witness vector by three
@@ -277,6 +282,24 @@ pub struct ConstraintProof {
     pub linear: DotProductProof,
 }
 
+/// First phase of the VEIL compilation. The caller may bind [`Self::root`]
+/// into an outer Fiat--Shamir transcript before that transcript derives the
+/// challenges used to construct the shifted verifier circuit. This breaks
+/// the otherwise-circular dependency between the mask commitment and those
+/// challenges.
+pub struct ConstraintCommitment {
+    circuit_inputs: usize,
+    padded_witness: Vec<F128>,
+    linear_data: crate::dot_product::DotProductProverData,
+    parameters: ConstraintParameters,
+}
+
+impl ConstraintCommitment {
+    pub fn root(&self) -> flock_core::merkle::Hash {
+        self.linear_data.root()
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ConstraintParameters {
     pub linear_padding: usize,
@@ -293,14 +316,27 @@ impl ConstraintParameters {
         }
     }
 
-    /// Memory-oriented profile for the direct FLOCK R1CS experiment. At
-    /// rate 1/2, 128 queries contribute roughly 53 bits in the basic
-    /// unique-decoding proximity term; this is not a 100-bit profile.
+    /// Test profile matching the direct FLOCK experiment. The base code is
+    /// rate 1/4 and its square/product code is rate 1/2; 128 queries
+    /// contribute roughly 53 bits in the square-code unique-decoding term.
     pub const fn flock_experimental() -> Self {
         Self {
             linear_padding: 128,
             hadamard_padding: 128,
-            inverse_rate: 2,
+            inverse_rate: 4,
+        }
+    }
+
+    /// Profile for the succinct FLOCK transcript compiler. With at most a
+    /// handful of product rows, the square code has rate at most 1/4; 160
+    /// non-adaptive queries give about 108 bits for the unique-decoding
+    /// proximity term `(5/8)^160`. This remains an experimental, unaudited
+    /// profile rather than a production security claim.
+    pub const fn succinct_flock_experimental() -> Self {
+        Self {
+            linear_padding: 160,
+            hadamard_padding: 160,
+            inverse_rate: 8,
         }
     }
 
@@ -370,31 +406,106 @@ pub fn prove_constraints_with_parameters<C: Challenger, R: MaskSampler + ?Sized>
     rng: &mut R,
     challenger: &mut C,
 ) -> Result<ConstraintProof, ConstraintError> {
+    let commitment = commit_constraint_inputs(circuit, inputs, parameters, rng)?;
+    prove_constraints_from_commitment(circuit, commitment, rng, challenger)
+}
+
+/// Commit to the shifted-circuit inputs before the outer protocol samples
+/// challenges. Circuits used with this two-phase API must not materialize
+/// multiplication outputs: verifier checks in FLOCK use only linear
+/// expressions plus asserted products, so this restriction loses nothing and
+/// keeps the precommitment independent of later challenges.
+pub fn commit_constraint_inputs<R: MaskSampler + ?Sized>(
+    circuit: &ArithmeticCircuit,
+    inputs: &[F128],
+    parameters: ConstraintParameters,
+    rng: &mut R,
+) -> Result<ConstraintCommitment, ConstraintError> {
     let parameters = parameters.validate()?;
-    let witness = circuit.complete_witness(inputs)?;
-    if !circuit.is_satisfied(&witness)? {
-        return Err(ConstraintError::UnsatisfiedCircuit);
+    if circuit.num_variables != circuit.num_inputs
+        || circuit
+            .multiplications
+            .iter()
+            .any(|gate| gate.materialized_output.is_some())
+    {
+        return Err(ConstraintError::MalformedCircuit);
+    }
+    if inputs.len() != circuit.num_inputs {
+        return Err(ConstraintError::WrongInputLength {
+            expected: circuit.num_inputs,
+            actual: inputs.len(),
+        });
     }
 
+    let mut random = [F128::ZERO; 3];
+    rng.fill_f128(&mut random);
+    let [r, s, t] = random;
+    let r_plus_one = r + F128::ONE;
+    let mut padded_witness = Vec::with_capacity(inputs.len() + 6);
+    padded_witness.extend_from_slice(inputs);
+    padded_witness.extend_from_slice(&[r, s, r * s, r_plus_one, t, r_plus_one * t]);
     let linear_parameters = VectorParameters::with_security(
-        circuit.num_variables,
+        padded_witness.len(),
         1,
         parameters.linear_padding,
         parameters.inverse_rate,
     )?;
-    let linear_data = commit_vectors(std::slice::from_ref(&witness), linear_parameters, rng)?;
-    let linear_root = linear_data.root();
+    let linear_data = commit_vectors(
+        std::slice::from_ref(&padded_witness),
+        linear_parameters,
+        rng,
+    )?;
+    Ok(ConstraintCommitment {
+        circuit_inputs: circuit.num_inputs,
+        padded_witness,
+        linear_data,
+        parameters,
+    })
+}
 
-    let mut constraints = circuit.linear_constraints.clone();
+/// Finish a two-phase proof using an input commitment made before the outer
+/// protocol derived the verifier-circuit challenges.
+pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>(
+    circuit: &ArithmeticCircuit,
+    commitment: ConstraintCommitment,
+    rng: &mut R,
+    challenger: &mut C,
+) -> Result<ConstraintProof, ConstraintError> {
+    if circuit.num_variables != circuit.num_inputs
+        || circuit.num_inputs != commitment.circuit_inputs
+        || circuit
+            .multiplications
+            .iter()
+            .any(|gate| gate.materialized_output.is_some())
+    {
+        return Err(ConstraintError::MalformedCircuit);
+    }
+    let inputs = &commitment.padded_witness[..commitment.circuit_inputs];
+    if !circuit.is_satisfied(inputs)? {
+        return Err(ConstraintError::UnsatisfiedCircuit);
+    }
+    let padded = padded_circuit(circuit);
+    if !padded.is_satisfied(&commitment.padded_witness)? {
+        return Err(ConstraintError::UnsatisfiedCircuit);
+    }
+
+    let ConstraintCommitment {
+        padded_witness,
+        linear_data,
+        parameters,
+        ..
+    } = commitment;
+    let linear_root = linear_data.root();
+    let mut constraints = padded.linear_constraints.clone();
     challenger.observe_label(b"veil-f128-constraint-system-v0");
     challenger.observe_bytes(&linear_root);
 
-    let hadamard = if circuit.multiplications.is_empty() {
-        None
-    } else {
-        let (a, b, c) = multiplication_vectors(circuit, &witness)?;
+    // The padded circuit always has the two masking products, even when the
+    // shifted verifier decision itself is linear.
+    let hadamard = {
+        let (a, b, c) = multiplication_vectors(&padded, &padded_witness)?;
         let hadamard_parameters = VectorParameters::with_security(
-            circuit.multiplications.len(),
+            padded.multiplications.len(),
             3,
             parameters.hadamard_padding,
             parameters.inverse_rate,
@@ -402,15 +513,15 @@ pub fn prove_constraints_with_parameters<C: Challenger, R: MaskSampler + ?Sized>
         let hadamard_data = commit_hadamard(&a, &b, &c, hadamard_parameters, rng)?;
         challenger.observe_bytes(&hadamard_data.root());
         let multiplication_rlc = challenger.sample_f128();
-        let dot_vector = powers(multiplication_rlc, circuit.multiplications.len());
+        let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
         let proof = prove_hadamard_and_dots(&dot_vector, hadamard_data, challenger)?;
-        append_multiplication_link_constraints(circuit, &dot_vector, &proof, &mut constraints);
+        append_multiplication_link_constraints(&padded, &dot_vector, &proof, &mut constraints);
         Some(proof)
     };
 
     let constraint_rlc = challenger.sample_f128();
     let (dot_vector, expected_dot) =
-        combine_linear_constraints(circuit.num_variables, &constraints, constraint_rlc)?;
+        combine_linear_constraints(padded.num_variables, &constraints, constraint_rlc)?;
     let linear = prove_dot_product(&dot_vector, linear_data, challenger)?;
     if linear.claimed_dot_products.as_slice() != [expected_dot] {
         return Err(ConstraintError::LinearClaimMismatch);
@@ -418,8 +529,8 @@ pub fn prove_constraints_with_parameters<C: Challenger, R: MaskSampler + ?Sized>
 
     Ok(ConstraintProof {
         parameters,
-        num_variables: circuit.num_variables,
-        num_multiplications: circuit.multiplications.len(),
+        num_variables: padded.num_variables,
+        num_multiplications: padded.multiplications.len(),
         hadamard,
         linear,
     })
@@ -431,45 +542,90 @@ pub fn verify_constraints<C: Challenger>(
     challenger: &mut C,
 ) -> Result<(), ConstraintError> {
     let parameters = proof.parameters.validate()?;
-    if proof.num_variables != circuit.num_variables
-        || proof.num_multiplications != circuit.multiplications.len()
-        || proof.linear.parameters.vector_length != circuit.num_variables
+    if circuit.num_variables != circuit.num_inputs
+        || circuit
+            .multiplications
+            .iter()
+            .any(|gate| gate.materialized_output.is_some())
+    {
+        return Err(ConstraintError::MalformedCircuit);
+    }
+    let padded = padded_circuit(circuit);
+    if proof.num_variables != padded.num_variables
+        || proof.num_multiplications != padded.multiplications.len()
+        || proof.linear.parameters.vector_length != padded.num_variables
         || proof.linear.parameters.num_vectors != 1
-        || proof.hadamard.is_some() != !circuit.multiplications.is_empty()
+        || proof.hadamard.is_none()
         || proof.linear.parameters.padding_length != parameters.linear_padding
         || proof.linear.parameters.code_length
-            != (circuit.num_variables + parameters.linear_padding).next_power_of_two()
+            != (padded.num_variables + parameters.linear_padding).next_power_of_two()
                 * parameters.inverse_rate
     {
         return Err(ConstraintError::WrongProofShape);
     }
 
-    let mut constraints = circuit.linear_constraints.clone();
+    let mut constraints = padded.linear_constraints.clone();
     challenger.observe_label(b"veil-f128-constraint-system-v0");
     challenger.observe_bytes(&proof.linear.commitment);
     if let Some(hadamard) = &proof.hadamard {
+        challenger.observe_bytes(&hadamard.commitment);
+        let multiplication_rlc = challenger.sample_f128();
         if hadamard.parameters.padding_length != parameters.hadamard_padding
+            || hadamard.parameters.vector_length != padded.multiplications.len()
             || hadamard.parameters.code_length
-                != (circuit.multiplications.len() + parameters.hadamard_padding).next_power_of_two()
+                != (padded.multiplications.len() + parameters.hadamard_padding).next_power_of_two()
                     * parameters.inverse_rate
         {
             return Err(ConstraintError::WrongProofShape);
         }
-        challenger.observe_bytes(&hadamard.commitment);
-        let multiplication_rlc = challenger.sample_f128();
-        let dot_vector = powers(multiplication_rlc, circuit.multiplications.len());
+        let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
         verify_hadamard_and_dots(&dot_vector, hadamard, challenger)?;
-        append_multiplication_link_constraints(circuit, &dot_vector, hadamard, &mut constraints);
+        append_multiplication_link_constraints(&padded, &dot_vector, hadamard, &mut constraints);
     }
 
     let constraint_rlc = challenger.sample_f128();
     let (dot_vector, expected_dot) =
-        combine_linear_constraints(circuit.num_variables, &constraints, constraint_rlc)?;
+        combine_linear_constraints(padded.num_variables, &constraints, constraint_rlc)?;
     if proof.linear.claimed_dot_products.as_slice() != [expected_dot] {
         return Err(ConstraintError::LinearClaimMismatch);
     }
     verify_dot_product(&dot_vector, &proof.linear, challenger)?;
     Ok(())
+}
+
+fn padded_circuit(circuit: &ArithmeticCircuit) -> ArithmeticCircuit {
+    let n = circuit.num_variables;
+    let r = LinearCombination::variable(n);
+    let s = LinearCombination::variable(n + 1);
+    let rs = LinearCombination::variable(n + 2);
+    let r_plus_one = LinearCombination::variable(n + 3);
+    let t = LinearCombination::variable(n + 4);
+    let r_plus_one_t = LinearCombination::variable(n + 5);
+
+    let mut multiplications = circuit.multiplications.clone();
+    multiplications.push(MultiplicationGate {
+        left: r.clone(),
+        right: s,
+        output: rs,
+        materialized_output: None,
+    });
+    multiplications.push(MultiplicationGate {
+        left: r_plus_one.clone(),
+        right: t,
+        output: r_plus_one_t,
+        materialized_output: None,
+    });
+    let mut linear_constraints = circuit.linear_constraints.clone();
+    linear_constraints.push(
+        r.add(&r_plus_one)
+            .add(&LinearCombination::constant(F128::ONE)),
+    );
+    ArithmeticCircuit {
+        num_inputs: n + 6,
+        num_variables: n + 6,
+        multiplications,
+        linear_constraints,
+    }
 }
 
 fn multiplication_vectors(
@@ -556,12 +712,12 @@ mod tests {
         let mut builder = CircuitBuilder::new(1);
         let h = builder.input(0);
         let v = builder.add(&builder.constant(masked), &h);
-        let square = builder.mul(&v, &v);
-        let check = builder.add(
-            &builder.add(&square, &v),
-            &builder.constant(public_constant),
-        );
-        builder.assert_zero(&check);
+        // v² + v + c = 0 is equivalent to v² = v + c. Expressing the
+        // product with a linear output keeps the circuit compatible with the
+        // two-phase precommitment API (no challenge-dependent materialized
+        // witness variables).
+        let output = builder.add(&v, &builder.constant(public_constant));
+        builder.assert_mul(&v, &v, &output);
         builder.finish()
     }
 
@@ -604,7 +760,9 @@ mod tests {
         let mut prover_challenger = FsChallenger::new(b"veil-f128-linear-test");
         let proof =
             prove_constraints(&circuit, &[value, value], &mut rng, &mut prover_challenger).unwrap();
-        assert!(proof.hadamard.is_none());
+        // The two dummy multiplication rows are present even for a linear
+        // verifier circuit; they hide the Hadamard linkage claims.
+        assert!(proof.hadamard.is_some());
         let mut verifier_challenger = FsChallenger::new(b"veil-f128-linear-test");
         verify_constraints(&circuit, &proof, &mut verifier_challenger).unwrap();
     }

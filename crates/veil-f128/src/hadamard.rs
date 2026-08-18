@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     code::{AdditiveRsCode, CodeError, CodeParameters},
     commitment::{MerkleMatrix, MerkleMatrixOpening},
-    dot_product::{VectorParameters, dot_product, sample_unique_positions},
+    dot_product::{VectorParameters, dot_product, sample_nonzero, sample_unique_positions},
 };
 
 #[derive(Clone, Debug)]
@@ -170,7 +170,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
     let code = code_for(parameters)?;
     let root = commitment.root();
 
-    challenger.observe_label(b"veil-f128-hadamard-v0");
+    challenger.observe_label(b"veil-f128-hadamard-v1");
     challenger.observe_bytes(&root);
     let evaluation_point = challenger.sample_f128();
     let product_mask_reduced = code.square_to_base(&product_mask_intermediate)?;
@@ -179,7 +179,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
         &product_mask_reduced[..parameters.vector_length],
     );
     challenger.observe_f128(gamma);
-    let product_mask_coefficient = challenger.sample_f128();
+    let product_mask_coefficient = sample_nonzero(challenger);
 
     let product_word = (0..parameters.code_length)
         .map(|index| {
@@ -201,7 +201,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = challenger.sample_f128();
+    let rho = sample_nonzero(challenger);
 
     let rlc_vector = (0..parameters.vector_length)
         .map(|index| a[index] + rho * (b[index] + rho * (c[index] + rho * additive_mask[index])))
@@ -268,11 +268,11 @@ fn verify_hadamard_and_dots_inner<C: Challenger>(
     }
     let code = code_for(parameters)?;
 
-    challenger.observe_label(b"veil-f128-hadamard-v0");
+    challenger.observe_label(b"veil-f128-hadamard-v1");
     challenger.observe_bytes(&proof.commitment);
     let evaluation_point = challenger.sample_f128();
     challenger.observe_f128(proof.gamma);
-    let product_mask_coefficient = challenger.sample_f128();
+    let product_mask_coefficient = sample_nonzero(challenger);
     challenger.observe_f128_slice(&proof.phi);
 
     let phi_reduced = code.square_to_base(&proof.phi)?;
@@ -288,7 +288,7 @@ fn verify_hadamard_and_dots_inner<C: Challenger>(
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);
     challenger.observe_bytes(&proof.commitment);
-    let rho = challenger.sample_f128();
+    let rho = sample_nonzero(challenger);
     let expected_dot = proof
         .claimed_dot_products
         .iter()

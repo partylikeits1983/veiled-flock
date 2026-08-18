@@ -197,9 +197,21 @@ pub fn vanishing_s_on_lambda(k_skip: usize) -> Vec<F128> {
 pub fn interpolate_at_z_combined(values_on_lambda: &[F128], k_skip: usize, z: F128) -> F128 {
     let ell = 1usize << k_skip;
     assert_eq!(values_on_lambda.len(), ell);
+    let weights = interpolate_at_z_combined_weights(k_skip, z);
+    values_on_lambda
+        .iter()
+        .zip(weights)
+        .fold(F128::ZERO, |acc, (value, weight)| acc + *value * weight)
+}
+
+/// Public coefficients of [`interpolate_at_z_combined`]. The VEIL shifted
+/// verifier uses these public weights to express the same reconstruction as
+/// a linear combination of masked transcript variables.
+pub fn interpolate_at_z_combined_weights(k_skip: usize, z: F128) -> Vec<F128> {
+    let ell = 1usize << k_skip;
     assert!(2 * ell <= 256, "Λ ∪ S must fit in F_8 (need k_skip ≤ 7)");
     let n_total = 2 * ell;
-    let mut acc = F128::ZERO;
+    let mut weights = Vec::with_capacity(ell);
     for i in 0..ell {
         // i-th Λ node = node index `ell + i` in PHI_8_TABLE.
         let node_idx = ell + i;
@@ -215,9 +227,9 @@ pub fn interpolate_at_z_combined(values_on_lambda: &[F128], k_skip: usize, z: F1
             den *= si + sj;
         }
         let weight = num * den.inv();
-        acc += weight * values_on_lambda[i];
+        weights.push(weight);
     }
-    acc
+    weights
 }
 
 /// Evaluate the multilinear eq polynomial at a point: `eq(r, x) = Π_i (1 + r_i + x_i)`

@@ -1,8 +1,6 @@
-# Architecture of the working experiment
+# Architecture of succinct VEIL-FLOCK
 
-## What is implemented
-
-The current end-to-end mode proves the fixed-digest statement
+## Implemented statement
 
 ```text
 public:  BLAKE3 digests y_0, ..., y_(b-1)
@@ -10,78 +8,91 @@ private: 64-byte messages x_0, ..., x_(b-1)
 claim:   BLAKE3(x_i) = y_i for every i
 ```
 
-It reuses FLOCK's pinned BLAKE3 Boolean R1CS and optimized witness generator,
-but replaces FLOCK's zerocheck/lincheck/Ligerito proof with a direct native
-`F128` VEIL proof. This is the memory-linear reference implementation. Compiling
-FLOCK's existing succinct verifier transcript through VEIL is the next
-performance phase, not something the current artifact claims to have done.
+The circuit is FLOCK's pinned Boolean BLAKE3 R1CS. Short batches use the same
+statement with deterministic padding up to the 256-slot hiding-PCS floor.
 
 ## Proof flow
 
 ```text
-64-byte messages
-      |
-FLOCK BLAKE3 generator -> Boolean z, a = A z, b = B z
-      |
-      +-- Hadamard vector 1: [a | z | r | r+1]
-      +-- Hadamard vector 2: [b | z | s | t]
-      +-- Hadamard vector 3: [z | z | rs | (r+1)t]
-      |                      proves R1CS and z^2 = z
-      |
-      +-- extended witness: [z | r | s | rs | r+1 | t | (r+1)t]
-                             (the six padding values remain private)
-      |
-VEIL Hadamard proof + VEIL dot-product proof
-      |
-public digest equalities, constant pin, and A/B transpose links are batched
-into one random linear dot claim against the same extended witness commitment
+randomized FLOCK witness z
+       |
+       +--> hiding Ligerito commitment Com(z)
+       |
+       +--> ordinary zerocheck + lincheck messages v
+                 |
+                 +--> send v' = v + h
+                      challenges are derived from v'
+
+precommit h before those challenges
+       |
+       +--> VEIL proof of C(v' + h) = 0
+              - all zerocheck recurrences
+              - final a * b identity
+              - all lincheck recurrences
+              - output values equal public PCS claims
+
+Com(z) + the two output claims
+       |
+       +--> one hiding ring-switch/Ligerito opening
+              also binds the public digest claim
 ```
 
-The two commitments use an additive-domain Reed--Solomon code over
-`GF(2^128)`. Each message has 128 random padding symbols, the verifier opens 128
-positions, and Merkle leaves/nodes are domain-separated by channel and a fresh
-per-proof nonce.
+Subtraction is addition in characteristic two. The shifted verifier has 242
+masked inputs at the batch-256 shape, one statement product row, and VEIL's two
+dummy masking rows. Its size is logarithmic in the FLOCK witness size.
 
-## Why the specialized compiler exists
+## Transcript split
 
-FLOCK's substituted BLAKE3 matrices contain roughly 21 million nonzero column
-indices. Expanding every index into a generic `(usize, F128)` linear-combination
-term exceeded 10 GB for the smallest padded experiment. The specialized compiler
-computes `A^T q` and `B^T q` directly from the sparse binary matrices, so proof
-memory is linear in the 16,384 witness slots plus the existing matrix storage.
+- Exposed then VEIL-masked: every F128 value observed from zerocheck and
+  lincheck.
+- Shielded by the hiding PCS: ring-switch values, opened code rows, recursive
+  Ligerito messages, Merkle paths, and the terminal residual.
+- Explicit linkage values: the AB and C evaluation claims. FLOCK's zk
+  randomizer rows move these values; the shifted circuit binds them to the
+  masked PIOP, and Ligerito binds them to the commitment.
+- Public: statement, circuit/PCS shape, batch size, commitment roots, nonce,
+  and digest claim.
 
-## Native characteristic-two VEIL crate
+## Two-phase VEIL commitment
 
-`crates/veil-f128` contains:
+The mask commitment must exist before masked FLOCK messages determine their
+Fiat--Shamir challenges. `veil-f128::commit_constraint_inputs` commits to `h`
+and six private product-padding values first. After FLOCK fixes the shifted
+verifier circuit, `prove_constraints_from_commitment` proves that circuit
+against the same commitment.
 
-- affine additive LCH NTTs over `F128`;
-- the base and square Reed--Solomon codes and reduction map;
-- framed row-Merkle commitments;
-- VEIL dot-product and Hadamard protocols;
-- a generic arithmetic-constraint compiler used by unit tests;
-- the specialized FLOCK block-R1CS compiler; and
-- the statement-only programmable-RO simulator.
+The generic compiler appends
+`(r,s,rs,r+1,t,(r+1)t)`. The two dummy products and the linear relation
+`r+(r+1)+1=0` hide the three Hadamard linkage claims; these values never appear
+in the proof.
 
-Upstream VEIL's Rust implementation is two-adic/prime-field-specific. This crate
-ports the protocol structure to an additive code; it does not pretend the
-KoalaBear implementation can be instantiated over a binary field.
+## Characteristic-two code
+
+`crates/veil-f128` supplies additive-domain Reed--Solomon base and product
+codes over `GF(2^128)`, the reduction map, code-padded Merkle commitments, and
+VEIL dot/Hadamard proofs. The succinct profile uses inverse rate 8 and 160
+random padding symbols/queries.
 
 ## Simulator
 
-The simulator receives the public matrices, public equalities, public statement,
-simulator coins, and a programmable random oracle. It never receives `z`, a
-message, or a preimage.
+`Blake3PreimageZkSetup::simulate_succinct` accepts public digests, simulator
+coins, and a programmable random oracle—no message or preimage.
 
-It samples random commitment roots, algebraic messages from their VEIL masking
-distributions, and queried code rows conditioned on the two verifier equations.
-It then programs only fresh framed Merkle leaf/node points so those rows open to
-the already sampled roots. The ordinary algebraic verifier accepts through the
-external oracle. Native SHA-256 rejects the same transcript, as required: a ROM
-simulator is not a real-hash proof forgery.
+It creates an unrelated randomized pseudo-witness, patches only its public
+digest cells, and commits to it with the normal hiding PCS. Because this vector
+does not satisfy the hash R1CS, the simulator samples zerocheck messages and
+programs the fold challenges, solving the final coefficient to land on the
+pseudo-witness's true terminal evaluations. Lincheck, the PCS opening, and the
+VEIL shifted-verifier proof then run unchanged. The production succinct
+verifier accepts the result through the programmed oracle.
 
 ## User-facing entry points
 
-- `VeiledBlake3Setup::{prove,verify}`: real native-SHA proof path.
-- `VeiledBlake3Setup::{simulate,verify_with_oracle}`: executable ROM game.
-- `veiled_flock demo`: prove and verify one 64-byte BLAKE3 preimage.
-- `veiled_flock prove/verify`: file-based proof bundle workflow.
+- `Blake3PreimageZkSetup::{prove_succinct,verify_succinct}`
+- `Blake3PreimageZkSetup::simulate_succinct`
+- `veiled_flock demo`
+- `veiled_flock prove/verify`
+
+The older direct whole-R1CS VEIL mode remains in `veiled_preimage.rs` as a
+correctness/reference implementation; it is no longer the CLI or benchmark
+path.

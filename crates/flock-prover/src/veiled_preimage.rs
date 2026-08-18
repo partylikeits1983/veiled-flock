@@ -30,7 +30,7 @@ use crate::r1cs_hashes::{
 };
 use crate::sim_oracle::{SharedOracle, ro_context};
 
-const TRANSCRIPT_LABEL: &[u8] = b"veiled-flock-blake3-preimage-direct-v0";
+const TRANSCRIPT_LABEL: &[u8] = b"veiled-flock-blake3-preimage-direct-v1";
 
 #[derive(Clone, Debug)]
 pub struct VeiledBlake3Setup {
@@ -150,7 +150,7 @@ impl VeiledBlake3Setup {
             &ro,
         )?;
         Ok(VeiledBlake3Proof {
-            version: 0,
+            version: 1,
             n_blocks: self.n_blocks,
             r1cs_digest,
             commitment_nonce,
@@ -164,7 +164,7 @@ impl VeiledBlake3Setup {
         digests: &[[u8; DIGEST_BYTES]],
         challenger: &mut C,
     ) -> Result<(), VeiledPreimageError> {
-        if proof.version != 0
+        if proof.version != 1
             || proof.n_blocks != self.n_blocks
             || proof.r1cs_digest != self.r1cs.statement_digest()
             || proof.r1cs.parameters != self.parameters
@@ -220,7 +220,7 @@ impl VeiledBlake3Setup {
             &programmer,
         )?;
         Ok(VeiledBlake3Proof {
-            version: 0,
+            version: 1,
             n_blocks: self.n_blocks,
             r1cs_digest,
             commitment_nonce,
@@ -238,7 +238,7 @@ impl VeiledBlake3Setup {
         challenger: &mut C,
         oracle: SharedOracle,
     ) -> Result<(), VeiledPreimageError> {
-        if proof.version != 0
+        if proof.version != 1
             || proof.n_blocks != self.n_blocks
             || proof.r1cs_digest != self.r1cs.statement_digest()
             || proof.r1cs.parameters != self.parameters
@@ -417,6 +417,12 @@ mod tests {
             .prove(&messages, &digests, &mut rng, &mut prover)
             .unwrap();
         let bytes = proof.to_bytes();
+        for message in &messages {
+            assert!(
+                !bytes.windows(MESSAGE_BYTES).any(|window| window == message),
+                "a serialized proof must not contain a raw preimage"
+            );
+        }
         let decoded = VeiledBlake3Proof::from_bytes(&bytes).unwrap();
         let mut trailing = bytes.clone();
         trailing.push(0);

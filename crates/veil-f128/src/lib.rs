@@ -21,8 +21,9 @@ pub use block_r1cs::{
 pub use code::{AdditiveRsCode, CodeError, CodeParameters};
 pub use commitment::{MerkleMatrix, MerkleMatrixOpening};
 pub use constraints::{
-    ArithmeticCircuit, CircuitBuilder, ConstraintError, ConstraintParameters, ConstraintProof,
-    LinearCombination, prove_constraints, prove_constraints_with_parameters, verify_constraints,
+    ArithmeticCircuit, CircuitBuilder, ConstraintCommitment, ConstraintError, ConstraintParameters,
+    ConstraintProof, LinearCombination, commit_constraint_inputs, prove_constraints,
+    prove_constraints_from_commitment, prove_constraints_with_parameters, verify_constraints,
 };
 pub use dot_product::{
     DotProductError, DotProductProof, DotProductProverData, VectorParameters, commit_vectors,

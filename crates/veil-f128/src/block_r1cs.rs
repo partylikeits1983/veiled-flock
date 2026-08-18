@@ -39,18 +39,19 @@ pub struct BlockR1csParameters {
 }
 
 impl BlockR1csParameters {
-    /// Reference profile used by the end-to-end experiment.  The rate-1/2
-    /// code is deliberately memory-oriented; it is not the final 100-bit
-    /// production parameter set.
+    /// Reference profile used by the end-to-end experiment. The base code has
+    /// rate 1/4, so its square/product code has rate 1/2 and retains a
+    /// non-trivial proximity gap. This is still not a reviewed production
+    /// parameter set.
     pub const fn experimental() -> Self {
         Self {
             query_count: 128,
-            inverse_rate: 2,
+            inverse_rate: 4,
         }
     }
 
     fn validate(self) -> Result<Self, BlockR1csError> {
-        if self.query_count == 0 || self.inverse_rate < 2 || !self.inverse_rate.is_power_of_two() {
+        if self.query_count == 0 || self.inverse_rate < 4 || !self.inverse_rate.is_power_of_two() {
             return Err(BlockR1csError::InvalidParameters);
         }
         Ok(self)
@@ -220,10 +221,10 @@ fn prove_block_r1cs_inner<C: Challenger, R: MaskSampler + ?Sized>(
         )?,
     };
 
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v0");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
     challenger.observe_bytes(&witness_data.root());
     challenger.observe_bytes(&hadamard_data.root());
-    let multiplication_rlc = challenger.sample_f128();
+    let multiplication_rlc = sample_not_zero_or_one(challenger);
     let dot_vector = powers(multiplication_rlc, 2 * n + 2);
     let hadamard = prove_hadamard_and_dots(&dot_vector, hadamard_data, challenger)?;
 
@@ -283,10 +284,10 @@ fn verify_block_r1cs_inner<C: Challenger>(
     {
         return Err(BlockR1csError::WrongProofShape);
     }
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v0");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
     challenger.observe_bytes(&proof.witness.commitment);
     challenger.observe_bytes(&proof.hadamard.commitment);
-    let multiplication_rlc = challenger.sample_f128();
+    let multiplication_rlc = sample_not_zero_or_one(challenger);
     let dot_vector = powers(multiplication_rlc, 2 * n + 2);
     match framed {
         Some(ctx) => verify_hadamard_and_dots_framed(
@@ -445,6 +446,18 @@ pub(crate) fn powers(base: F128, length: usize) -> Vec<F128> {
         .collect()
 }
 
+/// Sample the R1CS batching point from the subset on which VEIL's six-value
+/// padding map is bijective. In characteristic two its final two weights are
+/// non-zero and distinct exactly when `base` is neither zero nor one.
+pub(crate) fn sample_not_zero_or_one<C: Challenger>(challenger: &mut C) -> F128 {
+    loop {
+        let value = challenger.sample_f128();
+        if !value.is_zero() && value != F128::ONE {
+            return value;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use flock_core::{
@@ -550,5 +563,25 @@ mod tests {
             let recovered_s = claim_b + alpha * recovered_t;
             assert_eq!((recovered_r, recovered_s, recovered_t), (r, s, t));
         }
+    }
+
+    #[test]
+    fn registered_profile_keeps_the_square_code_below_rate_one() {
+        let parameters = BlockR1csParameters::experimental();
+        assert_eq!(parameters.inverse_rate, 4);
+        assert!(
+            BlockR1csParameters {
+                query_count: 128,
+                inverse_rate: 2,
+            }
+            .validate()
+            .is_err(),
+            "a rate-1 square code has no useful proximity gap"
+        );
+
+        let vector = vector_parameters(16_390, 1, parameters).unwrap();
+        let base_dimension = vector.message_length().next_power_of_two();
+        let square_dimension = 2 * base_dimension;
+        assert_eq!(vector.code_length, 2 * square_dimension);
     }
 }

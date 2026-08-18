@@ -54,7 +54,7 @@ fn bench_n(n: usize, iters: usize) {
     for _ in 0..iters {
         let mut chp = RandomChallenger::new(1);
         let (proof, _) = prove_chain_shift(&in_vals, &out_vals, &mut chp);
-        sink = sink + proof.g_at_point;
+        sink += proof.g_at_point;
     }
     let prove_ns = t0.elapsed().as_nanos() / iters as u128;
 
@@ -64,7 +64,7 @@ fn bench_n(n: usize, iters: usize) {
     for _ in 0..iters {
         let mut chv = RandomChallenger::new(1);
         let c = verify_chain_shift(&proof, x0_r, xlast_r, n, &mut chv).unwrap();
-        sink = sink + c.value;
+        sink += c.value;
     }
     let verify_ns = t1.elapsed().as_nanos() / iters as u128;
 

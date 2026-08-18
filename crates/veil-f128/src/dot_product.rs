@@ -212,7 +212,7 @@ pub fn prove_dot_product<C: Challenger>(
         return Err(DotProductError::WrongDotVectorLength);
     }
 
-    challenger.observe_label(b"veil-f128-dot-product-v0");
+    challenger.observe_label(b"veil-f128-dot-product-v1");
     let claimed_dot_products: Vec<F128> = vectors
         .iter()
         .map(|vector| dot_product(vector, dot_vector))
@@ -224,7 +224,7 @@ pub fn prove_dot_product<C: Challenger>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = challenger.sample_f128();
+    let rho = sample_nonzero(challenger);
 
     let rlc_vector = (0..parameters.vector_length)
         .map(|index| {
@@ -312,12 +312,12 @@ fn verify_dot_product_inner<C: Challenger>(
         return Err(DotProductError::WrongProofShape);
     }
 
-    challenger.observe_label(b"veil-f128-dot-product-v0");
+    challenger.observe_label(b"veil-f128-dot-product-v1");
     challenger.observe_f128_slice(dot_vector);
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);
     challenger.observe_bytes(&proof.commitment);
-    let rho = challenger.sample_f128();
+    let rho = sample_nonzero(challenger);
 
     let expected_dot = proof
         .claimed_dot_products
@@ -389,6 +389,18 @@ pub(crate) fn sample_unique_positions<C: Challenger>(
         positions.insert((challenger.sample_f128().lo as usize) & mask);
     }
     positions.into_iter().collect()
+}
+
+/// Sample uniformly from `F128 \ {0}`. The last proximity-generator
+/// coefficient must be non-zero: at zero the additive masking vector drops
+/// out and the revealed linear combination is the witness itself.
+pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
+    loop {
+        let value = challenger.sample_f128();
+        if !value.is_zero() {
+            return value;
+        }
+    }
 }
 
 pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
