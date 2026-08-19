@@ -255,3 +255,12 @@ Public proof data:
 
 The proof does not hide batch size, circuit shape, parameter profile, proof
 length, timing, or memory access patterns.
+
+## Diagrams
+
+ASCII sequence and class diagrams live in [`architecture/`](architecture/README.md).
+
+- [flock-core sequence](architecture/flock-core-sequence.md) — PIOP and PCS prover/verifier flow
+- [flock-prover sequence](architecture/flock-prover-sequence.md) — CLI, succinct VEIL, simulator
+- [veil-f128 sequence](architecture/veil-f128-sequence.md) — masked-transcript constraint flow
+- [workspace class diagram](architecture/class-diagram.md) — types and relations across all crates
