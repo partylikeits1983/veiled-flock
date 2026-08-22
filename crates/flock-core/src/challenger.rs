@@ -20,7 +20,7 @@
 //!   the previous one (Merlin-style duplex). SHA-256 is also used for the
 //!   Merkle commitments, so the whole system rests on a single hash.
 
-use crate::field::F128;
+use crate::{field::F128, ro::RoContext};
 use sha2::{Digest, Sha256};
 
 // `Send` supertrait: the verifier runs its PIOP/PCS replay inside a dedicated
@@ -28,6 +28,14 @@ use sha2::{Digest, Sha256};
 // it threads through must be able to cross into that pool. Both concrete
 // challengers (`RandomChallenger`, `FsChallenger`) are trivially `Send`.
 pub trait Challenger: Send {
+    /// Build the per-proof context used by point-hashed protocol roles.
+    /// Production challengers use native SHA-256. Programmable challengers
+    /// override this so Fiat--Shamir, PCS, and auxiliary commitments query the
+    /// same oracle object.
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        RoContext::native(nonce)
+    }
+
     /// Absorb a domain-separation label (e.g. `b"flock-zerocheck-v0"`). Each
     /// protocol entry should call this once on entry so a transcript from
     /// one protocol cannot be replayed as another.

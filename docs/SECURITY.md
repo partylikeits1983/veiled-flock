@@ -11,11 +11,11 @@ secrets.
 | Honest prove/verify completeness | Implemented and tested at batch 256 |
 | Raw messages absent from proof types | Checked by serialization tests and code review |
 | Mutation rejection | Tested for statement and major proof components |
-| Public-input-only simulated acceptance | Implemented for programmed Fiat--Shamir challenges |
+| Public-input-only simulated acceptance | Implemented with one programmable oracle for Fiat--Shamir, PCS, and VEIL hashing |
 | Distributional zero knowledge | Not proved |
 | Composed adversarial soundness | Not proved; only component evidence and estimates |
 | Argument of knowledge/extraction | Partial components exist; no active end-to-end theorem |
-| Classical-ROM composition | Not proved; current simulator is not a single-oracle model |
+| Classical-ROM composition | Not proved; the executable harness uses one oracle, but no composition theorem is claimed |
 | QROM security | Not claimed |
 
 ## Active path
@@ -30,18 +30,26 @@ commitments, openings, and the VEIL certificate.
 ## Simulator boundary
 
 `simulate_succinct` accepts public digests without a preimage and produces a
-proof accepted by the generic verifier. It programs Fiat--Shamir challenges
-only. PCS and inner VEIL hashing bypass its programmable oracle. The test does
-not model one random oracle for the full protocol or prove that simulated and
-real transcripts have the same distribution.
+proof accepted by the generic verifier. Fiat--Shamir, PCS, and inner VEIL
+hashing all query the same programmable oracle under disjoint encodings. This
+executable check does not prove that simulated and real transcripts have the
+same distribution.
+
+## Input bounds
+
+The CLI accepts at most 256 public digests and decodes VFLK0004 bundles with a
+1,177,084-byte limit, twice the measured batch-256 bundle size. The limit is
+enforced while reading and by the bincode decoder before proof vectors are
+constructed.
 
 ## Open requirements
 
-1. Use one programmable random oracle for Fiat--Shamir, PCS, and VEIL hashing.
-2. Prove the additive-code properties, AB/C masking rank, hiding Ligerito,
-   transcript fork, and ROM composition for the active path.
-3. Bound allocations before decoding attacker-controlled proof vectors.
-4. Audit side channels, randomness, and secret erasure.
+1. Prove the additive-code properties, AB/C masking rank, hiding Ligerito,
+   transcript fork, and ROM composition for the active path ([#44]).
+2. Audit side channels, randomness, and secret erasure ([#45]).
+
+[#44]: https://github.com/partylikeits1983/veiled-flock/issues/44
+[#45]: https://github.com/partylikeits1983/veiled-flock/issues/45
 
 Do not describe or deploy this implementation as a zero-knowledge argument
 until these requirements are resolved and independently reviewed.

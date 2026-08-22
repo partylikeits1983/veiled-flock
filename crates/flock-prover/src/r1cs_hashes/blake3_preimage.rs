@@ -1045,6 +1045,19 @@ mod tests {
             simulated.programmed_points,
             1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
         );
+        {
+            let oracle = oracle.lock().expect("oracle poisoned");
+            for channel in [
+                flock_core::ro::RoChannel::Witness,
+                flock_core::ro::RoChannel::VeilLinear,
+                flock_core::ro::RoChannel::VeilHadamard,
+            ] {
+                assert!(
+                    oracle.channel_query_count(channel) > 0,
+                    "the shared oracle must receive {channel:?} hashes"
+                );
+            }
+        }
 
         let mut verifier = crate::sim_oracle::OracleChallenger::new(DOMAIN, oracle.clone());
         setup

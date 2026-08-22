@@ -13,7 +13,7 @@ use flock_core::{
     pcs::{self, Commitment, PcsParams},
     proof::{ZClaim, bind_statement},
     r1cs::BlockR1cs,
-    ro::{RoChannel, RoContext},
+    ro::RoChannel,
     zerocheck::{self, ZerocheckProof},
     zk::{MaskSampler, ZkRng},
 };
@@ -626,7 +626,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     {
         chunk.copy_from_slice(&word.to_le_bytes());
     }
-    let ro = RoContext::native(proof_nonce);
+    let ro = challenger.ro_context(proof_nonce);
 
     let placeholder = CircuitBuilder::new(layout.observed_count()).finish();
     let veil_parameters = ConstraintParameters::succinct_flock_experimental();
@@ -834,7 +834,7 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    let ro = RoContext::native(proof.proof_nonce);
+    let ro = challenger.ro_context(proof.proof_nonce);
     bind_statement(challenger, r1cs, commitment, &proof.proof_nonce);
     challenger.observe_label(MASK_ROOT_LABEL);
     challenger.observe_bytes(&proof.veil.linear.commitment);
@@ -874,17 +874,4 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn succinct_shape_rejects_nonidentity_c() {
-        let mut r1cs = crate::r1cs_hashes::blake3::build_block_r1cs_zk(3);
-        assert!(MaskLayout::new(&r1cs).is_ok());
-        r1cs.c_0.rows[0].clear();
-        assert!(matches!(
-            MaskLayout::new(&r1cs),
-            Err(SuccinctVeilError::InvalidShape("R1CS mask geometry"))
-        ));
-    }
-}
+mod tests;
