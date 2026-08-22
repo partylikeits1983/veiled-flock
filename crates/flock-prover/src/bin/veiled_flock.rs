@@ -68,13 +68,7 @@ fn run() -> Result<(), String> {
             }
             let messages = bytes.as_chunks::<MESSAGE_BYTES>().0.to_vec();
             let bundle = prove(messages)?;
-            let encoded = bincode::serialize(&bundle)
-                .map_err(|error| format!("cannot encode proof: {error}"))?;
-            if encoded.len() as u64 > MAX_BUNDLE_BYTES {
-                return Err(format!(
-                    "generated proof exceeds the {MAX_BUNDLE_BYTES}-byte limit"
-                ));
-            }
+            let encoded = encode_bundle(&bundle)?;
             fs::write(&output, &encoded)
                 .map_err(|error| format!("cannot write {output}: {error}"))?;
             eprintln!("wrote {} bytes to {output}", encoded.len());
@@ -99,8 +93,7 @@ fn run() -> Result<(), String> {
             ];
             let bundle = prove(messages)?;
             verify(&bundle)?;
-            let bytes = bincode::serialize(&bundle)
-                .map_err(|error| format!("cannot encode proof: {error}"))?;
+            let bytes = encode_bundle(&bundle)?;
             eprintln!("demo complete: proof bundle is {} bytes", bytes.len());
             Ok(())
         }
@@ -170,16 +163,26 @@ fn read_bundle(path: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
+fn bundle_options() -> impl Options {
+    bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .with_limit(MAX_BUNDLE_BYTES)
+        .reject_trailing_bytes()
+}
+
+fn encode_bundle(bundle: &Bundle) -> Result<Vec<u8>, String> {
+    bundle_options()
+        .serialize(bundle)
+        .map_err(|error| format!("cannot encode proof: {error}"))
+}
+
 fn decode_bundle(bytes: &[u8]) -> Result<Bundle, String> {
     if bytes.len() as u64 > MAX_BUNDLE_BYTES {
         return Err(format!(
             "proof bundle exceeds the {MAX_BUNDLE_BYTES}-byte limit"
         ));
     }
-    bincode::DefaultOptions::new()
-        .with_fixint_encoding()
-        .with_limit(MAX_BUNDLE_BYTES)
-        .reject_trailing_bytes()
+    bundle_options()
         .deserialize(bytes)
         .map_err(|error| format!("cannot decode proof bundle: {error}"))
 }
