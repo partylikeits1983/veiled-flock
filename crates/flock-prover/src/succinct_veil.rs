@@ -625,7 +625,12 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     let mut nonce_words = [0u64; 4];
     nonce_rng.fill_u64s(&mut nonce_words);
     let mut proof_nonce = [0u8; 32];
-    for (chunk, word) in proof_nonce.chunks_exact_mut(8).zip(nonce_words) {
+    for (chunk, word) in proof_nonce
+        .as_chunks_mut::<8>()
+        .0
+        .iter_mut()
+        .zip(nonce_words)
+    {
         chunk.copy_from_slice(&word.to_le_bytes());
     }
     let ro = RoContext::native(proof_nonce);

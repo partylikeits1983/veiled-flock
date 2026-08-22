@@ -279,7 +279,9 @@ fn a1_schema_matches_wire_order() {
             let whole = observed_bytes.iter().any(|ob| ob == bts);
             let chunked = bts.len() % 32 == 0
                 && bts
-                    .chunks_exact(32)
+                    .as_chunks::<32>()
+                    .0
+                    .iter()
                     .all(|c| observed_bytes.iter().any(|ob| ob.as_slice() == c));
             assert!(
                 whole || chunked,

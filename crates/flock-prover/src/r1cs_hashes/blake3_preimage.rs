@@ -658,10 +658,12 @@ impl Blake3PreimageZkSetup {
         let mut message_words = vec![0u64; self.n_blocks * MESSAGE_BYTES / 8];
         message_rng.fill_u64s(&mut message_words);
         let own_messages = message_words
-            .chunks_exact(MESSAGE_BYTES / 8)
+            .as_chunks::<{ MESSAGE_BYTES / 8 }>()
+            .0
+            .iter()
             .map(|words| {
                 let mut message = [0u8; MESSAGE_BYTES];
-                for (chunk, word) in message.chunks_exact_mut(8).zip(words) {
+                for (chunk, word) in message.as_chunks_mut::<8>().0.iter_mut().zip(words) {
                     chunk.copy_from_slice(&word.to_le_bytes());
                 }
                 message

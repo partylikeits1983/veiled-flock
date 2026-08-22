@@ -258,7 +258,7 @@ fn f128_basis() -> Vec<F128> {
 /// Scale a flattened F128 vector by a field element (coordinate-wise).
 fn scale_flat(v: &[u64], lambda: F128) -> Vec<u64> {
     let mut out = Vec::with_capacity(v.len());
-    for c in v.chunks_exact(2) {
+    for c in v.as_chunks::<2>().0 {
         let p = F128 { lo: c[0], hi: c[1] } * lambda;
         out.push(p.lo);
         out.push(p.hi);

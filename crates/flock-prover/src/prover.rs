@@ -872,7 +872,9 @@ fn sample_mask_field_small(rng: &mut dyn flock_core::zk::MaskSampler, m: usize) 
     let mut words = vec![0u64; 2 * d];
     rng.fill_u64s(&mut words);
     words
-        .chunks_exact(2)
+        .as_chunks::<2>()
+        .0
+        .iter()
         .map(|pair| F128::new(pair[0], pair[1]))
         .collect()
 }
@@ -987,7 +989,9 @@ impl A1MaskForks {
         let mut nonce_rng = zk_rng.fork(b"a1-proof-nonce");
         let mut proof_nonce = [0u8; 32];
         for (chunk, word) in proof_nonce
-            .chunks_exact_mut(8)
+            .as_chunks_mut::<8>()
+            .0
+            .iter_mut()
             .zip((0..4).map(|_| nonce_rng.next_u64()))
         {
             chunk.copy_from_slice(&word.to_le_bytes());
