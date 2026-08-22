@@ -66,6 +66,10 @@ pub enum RoChannel {
     MaskSc = 4,
     /// The A3 `S_h` mask commitment.
     MaskSh = 5,
+    /// The succinct VEIL compiler's committed linear-witness matrix.
+    VeilLinear = 6,
+    /// The succinct VEIL compiler's committed Hadamard matrix.
+    VeilHadamard = 7,
 }
 
 impl RoChannel {
@@ -415,6 +419,8 @@ mod tests {
                 RoChannel::MaskS,
                 RoChannel::MaskSc,
                 RoChannel::MaskSh,
+                RoChannel::VeilLinear,
+                RoChannel::VeilHadamard,
             ] {
                 for depth in [0u8, 1, 2] {
                     let h = encode_header(role, channel, depth, &nonce, 64);

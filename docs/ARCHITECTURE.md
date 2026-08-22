@@ -159,9 +159,9 @@ the Hadamard proof. These values are committed but never serialized.
 Both VEIL code layers use inverse rate 8 and 160 random padding rows. The
 Fiat--Shamir transcript selects 160 distinct non-adaptive query positions.
 
-The active compiler uses unframed inner commitments and samples the
-multiplication batching point from the full field. See section 15 of the
-[specification](../SPEC.md).
+The two-phase compiler uses nonce- and channel-separated framed vector and
+Hadamard commitments. Its multiplication batching point excludes 0 and 1 so
+the six-value padding map is invertible for every accepted transcript.
 
 ## Step 6: link VEIL, PCS, and the public statement
 
@@ -235,8 +235,9 @@ The generic verifier accepts the simulated proof when driven by the same
 programmed Fiat--Shamir challenger. At batch 256, the simulator programs 17
 challenges.
 
-PCS and VEIL hashes bypass the programmable oracle. The current test covers
-Fiat--Shamir programming only.
+PCS and VEIL commitments use a native framed `RoContext`, so their hashes
+bypass the programmable oracle. The current test covers Fiat--Shamir
+programming only.
 
 This demonstrates that an accepting transcript can be generated from the
 public statement alone. Proving that its distribution matches a real proof

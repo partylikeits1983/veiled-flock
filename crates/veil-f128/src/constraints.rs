@@ -11,13 +11,18 @@
 //! resulting dot claims are linked back to the same witness vector by three
 //! additional linear constraints.
 
-use flock_core::{challenger::Challenger, field::F128, zk::MaskSampler};
+use flock_core::{
+    challenger::Challenger,
+    field::F128,
+    ro::{RoChannel, RoContext},
+    zk::MaskSampler,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     dot_product::{
         DotProductError, DotProductProof, VectorParameters, commit_vectors, prove_dot_product,
-        verify_dot_product,
+        sample_not_zero_or_one, verify_dot_product,
     },
     hadamard::{
         HadamardError, HadamardProof, commit_hadamard, prove_hadamard_and_dots,
@@ -278,7 +283,7 @@ pub struct ConstraintProof {
     pub parameters: ConstraintParameters,
     pub num_variables: usize,
     pub num_multiplications: usize,
-    pub hadamard: Option<HadamardProof>,
+    pub hadamard: HadamardProof,
     pub linear: DotProductProof,
 }
 
@@ -389,6 +394,7 @@ pub fn prove_constraints<C: Challenger, R: MaskSampler + ?Sized>(
     inputs: &[F128],
     rng: &mut R,
     challenger: &mut C,
+    ro: &RoContext,
 ) -> Result<ConstraintProof, ConstraintError> {
     prove_constraints_with_parameters(
         circuit,
@@ -396,6 +402,7 @@ pub fn prove_constraints<C: Challenger, R: MaskSampler + ?Sized>(
         ConstraintParameters::default(),
         rng,
         challenger,
+        ro,
     )
 }
 
@@ -405,9 +412,10 @@ pub fn prove_constraints_with_parameters<C: Challenger, R: MaskSampler + ?Sized>
     parameters: ConstraintParameters,
     rng: &mut R,
     challenger: &mut C,
+    ro: &RoContext,
 ) -> Result<ConstraintProof, ConstraintError> {
-    let commitment = commit_constraint_inputs(circuit, inputs, parameters, rng)?;
-    prove_constraints_from_commitment(circuit, commitment, rng, challenger)
+    let commitment = commit_constraint_inputs(circuit, inputs, parameters, rng, ro)?;
+    prove_constraints_from_commitment(circuit, commitment, rng, challenger, ro)
 }
 
 /// Commit to the shifted-circuit inputs before the outer protocol samples
@@ -420,6 +428,7 @@ pub fn commit_constraint_inputs<R: MaskSampler + ?Sized>(
     inputs: &[F128],
     parameters: ConstraintParameters,
     rng: &mut R,
+    ro: &RoContext,
 ) -> Result<ConstraintCommitment, ConstraintError> {
     let parameters = parameters.validate()?;
     if circuit.num_variables != circuit.num_inputs
@@ -454,6 +463,8 @@ pub fn commit_constraint_inputs<R: MaskSampler + ?Sized>(
         std::slice::from_ref(&padded_witness),
         linear_parameters,
         rng,
+        ro,
+        RoChannel::VeilLinear,
     )?;
     Ok(ConstraintCommitment {
         circuit_inputs: circuit.num_inputs,
@@ -470,6 +481,7 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
     commitment: ConstraintCommitment,
     rng: &mut R,
     challenger: &mut C,
+    ro: &RoContext,
 ) -> Result<ConstraintProof, ConstraintError> {
     if circuit.num_variables != circuit.num_inputs
         || circuit.num_inputs != commitment.circuit_inputs
@@ -510,13 +522,21 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
             parameters.hadamard_padding,
             parameters.inverse_rate,
         )?;
-        let hadamard_data = commit_hadamard(&a, &b, &c, hadamard_parameters, rng)?;
+        let hadamard_data = commit_hadamard(
+            &a,
+            &b,
+            &c,
+            hadamard_parameters,
+            rng,
+            ro,
+            RoChannel::VeilHadamard,
+        )?;
         challenger.observe_bytes(&hadamard_data.root());
-        let multiplication_rlc = challenger.sample_f128();
+        let multiplication_rlc = sample_not_zero_or_one(challenger);
         let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
         let proof = prove_hadamard_and_dots(&dot_vector, hadamard_data, challenger)?;
         append_multiplication_link_constraints(&padded, &dot_vector, &proof, &mut constraints);
-        Some(proof)
+        proof
     };
 
     let constraint_rlc = challenger.sample_f128();
@@ -540,6 +560,7 @@ pub fn verify_constraints<C: Challenger>(
     circuit: &ArithmeticCircuit,
     proof: &ConstraintProof,
     challenger: &mut C,
+    ro: &RoContext,
 ) -> Result<(), ConstraintError> {
     let parameters = proof.parameters.validate()?;
     if circuit.num_variables != circuit.num_inputs
@@ -555,8 +576,12 @@ pub fn verify_constraints<C: Challenger>(
         || proof.num_multiplications != padded.multiplications.len()
         || proof.linear.parameters.vector_length != padded.num_variables
         || proof.linear.parameters.num_vectors != 1
-        || proof.hadamard.is_none()
         || proof.linear.parameters.padding_length != parameters.linear_padding
+        || proof.hadamard.parameters.padding_length != parameters.hadamard_padding
+        || proof.hadamard.parameters.vector_length != padded.multiplications.len()
+        || proof.hadamard.parameters.code_length
+            != (padded.multiplications.len() + parameters.hadamard_padding).next_power_of_two()
+                * parameters.inverse_rate
         || proof.linear.parameters.code_length
             != (padded.num_variables + parameters.linear_padding).next_power_of_two()
                 * parameters.inverse_rate
@@ -567,21 +592,17 @@ pub fn verify_constraints<C: Challenger>(
     let mut constraints = padded.linear_constraints.clone();
     challenger.observe_label(b"veil-f128-constraint-system-v0");
     challenger.observe_bytes(&proof.linear.commitment);
-    if let Some(hadamard) = &proof.hadamard {
-        challenger.observe_bytes(&hadamard.commitment);
-        let multiplication_rlc = challenger.sample_f128();
-        if hadamard.parameters.padding_length != parameters.hadamard_padding
-            || hadamard.parameters.vector_length != padded.multiplications.len()
-            || hadamard.parameters.code_length
-                != (padded.multiplications.len() + parameters.hadamard_padding).next_power_of_two()
-                    * parameters.inverse_rate
-        {
-            return Err(ConstraintError::WrongProofShape);
-        }
-        let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
-        verify_hadamard_and_dots(&dot_vector, hadamard, challenger)?;
-        append_multiplication_link_constraints(&padded, &dot_vector, hadamard, &mut constraints);
-    }
+    challenger.observe_bytes(&proof.hadamard.commitment);
+    let multiplication_rlc = sample_not_zero_or_one(challenger);
+    let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
+    verify_hadamard_and_dots(
+        &dot_vector,
+        &proof.hadamard,
+        challenger,
+        ro,
+        RoChannel::VeilHadamard,
+    )?;
+    append_multiplication_link_constraints(&padded, &dot_vector, &proof.hadamard, &mut constraints);
 
     let constraint_rlc = challenger.sample_f128();
     let (dot_vector, expected_dot) =
@@ -589,7 +610,13 @@ pub fn verify_constraints<C: Challenger>(
     if proof.linear.claimed_dot_products.as_slice() != [expected_dot] {
         return Err(ConstraintError::LinearClaimMismatch);
     }
-    verify_dot_product(&dot_vector, &proof.linear, challenger)?;
+    verify_dot_product(
+        &dot_vector,
+        &proof.linear,
+        challenger,
+        ro,
+        RoChannel::VeilLinear,
+    )?;
     Ok(())
 }
 
@@ -701,7 +728,7 @@ fn powers(base: F128, length: usize) -> Vec<F128> {
 
 #[cfg(test)]
 mod tests {
-    use flock_core::{challenger::FsChallenger, zk::ZkRng};
+    use flock_core::{challenger::FsChallenger, ro::RoContext, zk::ZkRng};
 
     use super::*;
 
@@ -729,10 +756,12 @@ mod tests {
         let public_constant = secret * secret + secret;
         let circuit = root_circuit(public_constant, masked);
         let mut rng = ZkRng::from_seed([31; 32]);
+        let ro = RoContext::native([31; 32]);
         let mut prover_challenger = FsChallenger::new(b"veil-f128-constraints-test");
-        let proof = prove_constraints(&circuit, &[mask], &mut rng, &mut prover_challenger).unwrap();
+        let proof =
+            prove_constraints(&circuit, &[mask], &mut rng, &mut prover_challenger, &ro).unwrap();
         let mut verifier_challenger = FsChallenger::new(b"veil-f128-constraints-test");
-        verify_constraints(&circuit, &proof, &mut verifier_challenger).unwrap();
+        verify_constraints(&circuit, &proof, &mut verifier_challenger, &ro).unwrap();
     }
 
     #[test]
@@ -742,9 +771,10 @@ mod tests {
         let masked = secret + mask;
         let circuit = root_circuit(secret * secret + secret + F128::ONE, masked);
         let mut rng = ZkRng::from_seed([32; 32]);
+        let ro = RoContext::native([32; 32]);
         let mut challenger = FsChallenger::new(b"veil-f128-constraints-false");
         assert_eq!(
-            prove_constraints(&circuit, &[mask], &mut rng, &mut challenger),
+            prove_constraints(&circuit, &[mask], &mut rng, &mut challenger, &ro),
             Err(ConstraintError::UnsatisfiedCircuit)
         );
     }
@@ -757,13 +787,17 @@ mod tests {
         let circuit = builder.finish();
         let value = F128::new(7, 9);
         let mut rng = ZkRng::from_seed([33; 32]);
+        let ro = RoContext::native([33; 32]);
         let mut prover_challenger = FsChallenger::new(b"veil-f128-linear-test");
-        let proof =
-            prove_constraints(&circuit, &[value, value], &mut rng, &mut prover_challenger).unwrap();
-        // The two dummy multiplication rows are present even for a linear
-        // verifier circuit; they hide the Hadamard linkage claims.
-        assert!(proof.hadamard.is_some());
+        let proof = prove_constraints(
+            &circuit,
+            &[value, value],
+            &mut rng,
+            &mut prover_challenger,
+            &ro,
+        )
+        .unwrap();
         let mut verifier_challenger = FsChallenger::new(b"veil-f128-linear-test");
-        verify_constraints(&circuit, &proof, &mut verifier_challenger).unwrap();
+        verify_constraints(&circuit, &proof, &mut verifier_challenger, &ro).unwrap();
     }
 }

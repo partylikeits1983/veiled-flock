@@ -132,25 +132,8 @@ pub fn commit_vectors<R: MaskSampler + ?Sized>(
     vectors: &[Vec<F128>],
     parameters: VectorParameters,
     rng: &mut R,
-) -> Result<DotProductProverData, DotProductError> {
-    commit_vectors_inner(vectors, parameters, rng, None)
-}
-
-pub fn commit_vectors_framed<R: MaskSampler + ?Sized>(
-    vectors: &[Vec<F128>],
-    parameters: VectorParameters,
-    rng: &mut R,
     ctx: &RoContext,
     channel: RoChannel,
-) -> Result<DotProductProverData, DotProductError> {
-    commit_vectors_inner(vectors, parameters, rng, Some((ctx, channel)))
-}
-
-fn commit_vectors_inner<R: MaskSampler + ?Sized>(
-    vectors: &[Vec<F128>],
-    parameters: VectorParameters,
-    rng: &mut R,
-    framed: Option<(&RoContext, RoChannel)>,
 ) -> Result<DotProductProverData, DotProductError> {
     if vectors.len() != parameters.num_vectors {
         return Err(DotProductError::WrongVectorCount);
@@ -176,10 +159,7 @@ fn commit_vectors_inner<R: MaskSampler + ?Sized>(
         messages.push(message);
     }
     let codewords = parameters.code().encode_batch(&messages)?;
-    let commitment = match framed {
-        Some((ctx, channel)) => MerkleMatrix::new_framed(&codewords, ctx, channel),
-        None => MerkleMatrix::new(&codewords),
-    };
+    let commitment = MerkleMatrix::new(&codewords, ctx, channel);
 
     Ok(DotProductProverData {
         parameters,
@@ -269,25 +249,8 @@ pub fn verify_dot_product<C: Challenger>(
     dot_vector: &[F128],
     proof: &DotProductProof,
     challenger: &mut C,
-) -> Result<(), DotProductError> {
-    verify_dot_product_inner(dot_vector, proof, challenger, None)
-}
-
-pub fn verify_dot_product_framed<C: Challenger>(
-    dot_vector: &[F128],
-    proof: &DotProductProof,
-    challenger: &mut C,
     ctx: &RoContext,
     channel: RoChannel,
-) -> Result<(), DotProductError> {
-    verify_dot_product_inner(dot_vector, proof, challenger, Some((ctx, channel)))
-}
-
-fn verify_dot_product_inner<C: Challenger>(
-    dot_vector: &[F128],
-    proof: &DotProductProof,
-    challenger: &mut C,
-    framed: Option<(&RoContext, RoChannel)>,
 ) -> Result<(), DotProductError> {
     let parameters = proof.parameters;
     VectorParameters::with_security(
@@ -339,21 +302,13 @@ fn verify_dot_product_inner<C: Challenger>(
     if positions != proof.opening.positions {
         return Err(DotProductError::WrongProofShape);
     }
-    let opening_valid = match framed {
-        Some((ctx, channel)) => proof.opening.verify_framed(
-            &proof.commitment,
-            parameters.code_length,
-            parameters.commitment_width(),
-            ctx,
-            channel,
-        ),
-        None => proof.opening.verify(
-            &proof.commitment,
-            parameters.code_length,
-            parameters.commitment_width(),
-        ),
-    };
-    if !opening_valid {
+    if !proof.opening.verify(
+        &proof.commitment,
+        parameters.code_length,
+        parameters.commitment_width(),
+        ctx,
+        channel,
+    ) {
         return Err(DotProductError::InvalidMerkleOpening);
     }
 
@@ -403,6 +358,17 @@ pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
     }
 }
 
+/// Sample uniformly from `F128 \ {0, 1}`. VEIL's six-value multiplication
+/// padding is invertible only away from these two exceptional challenges.
+pub(crate) fn sample_not_zero_or_one<C: Challenger>(challenger: &mut C) -> F128 {
+    loop {
+        let value = challenger.sample_f128();
+        if !value.is_zero() && value != F128::ONE {
+            return value;
+        }
+    }
+}
+
 pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
     assert_eq!(left.len(), right.len());
     left.iter()
@@ -428,11 +394,20 @@ mod tests {
         let vectors = vec![vector(19, 10), vector(19, 100), vector(19, 1000)];
         let dot_vector = vector(19, 77);
         let mut rng = ZkRng::from_seed([7; 32]);
-        let data = commit_vectors(&vectors, parameters, &mut rng).unwrap();
+        let ctx = RoContext::native([1; 32]);
+        let data =
+            commit_vectors(&vectors, parameters, &mut rng, &ctx, RoChannel::Witness).unwrap();
         let mut prover_challenger = FsChallenger::new(b"veil-f128-dot-test");
         let proof = prove_dot_product(&dot_vector, data, &mut prover_challenger).unwrap();
         let mut verifier_challenger = FsChallenger::new(b"veil-f128-dot-test");
-        verify_dot_product(&dot_vector, &proof, &mut verifier_challenger).unwrap();
+        verify_dot_product(
+            &dot_vector,
+            &proof,
+            &mut verifier_challenger,
+            &ctx,
+            RoChannel::Witness,
+        )
+        .unwrap();
         assert_eq!(
             proof.claimed_dot_products,
             vectors
@@ -447,9 +422,11 @@ mod tests {
         let parameters = VectorParameters::with_security(8, 1, 4, 4).unwrap();
         let vectors = vec![vector(8, 10)];
         let dot_vector = vector(8, 77);
+        let ctx = RoContext::native([2; 32]);
         let make_proof = || {
             let mut rng = ZkRng::from_seed([9; 32]);
-            let data = commit_vectors(&vectors, parameters, &mut rng).unwrap();
+            let data =
+                commit_vectors(&vectors, parameters, &mut rng, &ctx, RoChannel::Witness).unwrap();
             let mut challenger = FsChallenger::new(b"veil-f128-dot-mutation");
             prove_dot_product(&dot_vector, data, &mut challenger).unwrap()
         };
@@ -457,11 +434,29 @@ mod tests {
         let mut bad_claim = make_proof();
         bad_claim.claimed_dot_products[0] += F128::ONE;
         let mut challenger = FsChallenger::new(b"veil-f128-dot-mutation");
-        assert!(verify_dot_product(&dot_vector, &bad_claim, &mut challenger).is_err());
+        assert!(
+            verify_dot_product(
+                &dot_vector,
+                &bad_claim,
+                &mut challenger,
+                &ctx,
+                RoChannel::Witness,
+            )
+            .is_err()
+        );
 
         let mut bad_opening = make_proof();
         bad_opening.opening.rows[0] += F128::ONE;
         let mut challenger = FsChallenger::new(b"veil-f128-dot-mutation");
-        assert!(verify_dot_product(&dot_vector, &bad_opening, &mut challenger).is_err());
+        assert!(
+            verify_dot_product(
+                &dot_vector,
+                &bad_opening,
+                &mut challenger,
+                &ctx,
+                RoChannel::Witness,
+            )
+            .is_err()
+        );
     }
 }

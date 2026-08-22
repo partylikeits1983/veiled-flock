@@ -130,15 +130,18 @@ The ordered fields are:
 5. two values for each lincheck round; and
 6. 64 lincheck `z_partial` values.
 
-`final_c_eval` is not an observed FLOCK message. It stores the explicit C
-opening claim. The shifted circuit reconstructs the same value from masked
-`round1_c`.
+`final_c_eval` is not an observed FLOCK message and is omitted from the masked
+wire type. The explicit C opening is stored once as `c_value`; the shifted
+circuit reconstructs the same value from masked `round1_c`.
 
 ## 7. Shifted verifier circuit
 
 The verifier derives all FLOCK challenges from the public masked transcript.
 It then constructs an arithmetic circuit `C_shifted` whose private inputs are
 the mask vector `h`.
+
+The sampled equality coordinates used by the compressed quadratic recurrence
+exclude `1`, where reconstructing `G(0)` from `G(1)` is non-invertible.
 
 For each public masked value `v_masked[i]`, the circuit reconstructs:
 
@@ -228,7 +231,7 @@ fork.
 
 ## 11. Proof format
 
-The CLI bundle uses magic `VFLK0003` and contains:
+The CLI bundle uses magic `VFLK0004` and contains:
 
 ```text
 public digest list
@@ -320,10 +323,11 @@ No QROM or production-security claim is made.
 
 ## 15. Known implementation deviations
 
-1. The multiplication batching challenge includes 0 and 1, contrary to
-   section 8.
-2. Inner VEIL commitments use unframed Merkle hashing.
-3. The simulator programs Fiat--Shamir challenges but not PCS or VEIL hashes.
-4. CLI decoding does not bound allocations before deserialization.
+1. Section 13's simulator programs Fiat--Shamir challenges, but the witness
+   PCS and inner VEIL commitments use a separate native framed `RoContext`.
+   The executable test is not yet a single-oracle simulation of all hash calls.
+2. CLI decoding rejects non-canonical encodings and trailing bytes, but does
+   not apply verifier-owned allocation bounds before `bincode`
+   deserialization.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md).

@@ -988,12 +988,7 @@ mod tests {
         rejects(&changed_veil, &commitment, &digests);
 
         let mut changed_hadamard = proof.clone();
-        changed_hadamard
-            .veil
-            .hadamard
-            .as_mut()
-            .expect("padding always creates Hadamard rows")
-            .phi[0] += flock_core::field::F128::ONE;
+        changed_hadamard.veil.hadamard.phi[0] += flock_core::field::F128::ONE;
         rejects(&changed_hadamard, &commitment, &digests);
 
         let mut changed_pcs = proof.clone();

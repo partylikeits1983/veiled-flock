@@ -37,14 +37,11 @@ real transcripts have the same distribution.
 
 ## Open requirements
 
-1. Exclude 0 and 1 from the constraint compiler's multiplication batching
-   challenge, as required by decision D008.
-2. Use framed, nonce-separated, and channel-separated inner VEIL commitments.
-3. Use one programmable random oracle for Fiat--Shamir, PCS, and VEIL hashing.
-4. Prove the additive-code properties, AB/C masking rank, hiding Ligerito,
+1. Use one programmable random oracle for Fiat--Shamir, PCS, and VEIL hashing.
+2. Prove the additive-code properties, AB/C masking rank, hiding Ligerito,
    transcript fork, and ROM composition for the active path.
-5. Bound allocations before decoding attacker-controlled proof vectors.
-6. Audit side channels, randomness, and secret erasure.
+3. Bound allocations before decoding attacker-controlled proof vectors.
+4. Audit side channels, randomness, and secret erasure.
 
 Do not describe or deploy this implementation as a zero-knowledge argument
 until these requirements are resolved and independently reviewed.

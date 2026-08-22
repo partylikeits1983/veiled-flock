@@ -16,7 +16,7 @@ pub mod simulator;
 
 pub use block_r1cs::{
     BlockR1csError, BlockR1csParameters, BlockR1csProof, PublicEquality, prove_block_r1cs,
-    prove_block_r1cs_framed, verify_block_r1cs, verify_block_r1cs_framed,
+    verify_block_r1cs,
 };
 pub use code::{AdditiveRsCode, CodeError, CodeParameters};
 pub use commitment::{MerkleMatrix, MerkleMatrixOpening};
@@ -27,12 +27,12 @@ pub use constraints::{
 };
 pub use dot_product::{
     DotProductError, DotProductProof, DotProductProverData, VectorParameters, commit_vectors,
-    commit_vectors_framed, prove_dot_product, verify_dot_product, verify_dot_product_framed,
+    prove_dot_product, verify_dot_product,
 };
 pub use flock_core::field::F128;
 pub use hadamard::{
-    HadamardError, HadamardProof, HadamardProverData, commit_hadamard, commit_hadamard_framed,
-    prove_hadamard_and_dots, verify_hadamard_and_dots, verify_hadamard_and_dots_framed,
+    HadamardError, HadamardProof, HadamardProverData, commit_hadamard, prove_hadamard_and_dots,
+    verify_hadamard_and_dots,
 };
 pub use ntt::AdditiveCosetNtt;
 pub use simulator::{

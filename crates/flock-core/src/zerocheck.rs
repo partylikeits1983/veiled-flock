@@ -41,6 +41,66 @@ use univariate_skip_optimized::{
 /// vectors of F128.
 pub const K_SKIP: usize = 6;
 
+/// Number of protocol-fixed equality coordinates used by the optimized
+/// zerocheck after the univariate skip.
+pub const N_INNER: usize = 7;
+
+/// Derive the equality point shared by every zerocheck prover, verifier, and
+/// simulator. The multilinear recurrence reconstructs `G(0)` by dividing by
+/// `1 + r_i`, so sampled rest coordinates must exclude `1`.
+pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128> {
+    assert!(
+        m >= K_SKIP + N_INNER,
+        "zerocheck equality point is too short"
+    );
+
+    let r_skip = challenger.sample_f128_vec(K_SKIP);
+    let outer_len = m - K_SKIP - N_INNER;
+    let r_outer = loop {
+        let candidate = challenger.sample_f128_vec(outer_len);
+        if candidate.iter().all(|value| *value != F128::ONE) {
+            break candidate;
+        }
+    };
+
+    let small = small_challenges_ghash();
+    let medium = medium_challenges_ghash();
+    debug_assert!(small.iter().chain(&medium).all(|value| *value != F128::ONE));
+
+    let mut r = vec![F128::ZERO; m];
+    r[..K_SKIP].copy_from_slice(&r_skip);
+    r[K_SKIP..K_SKIP + 3].copy_from_slice(&small);
+    r[K_SKIP + 3..K_SKIP + N_INNER].copy_from_slice(&medium);
+    r[K_SKIP + N_INNER..].copy_from_slice(&r_outer);
+    r
+}
+
+/// Linear weights taking `(running, G(1), G(∞))` to `G(rho)` for one
+/// compressed quadratic sumcheck round. Returning `None` keeps every verifier
+/// fail-closed if a custom challenge source supplies the excluded `r_eq = 1`.
+pub fn sumcheck_round_weights(r_eq: F128, rho: F128) -> Option<[F128; 3]> {
+    let denominator = F128::ONE + r_eq;
+    if denominator.is_zero() {
+        return None;
+    }
+    let one_plus_rho = F128::ONE + rho;
+    let running_weight = one_plus_rho * denominator.inv();
+    let one_weight = r_eq * running_weight + rho;
+    let infinity_weight = rho * one_plus_rho;
+    Some([running_weight, one_weight, infinity_weight])
+}
+
+fn fold_sumcheck_round(
+    running: F128,
+    msg_1: F128,
+    msg_inf: F128,
+    r_eq: F128,
+    rho: F128,
+) -> Option<F128> {
+    let [running_weight, one_weight, infinity_weight] = sumcheck_round_weights(r_eq, rho)?;
+    Some(running * running_weight + msg_1 * one_weight + msg_inf * infinity_weight)
+}
+
 /// Versioned public polynomial used as the fixed second factor in the
 /// field-valued zerocheck mask channel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -335,6 +395,10 @@ pub enum VerifyError {
     BadRound1Length { expected: usize, got: usize },
     /// Wrong number of multilinear-round messages (expected `log_n - K_SKIP`).
     BadMultilinearRoundsLength { expected: usize, got: usize },
+    /// A challenge made the compressed sumcheck recurrence non-invertible.
+    /// Production challenge derivation excludes this value; this check keeps
+    /// custom challengers and manually constructed transcripts fail-closed.
+    DegenerateChallenge,
     /// `proof.final_c_eval` doesn't match the verifier's reconstruction
     /// `C_s · interpolate_at_z_on_lambda(round1_c, k_skip, z)`. Catches
     /// dishonesty in the round-1 C message or in the final c-eval claim.
@@ -431,7 +495,6 @@ fn prove_packed_padded_inner<C: Challenger>(
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim, Option<Vec<F128>>) {
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7; // 3 small + 4 medium fixed-constant eq dims
     assert!(
         m >= k_skip + N_INNER,
         "prove requires m >= k_skip + N_INNER (= {})",
@@ -454,17 +517,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     //   r[k_skip+3..k_skip+7]       — protocol medium-eq constants β_i
     //   r[k_skip+7..m]              — sampled (the "outer" eq weights for
     //                                  the URM and multilinear rounds)
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     // ---- 3. Round 1: URM (extract_c, parallel) ----
     //
@@ -691,7 +744,6 @@ pub fn verify<C: Challenger>(
 ) -> Result<ZerocheckClaim, VerifyError> {
     let m = log_n;
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
 
     if m < k_skip + N_INNER {
         return Err(VerifyError::LogNTooSmall { log_n: m, k_skip });
@@ -722,17 +774,7 @@ pub fn verify<C: Challenger>(
     challenger.observe_label(b"flock-zerocheck-v0");
 
     // ---- Re-derive r (in lockstep with prove_packed) ----
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     // ---- Observe round-1 messages, sample z ----
     challenger.observe_f128_slice(&proof.round1_ab);
@@ -792,20 +834,16 @@ pub fn verify<C: Challenger>(
     let mut mlv_rhos: Vec<F128> = Vec::with_capacity(n_mlv);
     for (i, &(msg_1, msg_inf)) in proof.multilinear_rounds.iter().enumerate() {
         let r_eq = r[k_skip + i];
-        let one_plus_r_eq = F128::ONE + r_eq;
-
         let g1 = msg_1;
         let g_inf = msg_inf;
-        let g0 = (c_running + r_eq * g1) * one_plus_r_eq.inv();
 
         challenger.observe_f128(msg_1);
         challenger.observe_f128(msg_inf);
         let rho = challenger.sample_f128();
         mlv_rhos.push(rho);
 
-        let one_plus_rho = F128::ONE + rho;
-        // G(ρ) = G(0)·(1+ρ) + G(1)·ρ + G(∞)·ρ·(1+ρ).
-        c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
+        c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
+            .ok_or(VerifyError::DegenerateChallenge)?;
     }
 
     // ---- AB sumcheck final consistency ----
@@ -953,7 +991,6 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     Option<Round1MaskTranscript>,
 ) {
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
     assert!(
         m >= k_skip + N_INNER,
         "prove_zk requires m >= {}",
@@ -969,17 +1006,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     challenger.observe_label(b"flock-zerocheck-zk-v1");
 
     // ---- r (identical layout to prove_packed_padded_inner) ----
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     // ---- round 1 (â·b̂ only; unmasked) ----
     let ntt_s = AdditiveNttGf8::new(k_skip, F8::ZERO);
@@ -1260,24 +1287,13 @@ pub fn mask_round_pairs<C: Challenger>(
     challenger: &mut C,
 ) -> Vec<(F128, F128)> {
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
     assert!(m >= k_skip + N_INNER);
     let n_mlv = m - k_skip;
     let mask_spec = SmallMaskSpec::default();
     assert_eq!(p_small.len(), mask_spec.d(m));
 
     challenger.observe_label(b"flock-zerocheck-zk-v1");
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
     let _z = challenger.sample_f128();
 
     let mut mlv_arg = vec![F128::ONE; n_mlv];
@@ -1329,7 +1345,6 @@ pub fn verify_zk_masked<C: Challenger>(
 ) -> Result<ZerocheckClaim, VerifyError> {
     let m = log_n;
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
     if m < k_skip + N_INNER {
         return Err(VerifyError::LogNTooSmall { log_n: m, k_skip });
     }
@@ -1349,17 +1364,7 @@ pub fn verify_zk_masked<C: Challenger>(
     }
 
     challenger.observe_label(b"flock-zerocheck-zk-v1");
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     challenger.observe_f128_slice(&proof.round1_ab);
     challenger.observe_f128_slice(&proof.round1_c);
@@ -1400,16 +1405,14 @@ pub fn verify_zk_masked<C: Challenger>(
     let mut mlv_rhos: Vec<F128> = Vec::with_capacity(n_mlv);
     for (i, &(msg_1, msg_inf)) in proof.multilinear_rounds.iter().enumerate() {
         let r_eq = r[k_skip + i];
-        let one_plus_r_eq = F128::ONE + r_eq;
         let g1 = msg_1;
         let g_inf = msg_inf;
-        let g0 = (c_running + r_eq * g1) * one_plus_r_eq.inv();
         challenger.observe_f128(msg_1);
         challenger.observe_f128(msg_inf);
         let rho = challenger.sample_f128();
         mlv_rhos.push(rho);
-        let one_plus_rho = F128::ONE + rho;
-        c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
+        c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
+            .ok_or(VerifyError::DegenerateChallenge)?;
     }
 
     // Combined final check: â(ρ)·b̂(ρ) + γ·P(ρ)·Q★(ρ).
@@ -1441,6 +1444,53 @@ pub fn verify_zk_masked<C: Challenger>(
 mod tests {
     use super::*;
     use crate::challenger::FsChallenger;
+
+    struct ScriptedEqChallenger {
+        vector_calls: usize,
+    }
+
+    impl Challenger for ScriptedEqChallenger {
+        fn observe_f128(&mut self, _value: F128) {}
+
+        fn sample_f128(&mut self) -> F128 {
+            panic!("sample_eq_point uses framed vector sampling")
+        }
+
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.vector_calls += 1;
+            match self.vector_calls {
+                1 => vec![F128::ZERO; n],
+                2 => vec![F128::ONE; n],
+                3 => vec![F128::new(2, 0); n],
+                _ => panic!("unexpected vector challenge request"),
+            }
+        }
+    }
+
+    #[test]
+    fn equality_point_rejects_noninvertible_outer_coordinates() {
+        let mut challenger = ScriptedEqChallenger { vector_calls: 0 };
+        let point = sample_eq_point(K_SKIP + N_INNER + 1, &mut challenger);
+        assert_eq!(challenger.vector_calls, 3);
+        assert_eq!(point.last(), Some(&F128::new(2, 0)));
+        assert!(point[K_SKIP..].iter().all(|value| *value != F128::ONE));
+    }
+
+    #[test]
+    fn shared_round_weights_match_quadratic_reconstruction() {
+        let running = F128::new(3, 5);
+        let msg_1 = F128::new(7, 11);
+        let msg_inf = F128::new(13, 17);
+        let r_eq = F128::new(19, 23);
+        let rho = F128::new(29, 31);
+        let g0 = (running + r_eq * msg_1) * (F128::ONE + r_eq).inv();
+        let expected = g0 * (F128::ONE + rho) + msg_1 * rho + msg_inf * rho * (F128::ONE + rho);
+        assert_eq!(
+            fold_sumcheck_round(running, msg_1, msg_inf, r_eq, rho),
+            Some(expected)
+        );
+        assert_eq!(sumcheck_round_weights(F128::ONE, rho), None);
+    }
 
     /// SplitMix64 PRNG, deterministic.
     struct Rng(u64);
@@ -1774,18 +1824,8 @@ mod tests {
     fn zk_final_residual(m: usize, proof: &ZkZerocheckProof, seed: u64, mask_init: F128) -> F128 {
         use crate::challenger::RandomChallenger;
         let k_skip = K_SKIP;
-        const N_INNER: usize = 7;
         let mut ch = RandomChallenger::new(seed);
-        let _r_skip = ch.sample_f128_vec(k_skip);
-        let r_outer = ch.sample_f128_vec(m - k_skip - N_INNER);
-        let mut r = vec![F128::ZERO; m];
-        for (i, val) in small_challenges_ghash().iter().enumerate() {
-            r[k_skip + i] = *val;
-        }
-        for (i, val) in medium_challenges_ghash().iter().enumerate() {
-            r[k_skip + 3 + i] = *val;
-        }
-        r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+        let r = sample_eq_point(m, &mut ch);
         let z = ch.sample_f128();
 
         let combined_at_lambda: Vec<F128> = proof
@@ -1802,12 +1842,10 @@ mod tests {
         let mut mlv_rhos = Vec::with_capacity(proof.multilinear_rounds.len());
         for (i, &(g1, g_inf)) in proof.multilinear_rounds.iter().enumerate() {
             let r_eq = r[k_skip + i];
-            let one_plus_r_eq = F128::ONE + r_eq;
-            let g0 = (c_running + r_eq * g1) * one_plus_r_eq.inv();
             let rho = ch.sample_f128();
             mlv_rhos.push(rho);
-            let one_plus_rho = F128::ONE + rho;
-            c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
+            c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
+                .expect("sample_eq_point excludes r_eq = 1");
         }
         let expected = proof.final_a_eval * proof.final_b_eval
             + gamma * proof.final_p_eval * SmallMaskSpec::default().q_star_at(&mlv_rhos);
