@@ -14,8 +14,8 @@ fn bundle_codec_is_explicit_fixint_and_roundtrips() {
     };
     let encoded = bundle_options().serialize(&fixture).unwrap();
 
-    // Bincode 1.3's root helper is the legacy fixed-integer encoding. Keep
-    // VFLK0004 byte-compatible while making both CLI directions explicit.
+    // Bincode 1.3's root helper is the legacy fixed-integer encoding. Keep the
+    // bundle format byte-compatible while making both CLI directions explicit.
     assert_eq!(encoded, bincode::serialize(&fixture).unwrap());
     assert_eq!(
         bundle_options()

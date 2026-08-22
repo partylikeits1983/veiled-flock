@@ -875,7 +875,7 @@ pub fn verify<C: Challenger>(
 }
 
 // ===========================================================================
-// Field-mask amendment: P times the public affine Q-star (reference path)
+// Field mask: P times the public affine Q-star (reference path)
 // ===========================================================================
 //
 // The zerocheck's revealed round messages `(G_j(1), G_j(∞))` are degree-2 in
@@ -893,7 +893,7 @@ pub fn verify<C: Challenger>(
 // against this one. `P(ρ)` is returned for the caller to authenticate against
 // the P commitment through a hiding general-linear PCS opening.
 
-/// Zerocheck proof under the A1′ amendment. `round1_ab`/`round1_c` are the
+/// Zerocheck proof with a combined field mask. `round1_ab`/`round1_c` are the
 /// unmasked round-1 messages (already randomizer-covered); `mask_init` is the
 /// `P·Q★` sumcheck's post-skip initial claim `σ_z` (witness-free);
 /// `multilinear_rounds` are the COMBINED pairs `G_j + γ·M_j`.
@@ -909,21 +909,21 @@ pub struct ZkZerocheckProof {
     pub final_p_eval: F128,
 }
 
-/// Prove the zerocheck under the A1′ amendment. `p_small` is a field-valued
+/// Prove the zerocheck with a combined field mask. `p_small` is a field-valued
 /// vector on [`SmallMaskSpec`]'s diagonal support. It MUST already be committed
 /// and its commitment bound into the transcript before this call (so `γ`
 /// cannot depend on a later mask choice).
-/// Amendment A3 — the round-1 mask channel.
+/// Round-1 mask channel.
 ///
 /// Round 1 is the one PIOP class the degree-2 `γ·P·Q★` channel cannot touch:
 /// the verifier reconstructs the AB running claim from the **zerocheck
 /// assumption** `P^AB + P^C = 0` on `S`, and a mask that does not vanish
 /// there destroys that reconstruction. `P·Q★` does not vanish on `S`, which is
-/// why A1′ starts at round 2.
+/// why the product-mask channel starts at round 2.
 ///
-/// A3 masks it with a *pair* whose sum does vanish on `S`. With `M_c` the
-/// C-side mask and `M_ab = M_c + V_S·h` the AB-side one, the combined
-/// polynomial gains `M_ab + M_c = V_S·h`, which is zero on `S` — so the
+/// The round-1 channel masks it with a *pair* whose sum vanishes on `S`.
+/// With `M_c` the C-side mask and `M_ab = M_c + V_S·h` the AB-side one, the
+/// combined polynomial gains `M_ab + M_c = V_S·h`, which is zero on `S` — so the
 /// reconstruction is untouched — while the two sides move independently.
 /// That independence is the point: the measured escaping direction is
 /// supported on `round1_c` and *not* on `round1_ab`, so a diagonal mask
@@ -938,7 +938,7 @@ pub struct Round1Mask<'a> {
     pub s_h_packed: &'a [u8],
 }
 
-/// The two scalars the verifier needs to undo an A3 mask. Both are
+/// The two scalars the verifier needs to undo a round-1 mask. Both are
 /// witness-free and both must be opened against their commitments — the
 /// verifier consumes them to recover the C-claim and the AB running claim, so
 /// an unbound value would leave both unconstrained.
@@ -966,7 +966,7 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     (proof, claim)
 }
 
-/// [`prove_packed_padded_zk`] with the amendment-A3 round-1 mask channel.
+/// [`prove_packed_padded_zk`] with the optional round-1 mask channel.
 ///
 /// The returned [`ZerocheckClaim`] carries the **un-shifted** `c_eval`, so
 /// downstream claim handling is unchanged; the proof's `final_c_eval` carries
@@ -1015,7 +1015,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     let mut round1_ab: Vec<F128> = round1_ab_opt.iter().map(|x| c_s * *x).collect();
     let mut round1_c: Vec<F128> = round1_c_opt.iter().map(|x| c_s * *x).collect();
 
-    // ---- A3: the round-1 mask pair ----
+    // ---- round-1 mask pair ----
     //
     // `M_c` masks the C side; the AB side gets `M_c + V_S·h`, so the combined
     // polynomial gains `V_S·h`, which vanishes on S — leaving the verifier's
@@ -1267,7 +1267,7 @@ pub fn evaluate_zk_terminals_packed_padded(
 
 /// The degree-2 mask channel's contribution to the round messages, in
 /// isolation: the round pairs `(M_j(1), M_j(∞))` of the `P·Q★` product
-/// sumcheck, at the same challenge schedule the amended prover uses.
+/// sumcheck, at the same challenge schedule the masked prover uses.
 ///
 /// This is the map whose F₂ image the prover's per-proof coverage
 /// self-check measures (`flock_prover::zk_rank_check`). It runs the SAME
@@ -1313,7 +1313,7 @@ pub fn mask_round_pairs<C: Challenger>(
     out
 }
 
-/// Verify an A1′ zerocheck proof. Checks the combined sumcheck equation
+/// Verify a combined masked zerocheck proof. Checks the sumcheck equation
 /// `running == â(ρ)·b̂(ρ) + γ·P(ρ)·Q★(ρ)`. The caller MUST additionally
 /// authenticate `proof.final_p_eval == P(ρ)` against the P commitment
 /// (through the PCS). Returns the standard
@@ -1326,7 +1326,7 @@ pub fn verify_zk<C: Challenger>(
     verify_zk_masked(log_n, proof, None, challenger)
 }
 
-/// [`verify_zk`] with the amendment-A3 round-1 mask engaged.
+/// [`verify_zk`] with the optional round-1 mask engaged.
 ///
 /// `mask` is `(M_c(z), h(z))` taken from the proof. **Both are unchecked
 /// here**: this function only uses them to un-shift the AB running claim and
@@ -1380,7 +1380,7 @@ pub fn verify_zk_masked<C: Challenger>(
         .collect();
     let combined_at_z = interpolate_at_z_combined(&combined_at_lambda, k_skip, z);
     let p_c_at_z = interpolate_at_z_on_lambda(&proof.round1_c, k_skip, z);
-    // A3: the masked C side carries `P^C + M_c`, and the masked combined
+    // The masked C side carries `P^C + M_c`, and the masked combined
     // polynomial carries `combined + V_S·h` — the latter still zero on S, so
     // the reconstruction above is valid. What comes out is therefore
     // `P^AB(z) + M_ab(z)`; un-shift by `M_ab(z) = M_c(z) + V_S(z)·h(z)`.
@@ -1428,7 +1428,7 @@ pub fn verify_zk_masked<C: Challenger>(
         r_rest: r[k_skip..].to_vec(),
         a_eval: proof.final_a_eval,
         b_eval: proof.final_b_eval,
-        // A3: the PCS binds ẑ, so hand on the UN-shifted claim.
+        // The PCS binds ẑ, so hand on the unshifted claim.
         c_eval: match mask {
             Some((mc_at_z, _)) => proof.final_c_eval + mc_at_z,
             None => proof.final_c_eval,

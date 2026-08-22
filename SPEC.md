@@ -327,8 +327,8 @@ No QROM or production-security claim is made.
    Fiat--Shamir, witness PCS, and inner VEIL hashing query the same programmable
    oracle under disjoint encodings; unprogrammed points receive the native
    SHA-256 answer.
-2. The CLI accepts at most 256 public digests and applies the VFLK0004 bundle
-   size limit both while reading and during `bincode` deserialization. It also
-   rejects non-canonical encodings and trailing bytes.
+2. The CLI accepts at most 256 public digests and applies the bundle size limit
+   both while reading and during `bincode` deserialization. It also rejects
+   non-canonical encodings and trailing bytes.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md).

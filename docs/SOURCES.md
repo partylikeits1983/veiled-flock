@@ -11,6 +11,6 @@ directly to this `GF(2^128)` port.
 | [VEIL paper, ePrint 2026/683](https://eprint.iacr.org/2026/683) | current public preprint at review date | Protocol |
 | [VEIL Lean formalization](https://github.com/succinctlabs/veil-formal-verification/commit/064fb9e16fc46448010266fb77e00076985a3a23) | `064fb9e16fc46448010266fb77e00076985a3a23` | Reference proofs |
 | [`slop-veil` crate documentation](https://docs.rs/crate/slop-veil/6.2.2) | `6.2.2` | Reference implementation |
-| [Historical A1/custom-mask branch point](https://github.com/partylikeits1983/veiled-flock/commit/39c2ffe156a1197d04717769810c4f6fca0db4b0) | `39c2ffe156a1197d04717769810c4f6fca0db4b0` | Superseded protocol |
+| [Historical custom-mask branch point](https://github.com/partylikeits1983/veiled-flock/commit/39c2ffe156a1197d04717769810c4f6fca0db4b0) | `39c2ffe156a1197d04717769810c4f6fca0db4b0` | Superseded protocol |
 
 See [`SECURITY.md`](SECURITY.md) for remaining proof obligations.

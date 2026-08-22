@@ -37,19 +37,15 @@ same distribution.
 
 ## Input bounds
 
-The CLI accepts at most 256 public digests and decodes VFLK0004 bundles with a
-1,177,084-byte limit, twice the measured batch-256 bundle size. The limit is
-enforced while reading and by the bincode decoder before proof vectors are
-constructed.
+The CLI accepts at most 256 public digests and decodes proof bundles with a
+640 KiB resource limit. The limit is enforced while reading and by the bincode
+decoder before proof vectors are constructed.
 
 ## Open requirements
 
 1. Prove the additive-code properties, AB/C masking rank, hiding Ligerito,
-   transcript fork, and ROM composition for the active path ([#44]).
-2. Audit side channels, randomness, and secret erasure ([#45]).
-
-[#44]: https://github.com/partylikeits1983/veiled-flock/issues/44
-[#45]: https://github.com/partylikeits1983/veiled-flock/issues/45
+   transcript fork, and ROM composition for the active path.
+2. Audit side channels, randomness, and secret erasure.
 
 Do not describe or deploy this implementation as a zero-knowledge argument
 until these requirements are resolved and independently reviewed.

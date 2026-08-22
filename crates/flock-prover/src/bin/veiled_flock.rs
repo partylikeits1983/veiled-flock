@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 const DOMAIN: &[u8] = b"veiled-flock-cli-succinct-v0";
 const MAGIC: [u8; 8] = *b"VFLK0004";
 const MAX_MESSAGES: usize = 256;
-// A measured batch-256 VFLK0004 bundle is 588,542 bytes with the current profile.
-const MAX_BUNDLE_BYTES: u64 = 2 * 588_542;
+// Bound file reads and decoder allocation for untrusted proof bundles.
+const MAX_BUNDLE_BYTES: u64 = 640 * 1024;
 
 #[derive(Serialize, Deserialize)]
 struct Bundle {
