@@ -808,8 +808,7 @@ pub fn build_block_r1cs(n_blocks_log: usize) -> BlockR1cs {
 /// sits flush and `useful_bits_zk` fills the block exactly (16,384). The
 /// pair's rows are also A-type, so the effective A-side entropy is
 /// (2·128 + 512) bits/block × 2^n_log blocks — comfortably above the
-/// `128·V_free` budget for every supported batch size. The executable rank
-/// audit remains the ground truth.
+/// `128·V_free` budget for every supported batch size.
 pub fn zk_config() -> flock_core::zk::ZkConfig {
     flock_core::zk::ZkConfig {
         rand_chunks_a: 2,

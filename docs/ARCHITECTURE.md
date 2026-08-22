@@ -1,7 +1,6 @@
 # Architecture
 
-This document describes how the active implementation is intended to add zero
-knowledge to FLOCK with VEIL. The normative protocol and known conformance
+This document describes the intended VEIL integration. The protocol and known
 deviations are defined in [`../SPEC.md`](../SPEC.md).
 
 ## Components
@@ -160,13 +159,9 @@ the Hadamard proof. These values are committed but never serialized.
 Both VEIL code layers use inverse rate 8 and 160 random padding rows. The
 Fiat--Shamir transcript selects 160 distinct non-adaptive query positions.
 
-The two-phase compiler currently calls the unframed vector and Hadamard Merkle
-APIs. Framed, nonce- and channel-separated variants exist elsewhere in
-`veil-f128`, but are not threaded through this active API yet. The active
-compiler also samples the multiplication batching point from the entire field
-instead of excluding 0 and 1. These current implementation details are
-documented in [`../SPEC.md`](../SPEC.md) section 15; they are not intended
-protocol design.
+The active compiler uses unframed inner commitments and samples the
+multiplication batching point from the full field. See section 15 of the
+[specification](../SPEC.md).
 
 ## Step 6: link VEIL, PCS, and the public statement
 
@@ -240,11 +235,8 @@ The generic verifier accepts the simulated proof when driven by the same
 programmed Fiat--Shamir challenger. At batch 256, the simulator programs 17
 challenges.
 
-The witness PCS nevertheless constructs a native `RoContext`, and the active
-inner VEIL commitments use native unframed hashing. Those hash calls bypass the
-simulator's `ProgrammableOracle`. The current test is therefore an executable
-Fiat--Shamir programming test, not yet a faithful single-oracle simulation of
-the complete protocol.
+PCS and VEIL hashes bypass the programmable oracle. The current test covers
+Fiat--Shamir programming only.
 
 This demonstrates that an accepting transcript can be generated from the
 public statement alone. Proving that its distribution matches a real proof

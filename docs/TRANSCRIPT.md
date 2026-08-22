@@ -37,8 +37,5 @@ from the masked round-1 C vector.
 
 No mask, preimage, witness bit, or unmasked PIOP round message is serialized.
 
-This is the algebraic Fiat--Shamir transcript. It is not yet a manifest of all
-hash invocations: the witness PCS uses a separate native framed `RoContext`,
-and active inner VEIL Merkle commitments use native unframed hashing. Unifying
-these calls behind one programmable oracle remains a release-blocking
-deviation; see [`../SPEC.md`](../SPEC.md) section 15.
+PCS and VEIL hashes use separate native contexts and are not represented here.
+See section 15 of the [specification](../SPEC.md).

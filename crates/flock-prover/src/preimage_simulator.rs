@@ -57,11 +57,8 @@
 //! run against the *unmodified* verifier through a programmable oracle — that
 //! the construction is complete rather than merely plausible.
 //!
-//! It does **not** by itself establish indistinguishability. That is a
-//! statement about distributions and needs the coverage results restated in
-//! claim-kernel form for this relation. A simulator whose output verifies but
-//! is distributed differently is a real possibility and this module cannot
-//! rule it out on its own.
+//! Acceptance does not establish indistinguishability; real and simulated
+//! proofs may have different distributions.
 
 use crate::sim_oracle::OracleChallenger;
 use crate::sim_seal::{SealedStatement, SimCoins};

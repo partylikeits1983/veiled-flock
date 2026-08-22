@@ -36,15 +36,10 @@
 //!
 //! ## Zero-knowledge status
 //!
-//! [`Blake3PreimageSetup`] is the non-zk prover. The active experimental path
-//! is [`Blake3PreimageZkSetup::prove_succinct`]: it uses a hiding FLOCK
-//! commitment, masks the algebraic PIOP transcript, and proves the shifted
-//! verifier with `veil-f128`. A public-input-only Fiat--Shamir simulator is
-//! accepted by the generic verifier, but distributional zero knowledge and
-//! the complete soundness/knowledge composition are not proved. The exact
-//! active scope and known implementation gaps are recorded in
-//! `docs/SECURITY.md`; `docs/paper/` contains sources for the older
-//! A1/custom-mask protocol.
+//! [`Blake3PreimageSetup`] is the non-ZK prover.
+//! [`Blake3PreimageZkSetup::prove_succinct`] uses a hiding commitment, masks
+//! the PIOP transcript, and proves the shifted verifier with `veil-f128`. Its
+//! security proof is incomplete; see `docs/SECURITY.md`.
 
 use flock_core::challenger::Challenger;
 use flock_core::pcs::{Commitment, PcsParams};
@@ -931,8 +926,7 @@ mod tests {
         let n = N_TEST;
         let setup = Blake3PreimageZkSetup::new(n);
         let mut messages = msgs_of(0x51_CC_1C_7, n);
-        // A distinctive preimage marker makes the wire-format check below a
-        // useful tripwire for an accidental raw-witness serialization.
+        // Detect accidental raw-witness serialization.
         messages[0] = [0xA5; MESSAGE_BYTES];
         let digests = Blake3PreimageSetup::digests_of(&messages);
         let mut rng = flock_core::zk::ZkRng::from_seed([0x51; 32]);
@@ -941,9 +935,6 @@ mod tests {
             .prove_succinct(&messages, &digests, &mut rng, &mut prover_challenger)
             .expect("prove succinct VEIL");
 
-        // These are structural privacy/size regression checks, not a proof of
-        // distributional zero knowledge. The simulator and security argument
-        // carry the semantic obligation.
         let encoded = bincode::serialize(&(&commitment, &proof)).expect("serialize proof");
         assert!(
             encoded.len() <= 700_000,
@@ -1069,8 +1060,7 @@ mod tests {
             .expect("the generic verifier accepts the simulated proof");
     }
 
-    /// End to end: produce an honest proof for real BLAKE3 preimages, then
-    /// verify it against the digests alone.
+    /// Honest proof round trip.
     #[test]
     fn preimage_roundtrip() {
         let n = N_TEST;

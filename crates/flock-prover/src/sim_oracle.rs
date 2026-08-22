@@ -36,11 +36,8 @@
 //! a function, and pretending otherwise is exactly the error the freshness
 //! argument exists to rule out.
 //!
-//! The point-oracle adapter below can route framed Merkle calls through the
-//! same table, but the active succinct VEIL path does not yet thread it
-//! through every commitment. Its current acceptance test therefore models
-//! programmable Fiat--Shamir squeezes, not a complete single-oracle execution;
-//! see `docs/SECURITY.md`.
+//! The succinct VEIL path uses this oracle for Fiat--Shamir challenges, but
+//! not for every PCS and VEIL hash. See `docs/SECURITY.md`.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};

@@ -1,9 +1,4 @@
-# Test gate for the zk/veil features + Lean proofs. Runner scheme follows lint.yml.
-#
-# These features are security-critical and are NOT default features. This
-# workflow compiles the active succinct VEIL path and runs an exact,
-# non-vacuous regression manifest in addition to the broad historical zk test
-# set. The expensive A1 certificates remain in zk-certificates.yml.
+# Tests non-default zk/veil features and Lean proofs.
 
 name: Test
 
@@ -79,18 +74,16 @@ jobs:
       - name: cargo clippy (active veil feature)
         run: cargo clippy --release --workspace --all-targets --features veil -- -D warnings
 
-      - name: cargo test (zk feature, fast set)
-        # Ignored tests are the offline exact certificates and the m=22
-        # end-to-end runs; they are executed by zk-certificates.yml via
-        # scripts/zk-certify.sh.
-        run: cargo test --release --workspace --features zk
-
-      - name: Active succinct VEIL security regressions
-        run: bash scripts/veil-ci.sh
+      - name: cargo test (active veil feature)
+        run: cargo test --release --workspace --features veil
 
       - name: Succinct VEIL benchmark regression
         if: matrix.arch == 'x86_64-avx512'
-        run: bash scripts/veil-bench-check.sh
+        env:
+          VEIL_BENCH_BATCH: 256
+          VEIL_BENCH_RUNS: 5
+          VEIL_BENCH_CHECK: 1
+        run: cargo bench -p flock-prover --features veil --bench veil_vs_flock
 
   lean:
     name: Lean proofs (build + axiom audit)

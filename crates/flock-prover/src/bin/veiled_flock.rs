@@ -23,7 +23,7 @@ struct Bundle {
 }
 
 const USAGE: &str = "\
-veiled_flock — experimental candidate ZK argument for 64-byte BLAKE3 preimages
+veiled_flock — experimental VEIL argument for 64-byte BLAKE3 preimages
 
 Usage:
   veiled_flock prove  --message FILE --out FILE

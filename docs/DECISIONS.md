@@ -44,10 +44,8 @@ Merkle points. It does not force degenerate Fiat--Shamir challenges and does not
 claim to forge a native-SHA proof. Real and simulated transcripts use the same
 algebraic verifier with different random-oracle backends.
 
-**2026-08-19 conformance note:** this remains the target model, but the active
-succinct path currently programs only Fiat--Shamir squeezes. Its witness PCS
-constructs a native `RoContext`, and the inner VEIL compiler uses unframed
-native Merkle hashing. See [`../SPEC.md`](../SPEC.md) section 15, items 2 and 3.
+**Status:** the active path programs only Fiat--Shamir challenges; PCS and
+VEIL hashing use separate native contexts.
 
 ## D007 — Keep the square code below rate one
 
@@ -64,10 +62,7 @@ six-value batching point from `F \ {0,1}`. This makes the masking maps
 invertible for every accepted transcript instead of tolerating a negligible
 challenge on which a mask disappears.
 
-**2026-08-19 conformance note:** the direct block-R1CS implementation follows
-this decision. The active two-phase constraint compiler samples its
-multiplication batching point from all of `F`, so 0 and 1 remain possible.
-[`../SPEC.md`](../SPEC.md) section 15, item 1 records the deviation.
+**Status:** the active compiler samples this challenge from all of `F`.
 
 ## D009 — Compile only FLOCK's algebraic verifier transcript
 

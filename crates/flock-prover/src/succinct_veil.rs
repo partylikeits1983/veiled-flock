@@ -771,9 +771,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     } else {
         None
     };
-    // These terminal protocols use independently forked transcripts and
-    // randomness. Running them concurrently reduces prover latency without
-    // changing either transcript or the proof encoding.
+    // The terminal proofs use independent transcripts and randomness.
     let (pcs_open, veil) = rayon::join(
         || {
             open_claims_with_precomputed_ligerito_pd_ro(

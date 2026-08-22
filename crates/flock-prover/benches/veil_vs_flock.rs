@@ -48,6 +48,19 @@ fn median_usize(values: &mut [usize]) -> usize {
     values[values.len() / 2]
 }
 
+fn limit(name: &str, default: f64) -> f64 {
+    let limit = std::env::var(name).map_or(default, |value| value.parse().expect(name));
+    assert!(limit.is_finite() && limit > 0.0, "invalid {name}");
+    limit
+}
+
+fn check_overhead(label: &str, actual: f64, limit: f64) {
+    assert!(
+        actual.is_finite() && actual <= limit,
+        "{label} overhead {actual:.2}x exceeds {limit:.2}x"
+    );
+}
+
 fn bench_flock(
     setup: &Blake3PreimageSetup,
     messages: &[[u8; MESSAGE_BYTES]],
@@ -154,10 +167,26 @@ fn main() {
         "zk-flock\t{:.6}\t{:.6}\t{}",
         veil.prove_s, veil.verify_s, veil.proof_bytes
     );
-    println!(
-        "overhead\t{:.2}x\t{:.2}x\t{:.2}x",
-        veil.prove_s / flock.prove_s,
-        veil.verify_s / flock.verify_s,
-        veil.proof_bytes as f64 / flock.proof_bytes as f64
-    );
+    let prove_overhead = veil.prove_s / flock.prove_s;
+    let verify_overhead = veil.verify_s / flock.verify_s;
+    let size_overhead = veil.proof_bytes as f64 / flock.proof_bytes as f64;
+    println!("overhead\t{prove_overhead:.2}x\t{verify_overhead:.2}x\t{size_overhead:.2}x");
+
+    if std::env::var_os("VEIL_BENCH_CHECK").is_some() {
+        check_overhead(
+            "prover",
+            prove_overhead,
+            limit("VEIL_BENCH_MAX_PROVE_OVERHEAD", 3.5),
+        );
+        check_overhead(
+            "verifier",
+            verify_overhead,
+            limit("VEIL_BENCH_MAX_VERIFY_OVERHEAD", 3.5),
+        );
+        check_overhead(
+            "proof size",
+            size_overhead,
+            limit("VEIL_BENCH_MAX_SIZE_OVERHEAD", 2.5),
+        );
+    }
 }

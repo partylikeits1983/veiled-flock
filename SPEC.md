@@ -2,11 +2,9 @@
 
 ## 1. Status
 
-This document specifies the intended active succinct zk-FLOCK protocol and its
-wire behavior. The protocol is experimental. It has executable tests and a
-Fiat--Shamir simulator, but it does not yet have an end-to-end formal zero-
-knowledge proof. Section 15 records known places where the 2026-08-19
-implementation does not yet meet this specification's hardening/model goals.
+This document specifies the intended succinct zk-FLOCK protocol and wire
+format. The implementation is experimental and lacks an end-to-end
+zero-knowledge proof. Section 15 lists known deviations.
 
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative.
 
@@ -322,22 +320,10 @@ No QROM or production-security claim is made.
 
 ## 15. Known implementation deviations
 
-The following are current-state disclosures, not alternative protocol rules:
+1. The multiplication batching challenge includes 0 and 1, contrary to
+   section 8.
+2. Inner VEIL commitments use unframed Merkle hashing.
+3. The simulator programs Fiat--Shamir challenges but not PCS or VEIL hashes.
+4. CLI decoding does not bound allocations before deserialization.
 
-1. Section 8's six-value padding argument requires its multiplication batching
-   point to exclude 0 and 1. The active two-phase constraint compiler samples
-   from the whole field. The exceptional event is at most `2^-127` under ideal
-   sampling, but the claimed always-invertible masking map does not cover it.
-2. The active inner VEIL vector and Hadamard commitments use unframed Merkle
-   hashing. They do not yet use the nonce- and channel-separated framed APIs
-   used by the production-oriented witness PCS.
-3. Section 13's simulator programs Fiat--Shamir challenges, but the witness
-   PCS creates a native `RoContext` and inner VEIL Merkle hashing is native and
-   unframed. The executable test is not yet a single-oracle simulation of all
-   hash calls.
-4. CLI decoding rejects non-canonical encodings and trailing bytes, but does
-   not apply verifier-owned allocation bounds before `bincode`
-   deserialization.
-
-These deviations and the corresponding release gates are summarized in
-[`docs/SECURITY.md`](docs/SECURITY.md).
+See [`docs/SECURITY.md`](docs/SECURITY.md).
