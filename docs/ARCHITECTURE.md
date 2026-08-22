@@ -1,7 +1,8 @@
 # Architecture
 
-This document describes how the active implementation adds zero knowledge to
-FLOCK with VEIL. The normative protocol is defined in [`../SPEC.md`](../SPEC.md).
+This document describes how the active implementation is intended to add zero
+knowledge to FLOCK with VEIL. The normative protocol and known conformance
+deviations are defined in [`../SPEC.md`](../SPEC.md).
 
 ## Components
 
@@ -159,6 +160,14 @@ the Hadamard proof. These values are committed but never serialized.
 Both VEIL code layers use inverse rate 8 and 160 random padding rows. The
 Fiat--Shamir transcript selects 160 distinct non-adaptive query positions.
 
+The two-phase compiler currently calls the unframed vector and Hadamard Merkle
+APIs. Framed, nonce- and channel-separated variants exist elsewhere in
+`veil-f128`, but are not threaded through this active API yet. The active
+compiler also samples the multiplication batching point from the entire field
+instead of excluding 0 and 1. These current implementation details are
+documented in [`../SPEC.md`](../SPEC.md) section 15; they are not intended
+protocol design.
+
 ## Step 6: link VEIL, PCS, and the public statement
 
 After lincheck, the prover has:
@@ -228,11 +237,18 @@ pseudo-witness's actual terminal evaluations. Production lincheck, PCS, and
 VEIL code then complete the proof.
 
 The generic verifier accepts the simulated proof when driven by the same
-programmed oracle. At batch 256, the simulator programs 17 challenges.
+programmed Fiat--Shamir challenger. At batch 256, the simulator programs 17
+challenges.
+
+The witness PCS nevertheless constructs a native `RoContext`, and the active
+inner VEIL commitments use native unframed hashing. Those hash calls bypass the
+simulator's `ProgrammableOracle`. The current test is therefore an executable
+Fiat--Shamir programming test, not yet a faithful single-oracle simulation of
+the complete protocol.
 
 This demonstrates that an accepting transcript can be generated from the
 public statement alone. Proving that its distribution matches a real proof
-requires the remaining arguments listed in `docs/SECURITY.md`.
+requires the remaining arguments listed in [`SECURITY.md`](SECURITY.md).
 
 ## Private and public data
 

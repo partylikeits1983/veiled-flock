@@ -22,10 +22,9 @@
 //! `flags = CHUNK_START|CHUNK_END|ROOT`. [`ParamPinning::RootHash64`] pins
 //! exactly those wires in the R1CS, so the circuit no longer accepts *some*
 //! compression — it accepts the hash. The message words stay free: they are
-//! the witness. Longer messages need chunk/tree chaining and are future work
-//! (`docs/memos/fixed-digest-relation.md`); the statement encoding records the
-//! length policy so a proof for this relation can never be read as a proof for
-//! another.
+//! the witness. Longer messages need chunk/tree chaining and are future work;
+//! the statement encoding records the length policy so a proof for this
+//! relation can never be read as a proof for another.
 //!
 //! ## How the digests are bound
 //!
@@ -37,12 +36,15 @@
 //!
 //! ## Zero-knowledge status
 //!
-//! [`Blake3PreimageSetup`] is the non-zk prover. [`Blake3PreimageZkSetup`]
-//! uses the certified field-mask protocol and is gated to the exact production
-//! shape. Its simulator accepts only a sealed public statement, and the
-//! unmodified verifier checks the resulting proof through the same framed
-//! random oracle. The precise computational-ZK and knowledge-security scopes
-//! are recorded in `docs/paper/zk-flock.tex`.
+//! [`Blake3PreimageSetup`] is the non-zk prover. The active experimental path
+//! is [`Blake3PreimageZkSetup::prove_succinct`]: it uses a hiding FLOCK
+//! commitment, masks the algebraic PIOP transcript, and proves the shifted
+//! verifier with `veil-f128`. A public-input-only Fiat--Shamir simulator is
+//! accepted by the generic verifier, but distributional zero knowledge and
+//! the complete soundness/knowledge composition are not proved. The exact
+//! active scope and known implementation gaps are recorded in
+//! `docs/SECURITY.md`; `docs/paper/` contains sources for the older
+//! A1/custom-mask protocol.
 
 use flock_core::challenger::Challenger;
 use flock_core::pcs::{Commitment, PcsParams};
@@ -525,7 +527,7 @@ impl Blake3PreimageZkSetup {
     /// this makes one hiding witness opening and proves only FLOCK's small
     /// algebraic verifier transcript inside VEIL.
     #[cfg(feature = "veil")]
-    pub fn prove_succinct<Ch: Challenger + Clone>(
+    pub fn prove_succinct<Ch: Challenger + Clone + Send>(
         &self,
         msgs: &[[u8; MESSAGE_BYTES]],
         digests: &[[u8; DIGEST_BYTES]],
@@ -928,13 +930,32 @@ mod tests {
         // at m=22, i.e. 256 BLAKE3 blocks.
         let n = N_TEST;
         let setup = Blake3PreimageZkSetup::new(n);
-        let messages = msgs_of(0x51_CC_1C_7, n);
+        let mut messages = msgs_of(0x51_CC_1C_7, n);
+        // A distinctive preimage marker makes the wire-format check below a
+        // useful tripwire for an accidental raw-witness serialization.
+        messages[0] = [0xA5; MESSAGE_BYTES];
         let digests = Blake3PreimageSetup::digests_of(&messages);
         let mut rng = flock_core::zk::ZkRng::from_seed([0x51; 32]);
         let mut prover_challenger = FsChallenger::new(b"succinct-veil-preimage-test");
         let (proof, commitment) = setup
             .prove_succinct(&messages, &digests, &mut rng, &mut prover_challenger)
             .expect("prove succinct VEIL");
+
+        // These are structural privacy/size regression checks, not a proof of
+        // distributional zero knowledge. The simulator and security argument
+        // carry the semantic obligation.
+        let encoded = bincode::serialize(&(&commitment, &proof)).expect("serialize proof");
+        assert!(
+            encoded.len() <= 700_000,
+            "succinct proof unexpectedly grew to {} bytes",
+            encoded.len()
+        );
+        assert!(
+            encoded
+                .windows(MESSAGE_BYTES)
+                .all(|window| window != &messages[0][..]),
+            "serialized proof contains the raw preimage marker"
+        );
 
         let mut verifier_challenger = FsChallenger::new(b"succinct-veil-preimage-test");
         setup
@@ -1045,11 +1066,11 @@ mod tests {
                 &digests,
                 &mut verifier,
             )
-            .expect("the production verifier accepts the simulated proof");
+            .expect("the generic verifier accepts the simulated proof");
     }
 
-    /// End to end: prove knowledge of preimages of real BLAKE3 digests, and
-    /// verify against the digests alone.
+    /// End to end: produce an honest proof for real BLAKE3 preimages, then
+    /// verify it against the digests alone.
     #[test]
     fn preimage_roundtrip() {
         let n = N_TEST;
@@ -1508,8 +1529,7 @@ mod tests {
     /// than merely by value (as fresh randomness would).
     ///
     /// It is a diagnostic, not a proof: it can find a discrepancy but cannot
-    /// certify the absence of one. What it currently shows is recorded in
-    /// `docs/memos/interactive-simulator-design.md`.
+    /// certify the absence of one.
     #[test]
     #[ignore = "diagnostic; run explicitly"]
     fn measure_simulated_vs_honest_transcript() {

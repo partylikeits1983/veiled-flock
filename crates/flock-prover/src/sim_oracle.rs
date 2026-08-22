@@ -26,7 +26,8 @@
 //!
 //! ## Faithfulness to the model
 //!
-//! [`OracleChallenger`] is byte-for-byte [`FsChallenger`] except that each
+//! [`OracleChallenger`] is byte-for-byte
+//! [`FsChallenger`](flock_core::challenger::FsChallenger) except that each
 //! squeeze consults the programmed table first, keyed by the **exact query
 //! bytes** (`transcript state ‖ counter`) the honest challenger would have
 //! hashed. Absorption, tagging, re-absorption of squeezed bytes, and the PoW
@@ -34,6 +35,12 @@
 //! also reaches is visible there too — as it must be, since a random oracle is
 //! a function, and pretending otherwise is exactly the error the freshness
 //! argument exists to rule out.
+//!
+//! The point-oracle adapter below can route framed Merkle calls through the
+//! same table, but the active succinct VEIL path does not yet thread it
+//! through every commitment. Its current acceptance test therefore models
+//! programmable Fiat--Shamir squeezes, not a complete single-oracle execution;
+//! see `docs/SECURITY.md`.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
@@ -399,7 +406,7 @@ impl Challenger for OracleChallenger {
         // challenger does. It is NOT programmed: the simulator grinds
         // honestly on its programmed prefix, which is why programming and
         // grinding have to interleave rather than the former completing
-        // first (see docs/memos/interactive-simulator-design.md).
+        // first.
         let state = self.pow_state_digest();
         let nonce = if bits == 0 {
             // Canonical nonce at zero-bit sites, matching `FsChallenger` —

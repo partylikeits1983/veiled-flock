@@ -38,8 +38,7 @@
 //!
 //! Random probing can only under-estimate a rank, so a full-rank measurement is
 //! sound evidence of surjectivity; but these run at one challenge tuple and
-//! cover the PIOP block, not the PCS-opening interior. The remaining
-//! obligations are enumerated in `docs/memos/interactive-simulator-design.md`.
+//! cover the PIOP block, not the PCS-opening interior.
 
 #![cfg(feature = "zk")]
 

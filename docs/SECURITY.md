@@ -1,10 +1,29 @@
 # Security scope of succinct VEIL-FLOCK
 
-This implementation is experimental, unaudited, and not production-safe.
+This implementation is experimental, internally reviewed, not independently
+audited, and not suitable for production secrets.
 
-## Audit verdict
+## Claim status
 
-The active CLI path is genuinely wired through the native VEIL compiler:
+| Property | Current status |
+|---|---|
+| Exact 64-byte BLAKE3 relation | Implemented and differentially tested |
+| Honest prove/verify completeness | Implemented and tested at batch 256 |
+| Raw messages absent from proof types | Confirmed by serialization/code review |
+| Mutation rejection | Tested for statement and major proof components |
+| Public-input-only simulated acceptance | Implemented for programmed Fiat--Shamir challenges |
+| Distributional zero knowledge | Not proved |
+| Composed adversarial soundness | Not proved; only component evidence and estimates |
+| Argument of knowledge/extraction | Partial components exist; no active end-to-end theorem |
+| Classical-ROM composition | Not proved; current simulator is not a single-oracle model |
+| QROM security | Not claimed |
+
+The correct current description is “an implementation intended to be a
+zero-knowledge argument,” not an unqualified “zero-knowledge proof.”
+
+## Implementation wiring
+
+The active CLI path reaches the native VEIL compiler:
 
 ```text
 veiled_flock
@@ -14,100 +33,117 @@ veiled_flock
   -> veil_f128::prove_constraints_from_commitment
 ```
 
-Verification reconstructs the shifted circuit, verifies the same hiding PCS
-claims, and calls `veil_f128::verify_constraints`. The `veil` Cargo feature is
-therefore functional, not a label around ordinary FLOCK.
+Verification reconstructs the shifted circuit, checks the hiding PCS opening,
+derives the public digest claim, and calls `veil_f128::verify_constraints`.
+The `veil` feature is therefore functional, not a label around an ordinary
+FLOCK proof.
 
-The audit found no message, raw witness, transcript mask, or VEIL private
-witness in the serialized `Bundle`/`SuccinctVeilProof` types. The proof does
-contain public digests, randomized evaluation claims, Merkle commitments and
-openings, masked PIOP messages, and the VEIL certificate, as intended.
+The serialized `Bundle` and `SuccinctVeilProof` types contain no message, raw
+witness, transcript mask, PCS blinding witness, or VEIL private padding. They
+do contain the public digest list, randomized evaluation claims, Merkle roots
+and openings, masked PIOP messages, and the VEIL certificate.
 
-This is an implementation audit, not a cryptographic proof or independent
-review. In particular, executable simulator acceptance does not establish
-distributional equality.
+This establishes data-flow facts, not semantic privacy. A proof can omit the
+witness and still leak a function of it through its transcript; ruling that
+out is the purpose of the unfinished ZK proof.
 
-## What is hidden
+## Private and public information
 
-The 64-byte BLAKE3 messages and all ordinary FLOCK witness wires are private.
-The proof contains neither raw witness data nor an unmasked zerocheck/lincheck
-message.
+Intended private information:
 
-The digest list, actual batch count, padded shape, circuit, parameter profile,
-proof length, timing, and memory behavior are public.
+- the exact 64-byte message for each public digest;
+- ordinary FLOCK witness wires and ZK randomizer rows;
+- the 242 transcript masks at batch 256;
+- FLOCK PCS blinding data; and
+- VEIL code padding, additive/product masks, and six compiler pad values.
 
-## Why the composition is intended to be zero knowledge
+Public information:
 
-1. Every exposed algebraic PIOP coordinate is additively one-time-padded by an
-   independent `GF(2^128)` mask committed before its challenge is sampled.
-2. VEIL proves the shifted verifier identity without opening those masks. Its
-   code padding hides queried coordinates, its additive/product masks hide
-   revealed combinations, and two dummy product rows hide the three Hadamard
-   linkage claims.
-3. The witness PCS uses FLOCK's hiding commitment: a random low message half,
-   a full-support blinder codeword, and the existing hiding recursive opening.
-4. The two output evaluation claims are linked on both sides: the shifted
-   circuit derives them from the hidden PIOP, while Ligerito checks them against
-   the witness commitment. FLOCK's zk randomizer rows move those claim values.
+- the ordered digest list and actual batch count;
+- the padded power-of-two shape, which is at least 256 slots;
+- circuit and parameter profile, proof nonce, roots, and proof length;
+- masked zerocheck and lincheck messages;
+- explicit randomized AB and C evaluation values;
+- PCS and VEIL openings; and
+- timing, memory use, and access-pattern side channels.
 
-At batch 256, VEIL masks 242 transcript values. Its profile uses inverse rate
-8 and 160 random padding symbols for 160 non-adaptive queries. With three
-product rows, the square code has rate at most 1/4; the basic unique-decoding
-miss term `(5/8)^160` is about 108 bits. This is a parameter calculation, not a
-complete soundness proof.
+## Intended privacy argument
 
-## Executable simulator
+1. Every exposed algebraic FLOCK PIOP coordinate is additively padded with an
+   independent `GF(2^128)` mask committed before the dependent challenge.
+2. VEIL proves the shifted verifier identity without opening those masks. Code
+   padding is intended to hide queried coordinates, while additive/product
+   masks and two dummy product rows hide the revealed combinations.
+3. The witness uses FLOCK's hiding commitment and recursive opening rather
+   than its ordinary PCS path.
+4. The shifted circuit and PCS both check the same explicit AB and C values.
+   FLOCK's randomizer rows are intended to hide those two values. The public
+   digest value is verifier-derived and checked in the same PCS opening.
 
-`simulate_succinct` receives arbitrary public digests and no preimage. It
-constructs a randomized pseudo-witness whose public digest cells are patched,
-simulates zerocheck in the programmable ROM, and then runs the production
-lincheck, hiding PCS opening, and VEIL proof. The ordinary succinct verifier
-accepts the result using the same programmed oracle.
+At batch 256, the inner VEIL profile uses inverse rate 8, 160 random padding
+symbols, and 160 distinct non-adaptive queries. With three product rows, the
+square-code unique-decoding miss expression `(5/8)^160` is about 108 bits.
+This is one component estimate, not the protocol's final soundness level.
 
-This establishes executable simulator acceptance. Distributional equality
-additionally relies on:
+## Simulator boundary
 
-- uniform transcript masks and the VEIL code-projection property;
-- FLOCK's hiding-PCS lemmas/query budget;
-- the zk randomizer rows covering the AB/C output claim kernel; and
-- freshness of the programmed Fiat--Shamir points.
+`simulate_succinct` takes arbitrary public digests, a seed, a programmable
+oracle, and no preimage. It constructs a pseudo-witness for unrelated random
+messages, patches its public digest cells, programs zerocheck challenges, and
+then runs production lincheck, PCS, and VEIL code. The generic verifier accepts
+the result under the same programmed `OracleChallenger`.
 
-The existing fixed-digest certificates show that fresh randomizers move the
-terminal evaluations, and the succinct tests check that both output claims
-move across fresh draws. A full all-challenge rank proof for this exact
-two-claim kernel is still required before a formal ZK claim.
+The current harness programs Fiat--Shamir squeezes only. The succinct prover
+and verifier instantiate a native `RoContext` for PCS, and the active VEIL
+constraint compiler uses unframed native Merkle hashing. Those calls do not
+pass through the shared `ProgrammableOracle`. The test therefore demonstrates
+Fiat--Shamir programming acceptance, but not one executable random-oracle game
+covering every protocol hash call.
 
-The simulator uses `OracleChallenger`, not the production deterministic
-`FsChallenger`, because a random-oracle simulator must program challenge
-answers. Both challengers exercise the same generic succinct verifier. The
-formal ROM argument must still bound programming collisions and prove that
-the programmed view has the real view's distribution.
+Even after that wiring is fixed, acceptance alone is insufficient. A ZK proof
+must establish the distribution of the real and simulated views, account for
+programming collisions, and compose the transcript masks, VEIL proof, hiding
+PCS, and AB/C claim replacement.
 
-## Soundness checks implemented
+## Soundness evidence and limits
 
-- Verifier-owned PCS and VEIL parameters are pinned exactly.
-- The mask commitment is bound before every masked PIOP challenge.
-- The shifted circuit checks C interpolation, every zerocheck recurrence, the
-  final `a*b` product, every lincheck recurrence, and both PCS output values.
-- The public digest claim is verifier-derived and shares the same opening.
-- Mutations of the statement, nonce, witness root, masked zerocheck,
-  masked lincheck, AB claim, VEIL dot proof, VEIL Hadamard reduction, or
-  Ligerito opened rows are rejected.
-- Proof decoding is canonical in the CLI.
+Implemented checks include:
 
-## Remaining review obligations
+- verifier-owned PCS and VEIL parameters;
+- mask-root binding before masked PIOP challenges;
+- every zerocheck and lincheck recurrence, terminal `a*b`, and AB/C linkage in
+  the shifted circuit;
+- a verifier-derived public digest claim in the common witness opening;
+- canonical CLI encoding with rejection of trailing bytes; and
+- rejection tests for mutations to the statement, nonce, roots, masked
+  messages, AB/C values, PCS rows, and VEIL dot/Hadamard data.
 
-1. Prove the additive-code MDS projection, multiplicative reduction, and
-   proximity-generator properties for the registered dimensions.
-2. Prove the exact AB/C randomizer claim-kernel rank for every supported shape.
-3. Review the hiding-Ligerito recursion and its final residual against VEIL/CFW
-   assumptions, including the hard query budget.
-4. Prove the Fiat--Shamir compilation's ZK statement in the classical ROM;
-   QROM security is not claimed.
-5. Audit that the pre-PCS transcript fork used by the inner certificate is a
-   valid composition boundary.
-6. Add allocation limits before deserializing attacker-controlled vectors.
-7. Obtain independent cryptographic and implementation audits.
+No forged false statement was found by these tests. Mutation tests do not
+model an adaptive malicious prover, however. A complete soundness statement
+must combine at least the FLOCK PIOP error, random digest-equality test, PCS
+error, VEIL linear/Hadamard batching and proximity errors, Merkle binding, and
+Fiat--Shamir transform.
 
-The staged proof plan and proposed Lean theorem boundaries are in
-[`FORMAL_VERIFICATION.md`](FORMAL_VERIFICATION.md).
+## Known active deviations and obligations
+
+The current release-blocking items are:
+
+1. The active constraint compiler samples the six-value multiplication
+   batching point from all of `GF(2^128)` instead of excluding 0 and 1 as
+   required by decision D008. This adds an exceptional event of probability
+   at most `2^-127` under ideal sampling and invalidates the claimed
+   always-invertible masking argument on those challenges.
+2. Inner VEIL commitments use the legacy unframed Merkle APIs even though
+   framed, nonce- and channel-separated variants exist.
+3. The simulator and commitment layers do not yet use one shared programmable
+   random oracle.
+4. Additive-code MDS/projection/product properties, AB/C rank, hiding
+   Ligerito, the transcript fork, and the complete ROM composition remain
+   unproved for the active path.
+5. CLI decoding is canonical but not allocation-bounded before deserializing
+   attacker-controlled vectors.
+6. Timing, cache behavior, memory access, randomness quality, and secret
+   erasure have not been audited.
+
+These obligations must be resolved, tested, and independently reviewed before
+the implementation is described or deployed as a zero-knowledge argument.

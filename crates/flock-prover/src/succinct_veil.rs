@@ -593,7 +593,7 @@ fn shifted_verifier_circuit<C: Challenger>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
+pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
     z_packed: Vec<F128>,
@@ -771,25 +771,35 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
     } else {
         None
     };
-    let pcs_open = open_claims_with_precomputed_ligerito_pd_ro(
-        z_packed,
-        &prover_data,
-        &commitment,
-        &[ab.clone(), c.clone()],
-        &[s_hat_v_ab.as_deref(), s_hat_v_c.as_deref()],
-        &pd,
-        &padding,
-        lig_config,
-        &ro,
-        RoChannel::Witness,
-        challenger,
+    // These terminal protocols use independently forked transcripts and
+    // randomness. Running them concurrently reduces prover latency without
+    // changing either transcript or the proof encoding.
+    let (pcs_open, veil) = rayon::join(
+        || {
+            open_claims_with_precomputed_ligerito_pd_ro(
+                z_packed,
+                &prover_data,
+                &commitment,
+                &[ab.clone(), c.clone()],
+                &[s_hat_v_ab.as_deref(), s_hat_v_c.as_deref()],
+                &pd,
+                &padding,
+                lig_config,
+                &ro,
+                RoChannel::Witness,
+                challenger,
+            )
+        },
+        || {
+            prove_constraints_from_commitment(
+                &circuit,
+                veil_commitment,
+                &mut veil_rng,
+                &mut veil_challenger,
+            )
+        },
     );
-    let veil = prove_constraints_from_commitment(
-        &circuit,
-        veil_commitment,
-        &mut veil_rng,
-        &mut veil_challenger,
-    )?;
+    let veil = veil?;
     Ok((
         SuccinctVeilProof {
             proof_nonce,

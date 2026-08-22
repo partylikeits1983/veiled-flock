@@ -43,6 +43,11 @@ fn median(values: &mut [f64]) -> f64 {
     values[values.len() / 2]
 }
 
+fn median_usize(values: &mut [usize]) -> usize {
+    values.sort_unstable();
+    values[values.len() / 2]
+}
+
 fn bench_flock(
     setup: &Blake3PreimageSetup,
     messages: &[[u8; MESSAGE_BYTES]],
@@ -51,7 +56,7 @@ fn bench_flock(
 ) -> Measurement {
     let mut prove_times = Vec::with_capacity(runs);
     let mut verify_times = Vec::with_capacity(runs);
-    let mut proof_bytes = 0;
+    let mut proof_sizes = Vec::with_capacity(runs);
     for run in 0..=runs {
         let mut prover = FsChallenger::new(FLOCK_DOMAIN);
         let started = Instant::now();
@@ -64,7 +69,7 @@ fn bench_flock(
             .verify(&commitment, &proof, digests, &mut verifier)
             .unwrap();
         let verify_s = started.elapsed().as_secs_f64();
-        proof_bytes = R1csProofBundleLigerito { commitment, proof }
+        let proof_bytes = R1csProofBundleLigerito { commitment, proof }
             .to_bytes()
             .len();
 
@@ -72,12 +77,13 @@ fn bench_flock(
         if run > 0 {
             prove_times.push(prove_s);
             verify_times.push(verify_s);
+            proof_sizes.push(proof_bytes);
         }
     }
     Measurement {
         prove_s: median(&mut prove_times),
         verify_s: median(&mut verify_times),
-        proof_bytes,
+        proof_bytes: median_usize(&mut proof_sizes),
     }
 }
 
@@ -89,7 +95,7 @@ fn bench_veil(
 ) -> Measurement {
     let mut prove_times = Vec::with_capacity(runs);
     let mut verify_times = Vec::with_capacity(runs);
-    let mut proof_bytes = 0;
+    let mut proof_sizes = Vec::with_capacity(runs);
     for run in 0..=runs {
         let mut rng = ZkRng::from_seed([run as u8 + 1; 32]);
         let mut prover = FsChallenger::new(VEIL_DOMAIN);
@@ -105,17 +111,18 @@ fn bench_veil(
             .verify_succinct(&commitment, &proof, digests, &mut verifier)
             .unwrap();
         let verify_s = started.elapsed().as_secs_f64();
-        proof_bytes = bincode::serialize(&(commitment, proof)).unwrap().len();
+        let proof_bytes = bincode::serialize(&(commitment, proof)).unwrap().len();
 
         if run > 0 {
             prove_times.push(prove_s);
             verify_times.push(verify_s);
+            proof_sizes.push(proof_bytes);
         }
     }
     Measurement {
         prove_s: median(&mut prove_times),
         verify_s: median(&mut verify_times),
-        proof_bytes,
+        proof_bytes: median_usize(&mut proof_sizes),
     }
 }
 

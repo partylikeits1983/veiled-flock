@@ -58,11 +58,10 @@
 //! the construction is complete rather than merely plausible.
 //!
 //! It does **not** by itself establish indistinguishability. That is a
-//! statement about distributions and needs the coverage results (restated in
-//! claim-kernel form for this relation) plus the obligations listed in
-//! `docs/memos/interactive-simulator-design.md`. A simulator whose output
-//! verifies but is distributed differently is a real possibility and this
-//! module cannot rule it out on its own.
+//! statement about distributions and needs the coverage results restated in
+//! claim-kernel form for this relation. A simulator whose output verifies but
+//! is distributed differently is a real possibility and this module cannot
+//! rule it out on its own.
 
 use crate::sim_oracle::OracleChallenger;
 use crate::sim_seal::{SealedStatement, SimCoins};
