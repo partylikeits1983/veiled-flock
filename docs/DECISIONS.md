@@ -44,6 +44,9 @@ Merkle points. It does not force degenerate Fiat--Shamir challenges and does not
 claim to forge a native-SHA proof. Real and simulated transcripts use the same
 algebraic verifier with different random-oracle backends.
 
+**Status:** the active path programs only Fiat--Shamir challenges; PCS and
+VEIL hashing use separate native contexts.
+
 ## D007 — Keep the square code below rate one
 
 The original direct-reference rate-1/2 base profile made the square/product
@@ -58,6 +61,8 @@ Dot/Hadamard mask coefficients are sampled from `F \ {0}` and the R1CS
 six-value batching point from `F \ {0,1}`. This makes the masking maps
 invertible for every accepted transcript instead of tolerating a negligible
 challenge on which a mask disappears.
+
+**Status:** the active compiler samples this challenge from all of `F`.
 
 ## D009 — Compile only FLOCK's algebraic verifier transcript
 

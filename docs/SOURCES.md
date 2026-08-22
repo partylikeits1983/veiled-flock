@@ -1,17 +1,16 @@
-# Source pins
+# Source pins and upstream references
 
-These are research inputs, not vendored dependencies.
+Last checked: 2026-08-19.
 
-| Source | Local path | Revision |
+These sources informed the implementation. Upstream VEIL proofs do not apply
+directly to this `GF(2^128)` port.
+
+| Source | Pinned version | Role |
 |---|---|---|
-| Current FLOCK | `../flock` | `af7fa628fde250b862747521d79f721a501d1131` |
-| VEIL Lean formalization | `../veil-formal-verification` | `064fb9e16fc46448010266fb77e00076985a3a23` |
-| Previous zk-FLOCK experiment | `../../flock`, ref `fork/zk-flock` | `39c2ffe156a1197d04717769810c4f6fca0db4b0` |
-| VEIL Rust reference | local crates.io cache, `slop-veil` | `6.2.2` |
+| [FLOCK](https://github.com/succinctlabs/flock/commit/af7fa628fde250b862747521d79f721a501d1131) | `af7fa628fde250b862747521d79f721a501d1131` | Baseline |
+| [VEIL paper, ePrint 2026/683](https://eprint.iacr.org/2026/683) | current public preprint at review date | Protocol |
+| [VEIL Lean formalization](https://github.com/succinctlabs/veil-formal-verification/commit/064fb9e16fc46448010266fb77e00076985a3a23) | `064fb9e16fc46448010266fb77e00076985a3a23` | Reference proofs |
+| [`slop-veil` crate documentation](https://docs.rs/crate/slop-veil/6.2.2) | `6.2.2` | Reference implementation |
+| [Historical A1/custom-mask branch point](https://github.com/partylikeits1983/veiled-flock/commit/39c2ffe156a1197d04717769810c4f6fca0db4b0) | `39c2ffe156a1197d04717769810c4f6fca0db4b0` | Superseded protocol |
 
-Before a benchmark or security report, verify that the local checkouts still match
-these revisions. Do not silently benchmark against a dirty or advanced checkout.
-
-The VEIL trusted-base definitions and theorem statements require human comparison
-with the paper. Machine-checked proofs do not establish that the formal statements
-match either the paper or a future Rust port.
+See [`SECURITY.md`](SECURITY.md) for remaining proof obligations.

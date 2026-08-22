@@ -122,7 +122,13 @@ fn commit_hadamard_inner<R: MaskSampler + ?Sized>(
     for vector in [a, b, c, &additive_mask] {
         let column = messages.len();
         let mut message = vector.to_vec();
-        message.extend(padding_rows.chunks_exact(4).map(|row| row[column]));
+        message.extend(
+            padding_rows
+                .as_chunks::<4>()
+                .0
+                .iter()
+                .map(|row| row[column]),
+        );
         messages.push(message);
     }
     let mut codewords = code.encode_batch(&messages)?;
@@ -207,7 +213,9 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
         .map(|index| a[index] + rho * (b[index] + rho * (c[index] + rho * additive_mask[index])))
         .collect::<Vec<_>>();
     let rlc_padding = padding_rows
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .map(|row| row[0] + rho * (row[1] + rho * (row[2] + rho * row[3])))
         .collect::<Vec<_>>();
     challenger.observe_f128_slice(&rlc_vector);

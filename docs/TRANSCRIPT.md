@@ -36,3 +36,6 @@ PCS claim in that duplicate field, while the shifted circuit reconstructs it
 from the masked round-1 C vector.
 
 No mask, preimage, witness bit, or unmasked PIOP round message is serialized.
+
+PCS and VEIL hashes use separate native contexts and are not represented here.
+See section 15 of the [specification](../SPEC.md).

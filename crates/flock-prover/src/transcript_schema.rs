@@ -731,14 +731,12 @@ impl<'a> Cursor<'a> {
 
 fn f128_pairs(v: Vec<F128>) -> Vec<(F128, F128)> {
     assert_eq!(v.len() % 2, 0);
-    v.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+    v.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
 }
 
 fn bytes_hashes(b: &[u8]) -> Vec<Hash> {
     assert_eq!(b.len() % 32, 0);
-    b.chunks_exact(32)
-        .map(|c| <Hash>::try_from(c).unwrap())
-        .collect()
+    b.as_chunks::<32>().0.to_vec()
 }
 
 fn one_hash(b: &[u8]) -> Hash {

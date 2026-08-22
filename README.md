@@ -1,32 +1,30 @@
 # zk-FLOCK
 
-Experimental integration of VEIL with FLOCK to add zero knowledge.
+Experimental succinct VEIL wrapper for FLOCK.
 
-The implemented relation proves knowledge of 64-byte BLAKE3 preimages for a
-public list of digests. Preimages and FLOCK witness wires are not included in
-the proof.
+The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
+digest in an ordered batch:
 
-This code is unaudited and not suitable for production secrets.
-
-## Benchmark
-
-Batch 256, release build, median of 10 runs:
-
-| Mode | Prove | Verify | Proof size |
-|---|---:|---:|---:|
-| FLOCK | 7.59 ms | 13.52 ms | 272,013 bytes |
-| zk-FLOCK with VEIL | 11.74 ms | 5.21 ms | 579,999 bytes |
-
-```sh
-VEIL_BENCH_BATCH=256 VEIL_BENCH_RUNS=10 \
-  cargo bench -p flock-prover --features veil --bench veil_vs_flock
+```text
+public:   ordered BLAKE3 digests y[0..b)
+private:  64-byte messages x[0..b)
+claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 ```
+
+## Security status
+
+The implementation has completeness, mutation, serialization, and simulator
+tests. It does not have end-to-end zero-knowledge, soundness, or knowledge
+proofs. It is unaudited and unsuitable for production secrets. See
+[SECURITY.md](docs/SECURITY.md).
 
 ## Usage
 
 ```sh
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
+```
 
+```sh
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
   prove --message messages.bin --out proof.bin
 
@@ -34,14 +32,24 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
   verify --in proof.bin
 ```
 
-`messages.bin` must contain one or more concatenated 64-byte messages.
+`messages.bin` must contain one or more concatenated 64-byte messages. The
+proof bundle includes the ordered public digests.
+
+## Benchmarks
+
+```sh
+cargo bench -p flock-prover --bench blake3_native_chain
+cargo bench -p flock-prover --bench keccak_native_chain
+```
 
 ## Documentation
 
 - [Protocol specification](SPEC.md)
 - [Architecture](docs/ARCHITECTURE.md)
-- [Security status](docs/SECURITY.md)
-- [Formal verification plan](docs/FORMAL_VERIFICATION.md)
+- [Transcript](docs/TRANSCRIPT.md)
+- [Security scope](docs/SECURITY.md)
+- [Design decisions](docs/DECISIONS.md)
+- [Upstream source pins](docs/SOURCES.md)
 
 ## License
 

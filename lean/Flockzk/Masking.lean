@@ -1,7 +1,7 @@
 import Mathlib
 
 /-!
-The masking theorem behind zk-Flock (docs/zk-leakage.md).
+The masking theorem behind the earlier zk-FLOCK masking construction.
 
 At fixed verifier challenges, every value Flock's zk prover reveals is an
 affine function of the prover's secret mask bits `u` and the witness `w`:

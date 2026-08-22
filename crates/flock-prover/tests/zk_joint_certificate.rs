@@ -258,7 +258,7 @@ fn f128_basis() -> Vec<F128> {
 /// Scale a flattened F128 vector by a field element (coordinate-wise).
 fn scale_flat(v: &[u64], lambda: F128) -> Vec<u64> {
     let mut out = Vec::with_capacity(v.len());
-    for c in v.chunks_exact(2) {
+    for c in v.as_chunks::<2>().0 {
         let p = F128 { lo: c[0], hi: c[1] } * lambda;
         out.push(p.lo);
         out.push(p.hi);
@@ -271,9 +271,8 @@ fn scale_flat(v: &[u64], lambda: F128) -> Vec<u64> {
 // ---------------------------------------------------------------------------
 
 /// Everything that defines one run of the probed map. Challenges are fixed
-/// by `ch_seed` (see the challenge-tuple discussion in the module docs of
-/// `docs/zk-proof.md` §8): the transcript map is only linear at fixed
-/// challenges, so certificates are per-tuple and replicated across tuples.
+/// by `ch_seed`: the transcript map is only linear at fixed challenges, so
+/// certificates are per-tuple and replicated across tuples.
 struct Run<'a> {
     fx: &'a FixtureA1M15,
     payload: &'a [bool],
@@ -1597,9 +1596,7 @@ fn joint_certificate_negative_controls() {
 ///   witness functional.
 ///
 /// This is the control behind the "masks are drawn fresh per proof"
-/// requirement (`ZkRng::from_entropy` per proof + domain-separated forks);
-/// the multi-proof composition argument in `docs/zk-proof.md` §10 is what
-/// this failure mode would otherwise break.
+/// requirement (`ZkRng::from_entropy` per proof + domain-separated forks).
 #[test]
 fn mask_reuse_across_proofs_is_a_leak() {
     let fx = FixtureA1M15::new();

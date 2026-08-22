@@ -831,14 +831,12 @@ and the fixed-digest circuit digest is
 \end{center}
 The registry rejects any other digest or parameter tuple before proving.
 
-The single reproduction command is
+The certificate reproduction command is
 \begin{center}
-\small\texttt{scripts/zk-paper-reproduce.sh}.
+\small\texttt{scripts/zk-certify.sh}.
 \end{center}
-It runs the certificate suite and benchmark harness.  Performance numbers
-remain hardware-dependent; the harness prints the commit, machine, compiler,
-flags, medians, dispersion, and ranges needed to interpret a rerun.  The
-certificate artifacts are kept under \texttt{docs/artifacts} in the repository.
+The certificate artifacts are kept under \texttt{docs/artifacts} in the
+repository.  The historical performance harness is not retained.
 
 The evidence is deliberately layered.  Lean proves reusable mathematical
 statements.  Rust constructs and replays the matrices and translations for the

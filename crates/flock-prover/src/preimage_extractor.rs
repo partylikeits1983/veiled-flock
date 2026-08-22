@@ -107,7 +107,7 @@ pub fn recover_witness_from_leaf_queries(
             return Err(ExtractError::BadLeafQueries);
         }
         seen[index] = true;
-        for (lane, bytes) in payload.chunks_exact(16).enumerate() {
+        for (lane, bytes) in payload.as_chunks::<16>().0.iter().enumerate() {
             codeword[index * lanes + lane] = F128 {
                 lo: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
                 hi: u64::from_le_bytes(bytes[8..].try_into().unwrap()),

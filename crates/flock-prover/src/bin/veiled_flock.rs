@@ -23,7 +23,7 @@ struct Bundle {
 }
 
 const USAGE: &str = "\
-veiled_flock — experimental ZK proof of a 64-byte BLAKE3 preimage
+veiled_flock — experimental VEIL argument for 64-byte BLAKE3 preimages
 
 Usage:
   veiled_flock prove  --message FILE --out FILE
@@ -62,10 +62,7 @@ fn run() -> Result<(), String> {
                     bytes.len()
                 ));
             }
-            let messages = bytes
-                .chunks_exact(MESSAGE_BYTES)
-                .map(|chunk| chunk.try_into().expect("checked chunk size"))
-                .collect();
+            let messages = bytes.as_chunks::<MESSAGE_BYTES>().0.to_vec();
             let bundle = prove(messages)?;
             let encoded = bincode::serialize(&bundle)
                 .map_err(|error| format!("cannot encode proof: {error}"))?;

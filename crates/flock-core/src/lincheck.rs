@@ -461,8 +461,8 @@ pub fn zero_lincheck_padding_rows(s_packed: &mut [F128], k_log: usize, useful_bi
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LincheckMaskTranscript {
     /// `Σ_i comb[i]·S_vec[i]`, bound *before* `gamma_lc` is drawn. A prover
-    /// that misreports this shifts the initial claim by `γ_lc·δ'`; see the
-    /// γ-batching argument (Lemma L6) in `docs/zk-proof.md`.
+    /// that misreports this shifts the initial claim by `γ_lc·δ'`, so it can
+    /// pass only when the batching challenge cancels that nonzero defect.
     pub sigma_lc: F128,
     /// Fiat–Shamir batching challenge, drawn immediately after `sigma_lc`.
     pub gamma_lc: F128,
