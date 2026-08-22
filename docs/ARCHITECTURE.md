@@ -235,9 +235,11 @@ The generic verifier accepts the simulated proof when driven by the same
 programmed Fiat--Shamir challenger. At batch 256, the simulator programs 17
 challenges.
 
-PCS and VEIL commitments use a native framed `RoContext`, so their hashes
-bypass the programmable oracle. The current test covers Fiat--Shamir
-programming only.
+Fiat--Shamir, PCS, and VEIL commitments query the same programmable oracle
+under disjoint encodings. The simulator programs the required Fiat--Shamir
+challenges; unprogrammed PCS and VEIL points receive the native SHA-256 answer.
+The executable test checks that all three commitment channels reach the shared
+oracle.
 
 This demonstrates that an accepting transcript can be generated from the
 public statement alone. Proving that its distribution matches a real proof

@@ -13,7 +13,7 @@ use flock_core::{
     pcs::{self, Commitment, PcsParams},
     proof::{ZClaim, bind_statement},
     r1cs::BlockR1cs,
-    ro::RoChannel,
+    ro::{RoChannel, RoContext},
     zerocheck::{self, ZerocheckProof},
     zk::{MaskSampler, ZkRng},
 };
@@ -357,6 +357,10 @@ impl<'a, C> MaskingChallenger<'a, C> {
 }
 
 impl<C: Challenger> Challenger for MaskingChallenger<'_, C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        self.inner.ro_context(nonce)
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.inner.observe_label(label);
     }

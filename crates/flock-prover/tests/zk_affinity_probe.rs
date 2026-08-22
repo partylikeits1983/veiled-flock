@@ -52,6 +52,10 @@ struct RecordingChallenger<C: Challenger> {
 }
 
 impl<C: Challenger> Challenger for RecordingChallenger<C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> flock_core::ro::RoContext {
+        self.inner.ro_context(nonce)
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.inner.observe_label(label);
     }

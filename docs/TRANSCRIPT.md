@@ -39,6 +39,7 @@ while the shifted circuit reconstructs it from the masked round-1 C vector.
 
 No mask, preimage, witness bit, or unmasked PIOP round message is serialized.
 
-PCS and VEIL commitments use a native framed `RoContext` separate from the
-programmable Fiat--Shamir oracle and are not represented here. See section 15
-of the [specification](../SPEC.md).
+Fiat--Shamir, PCS, and VEIL hashing use one random oracle under injective,
+role-separated encodings. PCS and VEIL commitment queries are not represented
+in this algebraic transcript listing. See section 15 of the
+[specification](../SPEC.md).

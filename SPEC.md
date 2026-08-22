@@ -321,13 +321,14 @@ The following remain required:
 
 No QROM or production-security claim is made.
 
-## 15. Known implementation deviations
+## 15. Implementation notes
 
-1. Section 13's simulator programs Fiat--Shamir challenges, but the witness
-   PCS and inner VEIL commitments use a separate native framed `RoContext`.
-   The executable test is not yet a single-oracle simulation of all hash calls.
-2. CLI decoding rejects non-canonical encodings and trailing bytes, but does
-   not apply verifier-owned allocation bounds before `bincode`
-   deserialization.
+1. Section 13's simulator programs the required Fiat--Shamir challenges.
+   Fiat--Shamir, witness PCS, and inner VEIL hashing query the same programmable
+   oracle under disjoint encodings; unprogrammed points receive the native
+   SHA-256 answer.
+2. The CLI accepts at most 256 public digests and applies the VFLK0004 bundle
+   size limit both while reading and during `bincode` deserialization. It also
+   rejects non-canonical encodings and trailing bytes.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md).

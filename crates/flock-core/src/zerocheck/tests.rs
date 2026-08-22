@@ -1,27 +1,9 @@
 use super::*;
 use crate::challenger::FsChallenger;
 
-struct ScriptedEqChallenger {
-    vector_calls: usize,
-}
+mod helpers;
 
-impl Challenger for ScriptedEqChallenger {
-    fn observe_f128(&mut self, _value: F128) {}
-
-    fn sample_f128(&mut self) -> F128 {
-        panic!("sample_eq_point uses framed vector sampling")
-    }
-
-    fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
-        self.vector_calls += 1;
-        match self.vector_calls {
-            1 => vec![F128::ZERO; n],
-            2 => vec![F128::ONE; n],
-            3 => vec![F128::new(2, 0); n],
-            _ => panic!("unexpected vector challenge request"),
-        }
-    }
-}
+use helpers::{Rng, ScriptedEqChallenger};
 
 #[test]
 fn equality_point_rejects_noninvertible_outer_coordinates() {
@@ -46,29 +28,6 @@ fn shared_round_weights_match_quadratic_reconstruction() {
         Some(expected)
     );
     assert_eq!(sumcheck_round_weights(F128::ONE, rho), None);
-}
-
-/// SplitMix64 PRNG, deterministic.
-struct Rng(u64);
-impl Rng {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-    fn bits(&mut self, n: usize) -> Vec<bool> {
-        (0..n).map(|_| self.next_u64() & 1 == 1).collect()
-    }
-    fn field_mask(&mut self, m: usize) -> Vec<F128> {
-        (0..SmallMaskSpec::default().d(m))
-            .map(|_| F128::new(self.next_u64(), self.next_u64()))
-            .collect()
-    }
 }
 
 /// Pack three Boolean vectors into the (a_packed, b_packed, c_packed)
