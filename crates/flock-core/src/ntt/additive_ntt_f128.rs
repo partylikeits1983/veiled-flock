@@ -42,6 +42,7 @@
 //! pairs are adjacent — matching the standard `fold_pair` formula in DP24.
 
 use crate::field::F128;
+use rayon::prelude::*;
 
 mod kernels;
 
@@ -282,7 +283,6 @@ impl AdditiveNttF128 {
         num_ntts: usize,
         start_layer: usize,
     ) {
-        use rayon::prelude::*;
         let n_total = data.len();
         let log_d = log2_pow2(n_total / num_ntts);
 
@@ -510,7 +510,6 @@ impl AdditiveNttF128 {
     /// Rayon-parallel + NEON forward transform.
     #[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
     pub fn forward_transform_parallel(&self, data: &mut [F128]) {
-        use rayon::prelude::*;
         let log_d = log2_pow2(data.len());
         assert!(log_d <= self.log_domain_size());
 
@@ -601,7 +600,6 @@ impl AdditiveNttF128 {
     /// per-layer parallel path.
     #[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
     pub fn forward_transform_batched(&self, data: &mut [F128]) {
-        use rayon::prelude::*;
         let log_d = log2_pow2(data.len());
         assert!(log_d <= self.log_domain_size());
 
@@ -712,7 +710,6 @@ fn butterfly_interleaved_block_par_rows(
     block_size_half: usize,
     num_ntts: usize,
 ) {
-    use rayon::prelude::*;
     const PARALLEL_ROW_THRESHOLD: usize = 512;
     if block_size_half < PARALLEL_ROW_THRESHOLD {
         butterfly_interleaved_block(block, twiddle, block_size_half, num_ntts);
@@ -747,7 +744,6 @@ fn butterfly_interleaved_fused_2layer_par_rows(
     quarter: usize,
     num_ntts: usize,
 ) {
-    use rayon::prelude::*;
     const PARALLEL_ROW_THRESHOLD: usize = 256;
     let stride = quarter * num_ntts;
     debug_assert_eq!(block.len(), 4 * stride);
@@ -827,7 +823,6 @@ fn butterfly_interleaved_fused_4layer_par_rows(
     sixteenth: usize,
     num_ntts: usize,
 ) {
-    use rayon::prelude::*;
     const PARALLEL_ROW_THRESHOLD: usize = 256;
     debug_assert_eq!(block.len(), 16 * sixteenth * num_ntts);
     // Carry the base as `usize` (Send+Sync) so rayon's per-`r` closure can hold

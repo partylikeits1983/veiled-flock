@@ -1,4 +1,8 @@
 use super::super::{F128, build_sum_table};
+#[cfg(target_arch = "aarch64")]
+use rayon::prelude::*;
+#[cfg(target_arch = "aarch64")]
+use std::arch::aarch64::*;
 
 const NEON_TILE_T: usize = 8;
 
@@ -31,9 +35,6 @@ pub fn partial_fold_packed_z_neon_single_padded(
     useful_bits: usize,
     eq_outer: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
-    use std::arch::aarch64::*;
-
     const TILE_T: usize = NEON_TILE_T;
     const BLOCK_K: usize = 8;
 
@@ -135,7 +136,6 @@ unsafe fn process_block_neon_single(
     tables_ptr: *const u8,
     out_ptr: *mut F128,
 ) {
-    use std::arch::aarch64::*;
     const TILE_T: usize = NEON_TILE_T;
 
     let o = out_ptr as *mut u8;
@@ -208,8 +208,6 @@ pub fn partial_fold_packed_z_neon_iblock_padded(
     useful_bits: usize,
     eq_outer: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
-
     const TILE_T: usize = NEON_TILE_T;
     const BLOCK_K: usize = 8;
 
@@ -322,8 +320,6 @@ pub fn partial_fold_packed_z_neon_oblock_padded(
     useful_bits: usize,
     eq_outer: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
-
     const TILE_T: usize = NEON_TILE_T;
     const BLOCK_K: usize = 8;
 

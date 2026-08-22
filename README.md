@@ -48,7 +48,6 @@ cargo bench -p flock-prover --bench keccak_native_chain
 - [Architecture](docs/ARCHITECTURE.md)
 - [Transcript](docs/TRANSCRIPT.md)
 - [Security scope](docs/SECURITY.md)
-- [Design decisions](docs/DECISIONS.md)
 - [Upstream source pins](docs/SOURCES.md)
 
 ## License

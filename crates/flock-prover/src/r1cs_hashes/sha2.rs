@@ -1223,7 +1223,6 @@ pub fn min_n_blocks_log(n_compressions: usize) -> usize {
 /// Build the boolean witness across `2^n_blocks_log` blocks, one compression
 /// per block. Parallelized via rayon.
 pub fn generate_witness(compressions: &[([u32; 8], [u32; 16])], n_blocks_log: usize) -> Vec<bool> {
-    use rayon::prelude::*;
     let n_total_blocks = 1usize << n_blocks_log;
     assert!(compressions.len() <= n_total_blocks);
 
@@ -1841,6 +1840,7 @@ impl Sha256HybridSetup {
 // ---------------------------------------------------------------------------
 
 use super::common::{BM_V, BmRow, add_carry_parts_v, or_bit_row, or_u32_row};
+use rayon::prelude::*;
 
 #[inline(always)]
 fn map_v(x: &[u32; BM_V], f: impl Fn(u32) -> u32) -> [u32; BM_V] {
@@ -2025,6 +2025,8 @@ pub fn generate_witness_batch_major(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flock_core::challenger::FsChallenger;
+    use flock_core::lincheck::{LincheckCircuit, SparseMatrixCircuit};
 
     /// SplitMix64 PRNG, deterministic.
     struct Rng(u64);
@@ -2080,8 +2082,6 @@ mod tests {
     #[test]
     #[ignore]
     fn batch_major_prove_fast_roundtrip() {
-        use flock_core::challenger::FsChallenger;
-
         let setup = Sha256HybridSetup::new_batch_major(128);
         let mut rng = Rng::new(0xBA7C_F012);
         let inputs: Vec<([u32; 8], [u32; 16])> = (0..128)
@@ -2195,8 +2195,6 @@ mod tests {
     /// `Sha2LincheckCircuit` walker matches sparse fold byte-for-byte.
     #[test]
     fn lincheck_circuit_matches_sparse() {
-        use flock_core::lincheck::{LincheckCircuit, SparseMatrixCircuit};
-
         let mut rng = Rng::new(0x5_4A2_CCA1);
         let (a_0, b_0) = build_matrices();
         let sparse = SparseMatrixCircuit::new(&a_0, &b_0);
@@ -2231,7 +2229,6 @@ mod tests {
     #[test]
     #[ignore]
     fn prove_fast_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         let mut rng = Rng::new(0x5_a2_211e);
         let n = 128;
         let compressions: Vec<([u32; 8], [u32; 16])> =
@@ -2252,7 +2249,6 @@ mod tests {
     /// 128 compressions = m = 22, the smallest default-Ligerito-legal size.
     #[test]
     fn prove_ligerito_generic_matches_prove_fast() {
-        use flock_core::challenger::FsChallenger;
         let n = 128;
         let setup = Sha256HybridSetup::new(n);
         let mut rng = Rng::new(0x5A2_63112);
@@ -2290,8 +2286,6 @@ mod tests {
     /// the walker.)
     #[test]
     fn const_pin_all_zero_rejected() {
-        use flock_core::challenger::FsChallenger;
-
         let n = 120; // 8 padding blocks at n_block_slots = 128 (m = 22)
         let setup = Sha256HybridSetup::new(n);
 
@@ -2385,7 +2379,6 @@ mod tests {
     #[test]
     #[ignore]
     fn prove_chain_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         // n=128 → m=22 with K_LOG=15.
         let setup = Sha256HybridSetup::new(128);
         let (blocks, cv_0, cv_last) = honest_chain(setup.n_compressions, 0x511_3E_C0DE);
@@ -2414,7 +2407,6 @@ mod tests {
     #[test]
     #[should_panic(expected = "prove_chain requires n_compressions to exactly fill n_block_slots")]
     fn prove_chain_panics_on_padding() {
-        use flock_core::challenger::FsChallenger;
         let setup = Sha256HybridSetup::new(5);
         assert_eq!(setup.n_compressions, 5);
         assert_eq!(setup.n_block_slots(), 8);
@@ -2499,7 +2491,6 @@ mod tests {
 
     #[test]
     fn multi_path_log0_matches_single_path() {
-        use flock_core::challenger::FsChallenger;
         // path_log = 0 should be byte-identical to single-path. n=128 → m=22.
         let setup = Sha256HybridSetup::new(128);
         let (blocks, leaf, root, b) = honest_merkle_path(setup.n_compressions, 0xC0FFEE);
@@ -2541,7 +2532,6 @@ mod tests {
 
     #[test]
     fn prove_merkle_paths_ligerito_roundtrip_p4() {
-        use flock_core::challenger::FsChallenger;
         // path_log = 2 → P = 4 paths of length 32 each = 128 total → m=22.
         let setup = Sha256HybridSetup::new(128);
         let (blocks, leaves, root, b) =
@@ -2556,7 +2546,6 @@ mod tests {
 
     #[test]
     fn prove_merkle_path_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         // n=128 → m=22 with K_LOG=15 (smallest m with a Ligerito config).
         let setup = Sha256HybridSetup::new(128);
         let (blocks, leaf, root, b) = honest_merkle_path(setup.n_compressions, 0x5EED_F00D);
@@ -2598,8 +2587,6 @@ mod tests {
     #[test]
     #[ignore]
     fn batch_major_prove_merkle_path_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
-
         let setup = Sha256HybridSetup::new_batch_major(128);
         let (blocks, leaf, root, b) = honest_merkle_path(setup.n_compressions, 0xBA7C_BEEF);
         let mut ch = FsChallenger::new(b"sha2-merkle-batch-major");
@@ -2622,7 +2609,6 @@ mod tests {
 
     #[test]
     fn prove_merkle_paths_ligerito_roundtrip_p2() {
-        use flock_core::challenger::FsChallenger;
         // path_log=1 → P=2 paths of length 64 = 128 total → m=22.
         let setup = Sha256HybridSetup::new(128);
         let (blocks, leaves, root, b) =

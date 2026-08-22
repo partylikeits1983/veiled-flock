@@ -130,15 +130,18 @@ The ordered fields are:
 5. two values for each lincheck round; and
 6. 64 lincheck `z_partial` values.
 
-`final_c_eval` is not an observed FLOCK message. It stores the explicit C
-opening claim. The shifted circuit reconstructs the same value from masked
-`round1_c`.
+`final_c_eval` is not an observed FLOCK message and is omitted from the masked
+wire type. The explicit C opening is stored once as `c_value`; the shifted
+circuit reconstructs the same value from masked `round1_c`.
 
 ## 7. Shifted verifier circuit
 
 The verifier derives all FLOCK challenges from the public masked transcript.
 It then constructs an arithmetic circuit `C_shifted` whose private inputs are
 the mask vector `h`.
+
+The sampled equality coordinates used by the compressed quadratic recurrence
+exclude `1`, where reconstructing `G(0)` from `G(1)` is non-invertible.
 
 For each public masked value `v_masked[i]`, the circuit reconstructs:
 
@@ -228,7 +231,7 @@ fork.
 
 ## 11. Proof format
 
-The CLI bundle uses magic `VFLK0003` and contains:
+The CLI bundle contains:
 
 ```text
 public digest list
@@ -252,7 +255,7 @@ canonical and MUST reject trailing data.
 
 The verifier MUST:
 
-1. reject an empty digest list or invalid bundle magic;
+1. reject an empty or oversized digest list;
 2. reconstruct the padded setup from the digest count;
 3. reject mismatched commitment or proof parameters;
 4. reconstruct `C_shifted` from the masked proof;
@@ -318,12 +321,14 @@ The following remain required:
 
 No QROM or production-security claim is made.
 
-## 15. Known implementation deviations
+## 15. Implementation notes
 
-1. The multiplication batching challenge includes 0 and 1, contrary to
-   section 8.
-2. Inner VEIL commitments use unframed Merkle hashing.
-3. The simulator programs Fiat--Shamir challenges but not PCS or VEIL hashes.
-4. CLI decoding does not bound allocations before deserialization.
+1. Section 13's simulator programs the required Fiat--Shamir challenges.
+   Fiat--Shamir, witness PCS, and inner VEIL hashing query the same programmable
+   oracle under disjoint encodings; unprogrammed points receive the native
+   SHA-256 answer.
+2. The CLI accepts at most 256 public digests and applies the bundle size limit
+   both while reading and during `bincode` deserialization. It also rejects
+   non-canonical encodings and trailing bytes.
 
 See [`docs/SECURITY.md`](docs/SECURITY.md).

@@ -66,6 +66,8 @@ use crate::zerocheck::univariate_skip::build_eq;
 use serde::{Deserialize, Serialize};
 
 use super::pack::LOG_PACKING;
+use crate::pcs::tensor_algebra::TensorAlgebra;
+use rayon::prelude::*;
 
 /// Per-block padding descriptor in F_{2^128} units. Computed once from a bit-
 /// level [`PaddingSpec`] and reused across the fold kernels: any chunk whose
@@ -173,7 +175,6 @@ pub fn fold_1b_rows_multi_padded(
     suffix_tensors: &[&[F128]],
     padding: &PaddingSpec,
 ) -> Vec<Vec<F128>> {
-    use rayon::prelude::*;
     let k = suffix_tensors.len();
     let n = 1 << LOG_PACKING;
     assert!(
@@ -284,7 +285,6 @@ pub fn fold_1b_rows_multi_padded(
 /// rayon's per-task overhead dominates; we keep them sequential and only
 /// switch to parallel above a threshold.
 fn build_eq_parallel(r: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = r.len();
     // Uninit alloc — at iter `i`, the loop reads from t[..2^i] (always written
     // by an earlier iter or the t[0] = ONE seed) and writes to t[2^i..2^(i+1)]
@@ -405,7 +405,6 @@ pub fn fold_1b_rows_2way_mfr_padded(
     t1: &[F128],
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>) {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING; // 128
     assert_eq!(t0.len(), packed_witness.len());
     assert_eq!(t1.len(), packed_witness.len());
@@ -544,7 +543,6 @@ pub fn fold_1b_rows_2way_mfr_8wide_padded(
     t1: &[F128],
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>) {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING;
     assert_eq!(t0.len(), packed_witness.len());
     assert_eq!(t1.len(), packed_witness.len());
@@ -612,7 +610,6 @@ pub fn fold_1b_rows_2way_mfr_8wide_padded(
 /// table and one accumulator. Used by [`fold_1b_rows_naive`] for inputs
 /// divisible by 4 (the standard case at any reasonable `m`).
 pub fn fold_1b_rows_1way_mfr(packed_witness: &[F128], t: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING; // 128
     assert_eq!(t.len(), packed_witness.len());
     assert!(
@@ -696,7 +693,6 @@ pub fn fold_1b_rows_1way_mfr(packed_witness: &[F128], t: &[F128]) -> Vec<F128> {
 /// kernel this halves the transpose count AND halves the acc-RMW count, while
 /// keeping the well-reused small tables.
 pub fn fold_1b_rows_1way_mfr_8wide_k4(packed_witness: &[F128], t: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING;
     assert_eq!(t.len(), packed_witness.len());
     assert!(packed_witness.len().is_multiple_of(8));
@@ -765,7 +761,6 @@ pub fn fold_1b_rows_1way_mfr_16wide_padded(
     t: &[F128],
     padding: &PaddingSpec,
 ) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING;
     assert_eq!(t.len(), packed_witness.len());
     assert!(packed_witness.len().is_multiple_of(16));
@@ -848,7 +843,6 @@ pub fn fold_1b_rows_2way_mfr_16wide_padded(
     t1: &[F128],
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>) {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING;
     assert_eq!(t0.len(), packed_witness.len());
     assert_eq!(t1.len(), packed_witness.len());
@@ -960,7 +954,6 @@ pub fn fold_1b_rows_split(
     eq_hi: &[F128],
     padding: &PaddingSpec,
 ) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING; // 128
     let b = eq_lo.len();
     assert!(
@@ -1080,7 +1073,6 @@ pub fn fold_1b_rows_split_2way(
     eq_hi_1: &[F128],
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>) {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING; // 128
     let b = eq_lo_0.len();
     assert_eq!(eq_lo_1.len(), b);
@@ -1257,7 +1249,6 @@ pub fn fold_1b_rows_split_2way(
 ///
 /// - if `z_vec.len() != 2^(LOG_PACKING + tail.len())`.
 pub fn s_hat_v_from_z_vec(z_vec: &[F128], x_inner_rest_tail: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     let n_packed = 1usize << LOG_PACKING; // 128
     let n_tail = 1usize << x_inner_rest_tail.len();
     assert_eq!(
@@ -1319,7 +1310,6 @@ pub fn s_hat_v_from_z_vec(z_vec: &[F128], x_inner_rest_tail: &[F128]) -> Vec<F12
 /// accumulator; the reduce step XORs partials elementwise into the final
 /// output.
 pub fn fold_1b_rows_naive(packed_witness: &[F128], suffix_tensor: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     assert_eq!(packed_witness.len(), suffix_tensor.len());
     let n = 1 << LOG_PACKING;
 
@@ -1442,7 +1432,6 @@ pub fn tensor_algebra_transpose(s_hat_v: &[F128]) -> Vec<F128> {
 /// O(128 · 2^L) parallelized across positions via rayon. Output positions are
 /// independent — direct `par_iter` + `collect`.
 pub fn fold_b128_elems_naive(suffix_tensor: &[F128], eq_r_dprime: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     assert_eq!(eq_r_dprime.len(), 1 << LOG_PACKING);
     suffix_tensor
         .par_iter()
@@ -1473,7 +1462,6 @@ pub fn fold_b128_elems_naive(suffix_tensor: &[F128], eq_r_dprime: &[F128]) -> Ve
 /// Tables: 16 × 256 × 16 B = 64 KB (fits in L1+L2). Target speedup ~3× vs the
 /// `trailing_zeros` loop in `fold_b128_elems_naive`.
 pub fn fold_b128_elems(suffix_tensor: &[F128], eq_r_dprime: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     assert_eq!(eq_r_dprime.len(), 1 << LOG_PACKING);
     const N_BYTES: usize = 16; // bytes per F128
     const TABLE_SIZE: usize = 256;
@@ -1661,7 +1649,6 @@ pub fn fold_b128_elems_split(eq_lo: &[F128], eq_hi: &[F128], eq_r_dprime: &[F128
 /// block). Used to un-defer a [`RsEqInd::DeferredDense`] in the pcs combine's
 /// general (mixed/sparse/packed-direct) fallback path.
 pub(crate) fn fold_b128_from_table(eq_lo: &[F128], eq_hi: &[F128], tables: &[F128]) -> Vec<F128> {
-    use rayon::prelude::*;
     let b = eq_lo.len();
     // Each slot is written exactly once (`*slot = acc`) before any read.
     let mut out = crate::scratch::take_f128(b * eq_hi.len());
@@ -1801,7 +1788,6 @@ pub fn fold_1b_rows_sparse(packed_witness: &[F128], eq: &SparseEqTensor) -> Vec<
 /// Scalar bit-scan fallback for `fold_1b_rows_sparse`. One bit-scan per support
 /// entry — used when the support's index pattern isn't a uniform stride-block.
 fn fold_1b_rows_sparse_scalar(packed_witness: &[F128], eq: &SparseEqTensor) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING;
     let zero_acc = || vec![F128::ZERO; n];
 
@@ -1894,7 +1880,6 @@ fn fold_1b_rows_sparse_mfr_block4(
     support: &[(usize, F128)],
     stride: usize,
 ) -> Vec<F128> {
-    use rayon::prelude::*;
     let n = 1 << LOG_PACKING;
     debug_assert!(support.len().is_multiple_of(4));
     let num_groups = support.len() / 4;
@@ -1988,7 +1973,6 @@ pub fn fold_b128_elems_sparse_pairs(
     eq: &SparseEqTensor,
     eq_r_dprime: &[F128],
 ) -> Vec<(usize, F128)> {
-    use rayon::prelude::*;
     assert_eq!(eq_r_dprime.len(), 1 << LOG_PACKING);
     eq.live_tensor
         .par_iter()
@@ -2684,8 +2668,6 @@ pub fn verify_succinct<Ch: Challenger>(
 ///
 /// [DP24]: <https://eprint.iacr.org/2024/504>
 pub fn eval_rs_eq(z_vals: &[F128], query: &[F128], eq_r_dprime: &[F128]) -> F128 {
-    use crate::pcs::tensor_algebra::TensorAlgebra;
-
     assert_eq!(
         z_vals.len(),
         query.len(),
@@ -2718,7 +2700,6 @@ pub fn eval_rs_eq_prefix(
     z_vals: &[F128],
     query_prefix: &[F128],
 ) -> crate::pcs::tensor_algebra::TensorAlgebra {
-    use crate::pcs::tensor_algebra::TensorAlgebra;
     assert!(query_prefix.len() <= z_vals.len());
     let mut eval = TensorAlgebra::from_vertical(F128::ONE);
     for (&z_i, &q_i) in z_vals.iter().zip(query_prefix.iter()) {
@@ -2794,13 +2775,15 @@ pub fn eval_rs_eq_finish_from_prefix_binary_q(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::challenger::Challenger;
+    use crate::challenger::FsChallenger;
+    use crate::lincheck::{pack_z_lincheck, partial_fold_packed_z};
     use crate::pcs::pack::pack_witness;
     use crate::zerocheck::univariate_skip::build_eq;
 
     /// Binary-query specialization matches the general path bit-for-bit.
     #[test]
     fn eval_rs_eq_finish_binary_q_matches_general() {
-        use crate::challenger::Challenger;
         let mut rng = crate::challenger::RandomChallenger::new(0x_B17_0BBE);
         let log_n = 20usize;
         let prefix_len = 15usize;
@@ -2936,7 +2919,6 @@ mod tests {
     /// produce identical (rs_eq_ind, sumcheck_claim).
     #[test]
     fn prove_verify_roundtrip() {
-        use crate::challenger::FsChallenger;
         let mut rng = Rng::new(0xBEEF);
         for &m in &[8usize, 9, 10, 11] {
             let z = rng.bits(1 << m);
@@ -2972,7 +2954,6 @@ mod tests {
     /// This is the *core* algebraic identity that makes BaseFold work.
     #[test]
     fn dp24_identity_holds() {
-        use crate::challenger::FsChallenger;
         let mut rng = Rng::new(0xABCD);
         for &m in &[8usize, 9, 10, 11] {
             let z = rng.bits(1 << m);
@@ -2991,7 +2972,6 @@ mod tests {
     /// Mutation rejection: flipping one bit of the proof must cause verify to reject.
     #[test]
     fn verify_rejects_mutated_proof() {
-        use crate::challenger::FsChallenger;
         let m = 10usize;
         let mut rng = Rng::new(0x99);
         let z = rng.bits(1 << m);
@@ -3022,7 +3002,6 @@ mod tests {
 
     #[test]
     fn prove_batched_matches_sequential() {
-        use crate::challenger::FsChallenger;
         let mut rng = Rng::new(0x1234_5678);
         for &m in &[8usize, 9, 10, 11] {
             let z = rng.bits(1 << m);
@@ -3298,7 +3277,6 @@ mod tests {
     /// general-purpose `fold_1b_rows` over the materialized suffix tensor.
     #[test]
     fn s_hat_v_from_z_vec_matches_fold_1b_rows_ab() {
-        use crate::lincheck::{pack_z_lincheck, partial_fold_packed_z};
         const K_SKIP: usize = 6;
         // (m, k_log) — K_SKIP fixed at 6 (so x_inner_rest has k_log − 6 coords;
         // x_inner_rest[0] becomes ring-switch's prefix0 because
@@ -3349,7 +3327,6 @@ mod tests {
     /// and K=2 (no precompute) fold_1b_rows dispatch branches.
     #[test]
     fn prove_batched_with_precomputed_matches_unprecomputed() {
-        use crate::challenger::FsChallenger;
         let mut rng = Rng::new(0xF00D);
         for &m in &[8usize, 9, 10, 11] {
             let z = rng.bits(1 << m);
@@ -3640,7 +3617,6 @@ mod tests {
     /// the dense kernels).
     #[test]
     fn prove_batched_with_sparse_claim_matches_sequential() {
-        use crate::challenger::FsChallenger;
         let mut rng = Rng::new(0xBEEF_CAFE);
         for &m in &[10usize, 11, 12] {
             let z = rng.bits(1 << m);

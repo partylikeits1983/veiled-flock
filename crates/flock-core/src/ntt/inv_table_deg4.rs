@@ -30,6 +30,8 @@
 
 use crate::field::F8;
 use crate::ntt::AdditiveNttGf8;
+#[cfg(target_arch = "aarch64")]
+use core::arch::aarch64::*;
 
 /// `M = fwd_NTT_V₈ ∘ inv_NTT_S` collapsed into a single 256×256-byte table.
 ///
@@ -179,7 +181,6 @@ impl InvNttTableSToV8Gf8 {
     /// `bytes.len()` and `out.len()` must match the table shape (asserted).
     #[cfg(target_arch = "aarch64")]
     pub unsafe fn apply_neon_unchecked(&self, bytes: &[u8], out: &mut [F8]) {
-        use core::arch::aarch64::*;
         assert_eq!(bytes.len(), self.n_chunks);
         assert_eq!(out.len(), self.ell_out);
         let n128 = self.ell_out / 16; // 16 for ell_out = 256

@@ -36,6 +36,8 @@ use flock_core::pcs::{BatchOpeningProofLigerito, Commitment, PcsParams, ZkBlindO
 use flock_core::zerocheck::ZkZerocheckProof;
 
 use crate::prover::R1csProofZkA1;
+use FlatValue::*;
+use LeakageClass::*;
 
 /// Version of the schema itself; bump on any reclassification or reshape.
 pub const A1_SCHEMA_VERSION: u32 = 5;
@@ -175,7 +177,6 @@ fn flatten_opening(
     algebraic: LeakageClass,
     opening: &BatchOpeningProofLigerito,
 ) {
-    use FlatValue::*;
     let BatchOpeningProofLigerito {
         ring_switches,
         ligerito,
@@ -395,7 +396,6 @@ const OPEN_SH_PATHS: OpeningPaths = opening_paths!("open_s_h");
 /// fields, in prover message order (commitments → zerocheck → lincheck →
 /// P opening → Q opening → witness opening).
 pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatField> {
-    use FlatValue::*;
     let mut out = Vec::with_capacity(64);
     let R1csProofZkA1 {
         proof_nonce,
@@ -887,7 +887,6 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
 /// transcript classification; `manifest_of` extracted from a real proof must
 /// equal it exactly.
 pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
-    use LeakageClass::*;
     &[
         ("proof_nonce", Metadata, true),
         ("commitment.root", HiddenHash, true),

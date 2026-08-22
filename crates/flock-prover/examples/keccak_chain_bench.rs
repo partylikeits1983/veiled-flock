@@ -7,6 +7,7 @@
 use std::hint::black_box;
 use std::time::Instant;
 
+use flock_prover::challenger::Challenger;
 use flock_prover::challenger::FsChallenger;
 use flock_prover::field::F128;
 use flock_prover::r1cs_hashes::chain_common::{ChainFold, fold_in_out};
@@ -104,10 +105,7 @@ fn bench(n_keccaks: usize, n_runs: usize) {
     let (z_packed, _a, _b, _lc) =
         generate_witness_with_ab_packed_and_lincheck(&inputs, setup.n_keccaks_log());
     let mut ch = FsChallenger::new(b"chain-bench-iso");
-    let tau_pos: Vec<F128> = {
-        use flock_prover::challenger::Challenger;
-        ch.sample_f128_vec(CHAIN_LAYOUT.tau_pos_len())
-    };
+    let tau_pos: Vec<F128> = { ch.sample_f128_vec(CHAIN_LAYOUT.tau_pos_len()) };
     let fold = ChainFold::new(&CHAIN_LAYOUT, tau_pos);
 
     let mut best_fold = f64::INFINITY;
@@ -126,7 +124,6 @@ fn bench(n_keccaks: usize, n_runs: usize) {
 
     let mut best_shift = f64::INFINITY;
     for _ in 0..n_runs {
-        use flock_prover::challenger::Challenger;
         let mut ch = FsChallenger::new(b"chain-bench-shift");
         let _ = ch.sample_f128(); // keep transcript nondegenerate
         let t = Instant::now();

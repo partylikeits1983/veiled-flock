@@ -22,6 +22,10 @@
 
 use crate::field::F8;
 use crate::ntt::AdditiveNttGf8;
+#[cfg(target_arch = "aarch64")]
+use core::arch::aarch64::*;
+#[cfg(target_arch = "x86_64")]
+use core::arch::x86_64::*;
 
 #[derive(Clone, Debug)]
 pub struct InvNttTableByteSingleGf8 {
@@ -181,7 +185,6 @@ impl InvNttTableByteSingleGf8 {
     /// method validates slice lengths.
     #[cfg(target_arch = "aarch64")]
     pub unsafe fn apply_neon_unchecked(&self, bytes: &[u8], out: &mut [F8]) {
-        use core::arch::aarch64::*;
         assert_eq!(bytes.len(), self.n_chunks);
         assert_eq!(out.len(), self.ell);
         let n128 = self.ell / 16; // 4 for ell = 64
@@ -234,7 +237,6 @@ impl InvNttTableByteSingleGf8 {
     #[cfg(target_arch = "x86_64")]
     #[target_feature(enable = "sse2")]
     pub unsafe fn apply_x86_unchecked(&self, bytes: &[u8], out: &mut [F8]) {
-        use core::arch::x86_64::*;
         assert_eq!(bytes.len(), self.n_chunks);
         assert_eq!(out.len(), self.ell);
         let n128 = self.ell / 16; // 4 for ell = 64
@@ -293,7 +295,6 @@ impl InvNttTableByteSingleGf8 {
         // SAFETY: `bytes` contains `n_chunks == 8` readable bytes and `out`
         // contains `ell == 64` writable bytes.
         unsafe {
-            use core::arch::x86_64::*;
             let acc = self.apply_x86_avx512_register_unchecked(bytes.as_ptr());
             _mm512_storeu_si512(out.as_mut_ptr() as *mut __m512i, acc);
         }
@@ -314,7 +315,6 @@ impl InvNttTableByteSingleGf8 {
         &self,
         bytes: *const u8,
     ) -> core::arch::x86_64::__m512i {
-        use core::arch::x86_64::*;
         debug_assert_eq!(self.ell, 64, "avx512 apply is specialized for ell = 64");
         debug_assert_eq!(self.n_chunks, 8, "avx512 apply expects eight input bytes");
         let base = self.data_ptr();

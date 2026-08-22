@@ -17,10 +17,12 @@ use flock_core::lincheck::pack_z_lincheck_from_packed;
 use flock_core::pcs::ligerito::{ProverConfig, VerifierConfig};
 use flock_core::pcs::{self, Commitment, PcsParams};
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
+use flock_core::ro::RoContext;
 use flock_core::verifier::VerifyError;
 use flock_core::zk::ZkRng;
 
 use crate::prover::{R1csProofZkA1, prove_r1cs_zk_a1_with_config, verify_r1cs_zk_a1_with_config};
+use flock_core::{lincheck, zerocheck};
 
 // ---------------------------------------------------------------------------
 // Recording challenger
@@ -106,6 +108,10 @@ impl<C: Clone> Clone for RecordingChallenger<C> {
 }
 
 impl<C: Challenger> Challenger for RecordingChallenger<C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        self.inner.ro_context(nonce)
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.log
             .lock()
@@ -378,7 +384,6 @@ impl FixtureA1M15 {
         proof: &R1csProofZkA1,
         challenger: &mut Ch,
     ) -> [F128; 3] {
-        use flock_core::{lincheck, zerocheck};
         let zc = zerocheck::verify_zk_masked(
             Self::M,
             &proof.zerocheck,
@@ -427,5 +432,31 @@ impl FixtureA1M15 {
 impl Default for FixtureA1M15 {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use flock_core::{challenger::Challenger, merkle::merkle_tree_framed, ro::RoChannel};
+
+    use super::RecordingChallenger;
+    use crate::sim_oracle::{OracleChallenger, shared_oracle};
+
+    #[test]
+    fn recording_challenger_forwards_the_random_oracle_context() {
+        let oracle = shared_oracle();
+        let challenger =
+            RecordingChallenger::new(OracleChallenger::new(b"recording-ro", oracle.clone()));
+        let context = challenger.ro_context([9; 32]);
+
+        let _tree = merkle_tree_framed(b"ab", 2, &context, RoChannel::Witness, 0);
+
+        assert!(
+            oracle
+                .lock()
+                .unwrap()
+                .channel_query_count(RoChannel::Witness)
+                > 0
+        );
     }
 }

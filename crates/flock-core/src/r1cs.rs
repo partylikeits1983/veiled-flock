@@ -9,6 +9,10 @@
 //! boolean (`k = 2^k_log`). `C_0 = I_k` is implicit (we still carry the
 //! materialized `c_0` matrix for utilities like `satisfies`).
 
+use crate::bits::transpose_8_u64s_to_64_bytes;
+use crate::field::F128;
+use rayon::prelude::*;
+
 /// Sparse boolean matrix. `rows[i]` lists the column indices where the entry is 1.
 #[derive(Clone, Debug)]
 pub struct SparseBinaryMatrix {
@@ -369,7 +373,6 @@ impl BlockR1cs {
     /// Check the R1CS constraint `(A·z) ⊙ (B·z) = C·z` over GF(2) on a packed
     /// witness. Per-element check is `a & b == c` bitwise.
     pub fn satisfies_packed(&self, z_packed: &[crate::field::F128]) -> bool {
-        use crate::field::F128;
         assert_eq!(z_packed.len(), 1usize << (self.m - 7));
         let a = self.apply_a_packed(z_packed);
         let b = self.apply_b_packed(z_packed);
@@ -433,9 +436,6 @@ pub fn apply_block_diag_packed(
     m: usize,
     k_log: usize,
 ) -> Vec<crate::field::F128> {
-    use crate::field::F128;
-    use rayon::prelude::*;
-
     let k = 1usize << k_log;
     assert_eq!(m_0.num_rows, k);
     assert_eq!(m_0.num_cols, k);
@@ -556,8 +556,6 @@ fn apply_strip_csr(
     out_strip: &mut [crate::field::F128],
     f128_per_block: usize,
 ) {
-    use crate::bits::transpose_8_u64s_to_64_bytes;
-
     debug_assert_eq!(z_strip.len(), APPLY_STRIP * f128_per_block);
     debug_assert_eq!(out_strip.len(), APPLY_STRIP * f128_per_block);
     let k = f128_per_block * 128;
@@ -749,6 +747,7 @@ fn matrix_vector_product(m: &SparseBinaryMatrix, z: &[bool]) -> Vec<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pcs::pack_witness;
 
     /// Identity base matrix: `A_0 = I_k`. Each row has exactly one nonzero at
     /// the diagonal.
@@ -763,8 +762,6 @@ mod tests {
     /// Packed apply_a matches bool apply_a.
     #[test]
     fn packed_matches_bool_apply() {
-        use crate::pcs::pack_witness;
-
         // Test at several k_log values: k_log < 7, k_log = 7, k_log > 7.
         // (13,7)/(15,8) give n_outer = 64/128 — exercises the 64-wide strip
         // kernel when enough rayon workers' worth of strips exist.

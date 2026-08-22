@@ -7,6 +7,8 @@
 use flock_prover::challenger::FsChallenger;
 use flock_prover::pcs::{self, PcsParams};
 use flock_prover::prover::prove_ligerito;
+#[cfg(feature = "zk")]
+use flock_prover::prover::prove_ligerito_zk;
 use flock_prover::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
 use flock_prover::verifier::{self, VerifyError};
 
@@ -121,7 +123,6 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
 #[test]
 #[ignore] // Heavier — run with `cargo test r1cs_prove_verify_roundtrip_ligerito_zk -- --ignored --nocapture`
 fn r1cs_prove_verify_roundtrip_ligerito_zk() {
-    use flock_prover::prover::prove_ligerito_zk;
     let m = 22;
     let k_log = 6;
     let k_skip = 6;

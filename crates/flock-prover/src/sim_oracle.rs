@@ -36,15 +36,15 @@
 //! a function, and pretending otherwise is exactly the error the freshness
 //! argument exists to rule out.
 //!
-//! The succinct VEIL path uses this oracle for Fiat--Shamir challenges, but
-//! not for every PCS and VEIL hash. See `docs/SECURITY.md`.
+//! The succinct VEIL path also obtains its PCS and VEIL hashing context from
+//! [`OracleChallenger`], so all three roles query this one oracle object.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
-use flock_core::ro::{ByteOracle, encode_pow_point};
+use flock_core::ro::{ByteOracle, RoContext, encode_pow_point};
 
 // Transcript op tags — must match `flock_core::challenger`'s encoding, since
 // this challenger has to be byte-identical to the honest one.
@@ -61,12 +61,13 @@ const KIND_SLICE: u8 = 0x02;
 #[derive(Debug, Default)]
 pub struct ProgrammableOracle {
     table: HashMap<Vec<u8>, [u8; 32]>,
-    /// Every point queried, in order — the query transcript a straightline
-    /// extractor would read, and the audit trail for which programmed points
-    /// were actually reached.
+    /// Retained points in query order — the transcript a straightline
+    /// extractor reads. Large succinct Merkle trees are counted by channel
+    /// without retaining every point payload.
     queries: Vec<Vec<u8>>,
     seen: HashSet<[u8; 32]>,
     record_roles: Option<Vec<u8>>,
+    framed_channel_queries: [u64; 8],
 }
 
 impl ProgrammableOracle {
@@ -76,12 +77,23 @@ impl ProgrammableOracle {
 
     /// Answer at `point`: the programmed value if there is one, else the real
     /// hash. Records the query.
-    fn answer(&mut self, point: &[u8]) -> [u8; 32] {
+    fn answer(&mut self, point: &[u8], retain_point: bool) -> [u8; 32] {
         self.seen.insert(flock_core::ro::hash_point(point));
-        if self
-            .record_roles
-            .as_ref()
-            .is_none_or(|roles| point.first().is_some_and(|role| roles.contains(role)))
+        if point.len() >= 9
+            && matches!(
+                point[0],
+                flock_core::ro::ROLE_LEAF | flock_core::ro::ROLE_NODE
+            )
+            && point[1..8] == flock_core::ro::RO_MAGIC
+            && (point[8] as usize) < self.framed_channel_queries.len()
+        {
+            self.framed_channel_queries[point[8] as usize] += 1;
+        }
+        if retain_point
+            && self
+                .record_roles
+                .as_ref()
+                .is_none_or(|roles| point.first().is_some_and(|role| roles.contains(role)))
         {
             self.queries.push(point.to_vec());
         }
@@ -127,6 +139,11 @@ impl ProgrammableOracle {
         self.queries.len()
     }
 
+    /// Number of framed Merkle queries made for one protocol channel.
+    pub fn channel_query_count(&self, channel: flock_core::ro::RoChannel) -> u64 {
+        self.framed_channel_queries[channel.as_u8() as usize]
+    }
+
     /// The recorded query transcript.
     pub fn queries(&self) -> &[Vec<u8>] {
         &self.queries
@@ -167,6 +184,10 @@ impl ProgrammableOracle {
 /// verifier-side querying hit the same oracle.
 pub type SharedOracle = Arc<Mutex<ProgrammableOracle>>;
 
+fn lock_oracle(oracle: &SharedOracle) -> MutexGuard<'_, ProgrammableOracle> {
+    oracle.lock().unwrap_or_else(|error| error.into_inner())
+}
+
 pub fn shared_oracle() -> SharedOracle {
     Arc::new(Mutex::new(ProgrammableOracle::new()))
 }
@@ -177,24 +198,42 @@ pub fn shared_oracle() -> SharedOracle {
 #[derive(Clone)]
 pub struct ProgrammableByteOracle {
     oracle: SharedOracle,
+    retain_points: bool,
 }
 
 impl ProgrammableByteOracle {
     pub fn new(oracle: SharedOracle) -> Self {
-        Self { oracle }
+        Self {
+            oracle,
+            retain_points: true,
+        }
+    }
+
+    fn answering_only(oracle: SharedOracle) -> Self {
+        Self {
+            oracle,
+            retain_points: false,
+        }
     }
 }
 
 impl ByteOracle for ProgrammableByteOracle {
     fn answer(&self, point: &[u8]) -> [u8; 32] {
-        self.oracle.lock().expect("oracle poisoned").answer(point)
+        lock_oracle(&self.oracle).answer(point, self.retain_points)
     }
 }
 
 /// Construct a point-oracle context backed by the same programmable oracle
 /// used by [`OracleChallenger`].
-pub fn ro_context(nonce: [u8; 32], oracle: SharedOracle) -> flock_core::ro::RoContext {
-    flock_core::ro::RoContext::external(nonce, Arc::new(ProgrammableByteOracle::new(oracle)))
+pub fn ro_context(nonce: [u8; 32], oracle: SharedOracle) -> RoContext {
+    RoContext::external(nonce, Arc::new(ProgrammableByteOracle::new(oracle)))
+}
+
+fn answering_only_ro_context(nonce: [u8; 32], oracle: SharedOracle) -> RoContext {
+    RoContext::external(
+        nonce,
+        Arc::new(ProgrammableByteOracle::answering_only(oracle)),
+    )
 }
 
 /// Fiat–Shamir over a [`ProgrammableOracle`]. Byte-identical to
@@ -254,16 +293,13 @@ impl OracleChallenger {
     /// through the oracle so grind queries appear in its transcript.
     fn pow_answer(&self, state: &[u8; 32], nonce: u64) -> [u8; 32] {
         let point = encode_pow_point(state, nonce);
-        self.oracle.lock().expect("oracle poisoned").answer(&point)
+        lock_oracle(&self.oracle).answer(&point, true)
     }
 
     /// The proof-of-work state digest, mirroring `FsChallenger`, but routed
     /// through the programmable oracle so no point query bypasses the game.
     fn pow_state_digest(&self) -> [u8; 32] {
-        self.oracle
-            .lock()
-            .expect("oracle poisoned")
-            .answer(&self.absorbed)
+        lock_oracle(&self.oracle).answer(&self.absorbed, true)
     }
 
     /// Squeeze through the oracle, mirroring `FsChallenger::squeeze_into`.
@@ -272,7 +308,7 @@ impl OracleChallenger {
         let mut ctr: u64 = 0;
         while off < out.len() {
             let point = self.squeeze_point(ctr);
-            let block = self.oracle.lock().expect("oracle poisoned").answer(&point);
+            let block = lock_oracle(&self.oracle).answer(&point, true);
             let take = (out.len() - off).min(32);
             out[off..off + take].copy_from_slice(&block[..take]);
             off += take;
@@ -317,7 +353,7 @@ impl OracleChallenger {
             // Bytes past the requested length are never read by the squeeze,
             // so leaving them zero is harmless.
             {
-                let mut oracle = self.oracle.lock().expect("oracle poisoned");
+                let mut oracle = lock_oracle(&self.oracle);
                 if oracle.was_queried(&point) {
                     return None;
                 }
@@ -338,7 +374,7 @@ impl OracleChallenger {
         let mut block = [0u8; 32];
         block[..8].copy_from_slice(&value.lo.to_le_bytes());
         block[8..16].copy_from_slice(&value.hi.to_le_bytes());
-        let mut oracle = self.oracle.lock().expect("oracle poisoned");
+        let mut oracle = lock_oracle(&self.oracle);
         if oracle.was_queried(&point) {
             return None;
         }
@@ -348,6 +384,10 @@ impl OracleChallenger {
 }
 
 impl Challenger for OracleChallenger {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        answering_only_ro_context(nonce, self.oracle.clone())
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.absorb(&[OP_LABEL]);
         self.absorb(&(label.len() as u64).to_le_bytes());

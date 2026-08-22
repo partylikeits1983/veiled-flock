@@ -2,10 +2,7 @@
 
 use flock_core::{
     field::F128,
-    merkle::{
-        Hash, hash_leaf, merkle_multi_proof, merkle_tree, merkle_tree_framed,
-        verify_merkle_multi_proof, verify_merkle_multi_proof_framed,
-    },
+    merkle::{Hash, merkle_multi_proof, merkle_tree_framed, verify_merkle_multi_proof_framed},
     ro::{RoChannel, RoContext},
 };
 use serde::{Deserialize, Serialize};
@@ -26,15 +23,7 @@ pub struct MerkleMatrixOpening {
 }
 
 impl MerkleMatrix {
-    pub fn new(columns: &[Vec<F128>]) -> Self {
-        Self::build(columns, None)
-    }
-
-    pub fn new_framed(columns: &[Vec<F128>], ctx: &RoContext, channel: RoChannel) -> Self {
-        Self::build(columns, Some((ctx, channel)))
-    }
-
-    fn build(columns: &[Vec<F128>], framed: Option<(&RoContext, RoChannel)>) -> Self {
+    pub fn new(columns: &[Vec<F128>], ctx: &RoContext, channel: RoChannel) -> Self {
         assert!(
             !columns.is_empty(),
             "commitment must contain at least one column"
@@ -52,10 +41,7 @@ impl MerkleMatrix {
             values.extend(columns.iter().map(|column| column[row]));
         }
         let bytes = matrix_bytes(&values);
-        let tree = match framed {
-            Some((ctx, channel)) => merkle_tree_framed(&bytes, rows, ctx, channel, 0),
-            None => merkle_tree(&bytes, rows),
-        };
+        let tree = merkle_tree_framed(&bytes, rows, ctx, channel, 0);
         Self {
             rows,
             columns: column_count,
@@ -101,27 +87,7 @@ impl MerkleMatrix {
 }
 
 impl MerkleMatrixOpening {
-    pub fn verify(&self, root: &Hash, num_rows: usize, num_columns: usize) -> bool {
-        if !num_rows.is_power_of_two()
-            || self.rows.len() != self.positions.len().saturating_mul(num_columns)
-        {
-            return false;
-        }
-        let leaf_hashes: Vec<Hash> = self
-            .rows
-            .chunks(num_columns)
-            .map(|row| hash_leaf(&matrix_bytes(row)))
-            .collect();
-        verify_merkle_multi_proof(
-            root,
-            num_rows,
-            &self.positions,
-            &leaf_hashes,
-            &self.siblings,
-        )
-    }
-
-    pub fn verify_framed(
+    pub fn verify(
         &self,
         root: &Hash,
         num_rows: usize,
@@ -178,13 +144,14 @@ mod tests {
             (0..16).map(|i| F128::new(i, 0)).collect(),
             (0..16).map(|i| F128::new(100 + i, 1)).collect(),
         ];
-        let matrix = MerkleMatrix::new(&columns);
+        let ctx = RoContext::native([7; 32]);
+        let matrix = MerkleMatrix::new(&columns, &ctx, RoChannel::Witness);
         let opening = matrix.open(&[1, 2, 2, 11]);
-        assert!(opening.verify(&matrix.root(), 16, 2));
+        assert!(opening.verify(&matrix.root(), 16, 2, &ctx, RoChannel::Witness));
         assert_eq!(opening.positions, vec![1, 2, 11]);
 
         let mut bad = opening.clone();
         bad.rows[0] += F128::ONE;
-        assert!(!bad.verify(&matrix.root(), 16, 2));
+        assert!(!bad.verify(&matrix.root(), 16, 2, &ctx, RoChannel::Witness));
     }
 }

@@ -53,6 +53,7 @@ use kernels::aarch64::fold_one_row_neon_unchecked_8;
     target_feature = "vpclmulqdq"
 ))]
 use kernels::x86_64::{fold_and_message_x86_avx512, fold_round2_pair_x86_unchecked_8};
+use rayon::prelude::*;
 
 /// Returns `(pair_in_block_mask, useful_pairs_inclusive)` for the round-2
 /// fused-fold kernel. A pair (post-URM chunks `2k`, `2k+1`) is fully inside
@@ -494,8 +495,6 @@ pub fn uni_skip_fold_and_round_pair_optimized_packed_padded(
     mlv_challenges: &[F128],
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>, F128, F128) {
-    use rayon::prelude::*;
-
     assert_eq!(
         k_skip, 6,
         "optimized fold-and-round_pair variant is k_skip=6 only"
@@ -757,7 +756,6 @@ pub fn fold_packed_witness_at_z(
     k_skip: usize,
     table: &UniSkipFoldTable,
 ) -> Vec<F128> {
-    use rayon::prelude::*;
     assert_eq!(witness_packed.len(), (1usize << m) / 8);
     let n_chunks = table.n_chunks;
     let n_out = 1usize << (m - k_skip);
@@ -832,8 +830,6 @@ pub fn fold_and_compute_round_pair_into(
     r_fold: F128,
     r_next: &[F128],
 ) -> (F128, F128) {
-    use rayon::prelude::*;
-
     let n = a.len();
     assert_eq!(b.len(), n);
     assert!(n.is_power_of_two() && n >= 8);
@@ -1119,6 +1115,12 @@ pub fn uni_skip_fold_and_round_pair_optimized(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::field::F8;
+    use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
+    use crate::zerocheck::univariate_skip_optimized::{
+        c_s_f128, medium_challenges_ghash, round1_shift_reduce_extract_c_packed,
+        small_challenges_ghash,
+    };
 
     struct Rng(u64);
     impl Rng {
@@ -1386,13 +1388,6 @@ mod tests {
     /// prover skip per-round c tracking entirely.
     #[test]
     fn c_eval_from_round1_c_matches_direct_fold() {
-        use crate::field::F8;
-        use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
-        use crate::zerocheck::univariate_skip_optimized::{
-            c_s_f128, medium_challenges_ghash, round1_shift_reduce_extract_c_packed,
-            small_challenges_ghash,
-        };
-
         const K_SKIP: usize = 6;
         const N_INNER: usize = 7;
 

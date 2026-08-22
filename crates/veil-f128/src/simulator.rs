@@ -17,12 +17,13 @@ use flock_core::{
 use crate::{
     block_r1cs::{
         BlockR1csError, BlockR1csParameters, BlockR1csProof, PublicEquality, build_link_claim,
-        powers, sample_not_zero_or_one, validate_public, vector_parameters,
+        powers, validate_public, vector_parameters,
     },
     code::{AdditiveRsCode, CodeError, CodeParameters},
     commitment::MerkleMatrixOpening,
     dot_product::{
-        DotProductProof, VectorParameters, dot_product, sample_nonzero, sample_unique_positions,
+        DotProductProof, VectorParameters, dot_product, sample_nonzero, sample_not_zero_or_one,
+        sample_unique_positions,
     },
     hadamard::HadamardProof,
 };

@@ -52,6 +52,7 @@ use super::keccak::{
     apply_phi_bool, apply_phi_t, iota_lanes, rho_pi_lanes, state_idx, state_to_lanes, theta_lanes,
     theta_rho_pi_preimage,
 };
+use rayon::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Constants and layout
@@ -320,7 +321,6 @@ fn accumulate_subkeccak(i: usize, alpha: F128, eq_inner: &[F128], comb: &mut [F1
     // Rounds are independent (each writes only chi_*[r]); F128 addition is
     // XOR (exactly associative/commutative), so the parallel reduction is
     // bit-identical to the serial loop.
-    use rayon::prelude::*;
     let chi: Vec<(Vec<F128>, Vec<F128>, F128)> = (0..N_T)
         .into_par_iter()
         .map(|r| {
@@ -447,7 +447,6 @@ impl LincheckCircuit for KeccakLincheckCircuit {
     }
 
     fn fold_alpha_batched(&self, alpha: F128, eq_inner: &[F128]) -> Vec<F128> {
-        use rayon::prelude::*;
         assert_eq!(eq_inner.len(), K, "eq_inner length must equal n_cols = K");
 
         // The three sub-keccaks are independent (disjoint column regions
@@ -628,7 +627,11 @@ impl KeccakSetup {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::r1cs_hashes::keccak::{keccak_f, lanes_to_state};
+    use crate::r1cs_hashes::keccak as k1;
+    use crate::r1cs_hashes::keccak::keccak_f;
+    use crate::r1cs_hashes::keccak::lanes_to_state;
+    use flock_core::challenger::FsChallenger;
+    use std::time::Instant;
 
     struct Rng(u64);
     impl Rng {
@@ -799,10 +802,6 @@ mod tests {
     #[test]
     #[ignore = "timing comparison; run manually with --nocapture"]
     fn pack_win() {
-        use crate::r1cs_hashes::keccak as k1;
-        use flock_core::challenger::FsChallenger;
-        use std::time::Instant;
-
         let n = 6144usize;
         let mut rng = Rng::new(0xC0FFEE_BEEF);
         let inputs: Vec<State> = (0..n).map(|_| random_state(&mut rng)).collect();
@@ -843,7 +842,6 @@ mod tests {
     #[test]
     #[ignore]
     fn prove_fast_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         let n_keccaks = 49; // n_blocks_log = 5 → m = 22 with K_LOG=17
         let mut rng = Rng::new(0x21111_2170);
         let inputs: Vec<State> = (0..n_keccaks).map(|_| random_state(&mut rng)).collect();
@@ -863,7 +861,6 @@ mod tests {
         // prove_fast_timed mirrors prove_fast with phase timers added, so its
         // proof must verify and yield the same claim, and every phase must
         // record a positive duration.
-        use flock_core::challenger::FsChallenger;
         let n_keccaks = 49; // m = 22 (smallest Ligerito target)
         let mut rng = Rng::new(0x21111_2171);
         let inputs: Vec<State> = (0..n_keccaks).map(|_| random_state(&mut rng)).collect();
@@ -881,8 +878,6 @@ mod tests {
 
     #[test]
     fn prove_fast_roundtrip() {
-        use flock_core::challenger::FsChallenger;
-
         // n_keccaks = 49 → n_blocks_log = 5 → m = 22 (smallest Ligerito target).
         // Non-power-of-2 exercises the trailing-triple zero-state padding.
         let n_keccaks = 49;
@@ -907,9 +902,6 @@ mod tests {
     /// (z[Z_CONST] = 1, folded into lincheck) must now reject it.
     #[test]
     fn all_zero_witness_rejected() {
-        use crate::r1cs_hashes::keccak::keccak_f;
-        use flock_core::challenger::FsChallenger;
-
         let n_keccaks = 49; // m = 22 (m22_fast)
         let setup = KeccakSetup::new(n_keccaks);
 

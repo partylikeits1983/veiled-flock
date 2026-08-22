@@ -28,6 +28,7 @@ use flock_core::pcs::{
     Commitment, DirectEqInd, LOG_PACKING, PackedDirectClaim, PackedDirectClaimRef, PcsParams,
 };
 use flock_core::r1cs::BlockR1cs;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 // ---------------------------------------------------------------------------
@@ -168,8 +169,6 @@ pub fn fold_all_slots(
     packed: &[F128],
     fold: &MerklePathFold,
 ) -> [Vec<F128>; 4] {
-    use rayon::prelude::*;
-
     let bits_per_packed = 1usize << LOG_PACKING;
     let n_packed_per_slot = 1usize << fold.tau_pos.len();
     let block_packed = (1usize << layout.k_log) / bits_per_packed;

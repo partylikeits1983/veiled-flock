@@ -78,29 +78,8 @@ pub fn commit_hadamard<R: MaskSampler + ?Sized>(
     c: &[F128],
     parameters: VectorParameters,
     rng: &mut R,
-) -> Result<HadamardProverData, HadamardError> {
-    commit_hadamard_inner(a, b, c, parameters, rng, None)
-}
-
-pub fn commit_hadamard_framed<R: MaskSampler + ?Sized>(
-    a: &[F128],
-    b: &[F128],
-    c: &[F128],
-    parameters: VectorParameters,
-    rng: &mut R,
     ctx: &RoContext,
     channel: RoChannel,
-) -> Result<HadamardProverData, HadamardError> {
-    commit_hadamard_inner(a, b, c, parameters, rng, Some((ctx, channel)))
-}
-
-fn commit_hadamard_inner<R: MaskSampler + ?Sized>(
-    a: &[F128],
-    b: &[F128],
-    c: &[F128],
-    parameters: VectorParameters,
-    rng: &mut R,
-    framed: Option<(&RoContext, RoChannel)>,
 ) -> Result<HadamardProverData, HadamardError> {
     if parameters.num_vectors != 3 || parameters.padding_length == 0 {
         return Err(HadamardError::InvalidParameters);
@@ -136,10 +115,7 @@ fn commit_hadamard_inner<R: MaskSampler + ?Sized>(
     let mut product_mask_intermediate = vec![F128::ZERO; code.parameters().square_message_length()];
     rng.fill_f128(&mut product_mask_intermediate);
     codewords.push(code.encode_square(&product_mask_intermediate)?);
-    let commitment = match framed {
-        Some((ctx, channel)) => MerkleMatrix::new_framed(&codewords, ctx, channel),
-        None => MerkleMatrix::new(&codewords),
-    };
+    let commitment = MerkleMatrix::new(&codewords, ctx, channel);
 
     Ok(HadamardProverData {
         parameters,
@@ -245,25 +221,8 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
     dot_vector: &[F128],
     proof: &HadamardProof,
     challenger: &mut C,
-) -> Result<(), HadamardError> {
-    verify_hadamard_and_dots_inner(dot_vector, proof, challenger, None)
-}
-
-pub fn verify_hadamard_and_dots_framed<C: Challenger>(
-    dot_vector: &[F128],
-    proof: &HadamardProof,
-    challenger: &mut C,
     ctx: &RoContext,
     channel: RoChannel,
-) -> Result<(), HadamardError> {
-    verify_hadamard_and_dots_inner(dot_vector, proof, challenger, Some((ctx, channel)))
-}
-
-fn verify_hadamard_and_dots_inner<C: Challenger>(
-    dot_vector: &[F128],
-    proof: &HadamardProof,
-    challenger: &mut C,
-    framed: Option<(&RoContext, RoChannel)>,
 ) -> Result<(), HadamardError> {
     let parameters = proof.parameters;
     validate_parameters(parameters)?;
@@ -317,17 +276,10 @@ fn verify_hadamard_and_dots_inner<C: Challenger>(
     if positions != proof.opening.positions {
         return Err(HadamardError::WrongProofShape);
     }
-    let opening_valid = match framed {
-        Some((ctx, channel)) => {
-            proof
-                .opening
-                .verify_framed(&proof.commitment, parameters.code_length, 5, ctx, channel)
-        }
-        None => proof
-            .opening
-            .verify(&proof.commitment, parameters.code_length, 5),
-    };
-    if !opening_valid {
+    if !proof
+        .opening
+        .verify(&proof.commitment, parameters.code_length, 5, ctx, channel)
+    {
         return Err(HadamardError::InvalidMerkleOpening);
     }
 
@@ -392,66 +344,4 @@ fn powers(base: F128, length: usize) -> Vec<F128> {
 }
 
 #[cfg(test)]
-mod tests {
-    use flock_core::{challenger::FsChallenger, zk::ZkRng};
-
-    use super::*;
-
-    fn vector(length: usize, offset: u64) -> Vec<F128> {
-        (0..length)
-            .map(|index| {
-                F128::new(
-                    offset + index as u64,
-                    (offset ^ index as u64).rotate_left(13),
-                )
-            })
-            .collect()
-    }
-
-    fn fixture() -> (VectorParameters, Vec<F128>, Vec<F128>, Vec<F128>, Vec<F128>) {
-        let parameters = VectorParameters::with_security(21, 3, 9, 4).unwrap();
-        let a = vector(21, 10);
-        let b = vector(21, 100);
-        let c = a.iter().zip(&b).map(|(a, b)| *a * *b).collect();
-        let dot = vector(21, 1000);
-        (parameters, a, b, c, dot)
-    }
-
-    #[test]
-    fn hadamard_and_dot_roundtrip() {
-        let (parameters, a, b, c, dot) = fixture();
-        let mut rng = ZkRng::from_seed([21; 32]);
-        let data = commit_hadamard(&a, &b, &c, parameters, &mut rng).unwrap();
-        let mut prover_challenger = FsChallenger::new(b"veil-f128-hadamard-test");
-        let proof = prove_hadamard_and_dots(&dot, data, &mut prover_challenger).unwrap();
-        let mut verifier_challenger = FsChallenger::new(b"veil-f128-hadamard-test");
-        verify_hadamard_and_dots(&dot, &proof, &mut verifier_challenger).unwrap();
-    }
-
-    #[test]
-    fn false_hadamard_relation_is_rejected() {
-        let (parameters, a, b, mut c, dot) = fixture();
-        c[7] += F128::ONE;
-        let mut rng = ZkRng::from_seed([22; 32]);
-        let data = commit_hadamard(&a, &b, &c, parameters, &mut rng).unwrap();
-        let mut prover_challenger = FsChallenger::new(b"veil-f128-hadamard-false");
-        let proof = prove_hadamard_and_dots(&dot, data, &mut prover_challenger).unwrap();
-        let mut verifier_challenger = FsChallenger::new(b"veil-f128-hadamard-false");
-        assert!(
-            verify_hadamard_and_dots(&dot, &proof, &mut verifier_challenger).is_err(),
-            "a false pointwise product must fail the random reduction check"
-        );
-    }
-
-    #[test]
-    fn opening_mutation_is_rejected() {
-        let (parameters, a, b, c, dot) = fixture();
-        let mut rng = ZkRng::from_seed([23; 32]);
-        let data = commit_hadamard(&a, &b, &c, parameters, &mut rng).unwrap();
-        let mut prover_challenger = FsChallenger::new(b"veil-f128-hadamard-mutation");
-        let mut proof = prove_hadamard_and_dots(&dot, data, &mut prover_challenger).unwrap();
-        proof.opening.rows[0] += F128::ONE;
-        let mut verifier_challenger = FsChallenger::new(b"veil-f128-hadamard-mutation");
-        assert!(verify_hadamard_and_dots(&dot, &proof, &mut verifier_challenger).is_err());
-    }
-}
+mod tests;

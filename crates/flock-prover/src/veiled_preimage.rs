@@ -17,8 +17,7 @@ use flock_core::{
 use serde::{Deserialize, Serialize};
 use veil_f128::{
     BlockR1csError, BlockR1csParameters, BlockR1csProof, OracleProgrammer, OracleProgrammingError,
-    PublicEquality, SimulationError, prove_block_r1cs_framed, simulate_block_r1cs,
-    verify_block_r1cs_framed,
+    PublicEquality, SimulationError, prove_block_r1cs, simulate_block_r1cs, verify_block_r1cs,
 };
 
 use crate::r1cs_hashes::{
@@ -138,7 +137,7 @@ impl VeiledBlake3Setup {
             &commitment_nonce,
             digests,
         );
-        let r1cs = prove_block_r1cs_framed(
+        let r1cs = prove_block_r1cs(
             &self.r1cs,
             &z,
             &a,
@@ -181,7 +180,7 @@ impl VeiledBlake3Setup {
             digests,
         );
         let ro = RoContext::native(proof.commitment_nonce);
-        verify_block_r1cs_framed(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
+        verify_block_r1cs(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
         Ok(())
     }
 
@@ -255,7 +254,7 @@ impl VeiledBlake3Setup {
             digests,
         );
         let ro = ro_context(proof.commitment_nonce, oracle);
-        verify_block_r1cs_framed(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
+        verify_block_r1cs(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
         Ok(())
     }
 }

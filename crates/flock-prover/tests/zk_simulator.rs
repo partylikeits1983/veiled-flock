@@ -35,7 +35,9 @@
 use flock_core::challenger::{FsChallenger, RandomChallenger};
 use flock_core::field::F128;
 use flock_core::lincheck::pack_z_lincheck_from_packed;
+use flock_core::ro::RoContext;
 use flock_core::zk::{MaskSampler, ZkRng};
+use flock_prover::proof_io::R1csProofBundleZkA1;
 use flock_prover::prover::{
     A1MaskForks, A1MaskSources, prove_r1cs_zk_a1_with_masks,
     prove_r1cs_zk_a1_with_masks_pd_nonce_ro,
@@ -48,8 +50,6 @@ use flock_prover::zk_audit_support::FixtureA1M15;
 /// empty table must reproduce the native proof byte for byte.
 #[test]
 fn unprogrammed_external_backend_reproduces_native_proof_bytes() {
-    use flock_prover::proof_io::R1csProofBundleZkA1;
-
     let fx = FixtureA1M15::new();
     let payload = vec![false; FixtureA1M15::N_PAYLOAD * FixtureA1M15::BLOCKS];
     let u_a = vec![false; FixtureA1M15::A_BITS];
@@ -67,7 +67,7 @@ fn unprogrammed_external_backend_reproduces_native_proof_bytes() {
         let ro = if external {
             flock_prover::sim_oracle::ro_context(nonce, flock_prover::sim_oracle::shared_oracle())
         } else {
-            flock_core::ro::RoContext::native(nonce)
+            RoContext::native(nonce)
         };
         let mut ch = FsChallenger::new(b"flock-ro-backend-differential");
         let (proof, commitment, _) = prove_r1cs_zk_a1_with_masks_pd_nonce_ro(

@@ -32,9 +32,11 @@ use flock_core::field::F128;
 use flock_core::lincheck::pack_z_lincheck_from_packed;
 use flock_core::pcs::PcsParams;
 use flock_core::zk::MaskSampler;
+use flock_core::{lincheck, zerocheck};
 use flock_prover::prover::{A1MaskSources, prove_r1cs_zk_a1_with_masks};
 use flock_prover::r1cs_hashes::blake3::{Blake3Setup, Compression};
 use flock_prover::transcript_schema::{LeakageClass, SchemaIndex, algebraic_vector, flatten_a1};
+use flock_prover::zk_audit_support::FixtureA1M15;
 use flock_prover::zk_audit_support::tiny_zk_configs_for;
 
 struct Rng(u64);
@@ -678,7 +680,6 @@ fn claims_of(
     csc: &[F128],
     csh: &[F128],
 ) -> [F128; 5] {
-    use flock_core::{lincheck, zerocheck};
     let layout = setup.r1cs.zk.expect("zk layout");
     let (z, a, b, stripe) =
         flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk(
@@ -770,8 +771,6 @@ fn claims_of(
 #[test]
 #[ignore = "control for the BLAKE3 result; run alongside it"]
 fn control_same_procedure_on_the_passing_fixture() {
-    use flock_prover::zk_audit_support::FixtureA1M15;
-
     let fx = FixtureA1M15::new();
     let m = FixtureA1M15::M;
     let n = 1usize << m;

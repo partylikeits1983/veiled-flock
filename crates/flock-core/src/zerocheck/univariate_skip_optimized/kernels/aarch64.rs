@@ -1,4 +1,7 @@
 use super::super::{F8, F128, InvNttTableByteSingleGf8, N_CHUNKS};
+#[cfg(target_arch = "aarch64")]
+use crate::field::gf2_8::neon::{gf8_mul_vec16, gf8_reduce_vec16};
+use core::arch::aarch64::*;
 
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
@@ -11,8 +14,6 @@ pub(crate) unsafe fn accumulate_convert(
     partial_ab: &mut [F128; 64],
     partial_c: &mut [F128; 64],
 ) {
-    use core::arch::aarch64::*;
-
     // SAFETY: caller guarantees fixed input sizes and aarch64 provides NEON.
     unsafe {
         let convert_ptr = convert.as_ptr() as *const u8;
@@ -57,8 +58,6 @@ pub(crate) unsafe fn accumulate_convert_with_s_hat_v(
     partial_c_0: &mut [F128; 64],
     partial_c_1: &mut [F128; 64],
 ) {
-    use core::arch::aarch64::*;
-
     // SAFETY: caller guarantees fixed input sizes and aarch64 provides NEON.
     unsafe {
         let convert_ptr = convert.as_ptr() as *const u8;
@@ -109,8 +108,6 @@ pub(crate) unsafe fn accumulate_convert_with_s_hat_v(
 #[cfg(target_arch = "aarch64")]
 #[inline(always)]
 pub(crate) unsafe fn bit_transpose_64bytes_neon(input: &[u8; 64], output: &mut [u8; 64]) {
-    use core::arch::aarch64::*;
-
     unsafe {
         let in_ptr = input.as_ptr();
         let v0 = vld1q_u8(in_ptr);
@@ -189,9 +186,6 @@ pub(crate) fn shift_reduce_inner_ab_neon(
     a_col: &mut [F8],
     b_col: &mut [F8],
 ) {
-    use crate::field::gf2_8::neon::{gf8_mul_vec16, gf8_reduce_vec16};
-    use core::arch::aarch64::*;
-
     let byte_base_b = chunk_byte_base + b_med * N_CHUNKS * 8;
 
     // Four (lo, hi) pairs of u16x8 accumulators = 64 u16 lanes total, matching
@@ -284,7 +278,6 @@ unsafe fn xor_apply_byte_into_8_regs<const BH: usize, const ODD: bool>(
     db2: &mut core::arch::aarch64::uint8x16_t,
     db3: &mut core::arch::aarch64::uint8x16_t,
 ) {
-    use core::arch::aarch64::*;
     unsafe {
         let ra = table_base.add(a_byte as usize * 64);
         let rb = table_base.add(b_byte as usize * 64);
@@ -338,8 +331,6 @@ unsafe fn fused_apply_one_k<const K: i32>(
     acc3_lo: &mut core::arch::aarch64::uint16x8_t,
     acc3_hi: &mut core::arch::aarch64::uint16x8_t,
 ) {
-    use crate::field::gf2_8::neon::gf8_mul_vec16;
-    use core::arch::aarch64::*;
     unsafe {
         // b = 0: identity permutation — plain load of the 4 chunks.
         let ra0 = table_base.add(*a_row as usize * 64);
@@ -474,9 +465,6 @@ pub(crate) fn shift_reduce_inner_ab_fused_neon(
     b_med: usize,
     out: &mut [u8; 64],
 ) {
-    use crate::field::gf2_8::neon::gf8_reduce_vec16;
-    use core::arch::aarch64::*;
-
     let byte_base_b = chunk_byte_base + b_med * N_CHUNKS * 8;
     let table_base = inv_table.data_ptr();
 
