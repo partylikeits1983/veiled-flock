@@ -1,0 +1,9 @@
+# `cargo build` needs a toolchain that has both:
+#   - edition 2024 (Rust 1.85+), else the workspace manifest fails to parse
+#     with `feature edition2024 is required`;
+#   - a stable `isolate_lowest_one` (Rust 1.98+), used by the NTT inverse
+#     tables, the multilinear zerocheck, and the prover chain.
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
