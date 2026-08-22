@@ -1,6 +1,5 @@
 # Pinned so `cargo build` works regardless of the machine's rustup default.
-# Requires >= 1.85 for edition 2024; 1.98.0 is the version CI's `stable` clippy
-# gate was last verified against (see commit "fix: satisfy Rust 1.98 Clippy").
+# Requires >= 1.85 for edition 2024; CI also uses this pinned toolchain.
 [toolchain]
 channel = "1.98.0"
 components = ["rustfmt", "clippy"]

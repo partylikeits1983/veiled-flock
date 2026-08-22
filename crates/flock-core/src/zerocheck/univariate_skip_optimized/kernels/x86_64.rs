@@ -8,6 +8,15 @@ use super::super::{F8, InvNttTableByteSingleGf8, N_CHUNKS};
     target_feature = "vpclmulqdq"
 ))]
 use crate::field::gf2_128::x86_64::{f128x4_set, ghash_mul_x4};
+#[cfg(any(
+    target_feature = "gfni",
+    all(
+        target_feature = "avx512f",
+        target_feature = "avx512bw",
+        target_feature = "avx512vbmi"
+    ),
+    all(target_feature = "avx512f", target_feature = "vpclmulqdq")
+))]
 use core::arch::x86_64::*;
 
 /// AVX-512 (VBMI) 64-byte bit-transpose — direct port of the NEON two-stage

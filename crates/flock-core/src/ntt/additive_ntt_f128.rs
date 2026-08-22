@@ -42,10 +42,6 @@
 //! pairs are adjacent — matching the standard `fold_pair` formula in DP24.
 
 use crate::field::F128;
-#[cfg(any(
-    all(target_arch = "aarch64", target_feature = "aes"),
-    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
-))]
 use rayon::prelude::*;
 
 mod kernels;
