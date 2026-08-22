@@ -1,10 +1,5 @@
 [workspace]
-members = [
-    "crates/flock-core",
-    "crates/flock-prover",
-    "crates/veil-f128",
-    "tools/import-lint",
-]
+members = ["crates/flock-core", "crates/flock-prover", "crates/veil-f128"]
 resolver = "2"
 
 [workspace.package]

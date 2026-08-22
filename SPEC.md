@@ -255,7 +255,7 @@ canonical and MUST reject trailing data.
 
 The verifier MUST:
 
-1. reject an empty digest list or invalid bundle magic;
+1. reject an empty or oversized digest list;
 2. reconstruct the padded setup from the digest count;
 3. reject mismatched commitment or proof parameters;
 4. reconstruct `C_shifted` from the masked proof;

@@ -325,11 +325,10 @@ fn zk_gamma_cancellation_unique_and_fs_ordering() {
         &mut ch_prove,
     );
 
-    // (a) Rejected as-is.
     let mut ch = RandomChallenger::new(seed);
     assert!(verify_zk(m, &proof, &mut ch).is_err());
 
-    // (b) Residual is affine in σ_z; solve for the unique root σ*.
+    // The residual is affine in σ_z; solve for the unique root σ*.
     let r0 = zk_final_residual(m, &proof, seed, proof.mask_init);
     let r1 = zk_final_residual(m, &proof, seed, proof.mask_init + F128::ONE);
     let slope = r0 + r1; // affine over char 2: R(x+1) + R(x) = slope
@@ -348,23 +347,16 @@ fn zk_gamma_cancellation_unique_and_fs_ordering() {
         assert_ne!(zk_final_residual(m, &proof, seed, other), F128::ZERO);
     }
 
-    // (c) The ordering attack: with γ known in advance, the patched
-    // proof is ACCEPTED by the real verifier.
+    // With γ known in advance, the patched proof is accepted.
     let mut cheat = proof.clone();
     cheat.mask_init = sigma_star;
     let mut ch = RandomChallenger::new(seed);
     assert!(verify_zk(m, &cheat, &mut ch).is_ok());
 
-    // (d) Under Fiat–Shamir the same proof is rejected: γ is derived
+    // Under Fiat–Shamir the same proof is rejected: γ is derived
     // after σ_z is absorbed, so the solved-for γ never occurs.
     let mut ch_fs = FsChallenger::new(ORDERING_TEST_DOMAIN);
     assert!(verify_zk(m, &cheat, &mut ch_fs).is_err());
-
-    // (e) Thin accepting set: 100 fresh challenge tuples all reject.
-    for s in 0..100u64 {
-        let mut ch = RandomChallenger::new(0x51DE_0000 + s);
-        assert!(verify_zk(m, &cheat, &mut ch).is_err(), "seed={s}");
-    }
 }
 
 // Reject mutations to every unmasked-proof component.

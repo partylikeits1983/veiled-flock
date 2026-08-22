@@ -1,6 +1,9 @@
 use flock_core::{challenger::FsChallenger, zk::ZkRng};
 
-use super::*;
+use super::{
+    F128, RoChannel, RoContext, VectorParameters, commit_hadamard, prove_hadamard_and_dots,
+    verify_hadamard_and_dots,
+};
 
 fn vector(length: usize, offset: u64) -> Vec<F128> {
     (0..length)
@@ -59,8 +62,7 @@ fn false_hadamard_relation_is_rejected() {
             &ctx,
             RoChannel::MaskP,
         )
-        .is_err(),
-        "a false pointwise product must fail the random reduction check"
+        .is_err()
     );
 }
 
