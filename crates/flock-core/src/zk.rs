@@ -132,7 +132,7 @@ impl MaskSampler for PlaybackSampler<'_> {
             "PlaybackSampler: odd u64 request"
         );
         let n = out.len() / 2;
-        for (i, chunk) in out.chunks_exact_mut(2).enumerate() {
+        for (i, chunk) in out.as_chunks_mut::<2>().0.iter_mut().enumerate() {
             let v = self.data[self.pos + i];
             chunk[0] = v.lo;
             chunk[1] = v.hi;
