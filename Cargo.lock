@@ -170,7 +170,6 @@ dependencies = [
  "bincode",
  "blake3",
  "flock-core",
- "keccak",
  "rayon",
  "serde",
  "serde_json",

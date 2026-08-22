@@ -35,6 +35,13 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
 `messages.bin` must contain one or more concatenated 64-byte messages. The
 proof bundle includes the ordered public digests.
 
+## Benchmarks
+
+```sh
+cargo bench -p flock-prover --bench blake3_native_chain
+cargo bench -p flock-prover --bench keccak_native_chain
+```
+
 ## Documentation
 
 - [Protocol specification](SPEC.md)
