@@ -42,6 +42,7 @@ use flock_core::field::F128;
 use flock_core::lincheck::{self, pack_z_lincheck_from_packed};
 use flock_core::pcs::{self, ring_switch};
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
+use flock_core::ro::RoContext;
 use flock_core::zerocheck::{self, PaddingSpec};
 
 struct RecordingChallenger<C: Challenger> {
@@ -50,7 +51,7 @@ struct RecordingChallenger<C: Challenger> {
 }
 
 impl<C: Challenger> Challenger for RecordingChallenger<C> {
-    fn ro_context(&self, nonce: [u8; 32]) -> flock_core::ro::RoContext {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
         self.inner.ro_context(nonce)
     }
 

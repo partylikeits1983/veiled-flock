@@ -61,6 +61,7 @@ use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;
 use flock_core::zerocheck::multilinear::eq_eval;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Multilinear extension of the successor relation `b = a + 1` (integer
@@ -372,8 +373,6 @@ pub fn fold_contiguous_regions(
     region_byte_offsets: &[usize],
     region_weights: &[F128],
 ) -> Vec<Vec<F128>> {
-    use rayon::prelude::*;
-
     let region_bits = region_weights.len();
     assert!(
         region_bits.is_multiple_of(8),

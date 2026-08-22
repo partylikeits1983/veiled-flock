@@ -57,6 +57,12 @@ use super::univariate_skip_deg4::{K_SKIP, K_V8, LAMBDA4_SIZE, S_SIZE, V8_SIZE};
 use super::univariate_skip_optimized::{
     bit_transpose_64bytes, medium_challenges_ghash, small_challenges_ghash,
 };
+use crate::field::F128 as F;
+use crate::field::PHI_8_TABLE;
+#[cfg(target_arch = "aarch64")]
+use crate::field::gf2_8::neon::{gf8_mul_vec16, gf8_reduce_vec16};
+#[cfg(target_arch = "aarch64")]
+use core::arch::aarch64::*;
 
 // ---------------------------------------------------------------------------
 // Protocol constants. Same shape as the degree-2 path: 3 small + 4 medium dims
@@ -81,7 +87,6 @@ pub fn medium_challenges_deg4() -> [F128; 4] {
 fn d_inv() -> F128 {
     // Inline of degree-2's d_inv since that's pub(crate)-scoped. The value
     // is purely a function of the medium challenge structure — protocol-fixed.
-    use crate::field::F128 as F;
     let g1 = F {
         lo: 1u64 << 1,
         hi: 0,
@@ -104,7 +109,6 @@ fn d_inv() -> F128 {
 /// Convert table γ^b · φ_8(v) for b ∈ [0, 16), v ∈ [0, 256). Same as the
 /// degree-2 path — protocol-fixed once. Cached after the first call.
 fn build_convert_table() -> Vec<F128> {
-    use crate::field::PHI_8_TABLE;
     let mut gamma_pow = [F128::ZERO; 16];
     gamma_pow[0] = F128::ONE;
     for b in 1..16 {
@@ -282,7 +286,6 @@ unsafe fn xor_apply_byte_into_4_regs_deg4<
     d2: &mut core::arch::aarch64::uint8x16_t,
     d3: &mut core::arch::aarch64::uint8x16_t,
 ) {
-    use core::arch::aarch64::*;
     unsafe {
         // Row[byte] in the 256-byte-row table.
         let row = table_base.add(byte as usize * V8_SIZE);
@@ -321,7 +324,6 @@ unsafe fn build_factor_row_4chunks_deg4<const TILE_BASE: usize>(
     core::arch::aarch64::uint8x16_t,
     core::arch::aarch64::uint8x16_t,
 ) {
-    use core::arch::aarch64::*;
     unsafe {
         let row0 = table_base.add(*factor_row as usize * V8_SIZE);
         let mut d0 = vld1q_u8(row0.add((TILE_BASE + 0) * 16));
@@ -405,8 +407,6 @@ unsafe fn process_tile_deg4<const TILE_BASE: usize>(
     byte_base_b: usize,
     out_tile: *mut u8,
 ) {
-    use crate::field::gf2_8::neon::{gf8_mul_vec16, gf8_reduce_vec16};
-    use core::arch::aarch64::*;
     unsafe {
         let mut acc0_lo = vdupq_n_u16(0);
         let mut acc0_hi = vdupq_n_u16(0);
@@ -725,7 +725,6 @@ pub fn round1_shift_reduce_extract_z_packed_deg4(
         // then one F128 mul by eq_outer_val. Replaces 16 scalar F128 muls.
         #[cfg(target_arch = "aarch64")]
         unsafe {
-            use core::arch::aarch64::*;
             let convert_ptr = convert.as_ptr() as *const u8;
             // abcd lanes (192 of them, on Λ₄).
             for lane in 0..LAMBDA4_SIZE {

@@ -45,6 +45,7 @@ use flock_core::challenger::Challenger;
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
+use flock_core::ro::RoContext;
 
 use crate::digest_bind::{
     DigestChallenges, DigestLayout, DigestStatement, PaddingDigest, digest_claim,
@@ -57,6 +58,8 @@ use crate::r1cs_hashes::blake3::{
     build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
     generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
+#[cfg(feature = "veil")]
+use flock_core::zk::MaskSampler;
 
 /// Bytes of message covered by one instance of this relation.
 pub const MESSAGE_BYTES: usize = 64;
@@ -529,8 +532,6 @@ impl Blake3PreimageZkSetup {
         rng: &mut flock_core::zk::ZkRng,
         challenger: &mut Ch,
     ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
-        use flock_core::zk::MaskSampler;
-
         if digests.len() != self.n_blocks || msgs.len() != self.n_blocks {
             return Err(PreimageError::BatchSizeMismatch {
                 expected: self.n_blocks,
@@ -642,8 +643,6 @@ impl Blake3PreimageZkSetup {
         oracle: crate::sim_oracle::SharedOracle,
         domain: &[u8],
     ) -> Result<SimulatedSuccinctPreimage, SuccinctPreimageError> {
-        use flock_core::zk::MaskSampler;
-
         if digests.len() != self.n_blocks {
             return Err(PreimageError::BatchSizeMismatch {
                 expected: self.n_blocks,
@@ -743,7 +742,10 @@ impl Blake3PreimageZkSetup {
             Some(&mut source),
             &mut challenger,
         )?;
-        let programmed_points = oracle.lock().expect("oracle poisoned").programmed_len();
+        let programmed_points = oracle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .programmed_len();
         Ok(SimulatedSuccinctPreimage {
             proof,
             commitment,
@@ -760,8 +762,6 @@ impl Blake3PreimageZkSetup {
         rng: &mut flock_core::zk::ZkRng,
         challenger: &mut Ch,
     ) -> Result<(crate::prover::R1csProofZkA1, Commitment), PreimageError> {
-        use flock_core::zk::MaskSampler;
-
         crate::zk_certificate::require_certified(
             crate::zk_certificate::StatementFamily::Blake3Preimage,
             self.n_blocks,
@@ -847,7 +847,7 @@ impl Blake3PreimageZkSetup {
         digests: &[[u8; DIGEST_BYTES]],
         challenger: &mut Ch,
     ) -> Result<(), flock_core::verifier::VerifyError> {
-        let ro = flock_core::ro::RoContext::native(proof.proof_nonce);
+        let ro = RoContext::native(proof.proof_nonce);
         self.verify_with_ro(commitment, proof, digests, &ro, challenger)
     }
 
@@ -860,7 +860,7 @@ impl Blake3PreimageZkSetup {
         commitment: &Commitment,
         proof: &crate::prover::R1csProofZkA1,
         digests: &[[u8; DIGEST_BYTES]],
-        ro: &flock_core::ro::RoContext,
+        ro: &RoContext,
         challenger: &mut Ch,
     ) -> Result<(), flock_core::verifier::VerifyError> {
         let stmt = self.statement(digests);
@@ -900,7 +900,16 @@ pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &Diges
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::preimage_simulator::simulate;
+    use crate::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
+    use crate::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_pinned, generate_witness};
+    use crate::sim_game::{OracleQueryCounts, SimGameLedger, production_grinding_candidate_bound};
+    use crate::sim_oracle::OracleChallenger;
+    use crate::sim_oracle::shared_oracle;
+    use crate::sim_seal::{SealedStatement, SimCoins};
+    use crate::transcript_schema::{algebraic_vector, flatten_a1};
     use flock_core::challenger::FsChallenger;
+    use flock_core::zk::MaskSampler;
 
     /// The smallest batch with a registered Ligerito config: m = k_log +
     /// n_log = 14 + 8 = 22, the production shape.
@@ -1046,7 +1055,7 @@ mod tests {
             1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
         );
         {
-            let oracle = oracle.lock().expect("oracle poisoned");
+            let oracle = oracle.lock().unwrap_or_else(|error| error.into_inner());
             for channel in [
                 flock_core::ro::RoChannel::Witness,
                 flock_core::ro::RoChannel::VeilLinear,
@@ -1258,8 +1267,6 @@ mod tests {
     /// protocol rather than because the simulation works.
     #[test]
     fn oracle_harness_accepts_a_real_proof_unprogrammed() {
-        use crate::sim_oracle::{OracleChallenger, shared_oracle};
-
         let setup = Blake3PreimageSetup::new(N_TEST);
         let msgs = msgs_of(0x0AC1E_5EED, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&msgs);
@@ -1298,10 +1305,6 @@ mod tests {
     /// not a satisfying assignment at all. The unmodified verifier accepts.
     #[test]
     fn simulator_produces_an_accepting_proof_without_any_preimage() {
-        use crate::preimage_simulator::simulate;
-        use crate::sim_oracle::{OracleChallenger, shared_oracle};
-        use crate::sim_seal::{SealedStatement, SimCoins};
-
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         // The statement: digests of messages the simulator will never see.
         let secret = msgs_of(0x5EC1_5EC1, N_TEST);
@@ -1326,13 +1329,6 @@ mod tests {
     /// analytical 128-bit-tail budget.
     #[test]
     fn production_random_oracle_ledger_matches_artifact() {
-        use crate::preimage_simulator::simulate;
-        use crate::sim_game::{
-            OracleQueryCounts, SimGameLedger, production_grinding_candidate_bound,
-        };
-        use crate::sim_oracle::{OracleChallenger, shared_oracle};
-        use crate::sim_seal::{SealedStatement, SimCoins};
-
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         let secret = msgs_of(0xA11C_E5E5, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&secret);
@@ -1392,8 +1388,6 @@ mod tests {
     /// zerocheck had to be simulated rather than run.
     #[test]
     fn the_simulators_committed_vector_is_not_a_valid_witness() {
-        use crate::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_pinned, generate_witness};
-
         let n_log = 3usize;
         let r1cs = build_block_r1cs_pinned(n_log, ParamPinning::RootHash64);
         let own = msgs_of(0x1111, 1);
@@ -1427,12 +1421,6 @@ mod tests {
     /// simulation, not from the patched vector being secretly acceptable.
     #[test]
     fn honest_prover_on_the_patched_vector_is_rejected() {
-        use crate::r1cs_hashes::blake3::{
-            ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-        };
-        use crate::sim_oracle::{OracleChallenger, shared_oracle};
-        use flock_core::zk::MaskSampler;
-
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         let secret = msgs_of(0x7777, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&secret);
@@ -1533,11 +1521,6 @@ mod tests {
     #[test]
     #[ignore = "diagnostic; run explicitly"]
     fn measure_simulated_vs_honest_transcript() {
-        use crate::preimage_simulator::simulate;
-        use crate::sim_oracle::shared_oracle;
-        use crate::sim_seal::{SealedStatement, SimCoins};
-        use crate::transcript_schema::{algebraic_vector, flatten_a1};
-
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         let secret = msgs_of(0xD1F_0001, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&secret);

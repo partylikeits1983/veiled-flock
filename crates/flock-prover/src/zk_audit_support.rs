@@ -22,6 +22,7 @@ use flock_core::verifier::VerifyError;
 use flock_core::zk::ZkRng;
 
 use crate::prover::{R1csProofZkA1, prove_r1cs_zk_a1_with_config, verify_r1cs_zk_a1_with_config};
+use flock_core::{lincheck, zerocheck};
 
 // ---------------------------------------------------------------------------
 // Recording challenger
@@ -383,7 +384,6 @@ impl FixtureA1M15 {
         proof: &R1csProofZkA1,
         challenger: &mut Ch,
     ) -> [F128; 3] {
-        use flock_core::{lincheck, zerocheck};
         let zc = zerocheck::verify_zk_masked(
             Self::M,
             &proof.zerocheck,

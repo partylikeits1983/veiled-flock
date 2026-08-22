@@ -1,4 +1,4 @@
-use super::*;
+use super::{MaskLayout, SuccinctVeilError};
 
 #[test]
 fn succinct_shape_rejects_nonidentity_c() {

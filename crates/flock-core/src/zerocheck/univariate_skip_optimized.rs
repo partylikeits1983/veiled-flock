@@ -66,6 +66,7 @@ use kernels::shift_reduce_inner_ab_scalar;
 use kernels::x86_64::shift_reduce_inner_ab_x86_avx512;
 #[cfg(all(test, target_arch = "x86_64", target_feature = "gfni"))]
 use kernels::x86_64::shift_reduce_inner_ab_x86_sse;
+use rayon::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Protocol constants — fixed by the optimization design.
@@ -683,8 +684,6 @@ pub fn round1_shift_reduce_extract_c_packed_padded(
     inv_table: &InvNttTableByteSingleGf8,
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>) {
-    use rayon::prelude::*;
-
     assert_eq!(k_skip, K_SKIP, "optimized variant is k_skip=6 only");
     assert!(
         m >= k_skip + N_INNER,
@@ -775,8 +774,6 @@ pub fn round1_shift_reduce_extract_c_packed_padded_with_s_hat_v(
     inv_table: &InvNttTableByteSingleGf8,
     padding: &PaddingSpec,
 ) -> (Vec<F128>, Vec<F128>, Vec<F128>) {
-    use rayon::prelude::*;
-
     assert_eq!(k_skip, K_SKIP, "optimized variant is k_skip=6 only");
     assert!(
         m >= k_skip + N_INNER,
@@ -919,6 +916,9 @@ fn round1_shift_reduce_extract_c_packed_serial(
 mod tests {
     use super::*;
     use crate::ntt::AdditiveNttGf8;
+    use crate::zerocheck::PaddingSpec;
+    use crate::zerocheck::univariate_skip::pack_bits;
+    use crate::zerocheck::univariate_skip::round1_extract_c_packed_with_s_hat_v;
     use crate::zerocheck::univariate_skip::round1_naive;
 
     /// **Soundness assumption.** Zerocheck and the Ligerito PCS opening at
@@ -1138,8 +1138,6 @@ mod tests {
 
     #[test]
     fn parallel_matches_serial() {
-        use crate::zerocheck::univariate_skip::pack_bits;
-
         // At small m the parallel overhead dominates, but the *output* must
         // still match the serial version bit-for-bit. F128 XOR-sum reduction
         // is commutative + associative, so any thread-scheduling order yields
@@ -1180,9 +1178,6 @@ mod tests {
     ///     (this is the only shape that exercises the full-skip case.)
     #[test]
     fn padded_matches_dense_with_zero_padding() {
-        use crate::zerocheck::PaddingSpec;
-        use crate::zerocheck::univariate_skip::pack_bits;
-
         // (k_log, useful_bits, n_blocks_log) — pick n_blocks_log so
         // m = k_log + n_blocks_log is small enough to keep the test fast
         // while still exercising the kernel's parallel + boundary paths.
@@ -1487,8 +1482,6 @@ mod tests {
     /// the scalar-oracle's canonical form.
     #[test]
     fn fusion_matches_existing_and_scalar_oracle() {
-        use crate::zerocheck::univariate_skip::round1_extract_c_packed_with_s_hat_v;
-
         for &m in &[13usize, 14, 15] {
             let mut rng = Rng::new(0xF00D_u64.wrapping_add(m as u64));
             let a = pack_bits(&rng.bits(1 << m));

@@ -31,7 +31,11 @@ use flock_core::lincheck::{self, QuirkyPoint, pack_z_lincheck_from_packed};
 use flock_core::pcs::{self, Commitment, PcsParams};
 use flock_core::proof::{R1csClaim, R1csProofLigerito, ZClaim, bind_statement};
 use flock_core::r1cs::BlockR1cs;
+use flock_core::ro::RoContext;
+#[cfg(feature = "zk")]
+use flock_core::verifier::VerifyError;
 use flock_core::zerocheck;
+use std::time::Instant;
 
 /// Construct a multilinear `x_outer_full` of length `m − k_skip` from a
 /// QuirkyPoint: concatenate `x_inner_rest` and `x_outer`. This is the format
@@ -65,7 +69,7 @@ pub(crate) fn open_claims_with_precomputed_ligerito<Ch: Challenger>(
     lig_config: &pcs::ligerito::ProverConfig,
     challenger: &mut Ch,
 ) -> pcs::BatchOpeningProofLigerito {
-    let ro = flock_core::ro::RoContext::plain();
+    let ro = RoContext::plain();
     open_claims_with_precomputed_ligerito_ro(
         z_packed,
         prover_data,
@@ -90,7 +94,7 @@ pub(crate) fn open_claims_with_precomputed_ligerito_ro<Ch: Challenger>(
     precomputed_s_hat_v: &[Option<&[F128]>],
     padding: &zerocheck::PaddingSpec,
     lig_config: &pcs::ligerito::ProverConfig,
-    ro: &flock_core::ro::RoContext,
+    ro: &RoContext,
     channel: flock_core::ro::RoChannel,
     challenger: &mut Ch,
 ) -> pcs::BatchOpeningProofLigerito {
@@ -120,7 +124,7 @@ pub(crate) fn open_claims_with_precomputed_ligerito_pd_ro<Ch: Challenger>(
     packed_direct: &[pcs::PackedDirectClaim],
     padding: &zerocheck::PaddingSpec,
     lig_config: &pcs::ligerito::ProverConfig,
-    ro: &flock_core::ro::RoContext,
+    ro: &RoContext,
     channel: flock_core::ro::RoChannel,
     challenger: &mut Ch,
 ) -> pcs::BatchOpeningProofLigerito {
@@ -691,7 +695,6 @@ pub fn prove_fast_ligerito_timed<Ch: Challenger>(
     prefaulted_codeword: Option<Vec<F128>>,
     challenger: &mut Ch,
 ) -> (R1csProofLigerito, Commitment, R1csClaim, ProvePhaseTimings) {
-    use std::time::Instant;
     let mut t = ProvePhaseTimings::default();
 
     let log_n = r1cs.m - pcs::LOG_PACKING;
@@ -1261,7 +1264,7 @@ pub fn prove_r1cs_zk_a1_with_masks_pd_nonce<Ch: Challenger + Clone>(
     Commitment,
     Option<crate::zk_rank_check::RankCheckReport>,
 ) {
-    let ro = flock_core::ro::RoContext::native(proof_nonce);
+    let ro = RoContext::native(proof_nonce);
     prove_r1cs_zk_a1_with_masks_pd_nonce_ro(
         r1cs,
         pcs_params,
@@ -1300,7 +1303,7 @@ pub fn prove_r1cs_zk_a1_with_masks_pd_nonce_ro<Ch: Challenger + Clone>(
     zerocheck_source: Option<&mut dyn ZerocheckSource<Ch>>,
     coverage_probe_seed: Option<u64>,
     proof_nonce: [u8; 32],
-    ro: &flock_core::ro::RoContext,
+    ro: &RoContext,
     challenger: &mut Ch,
 ) -> (
     R1csProofZkA1,
@@ -1670,7 +1673,7 @@ pub fn verify_r1cs_zk_a1_pd_ro<Ch: Challenger + Clone>(
     proof: &R1csProofZkA1,
     commitment: &Commitment,
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
-    ro: &flock_core::ro::RoContext,
+    ro: &RoContext,
     packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
     challenger: &mut Ch,
 ) -> Result<(), flock_core::verifier::VerifyError> {
@@ -1728,7 +1731,7 @@ pub fn verify_r1cs_zk_a1_with_config_pd<Ch: Challenger + Clone>(
     challenger: &mut Ch,
     packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
 ) -> Result<(), flock_core::verifier::VerifyError> {
-    let ro = flock_core::ro::RoContext::native(proof.proof_nonce);
+    let ro = RoContext::native(proof.proof_nonce);
     verify_r1cs_zk_a1_with_config_pd_ro(
         r1cs,
         pcs_params,
@@ -1752,7 +1755,7 @@ pub fn verify_r1cs_zk_a1_with_config_pd_ro<Ch: Challenger + Clone>(
     commitment: &Commitment,
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_v: &pcs::ligerito::VerifierConfig,
-    ro: &flock_core::ro::RoContext,
+    ro: &RoContext,
     challenger: &mut Ch,
     packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
 ) -> Result<(), flock_core::verifier::VerifyError> {
@@ -1780,11 +1783,10 @@ fn verify_r1cs_zk_a1_with_config_pd_ro_inner<Ch: Challenger + Clone>(
     commitment: &Commitment,
     lincheck_circuit: &dyn lincheck::LincheckCircuit,
     lig_v: &pcs::ligerito::VerifierConfig,
-    ro: &flock_core::ro::RoContext,
+    ro: &RoContext,
     challenger: &mut Ch,
     packed_direct: &mut (dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)> + Send),
 ) -> Result<(), flock_core::verifier::VerifyError> {
-    use flock_core::verifier::VerifyError;
     let m = r1cs.m;
 
     // The mask commitments' params are attacker-supplied proof data; the

@@ -6,6 +6,10 @@
 //! `ghash_mul_vec2_neon`), so `num_ntts` must be a multiple of 2.
 
 use crate::field::F128;
+#[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
+use crate::field::gf2_128::aarch64::ghash_mul_vec2_neon;
+#[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
+use rayon::prelude::*;
 
 #[inline]
 fn next_s(s: F128, s_at_root: F128) -> F128 {
@@ -69,8 +73,6 @@ fn butterfly_scalar(data: &mut [F128], lambda: F128, num_ntts: usize) {
 #[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
 #[inline]
 fn butterfly_row_pair_neon(top_row: &mut [F128], bot_row: &mut [F128], lambda: F128) {
-    use crate::field::gf2_128::aarch64::ghash_mul_vec2_neon;
-
     debug_assert_eq!(top_row.len(), bot_row.len());
     let num_ntts = top_row.len();
     // SAFETY: aes/neon are statically enabled at compile time.
@@ -128,7 +130,6 @@ fn butterfly_neon(data: &mut [F128], lambda: F128, num_ntts: usize) {
 
 #[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
 fn butterfly_par(data: &mut [F128], lambda: F128, num_ntts: usize) {
-    use rayon::prelude::*;
     let half_offset = ((data.len() / num_ntts) >> 1) * num_ntts;
     let (top, bot) = data.split_at_mut(half_offset);
     top.par_chunks_mut(num_ntts)

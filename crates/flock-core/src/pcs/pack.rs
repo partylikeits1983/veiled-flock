@@ -21,6 +21,7 @@
 //! [DP24]: https://eprint.iacr.org/2024/504
 
 use crate::field::F128;
+use rayon::prelude::*;
 
 /// `log_2` of the packing width. F_{2^128} holds 128 bits = 2^7.
 pub const LOG_PACKING: usize = 7;
@@ -38,7 +39,6 @@ pub const PACKING_WIDTH: usize = 1 << LOG_PACKING;
 /// - if `z.len() != 1 << m`
 /// - if `m < LOG_PACKING`
 pub fn pack_witness(z: &[bool], m: usize) -> Vec<F128> {
-    use rayon::prelude::*;
     assert_eq!(z.len(), 1usize << m, "z length must be 2^m");
     assert!(
         m >= LOG_PACKING,

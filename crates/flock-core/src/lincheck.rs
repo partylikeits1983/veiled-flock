@@ -132,6 +132,7 @@ pub use kernels::{
     partial_fold_packed_z_neon_iblock_padded, partial_fold_packed_z_neon_oblock_padded,
     partial_fold_packed_z_neon_single, partial_fold_packed_z_neon_single_padded,
 };
+use rayon::prelude::*;
 
 /// Bench-only A/B toggle: when set, [`partial_fold_packed_z_best`] uses the legacy
 /// `i_inner`-partitioned `partial_fold_packed_z_neon_iblock_padded` instead of the
@@ -323,7 +324,6 @@ impl LincheckCircuit for CscCircuit {
         self.const_pin
     }
     fn fold_alpha_batched(&self, alpha: F128, eq_inner: &[F128]) -> Vec<F128> {
-        use rayon::prelude::*;
         assert_eq!(eq_inner.len(), self.n_cols);
         let one_col = |c: usize| {
             let mut sa = F128::ZERO;
@@ -574,7 +574,6 @@ pub fn sparse_row_fold(matrix: &SparseBinaryMatrix, eq_table: &[F128]) -> Vec<F1
         // Scatter-reduce: per-thread accumulator, XOR-merge at the end. Each
         // thread allocates a length-n_cols buffer (~256 KB at k=16384) — fine
         // vs the witness-scale buffers already in flight.
-        use rayon::prelude::*;
         matrix
             .rows
             .par_iter()
@@ -681,8 +680,6 @@ pub fn partial_fold_packed_z_fast_padded(
     useful_bits: usize,
     eq_outer: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
-
     let n_log = m - k_log;
     let k = 1usize << k_log;
     let n_outer = 1usize << n_log;
@@ -863,7 +860,6 @@ pub fn pack_z_lincheck_from_packed(
     m: usize,
     k_log: usize,
 ) -> Vec<u8> {
-    use rayon::prelude::*;
     let k = 1usize << k_log;
     let n_total = 1usize << m;
     assert_eq!(z_packed_f128.len(), n_total / 128);
@@ -957,7 +953,6 @@ fn sparse_row_fold_alpha_batched(
     b_0: &SparseBinaryMatrix,
     eq_table: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
     let n_cols = a_0.num_cols;
     debug_assert_eq!(b_0.num_cols, n_cols);
     debug_assert_eq!(eq_table.len(), a_0.num_rows);
@@ -1032,7 +1027,6 @@ fn sparse_row_fold_alpha_batched(
 /// `(Σ c_hi·z_hi, Σ (c_hi+c_lo)·(z_hi+z_lo))` over the top-bit split. The
 /// `len()` of `c` and `z` is even; `half = len/2`.
 fn sumcheck_round_eval_par(c: &[F128], z: &[F128]) -> (F128, F128) {
-    use rayon::prelude::*;
     let half = c.len() / 2;
     debug_assert_eq!(z.len(), c.len());
     let (clo, chi) = c.split_at(half);
@@ -1065,7 +1059,6 @@ pub fn sumcheck_bind_top_in_place_par_pub(v: &mut Vec<F128>, r: F128) {
 }
 
 fn sumcheck_bind_top_in_place_par(v: &mut Vec<F128>, r: F128) {
-    use rayon::prelude::*;
     let half = v.len() / 2;
     if half < SUMCHECK_PAR_THRESHOLD {
         for i in 0..half {
@@ -1113,7 +1106,6 @@ fn sumcheck_bind_both_and_eval_next(
     z: &mut Vec<F128>,
     r: F128,
 ) -> (F128, F128) {
-    use rayon::prelude::*;
     let len = comb.len();
     debug_assert_eq!(z.len(), len);
     let half = len / 2;

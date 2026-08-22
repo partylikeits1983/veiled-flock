@@ -28,6 +28,7 @@ use std::time::Instant;
 
 use flock_prover::field::F128;
 use flock_prover::lincheck::{build_quirky_eq_table, sparse_row_fold};
+use flock_prover::r1cs_hashes::sha2::build_block_witness;
 use flock_prover::r1cs_hashes::sha2::{
     H_WORDS, K, K_LOG, K_SKIP, M_WORDS, N_OUT_WORDS, N_ROUNDS, N_SCHED, SHA256_K, WORD_BITS,
     Z_CONST_POS, a_new_bit, build_matrices, ch_and_bit, e_new_bit, h_bit, h_out_bit, m_bit,
@@ -421,8 +422,6 @@ impl Rng {
 }
 
 fn main() {
-    use flock_prover::r1cs_hashes::sha2::build_block_witness;
-
     let mut rng = Rng::new(0x00C0_FFEE_5A55);
     let inner_rest_len = K_LOG - K_SKIP;
 

@@ -14,9 +14,11 @@
 use flock_core::challenger::FsChallenger;
 use flock_core::field::F128;
 use flock_core::pcs::Commitment;
+use flock_core::pcs::PcsParams;
 use flock_core::zk::ZkRng;
 use flock_prover::prover::R1csProofZkA1;
 use flock_prover::zk_audit_support::FixtureA1M15;
+use flock_prover::zk_certificate::{StatementFamily, ZkGateError, require_certified};
 
 struct Rng(u64);
 impl Rng {
@@ -278,9 +280,6 @@ fn a1_rejects_domain_substitution() {
 /// for an uncertified BLAKE3 shape, the case that *is* reachable.
 #[test]
 fn zk_gate_rejects_uncertified_configuration() {
-    use flock_core::pcs::PcsParams;
-    use flock_prover::zk_certificate::{StatementFamily, ZkGateError, require_certified};
-
     let fx = FixtureA1M15::new();
     // The m=15 audit fixture is deliberately NOT a certified production
     // configuration — the gate must refuse it.

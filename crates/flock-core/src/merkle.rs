@@ -20,7 +20,9 @@
 //! should prepend `0x00`/`0x01` (or equivalent) to distinguish the two
 //! pre-images and avoid second-preimage attacks via interpretation collision.
 
+use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
 use rayon::prelude::*;
+use std::sync::atomic::Ordering::Relaxed;
 
 pub type Hash = [u8; 32];
 
@@ -106,7 +108,6 @@ pub mod hash_count {
 pub fn hash_leaf(data: &[u8]) -> Hash {
     #[cfg(feature = "hash-count")]
     {
-        use std::sync::atomic::Ordering::Relaxed;
         hash_count::LEAF_CALLS.fetch_add(1, Relaxed);
         hash_count::LEAF_COMPRESSIONS.fetch_add(hash_count::sha256_blocks(data.len()), Relaxed);
     }
@@ -167,7 +168,6 @@ pub fn merkle_tree(data: &[u8], num_leaves: usize) -> Vec<Hash> {
                 if outs.len() == 4 {
                     #[cfg(feature = "hash-count")]
                     {
-                        use std::sync::atomic::Ordering::Relaxed;
                         hash_count::LEAF_CALLS.fetch_add(4, Relaxed);
                         hash_count::LEAF_COMPRESSIONS
                             .fetch_add(4 * hash_count::sha256_blocks(leaf_size), Relaxed);
@@ -292,7 +292,6 @@ pub fn merkle_tree_framed(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> Vec<Hash> {
-    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
     assert!(
         num_leaves.is_power_of_two() && num_leaves > 0,
         "num_leaves must be power of 2"
@@ -467,7 +466,6 @@ pub fn verify_merkle_proof_framed(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> bool {
-    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
     if !num_leaves.is_power_of_two() || num_leaves == 0 || index >= num_leaves {
         return false;
     }
@@ -518,8 +516,6 @@ pub fn verify_merkle_multi_proof_framed(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> bool {
-    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
-
     if !num_leaves.is_power_of_two() || num_leaves == 0 {
         return false;
     }
@@ -830,6 +826,13 @@ pub fn verify_merkle_multi_proof(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(any(
+        all(target_arch = "aarch64", target_feature = "sha2"),
+        all(target_arch = "x86_64", target_feature = "sha")
+    ))]
+    use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
+    use crate::ro::{RecordingOracle, RoChannel, RoContext};
+    use std::sync::Arc;
 
     #[test]
     fn two_leaves_matches_hand_computation() {
@@ -972,8 +975,6 @@ mod tests {
 
     #[test]
     fn tree_root_separates_nonce_channel_depth_level_index() {
-        use crate::ro::{RoChannel, RoContext};
-
         let (n_leaves, leaf_size) = (16, 33);
         let data = random_data(n_leaves, leaf_size, 0x4652_414d_4544);
         let ctx = RoContext::native([0xA5; 32]);
@@ -1015,8 +1016,6 @@ mod tests {
 
     #[test]
     fn framed_merkle_proof_rejects_malformed_inputs() {
-        use crate::ro::{RoChannel, RoContext};
-
         let (n_leaves, leaf_size) = (8, 19);
         let data = random_data(n_leaves, leaf_size, 19);
         let ctx = RoContext::native([7; 32]);
@@ -1071,8 +1070,6 @@ mod tests {
 
     #[test]
     fn framed_merkle_multi_proof_roundtrips() {
-        use crate::ro::{RoChannel, RoContext};
-
         let (n_leaves, leaf_size) = (16, 24);
         let data = random_data(n_leaves, leaf_size, 0x4d55_4c54_49);
         let ctx = RoContext::native([0x33; 32]);
@@ -1120,10 +1117,6 @@ mod tests {
 
     #[test]
     fn external_framed_tree_matches_native_and_records_every_node() {
-        use std::sync::Arc;
-
-        use crate::ro::{RecordingOracle, RoChannel, RoContext};
-
         let (n_leaves, leaf_size) = (32, 17);
         let data = random_data(n_leaves, leaf_size, 0x4558_5445_524e_414c);
         let nonce = [0x5C; 32];
@@ -1152,8 +1145,6 @@ mod tests {
     ))]
     #[test]
     fn framed_midstate_simd_matches_scalar_all_tail_shapes() {
-        use crate::ro::{ROLE_LEAF, ROLE_NODE, RoChannel, RoContext, RoTreeHasher};
-
         let ctx = RoContext::native([0x91; 32]);
         for role in [ROLE_LEAF, ROLE_NODE] {
             for len in [

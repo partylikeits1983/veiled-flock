@@ -40,11 +40,11 @@
 //! [`OracleChallenger`], so all three roles query this one oracle object.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
-use flock_core::ro::{ByteOracle, encode_pow_point};
+use flock_core::ro::{ByteOracle, RoContext, encode_pow_point};
 
 // Transcript op tags — must match `flock_core::challenger`'s encoding, since
 // this challenger has to be byte-identical to the honest one.
@@ -184,6 +184,10 @@ impl ProgrammableOracle {
 /// verifier-side querying hit the same oracle.
 pub type SharedOracle = Arc<Mutex<ProgrammableOracle>>;
 
+fn lock_oracle(oracle: &SharedOracle) -> MutexGuard<'_, ProgrammableOracle> {
+    oracle.lock().unwrap_or_else(|error| error.into_inner())
+}
+
 pub fn shared_oracle() -> SharedOracle {
     Arc::new(Mutex::new(ProgrammableOracle::new()))
 }
@@ -215,21 +219,18 @@ impl ProgrammableByteOracle {
 
 impl ByteOracle for ProgrammableByteOracle {
     fn answer(&self, point: &[u8]) -> [u8; 32] {
-        self.oracle
-            .lock()
-            .expect("oracle poisoned")
-            .answer(point, self.retain_points)
+        lock_oracle(&self.oracle).answer(point, self.retain_points)
     }
 }
 
 /// Construct a point-oracle context backed by the same programmable oracle
 /// used by [`OracleChallenger`].
-pub fn ro_context(nonce: [u8; 32], oracle: SharedOracle) -> flock_core::ro::RoContext {
-    flock_core::ro::RoContext::external(nonce, Arc::new(ProgrammableByteOracle::new(oracle)))
+pub fn ro_context(nonce: [u8; 32], oracle: SharedOracle) -> RoContext {
+    RoContext::external(nonce, Arc::new(ProgrammableByteOracle::new(oracle)))
 }
 
-fn answering_only_ro_context(nonce: [u8; 32], oracle: SharedOracle) -> flock_core::ro::RoContext {
-    flock_core::ro::RoContext::external(
+fn answering_only_ro_context(nonce: [u8; 32], oracle: SharedOracle) -> RoContext {
+    RoContext::external(
         nonce,
         Arc::new(ProgrammableByteOracle::answering_only(oracle)),
     )
@@ -292,19 +293,13 @@ impl OracleChallenger {
     /// through the oracle so grind queries appear in its transcript.
     fn pow_answer(&self, state: &[u8; 32], nonce: u64) -> [u8; 32] {
         let point = encode_pow_point(state, nonce);
-        self.oracle
-            .lock()
-            .expect("oracle poisoned")
-            .answer(&point, true)
+        lock_oracle(&self.oracle).answer(&point, true)
     }
 
     /// The proof-of-work state digest, mirroring `FsChallenger`, but routed
     /// through the programmable oracle so no point query bypasses the game.
     fn pow_state_digest(&self) -> [u8; 32] {
-        self.oracle
-            .lock()
-            .expect("oracle poisoned")
-            .answer(&self.absorbed, true)
+        lock_oracle(&self.oracle).answer(&self.absorbed, true)
     }
 
     /// Squeeze through the oracle, mirroring `FsChallenger::squeeze_into`.
@@ -313,11 +308,7 @@ impl OracleChallenger {
         let mut ctr: u64 = 0;
         while off < out.len() {
             let point = self.squeeze_point(ctr);
-            let block = self
-                .oracle
-                .lock()
-                .expect("oracle poisoned")
-                .answer(&point, true);
+            let block = lock_oracle(&self.oracle).answer(&point, true);
             let take = (out.len() - off).min(32);
             out[off..off + take].copy_from_slice(&block[..take]);
             off += take;
@@ -362,7 +353,7 @@ impl OracleChallenger {
             // Bytes past the requested length are never read by the squeeze,
             // so leaving them zero is harmless.
             {
-                let mut oracle = self.oracle.lock().expect("oracle poisoned");
+                let mut oracle = lock_oracle(&self.oracle);
                 if oracle.was_queried(&point) {
                     return None;
                 }
@@ -383,7 +374,7 @@ impl OracleChallenger {
         let mut block = [0u8; 32];
         block[..8].copy_from_slice(&value.lo.to_le_bytes());
         block[8..16].copy_from_slice(&value.hi.to_le_bytes());
-        let mut oracle = self.oracle.lock().expect("oracle poisoned");
+        let mut oracle = lock_oracle(&self.oracle);
         if oracle.was_queried(&point) {
             return None;
         }
@@ -393,7 +384,7 @@ impl OracleChallenger {
 }
 
 impl Challenger for OracleChallenger {
-    fn ro_context(&self, nonce: [u8; 32]) -> flock_core::ro::RoContext {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
         answering_only_ro_context(nonce, self.oracle.clone())
     }
 

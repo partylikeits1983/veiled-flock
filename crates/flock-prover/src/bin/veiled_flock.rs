@@ -13,14 +13,12 @@ use flock_prover::{
 use serde::{Deserialize, Serialize};
 
 const DOMAIN: &[u8] = b"veiled-flock-cli-succinct-v0";
-const MAGIC: [u8; 8] = *b"VFLK0004";
 const MAX_MESSAGES: usize = 256;
 // Bound file reads and decoder allocation for untrusted proof bundles.
 const MAX_BUNDLE_BYTES: u64 = 640 * 1024;
 
 #[derive(Serialize, Deserialize)]
 struct Bundle {
-    magic: [u8; 8],
     digests: Vec<[u8; DIGEST_BYTES]>,
     commitment: Commitment,
     proof: SuccinctVeilProof,
@@ -123,7 +121,6 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
         .map_err(|error| format!("proof generation failed: {error:?}"))?;
     eprintln!("proved in {:.3}s", started.elapsed().as_secs_f64());
     Ok(Bundle {
-        magic: MAGIC,
         digests,
         commitment,
         proof,
@@ -131,8 +128,8 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
 }
 
 fn verify(bundle: &Bundle) -> Result<(), String> {
-    if bundle.magic != MAGIC || bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
-        return Err("invalid bundle header or statement shape".to_string());
+    if bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
+        return Err("invalid bundle statement shape".to_string());
     }
     let setup = Blake3PreimageZkSetup::new_succinct(bundle.digests.len());
     let mut challenger = FsChallenger::new(DOMAIN);

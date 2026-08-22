@@ -1,9 +1,17 @@
 use super::*;
-use crate::challenger::FsChallenger;
+use crate::zerocheck::univariate_skip::pack_bits;
+use crate::{
+    challenger::{FsChallenger, RandomChallenger},
+    ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8},
+};
 
 mod helpers;
 
 use helpers::{Rng, ScriptedEqChallenger};
+
+const TEST_DOMAIN: &[u8] = b"flock-zerocheck-test-v0";
+const ZK_TEST_DOMAIN: &[u8] = b"flock-zerocheck-zk-test-v0";
+const ORDERING_TEST_DOMAIN: &[u8] = b"flock-zerocheck-ordering-test-v0";
 
 #[test]
 fn equality_point_rejects_noninvertible_outer_coordinates() {
@@ -33,7 +41,6 @@ fn shared_round_weights_match_quadratic_reconstruction() {
 // Pack three Boolean vectors into the (a_packed, b_packed, c_packed)
 // shape that `prove_packed` consumes.
 fn pack_abc(a: &[bool], b: &[bool], c: &[bool]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
-    use univariate_skip::pack_bits;
     (pack_bits(a), pack_bits(b), pack_bits(c))
 }
 
@@ -47,10 +54,10 @@ fn prove_verify_roundtrip_honest() {
         let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
 
         let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
+        let mut ch_prove = FsChallenger::new(TEST_DOMAIN);
         let (proof, claim_p) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
 
-        let mut ch_verify = FsChallenger::new(b"flock-test-v0");
+        let mut ch_verify = FsChallenger::new(TEST_DOMAIN);
         let result = verify(m, &proof, &mut ch_verify);
         let claim_v = result.unwrap_or_else(|e| panic!("verify rejected at m={m}: {e:?}"));
 
@@ -69,7 +76,7 @@ fn prove_verify_zk_roundtrip_honest() {
         let p_small = rng.field_mask(m);
         let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
 
-        let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
+        let mut ch_prove = FsChallenger::new(ZK_TEST_DOMAIN);
         let (proof, claim_p) = prove_packed_padded_zk(
             &a_p,
             &b_p,
@@ -80,7 +87,7 @@ fn prove_verify_zk_roundtrip_honest() {
             &mut ch_prove,
         );
 
-        let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
+        let mut ch_verify = FsChallenger::new(ZK_TEST_DOMAIN);
         let claim_v = verify_zk(m, &proof, &mut ch_verify)
             .unwrap_or_else(|e| panic!("verify_zk rejected honest proof at m={m}: {e:?}"));
         assert_eq!(claim_p, claim_v, "zk claim mismatch at m={m}");
@@ -112,7 +119,7 @@ fn prove_verify_zk_round1_mask_roundtrip() {
             };
             let (sc_p, sh_p, _) = pack_abc(&sc_bits, &sh_bits, &zeros);
 
-            let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
+            let mut ch_prove = FsChallenger::new(ZK_TEST_DOMAIN);
             let (proof, claim_p, mt) = prove_packed_padded_zk_masked(
                 &a_p,
                 &b_p,
@@ -128,16 +135,14 @@ fn prove_verify_zk_round1_mask_roundtrip() {
             );
             let mt = mt.expect("mask transcript");
 
-            let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
+            let mut ch_verify = FsChallenger::new(ZK_TEST_DOMAIN);
             let claim_v =
                 verify_zk_masked(m, &proof, Some((mt.mc_at_z, mt.h_at_z)), &mut ch_verify)
-                    .unwrap_or_else(|e| {
-                        panic!("{stage} mask verify rejected honest proof at m={m}: {e:?}")
-                    });
-            assert_eq!(claim_p, claim_v, "{stage} mask claim mismatch at m={m}");
+                    .unwrap_or_else(|e| panic!("stage={stage}, m={m}: {e:?}"));
+            assert_eq!(claim_p, claim_v, "stage={stage}, m={m}");
 
             // A zero mask must return the unmasked c claim.
-            let mut ch_ref = FsChallenger::new(b"flock-zk-test-v0");
+            let mut ch_ref = FsChallenger::new(ZK_TEST_DOMAIN);
             let (_, claim_ref) = prove_packed_padded_zk(
                 &a_p,
                 &b_p,
@@ -148,10 +153,7 @@ fn prove_verify_zk_round1_mask_roundtrip() {
                 &mut ch_ref,
             );
             if stage == "zero" {
-                assert_eq!(
-                    claim_ref, claim_v,
-                    "zero masks must reproduce the unmasked protocol at m={m}"
-                );
+                assert_eq!(claim_ref, claim_v, "m={m}");
             }
         }
     }
@@ -160,7 +162,6 @@ fn prove_verify_zk_round1_mask_roundtrip() {
 // The round-1 mask construction requires the C-side output to depend only on C.
 #[test]
 fn round1_c_output_is_independent_of_ab() {
-    use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
     let m = 13usize;
     let k_skip = K_SKIP;
     let mut rng = Rng::new(24601);
@@ -183,11 +184,7 @@ fn round1_c_output_is_independent_of_ab() {
     let (_, c_without_ab) = round1_shift_reduce_extract_c_packed_padded(
         &z_p, &z_p, &c_p, m, k_skip, &r, &inv_table, &pad,
     );
-    assert_eq!(
-        c_with_ab, c_without_ab,
-        "the round-1 C output depends on a,b; cannot derive a mask's \
-             C-side message by zeroing them"
-    );
+    assert_eq!(c_with_ab, c_without_ab);
 }
 
 // Reject mutations to every masked-proof component.
@@ -200,7 +197,7 @@ fn verify_zk_rejects_mutations() {
     let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
     let p_small = rng.field_mask(m);
     let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-    let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
+    let mut ch_prove = FsChallenger::new(ZK_TEST_DOMAIN);
     let (proof, _) = prove_packed_padded_zk(
         &a_p,
         &b_p,
@@ -215,7 +212,7 @@ fn verify_zk_rejects_mutations() {
     let mutate = |f: &dyn Fn(&mut ZkZerocheckProof)| {
         let mut bad = proof.clone();
         f(&mut bad);
-        let mut ch = FsChallenger::new(b"flock-zk-test-v0");
+        let mut ch = FsChallenger::new(ZK_TEST_DOMAIN);
         assert!(verify_zk(m, &bad, &mut ch).is_err());
     };
     mutate(&|pr| pr.mask_init += bump);
@@ -254,7 +251,7 @@ fn zk_invalid_witness_rejected() {
         let p_small = rng.field_mask(m);
         let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
 
-        let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
+        let mut ch_prove = FsChallenger::new(ZK_TEST_DOMAIN);
         let (proof, _) = prove_packed_padded_zk(
             &a_p,
             &b_p,
@@ -264,19 +261,15 @@ fn zk_invalid_witness_rejected() {
             &PaddingSpec::dense(m),
             &mut ch_prove,
         );
-        let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
+        let mut ch_verify = FsChallenger::new(ZK_TEST_DOMAIN);
         let res = verify_zk(m, &proof, &mut ch_verify);
-        assert!(
-            res.is_err(),
-            "verify_zk ACCEPTED a false statement at m={m}: {res:?}"
-        );
+        assert!(res.is_err(), "m={m}");
     }
 }
 
 // Replay verify_zk's final residual with an overridden mask_init.
 #[cfg(test)]
 fn zk_final_residual(m: usize, proof: &ZkZerocheckProof, seed: u64, mask_init: F128) -> F128 {
-    use crate::challenger::RandomChallenger;
     let k_skip = K_SKIP;
     let mut ch = RandomChallenger::new(seed);
     let r = sample_eq_point(m, &mut ch);
@@ -310,7 +303,6 @@ fn zk_final_residual(m: usize, proof: &ZkZerocheckProof, seed: u64, mask_init: F
 // Fiat--Shamir ordering rejects that cancellation except with probability 2^-128.
 #[test]
 fn zk_gamma_cancellation_unique_and_fs_ordering() {
-    use crate::challenger::RandomChallenger;
     let m = 14;
     let seed = 0x6A77A_5EED;
     let mut rng = Rng::new(0xBAD_C0DE);
@@ -335,27 +327,16 @@ fn zk_gamma_cancellation_unique_and_fs_ordering() {
 
     // (a) Rejected as-is.
     let mut ch = RandomChallenger::new(seed);
-    assert!(
-        verify_zk(m, &proof, &mut ch).is_err(),
-        "invalid witness must be rejected at the honest σ_z"
-    );
+    assert!(verify_zk(m, &proof, &mut ch).is_err());
 
     // (b) Residual is affine in σ_z; solve for the unique root σ*.
     let r0 = zk_final_residual(m, &proof, seed, proof.mask_init);
     let r1 = zk_final_residual(m, &proof, seed, proof.mask_init + F128::ONE);
     let slope = r0 + r1; // affine over char 2: R(x+1) + R(x) = slope
-    assert_ne!(r0, F128::ZERO, "defect must be visible in the residual");
-    assert_ne!(
-        slope,
-        F128::ZERO,
-        "σ_z slope γ·Π(1+ρ)/(1+r_eq) must be nonzero"
-    );
+    assert_ne!(r0, F128::ZERO);
+    assert_ne!(slope, F128::ZERO);
     let sigma_star = proof.mask_init + r0 * slope.inv();
-    assert_eq!(
-        zk_final_residual(m, &proof, seed, sigma_star),
-        F128::ZERO,
-        "σ* must be the root"
-    );
+    assert_eq!(zk_final_residual(m, &proof, seed, sigma_star), F128::ZERO);
     // Uniqueness: affine with nonzero slope ⇒ any other σ has nonzero
     // residual; spot-check a few.
     for k in 1..8u64 {
@@ -372,28 +353,17 @@ fn zk_gamma_cancellation_unique_and_fs_ordering() {
     let mut cheat = proof.clone();
     cheat.mask_init = sigma_star;
     let mut ch = RandomChallenger::new(seed);
-    assert!(
-        verify_zk(m, &cheat, &mut ch).is_ok(),
-        "σ_z chosen AFTER γ must cancel the invalid witness under a \
-             fixed-challenge (ordering-violating) verifier — this is the \
-             attack Fiat–Shamir ordering exists to prevent"
-    );
+    assert!(verify_zk(m, &cheat, &mut ch).is_ok());
 
     // (d) Under Fiat–Shamir the same proof is rejected: γ is derived
     // after σ_z is absorbed, so the solved-for γ never occurs.
-    let mut ch_fs = FsChallenger::new(b"flock-zk-order-v0");
-    assert!(
-        verify_zk(m, &cheat, &mut ch_fs).is_err(),
-        "FS-derived γ must deny the σ_z-after-γ cancellation"
-    );
+    let mut ch_fs = FsChallenger::new(ORDERING_TEST_DOMAIN);
+    assert!(verify_zk(m, &cheat, &mut ch_fs).is_err());
 
     // (e) Thin accepting set: 100 fresh challenge tuples all reject.
     for s in 0..100u64 {
         let mut ch = RandomChallenger::new(0x51DE_0000 + s);
-        assert!(
-            verify_zk(m, &cheat, &mut ch).is_err(),
-            "patched proof accepted at unrelated challenge tuple {s}"
-        );
+        assert!(verify_zk(m, &cheat, &mut ch).is_err(), "seed={s}");
     }
 }
 
@@ -407,14 +377,14 @@ fn verify_rejects_mutations() {
     let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
 
     let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-    let mut ch_prove = FsChallenger::new(b"flock-test-v0");
+    let mut ch_prove = FsChallenger::new(TEST_DOMAIN);
     let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
 
     let bump = F128::ONE;
     let mutate = |f: &dyn Fn(&mut ZerocheckProof)| {
         let mut bad = proof.clone();
         f(&mut bad);
-        let mut ch = FsChallenger::new(b"flock-test-v0");
+        let mut ch = FsChallenger::new(TEST_DOMAIN);
         assert!(verify(m, &bad, &mut ch).is_err());
     };
     mutate(&|pr| pr.round1_ab[0] += bump);
@@ -437,13 +407,13 @@ fn verify_rejects_shape_errors() {
     let b = rng.bits(1 << m);
     let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
     let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-    let mut ch_prove = FsChallenger::new(b"flock-test-v0");
+    let mut ch_prove = FsChallenger::new(TEST_DOMAIN);
     let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
 
     // Truncate round1_ab.
     let mut bad = proof.clone();
     bad.round1_ab.pop();
-    let mut ch = FsChallenger::new(b"flock-test-v0");
+    let mut ch = FsChallenger::new(TEST_DOMAIN);
     assert!(matches!(
         verify(m, &bad, &mut ch),
         Err(VerifyError::BadRound1Length { .. })
@@ -452,14 +422,14 @@ fn verify_rejects_shape_errors() {
     // Truncate multilinear rounds.
     let mut bad = proof.clone();
     bad.multilinear_rounds.pop();
-    let mut ch = FsChallenger::new(b"flock-test-v0");
+    let mut ch = FsChallenger::new(TEST_DOMAIN);
     assert!(matches!(
         verify(m, &bad, &mut ch),
         Err(VerifyError::BadMultilinearRoundsLength { .. })
     ));
 
     // log_n too small.
-    let mut ch = FsChallenger::new(b"flock-test-v0");
+    let mut ch = FsChallenger::new(TEST_DOMAIN);
     assert!(matches!(
         verify(K_SKIP + 6, &proof, &mut ch),
         Err(VerifyError::LogNTooSmall { .. })
@@ -478,15 +448,12 @@ fn false_statement_rejected() {
         c[3] = !c[3];
 
         let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
+        let mut ch_prove = FsChallenger::new(TEST_DOMAIN);
         let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
 
-        let mut ch_verify = FsChallenger::new(b"flock-test-v0");
+        let mut ch_verify = FsChallenger::new(TEST_DOMAIN);
         let res = verify(m, &proof, &mut ch_verify);
-        assert!(
-            res.is_err(),
-            "verify ACCEPTED a false statement at m={m}: {res:?}"
-        );
+        assert!(res.is_err(), "m={m}");
     }
 }
 
@@ -500,15 +467,12 @@ fn final_ab_claims_bound_to_transcript() {
     let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
     let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
 
-    let mut ch_prove = FsChallenger::new(b"flock-test-v0");
+    let mut ch_prove = FsChallenger::new(TEST_DOMAIN);
     let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
 
     // Capture the next challenge, which lincheck uses as α.
-    let mut ch_honest = FsChallenger::new(b"flock-test-v0");
-    assert!(
-        verify(m, &proof, &mut ch_honest).is_ok(),
-        "honest verify rejected"
-    );
+    let mut ch_honest = FsChallenger::new(TEST_DOMAIN);
+    assert!(verify(m, &proof, &mut ch_honest).is_ok());
     let alpha_honest = ch_honest.sample_f128();
 
     // Preserve final_a_eval * final_b_eval while changing both factors.
@@ -516,40 +480,25 @@ fn final_ab_claims_bound_to_transcript() {
         lo: 0x0123_4567_89ab_cdef,
         hi: 0xfedc_ba98_7654_3210,
     };
-    assert!(t != F128::ZERO && t != F128::ONE, "t must be nontrivial");
+    assert!(t != F128::ZERO && t != F128::ONE);
     let mut bad = proof.clone();
     bad.final_a_eval *= t;
     bad.final_b_eval *= t.inv();
-    assert_ne!(
-        bad.final_a_eval, proof.final_a_eval,
-        "tamper must change final_a_eval"
-    );
-    assert_ne!(
-        bad.final_b_eval, proof.final_b_eval,
-        "tamper must change final_b_eval"
-    );
+    assert_ne!(bad.final_a_eval, proof.final_a_eval);
+    assert_ne!(bad.final_b_eval, proof.final_b_eval);
     assert_eq!(
         bad.final_a_eval * bad.final_b_eval,
-        proof.final_a_eval * proof.final_b_eval,
-        "tamper must preserve the product",
+        proof.final_a_eval * proof.final_b_eval
     );
 
     // Zerocheck checks only the product; transcript binding protects the
     // individual claims used downstream.
-    let mut ch_tampered = FsChallenger::new(b"flock-test-v0");
-    assert!(
-        verify(m, &bad, &mut ch_tampered).is_ok(),
-        "product-preserving tamper rejected by zerocheck's own checks (unexpected)",
-    );
+    let mut ch_tampered = FsChallenger::new(TEST_DOMAIN);
+    assert!(verify(m, &bad, &mut ch_tampered).is_ok());
     let alpha_tampered = ch_tampered.sample_f128();
 
     // Observing both claims must change the downstream challenge.
-    assert_ne!(
-        alpha_honest, alpha_tampered,
-        "final A/B claims are not bound into the transcript: a product-preserving \
-             tamper leaves the downstream challenge unchanged, breaking lincheck's \
-             α-batched reduction of (v_a, v_b)",
-    );
+    assert_ne!(alpha_honest, alpha_tampered);
 }
 
 // The proof is deterministic for a fixed witness and challenger seed.
@@ -562,8 +511,8 @@ fn prove_deterministic() {
     let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
 
     let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-    let mut ch1 = FsChallenger::new(b"flock-test-v0");
-    let mut ch2 = FsChallenger::new(b"flock-test-v0");
+    let mut ch1 = FsChallenger::new(TEST_DOMAIN);
+    let mut ch2 = FsChallenger::new(TEST_DOMAIN);
     let (proof1, claim1) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch1);
     let (proof2, claim2) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch2);
 

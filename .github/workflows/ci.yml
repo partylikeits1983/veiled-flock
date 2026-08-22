@@ -31,6 +31,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --locked --release --workspace --all-targets --all-features -- -D warnings
 
+      - name: Import placement
+        run: cargo run --locked --release -p import-lint -- .
+
       - name: Function and zero-knowledge smoke tests
         run: |
           cargo test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_preimage_roundtrip_and_mutations -- --exact

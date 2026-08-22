@@ -21,6 +21,7 @@
 //!   Merkle commitments, so the whole system rests on a single hash.
 
 use crate::{field::F128, ro::RoContext};
+use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
 // `Send` supertrait: the verifier runs its PIOP/PCS replay inside a dedicated
@@ -28,10 +29,8 @@ use sha2::{Digest, Sha256};
 // it threads through must be able to cross into that pool. Both concrete
 // challengers (`RandomChallenger`, `FsChallenger`) are trivially `Send`.
 pub trait Challenger: Send {
-    /// Build the per-proof context used by point-hashed protocol roles.
-    /// Production challengers use native SHA-256. Programmable challengers
-    /// override this so Fiat--Shamir, PCS, and auxiliary commitments query the
-    /// same oracle object.
+    /// Build the SHA-256 context used by PCS and auxiliary commitments.
+    /// Simulator challengers override this to share their programmable oracle.
     fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
         RoContext::native(nonce)
     }
@@ -344,7 +343,6 @@ impl Challenger for FsChallenger {
             // usually falls inside one block (so all threads do useful
             // pre-match work), small enough to avoid the 4× over-scan the old
             // `+2` block caused (which left ~¾ of threads doing cancelled work).
-            use rayon::prelude::*;
             let block: u64 = 1 << (bits.min(24) + 1);
             let mut start: u64 = 0;
             loop {

@@ -42,6 +42,9 @@ pub use ring_switch::{RingSwitchProof, SparseEqTensor};
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::zerocheck::PaddingSpec;
+use crate::zerocheck::multilinear::eq_eval;
+#[cfg(feature = "zk")]
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Batched opening proof: ring-switching frontend + Ligerito backend.
@@ -312,7 +315,6 @@ fn open_zk_blinded<Ch: Challenger>(
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> (ligerito::LigeritoProof, ZkBlindOpening) {
-    use rayon::prelude::*;
     let w = packed_witness.len();
     assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
     assert_eq!(
@@ -464,7 +466,6 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     let gammas_pl: Vec<F128> = (0..n_pl).map(|_| challenger.sample_f128()).collect();
 
     let t = std::time::Instant::now();
-    use rayon::prelude::*;
 
     let l = if let Some((_, out)) = rs_results.first() {
         out.rs_eq_ind.len()
@@ -725,8 +726,6 @@ fn sparse_scatter_add_parallel(
     eq: &SparseEqTensor,
     gamma: F128,
 ) -> (F128, F128) {
-    use rayon::prelude::*;
-
     let c_total = eq.live_tensor.len();
     if c_total == 0 {
         return (F128::ZERO, F128::ZERO);
@@ -971,7 +970,6 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
     //    For BLAKE3 m=30: ris is 19 dims, yr is 4 dims → 19× prefix reuse.
     let log_n = commitment.params.log_msg_len();
     let eval_b_witness = |ris: &[F128], yr_log_n: usize| -> Vec<F128> {
-        use crate::zerocheck::multilinear::eq_eval;
         let yr_len = 1usize << yr_log_n;
         let prefix_len = ris.len();
 
@@ -1020,7 +1018,6 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
         //      y_suffix is binary (bits of y), so we use the binary-query
         //      specializations of eval_rs_eq_finish / eq_eval — each suffix
         //      step collapses to a single scale_vertical / scalar product.
-        use rayon::prelude::*;
         debug_assert!(yr_log_n <= 32, "yr_log_n > 32 not supported by binary path");
         (0..yr_len)
             .into_par_iter()
@@ -1109,8 +1106,18 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
 mod tests {
     use super::*;
     use crate::challenger::FsChallenger;
+    #[cfg(feature = "zk")]
+    use crate::ro::{RecordingOracle, RoChannel, RoContext};
+    #[cfg(feature = "zk")]
+    use crate::zerocheck::SmallMaskSpec;
     use crate::zerocheck::multilinear::lagrange_weights_naive;
     use crate::zerocheck::univariate_skip::build_eq;
+    #[cfg(feature = "zk")]
+    use crate::zerocheck::univariate_skip::pack_bits;
+    #[cfg(feature = "zk")]
+    use crate::zk::ZkRng;
+    #[cfg(feature = "zk")]
+    use std::sync::Arc;
 
     struct Rng(u64);
     impl Rng {
@@ -1199,11 +1206,6 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn pcs_zk_roundtrip_and_negatives() {
-        use std::sync::Arc;
-
-        use crate::ro::{RecordingOracle, RoChannel, RoContext};
-        use crate::zerocheck::univariate_skip::build_eq;
-        use crate::zk::ZkRng;
         let m = 13usize;
         let mut rng = Rng::new(0x2CF0);
         let z = rng.bits(1 << m);
@@ -1328,9 +1330,6 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn zk_field_mask_hiding_open_roundtrip() {
-        use crate::zerocheck::univariate_skip::pack_bits;
-        use crate::zerocheck::{SmallMaskSpec, univariate_skip::build_eq};
-        use crate::zk::ZkRng;
         let m = 13usize;
         let mut rng = Rng::new(0x9A2B);
         let a = rng.bits(1 << m);

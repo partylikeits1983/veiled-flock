@@ -231,7 +231,7 @@ fork.
 
 ## 11. Proof format
 
-The CLI bundle uses magic `VFLK0004` and contains:
+The CLI bundle contains:
 
 ```text
 public digest list

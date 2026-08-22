@@ -14,8 +14,7 @@ fn bundle_codec_is_explicit_fixint_and_roundtrips() {
     };
     let encoded = bundle_options().serialize(&fixture).unwrap();
 
-    // Bincode 1.3's root helper is the legacy fixed-integer encoding. Keep the
-    // bundle format byte-compatible while making both CLI directions explicit.
+    // Bincode 1.3's root helper uses the same fixed-integer encoding.
     assert_eq!(encoded, bincode::serialize(&fixture).unwrap());
     assert_eq!(
         bundle_options()
@@ -33,7 +32,6 @@ fn decoder_rejects_oversized_input() {
 
 #[test]
 fn decoder_rejects_an_unbounded_digest_vector() {
-    let mut bytes = MAGIC.to_vec();
-    bytes.extend_from_slice(&u64::MAX.to_le_bytes());
+    let bytes = u64::MAX.to_le_bytes();
     assert!(decode_bundle(&bytes).is_err());
 }

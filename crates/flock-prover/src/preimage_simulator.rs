@@ -69,6 +69,11 @@ use flock_core::zerocheck::{self, K_SKIP, ZkZerocheckProof};
 
 use crate::digest_bind::{DigestChallenges, digest_claim};
 use crate::prover::R1csProofZkA1;
+use crate::r1cs_hashes::blake3::{
+    ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+};
+use crate::r1cs_hashes::blake3_preimage::{MESSAGE_BYTES, message_compression};
+use flock_core::zk::MaskSampler;
 
 /// Number of inner coordinates the zerocheck pins to protocol constants.
 const N_INNER: usize = 7;
@@ -453,12 +458,6 @@ pub fn simulate(
     oracle: &crate::sim_oracle::SharedOracle,
     domain: &[u8],
 ) -> Result<SimulatedProof, SimError> {
-    use crate::r1cs_hashes::blake3::{
-        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-    };
-    use crate::r1cs_hashes::blake3_preimage::{MESSAGE_BYTES, message_compression};
-    use flock_core::zk::MaskSampler;
-
     let setup = sealed.setup();
     let r1cs = &setup.r1cs;
     let pcs_params = &setup.pcs_params;
@@ -560,7 +559,10 @@ pub fn simulate(
     if let Some(e) = source.failure {
         return Err(e);
     }
-    let programmed = oracle.lock().expect("oracle poisoned").programmed_len();
+    let programmed = oracle
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .programmed_len();
     Ok(SimulatedProof {
         proof,
         commitment,
