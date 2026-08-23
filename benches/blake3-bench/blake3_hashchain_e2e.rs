@@ -24,13 +24,11 @@
 //! Run: `cargo bench -p veiled-flock-benchmarks`.
 //! Smoke: `BENCH_SMOKE=1 cargo bench -p veiled-flock-benchmarks`.
 
-use bincode::Options;
 use blake3_bench::{
-    BenchRow, RowTimings, blake3_chain, blake3_native_rate, json_path_from_args, print_table, runs,
-    smoke, time_best, verify_chain_linkage, write_json,
+    BenchRow, RowTimings, blake3_chain, blake3_native_rate, json_path_from_args, max_log_from_env,
+    print_table, proof_size, runs, smoke, time_best, verify_chain_linkage, write_json,
 };
 use flock_prover::challenger::FsChallenger;
-use flock_prover::proof_io::fixint_options;
 use flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 use flock_prover::veiled_preimage::VeiledBlake3Setup;
 use flock_prover::zk::ZkRng;
@@ -39,32 +37,17 @@ const DOMAIN: &[u8] = b"veiled-flock-bench-blake3-e2e-v0";
 const CHAIN_SEED: u64 = 0xC0FFEE_42;
 const ZK_SEED: [u8; 32] = [0x42; 32];
 
-/// Size a value with the canonical fixint encoder (no size limit — framed
-/// proofs exceed the CLI's untrusted-read cap by design).
-fn proof_size<T: serde::Serialize>(value: &T) -> usize {
-    fixint_options()
-        .serialized_size(value)
-        .expect("bincode size of an in-memory proof") as usize
-}
-
 fn framed_sweep() -> Vec<usize> {
     if smoke() {
         return vec![2];
     }
-    let max_log: u32 = match std::env::var("BENCH_FRAMED_MAX_LOG") {
-        Err(_) => 6,
-        Ok(v) => {
-            let k = v
-                .trim()
-                .parse()
-                .expect("BENCH_FRAMED_MAX_LOG must be an integer");
-            assert!(
-                (1..=14).contains(&k),
-                "BENCH_FRAMED_MAX_LOG must be in 1..=14 (m = 14 + log; see the memory model)"
-            );
-            k
-        }
-    };
+    let max_log = max_log_from_env(
+        "BENCH_FRAMED_MAX_LOG",
+        6,
+        1,
+        14,
+        "m = 14 + log; see the memory model",
+    );
     (1..=max_log).map(|k| 1usize << k).collect()
 }
 

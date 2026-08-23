@@ -13,11 +13,6 @@ flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
 # blake3-bench's lib and is shared from there.
 blake3-bench = { path = "../blake3-bench" }
 
-[dev-dependencies]
-# Proof-size measurement uses one fixint encoder for all size columns.
-bincode = { workspace = true }
-serde = { workspace = true }
-
 # Keep libtest's default bench harness off the lib so `cargo bench -- <args>`
 # reaches only the custom bench target.
 [lib]

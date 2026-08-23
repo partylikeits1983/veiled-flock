@@ -14,13 +14,10 @@ publish = false
 [dependencies]
 flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
 blake3 = { workspace = true }
-serde = { workspace = true }
-serde_json = { workspace = true }
-
-[dev-dependencies]
 # Proof-size measurement uses one fixint encoder for all size columns.
 bincode = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 
 # Keep libtest's default bench harness off the lib so `cargo bench -- <args>`
 # reaches only the custom bench target.

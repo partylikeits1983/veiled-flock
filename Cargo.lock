@@ -245,10 +245,8 @@ dependencies = [
 name = "keccak-bench"
 version = "0.1.0"
 dependencies = [
- "bincode",
  "blake3-bench",
  "flock-prover",
- "serde",
 ]
 
 [[package]]

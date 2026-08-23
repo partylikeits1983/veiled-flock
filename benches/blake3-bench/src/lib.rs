@@ -93,15 +93,27 @@ pub fn verify_chain_linkage(digests: &[[u8; DIGEST_BYTES]]) -> bool {
     })
 }
 
-/// Measure the native BLAKE3 chain rate once, in hashes per second.
+/// Measure an amortized native rate: warm up on `links / 10`, then time
+/// `links` executions of `chain` and return executions per second.
 ///
-/// One calibration serves every row: hash chains scale linearly, so
-/// `native seconds at n = n / rate`. The measurement warms up first and
-/// then times a fixed link count, so small-n rows never divide by a
+/// One calibration serves every bench row: hash chains scale linearly, so
+/// `native seconds at n = n / rate`, and small-n rows never divide by a
 /// noise-level baseline.
+pub fn amortized_rate(links: usize, chain: impl Fn(usize)) -> f64 {
+    chain(links / 10); // warmup
+    let start = Instant::now();
+    chain(links);
+    links as f64 / start.elapsed().as_secs_f64()
+}
+
+/// The calibration link count: small in smoke mode.
+pub fn calibration_links() -> usize {
+    if smoke() { 10_000 } else { 100_000 }
+}
+
+/// Measure the native BLAKE3 chain rate once, in hashes per second.
 pub fn blake3_native_rate() -> f64 {
-    let links = if smoke() { 10_000 } else { 100_000 };
-    let chain = |count: usize| {
+    amortized_rate(calibration_links(), |count| {
         let mut head = SplitMix(0xBA5E_11E5).bytes32();
         for _ in 0..count {
             let mut message = [0u8; MESSAGE_BYTES];
@@ -109,11 +121,7 @@ pub fn blake3_native_rate() -> f64 {
             head = *blake3::hash(std::hint::black_box(&message)).as_bytes();
         }
         std::hint::black_box(head);
-    };
-    chain(links / 10); // warmup
-    let start = Instant::now();
-    chain(links);
-    links as f64 / start.elapsed().as_secs_f64()
+    })
 }
 
 /// Format a duration in seconds as an aligned human-readable string.
@@ -202,7 +210,6 @@ impl BenchRow {
     /// `hashes_per_s = n_real / prove_s` and
     /// `slowdown = prove_s / (n_real / native_rate)`. Every backend row
     /// function uses this constructor, so the formulas exist once.
-    #[allow(clippy::too_many_arguments)]
     pub fn new(
         backend: &'static str,
         relation: &'static str,
@@ -227,6 +234,39 @@ impl BenchRow {
             hashes_per_s: n_real as f64 / timings.prove_s,
             slowdown: timings.prove_s / native_s,
             params,
+        }
+    }
+}
+
+/// Size a value with the canonical fixint encoder
+/// ([`flock_prover::proof_io::fixint_options`], no size limit — framed
+/// proofs exceed the CLI's untrusted-read cap by design). One encoder
+/// serves every proof-size column.
+pub fn proof_size<T: serde::Serialize>(value: &T) -> usize {
+    use bincode::Options;
+    flock_prover::proof_io::fixint_options()
+        .serialized_size(value)
+        .expect("bincode size of an in-memory proof") as usize
+}
+
+/// Read an optional `MAX_LOG`-style sweep override from the environment.
+///
+/// Returns `default` when `name` is unset. A value that does not parse as
+/// an integer, or falls outside `min..=max`, stops the bench loudly —
+/// a silently adjusted override would run the wrong sweep.
+pub fn max_log_from_env(name: &str, default: u32, min: u32, max: u32, hint: &str) -> u32 {
+    match std::env::var(name) {
+        Err(_) => default,
+        Ok(v) => {
+            let k: u32 = v
+                .trim()
+                .parse()
+                .unwrap_or_else(|_| panic!("{name} must be an integer"));
+            assert!(
+                (min..=max).contains(&k),
+                "{name} must be in {min}..={max} ({hint})"
+            );
+            k
         }
     }
 }

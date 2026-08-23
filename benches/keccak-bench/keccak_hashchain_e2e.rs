@@ -17,12 +17,11 @@
 //! Run: `cargo bench -p keccak-bench`.
 //! Smoke: `BENCH_SMOKE=1 cargo bench -p keccak-bench` (n = 64, 1 run).
 
-use bincode::Options;
 use blake3_bench::{
-    BenchRow, RowTimings, json_path_from_args, print_table, runs, smoke, time_best, write_json,
+    BenchRow, RowTimings, json_path_from_args, max_log_from_env, print_table, proof_size, runs,
+    smoke, time_best, write_json,
 };
 use flock_prover::challenger::FsChallenger;
-use flock_prover::proof_io::fixint_options;
 use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup, State, keccak_f};
 use flock_prover::zk::ZkRng;
 use keccak_bench::{keccak_honest_chain, keccak_native_rate, verify_state_linkage};
@@ -31,31 +30,17 @@ const DOMAIN: &[u8] = b"veiled-flock-bench-keccak-e2e-v0";
 const CHAIN_SEED: u64 = 0xC0FFEE_43;
 const ZK_SEED: [u8; 32] = [0x43; 32];
 
-/// Size a value with the canonical fixint encoder (no size limit).
-fn proof_size<T: serde::Serialize>(value: &T) -> usize {
-    fixint_options()
-        .serialized_size(value)
-        .expect("bincode size of an in-memory proof") as usize
-}
-
 fn sweep() -> Vec<usize> {
     if smoke() {
         return vec![64];
     }
-    let max_log: u32 = match std::env::var("BENCH_KECCAK_MAX_LOG") {
-        Err(_) => 12,
-        Ok(v) => {
-            let k = v
-                .trim()
-                .parse()
-                .expect("BENCH_KECCAK_MAX_LOG must be an integer");
-            assert!(
-                (6..=19).contains(&k),
-                "BENCH_KECCAK_MAX_LOG must be in 6..=19 (m = 16 + log; configs stop at m = 35)"
-            );
-            k
-        }
-    };
+    let max_log = max_log_from_env(
+        "BENCH_KECCAK_MAX_LOG",
+        12,
+        6,
+        19,
+        "m = 16 + log; configs stop at m = 35",
+    );
     (6..=max_log).step_by(2).map(|k| 1usize << k).collect()
 }
 
