@@ -18,6 +18,11 @@ blake3-bench = { path = "../blake3-bench" }
 bincode = { workspace = true }
 serde = { workspace = true }
 
+# Keep libtest's default bench harness off the lib so `cargo bench -- <args>`
+# reaches only the custom bench target.
+[lib]
+bench = false
+
 [[bench]]
 name = "keccak_hashchain_e2e"
 path = "keccak_hashchain_e2e.rs"

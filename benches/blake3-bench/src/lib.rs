@@ -152,6 +152,11 @@ pub fn runs() -> usize {
 }
 
 /// One measured benchmark row.
+///
+/// Serializes for the `--json` dump. Every field is mandatory — a row
+/// without its `params`, `backend`, and `relation` is not comparable
+/// across commits, and the schema does not permit one.
+#[derive(serde::Serialize)]
 pub struct BenchRow {
     /// Backend label, for example `veil-framed`.
     pub backend: &'static str,
@@ -224,6 +229,29 @@ impl BenchRow {
             params,
         }
     }
+}
+
+/// Return the path after a `--json` argument, or `None` when absent.
+///
+/// Cargo forwards bench arguments after `--`, so the call shape is:
+/// `cargo bench -p <crate> -- --json results.json`. A `--json` flag
+/// without a path stops the bench loudly.
+pub fn json_path_from_args() -> Option<String> {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if arg == "--json" {
+            return Some(args.next().expect("--json needs a file path"));
+        }
+    }
+    None
+}
+
+/// Write the rows as pretty JSON: `{ "bench": <title>, "rows": [...] }`.
+pub fn write_json(path: &str, title: &str, rows: &[BenchRow]) -> std::io::Result<()> {
+    let doc = serde_json::json!({ "bench": title, "rows": rows });
+    let mut text = serde_json::to_string_pretty(&doc).expect("bench rows serialize");
+    text.push('\n');
+    std::fs::write(path, text)
 }
 
 /// Print rows as one aligned table with a title line.

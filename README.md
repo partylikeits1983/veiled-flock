@@ -37,9 +37,19 @@ proof bundle includes the ordered public digests.
 
 ## Benchmarks
 
+Raw hash-throughput micro-benches:
+
 ```sh
 cargo bench -p flock-prover --bench blake3_native_chain
 cargo bench -p flock-prover --bench keccak_native_chain
+```
+
+End-to-end proving benchmarks (full prove + verify cycles, both veil-f128
+backends and the native chain prover) live in [`benches/`](benches/README.md):
+
+```sh
+cargo bench -p blake3-bench
+cargo bench -p keccak-bench
 ```
 
 ## Documentation

@@ -18,7 +18,9 @@
 //! Smoke: `BENCH_SMOKE=1 cargo bench -p keccak-bench` (n = 64, 1 run).
 
 use bincode::Options;
-use blake3_bench::{BenchRow, RowTimings, print_table, runs, smoke, time_best};
+use blake3_bench::{
+    BenchRow, RowTimings, json_path_from_args, print_table, runs, smoke, time_best, write_json,
+};
 use flock_prover::challenger::FsChallenger;
 use flock_prover::proof_io::fixint_options;
 use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup, State, keccak_f};
@@ -169,4 +171,8 @@ fn main() {
         print_table("keccak hashchain e2e (in progress)", &rows);
     }
     print_table("keccak hashchain e2e (final)", &rows);
+    if let Some(path) = json_path_from_args() {
+        write_json(&path, "keccak_hashchain_e2e", &rows).expect("write --json results");
+        println!("wrote {path}");
+    }
 }

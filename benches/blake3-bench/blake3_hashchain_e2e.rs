@@ -26,8 +26,8 @@
 
 use bincode::Options;
 use blake3_bench::{
-    BenchRow, RowTimings, blake3_chain, blake3_native_rate, print_table, runs, smoke, time_best,
-    verify_chain_linkage,
+    BenchRow, RowTimings, blake3_chain, blake3_native_rate, json_path_from_args, print_table, runs,
+    smoke, time_best, verify_chain_linkage, write_json,
 };
 use flock_prover::challenger::FsChallenger;
 use flock_prover::proof_io::fixint_options;
@@ -167,4 +167,8 @@ fn main() {
         print_table("blake3 hashchain e2e (in progress)", &rows);
     }
     print_table("blake3 hashchain e2e (final)", &rows);
+    if let Some(path) = json_path_from_args() {
+        write_json(&path, "blake3_hashchain_e2e", &rows).expect("write --json results");
+        println!("wrote {path}");
+    }
 }
