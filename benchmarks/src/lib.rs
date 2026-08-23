@@ -63,9 +63,10 @@ pub fn keccak_honest_chain(n: usize, seed: u64) -> (Vec<State>, State, State) {
 
 /// Build an honest BLAKE3 hash chain of `n` single-block messages.
 ///
-/// The chain rule is: `message_0 = seed_bytes || zeros`, then
-/// `digest_i = blake3(message_i)` and `message_{i+1} = digest_i || zeros`.
-/// Returns `(messages, digests)`, one pair per chain link.
+/// The head of `message_0` is 32 pseudo-random bytes derived from `seed`
+/// via splitmix64. Then `digest_i = blake3(message_i)` and
+/// `message_{i+1} = digest_i || zeros`. Returns `(messages, digests)`,
+/// one pair per chain link.
 pub fn blake3_chain(n: usize, seed: u64) -> (Vec<[u8; MESSAGE_BYTES]>, Vec<[u8; DIGEST_BYTES]>) {
     let mut rng = SplitMix(seed);
     let mut messages = Vec::with_capacity(n);
@@ -92,6 +93,9 @@ pub fn time_best<T>(runs: usize, mut f: impl FnMut() -> T) -> (T, f64) {
     let mut out = std::hint::black_box(f());
     let mut best = start.elapsed().as_secs_f64();
     for _ in 1..runs {
+        // Drop the previous output BEFORE the timer starts. A multi-MB
+        // proof's teardown must not land inside the measured window.
+        drop(out);
         let start = Instant::now();
         out = std::hint::black_box(f());
         best = best.min(start.elapsed().as_secs_f64());
@@ -99,19 +103,41 @@ pub fn time_best<T>(runs: usize, mut f: impl FnMut() -> T) -> (T, f64) {
     (out, best)
 }
 
-/// Time one native BLAKE3 chain pass of `n` hashes. Returns seconds.
-pub fn blake3_native_chain_secs(n: usize, seed: u64) -> f64 {
-    let mut rng = SplitMix(seed);
-    let mut head = rng.bytes32();
-    let start = Instant::now();
-    for _ in 0..n {
+/// Check chain linkage over a public digest list.
+///
+/// The chain rule is public, so linkage needs no witness: the check is
+/// `blake3(digest_i || zeros) == digest_{i + 1}` for every link. Returns
+/// `true` when every link holds. Benched verify paths run this so the
+/// measured time covers the full public-chain relation.
+pub fn verify_chain_linkage(digests: &[[u8; DIGEST_BYTES]]) -> bool {
+    digests.windows(2).all(|pair| {
         let mut message = [0u8; MESSAGE_BYTES];
-        message[..DIGEST_BYTES].copy_from_slice(&head);
-        head = *blake3::hash(std::hint::black_box(&message)).as_bytes();
-    }
-    let elapsed = start.elapsed().as_secs_f64();
-    std::hint::black_box(head);
-    elapsed
+        message[..DIGEST_BYTES].copy_from_slice(&pair[0]);
+        *blake3::hash(&message).as_bytes() == pair[1]
+    })
+}
+
+/// Measure the native BLAKE3 chain rate once, in hashes per second.
+///
+/// One calibration serves every row: hash chains scale linearly, so
+/// `native seconds at n = n / rate`. The measurement warms up first and
+/// then times a fixed link count, so small-n rows never divide by a
+/// noise-level baseline.
+pub fn blake3_native_rate() -> f64 {
+    let links = if smoke() { 10_000 } else { 100_000 };
+    let chain = |count: usize| {
+        let mut head = SplitMix(0xBA5E_11E5).bytes32();
+        for _ in 0..count {
+            let mut message = [0u8; MESSAGE_BYTES];
+            message[..DIGEST_BYTES].copy_from_slice(&head);
+            head = *blake3::hash(std::hint::black_box(&message)).as_bytes();
+        }
+        std::hint::black_box(head);
+    };
+    chain(links / 10); // warmup
+    let start = Instant::now();
+    chain(links);
+    links as f64 / start.elapsed().as_secs_f64()
 }
 
 /// Format a duration in seconds as an aligned human-readable string.
@@ -126,13 +152,22 @@ pub fn fmt_ms(s: f64) -> String {
     }
 }
 
-/// Report `true` when `BENCH_SMOKE=1` is set.
+/// Report `true` when `BENCH_SMOKE` is set to a truthy value.
 ///
-/// Smoke mode shrinks each sweep and the run count. CI uses it.
+/// Smoke mode shrinks each sweep and the run count. CI uses it. Accepted
+/// truthy values: `1`, `true`, `yes`, `on` (case-insensitive). Any other
+/// non-empty value stops the bench loudly — a silently ignored setting
+/// would run the full sweep against the operator's intent.
 pub fn smoke() -> bool {
-    std::env::var("BENCH_SMOKE")
-        .map(|v| v == "1")
-        .unwrap_or(false)
+    match std::env::var("BENCH_SMOKE") {
+        Err(_) => false,
+        Ok(v) if v.is_empty() => false,
+        Ok(v) => match v.to_ascii_lowercase().as_str() {
+            "1" | "true" | "yes" | "on" => true,
+            "0" | "false" | "no" | "off" => false,
+            other => panic!("BENCH_SMOKE set to unrecognized value {other:?}; use 1 or 0"),
+        },
+    }
 }
 
 /// Number of timing runs per row: 1 in smoke mode, 3 otherwise.
@@ -166,6 +201,53 @@ pub struct BenchRow {
     pub slowdown: f64,
     /// Parameter set that produced this row.
     pub params: String,
+}
+
+/// The four timed sections of one row, in seconds.
+pub struct RowTimings {
+    /// Setup construction time.
+    pub setup_s: f64,
+    /// Witness generation time.
+    pub witness_s: f64,
+    /// Prove time (best of N).
+    pub prove_s: f64,
+    /// Verify time (best of N).
+    pub verify_s: f64,
+}
+
+impl BenchRow {
+    /// Build a row and compute the derived metrics in one place.
+    ///
+    /// `hashes_per_s = n_real / prove_s` and
+    /// `slowdown = prove_s / (n_real / native_rate)`. Every backend row
+    /// function uses this constructor, so the formulas exist once.
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        backend: &'static str,
+        relation: &'static str,
+        n_real: usize,
+        n_slots: usize,
+        timings: RowTimings,
+        proof_bytes: usize,
+        native_rate: f64,
+        params: String,
+    ) -> Self {
+        let native_s = n_real as f64 / native_rate;
+        Self {
+            backend,
+            relation,
+            n_real,
+            n_slots,
+            setup_s: timings.setup_s,
+            witness_s: timings.witness_s,
+            prove_s: timings.prove_s,
+            verify_s: timings.verify_s,
+            proof_bytes,
+            hashes_per_s: n_real as f64 / timings.prove_s,
+            slowdown: timings.prove_s / native_s,
+            params,
+        }
+    }
 }
 
 /// Print rows as one aligned table with a title line.
@@ -255,6 +337,29 @@ mod tests {
         let (value, secs) = time_best(3, || 41 + 1);
         assert_eq!(value, 42);
         assert!(secs >= 0.0);
+    }
+
+    #[test]
+    fn verify_chain_linkage_accepts_honest_and_rejects_tampered() {
+        let (_, digests) = blake3_chain(5, 1);
+        assert!(verify_chain_linkage(&digests));
+        let mut bad = digests.clone();
+        bad[2][0] ^= 1;
+        assert!(!verify_chain_linkage(&bad));
+        assert!(verify_chain_linkage(&digests[..1]));
+    }
+
+    #[test]
+    fn bench_row_derives_metrics_from_inputs() {
+        let timings = RowTimings {
+            setup_s: 1.0,
+            witness_s: 1.0,
+            prove_s: 2.0,
+            verify_s: 1.0,
+        };
+        let row = BenchRow::new("b", "r", 10, 16, timings, 5, 100.0, String::new());
+        assert_eq!(row.hashes_per_s, 5.0);
+        assert_eq!(row.slowdown, 20.0);
     }
 
     #[test]
