@@ -68,3 +68,200 @@ fn mask_layout_chain_section_is_conditional() {
         base.observed_count() + 2 * (6 + 1 + 3),
     );
 }
+
+// -- Succinct chain composition (Part 7c) -----------------------------------
+
+/// Full succinct-chain round-trip on keccak at the m = 22 floor: honest
+/// chain witness, endpoints-only public statement, in-circuit linkage.
+/// Tampered endpoints and a tampered public chain value must reject.
+#[test]
+fn succinct_chain_roundtrip_and_tamper() {
+    use crate::r1cs_hashes::keccak;
+    use flock_core::challenger::FsChallenger;
+    use flock_core::zk::MaskSampler;
+
+    let n_log = 6usize;
+    let n = 1usize << n_log;
+    let r1cs = keccak::build_block_r1cs_zk(n_log);
+    let pcs_params = flock_core::pcs::PcsParams {
+        m: r1cs.m,
+        log_inv_rate: 1,
+        log_batch_size: 6,
+        profile: flock_core::pcs::ligerito::LigeritoProfile::Fast,
+        zk: true,
+    };
+    let layout = r1cs.zk.expect("zk r1cs");
+    let shape = super::ChainMaskShape::from_layout(&layout, r1cs.k_log);
+
+    // Honest chain: inputs[i + 1] = keccak_f(inputs[i]).
+    let mut seed = 0x0501_7C3Au64;
+    let mut next_bit = || {
+        seed = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = seed;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z & 1 == 1
+    };
+    let mut x0 = [false; keccak::STATE_BITS];
+    for b in x0.iter_mut() {
+        *b = next_bit();
+    }
+    let mut inputs = Vec::with_capacity(n);
+    let mut cur = x0;
+    for _ in 0..n {
+        inputs.push(cur);
+        keccak::keccak_f(&mut cur);
+    }
+    let x_last = cur;
+
+    let mut rng = flock_core::zk::ZkRng::from_seed([0x77; 32]);
+    let mut witness_rng = rng.fork(b"test-witness-randomizers");
+    let mut rand_words =
+        vec![0u64; n * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)];
+    witness_rng.fill_u64s(&mut rand_words);
+    let (z, a, b, z_lincheck) = keccak::generate_witness_with_ab_packed_and_lincheck_zk(
+        &inputs,
+        n_log,
+        &layout,
+        &rand_words,
+    );
+
+    let circuit = flock_core::lincheck::ZkLincheckCircuit::new(&keccak::KeccakLincheckCircuit, &layout);
+    let lig_prover = flock_core::pcs::ligerito::prover_config_for(
+        pcs_params.log_msg_len(),
+        pcs_params.log_batch_size,
+        pcs_params.profile,
+    )
+    .expect("m = 22 prover config");
+    let lig_verifier = flock_core::pcs::ligerito::verifier_config_for(
+        pcs_params.log_msg_len(),
+        pcs_params.log_batch_size,
+        pcs_params.profile,
+    )
+    .expect("m = 22 verifier config");
+
+    let x0_phys = keccak::state_to_phys_bits(&x0);
+    let xlast_phys = keccak::state_to_phys_bits(&x_last);
+
+    let mut chp = FsChallenger::new(b"succinct-chain-test-v0");
+    let (proof, commitment) = super::prove_succinct_chain_veil_r1cs(
+        &r1cs,
+        &pcs_params,
+        z,
+        a,
+        b,
+        z_lincheck,
+        &circuit,
+        &keccak::CHAIN_LAYOUT,
+        &shape,
+        &x0_phys,
+        &xlast_phys,
+        &lig_prover,
+        &mut rng,
+        &mut chp,
+    )
+    .expect("honest succinct chain prove");
+
+    let mut chv = FsChallenger::new(b"succinct-chain-test-v0");
+    super::verify_succinct_chain_veil_r1cs(
+        &r1cs,
+        &pcs_params,
+        &proof,
+        &commitment,
+        &circuit,
+        &keccak::CHAIN_LAYOUT,
+        &shape,
+        &x0_phys,
+        &xlast_phys,
+        &lig_verifier,
+        &mut chv,
+    )
+    .expect("honest succinct chain verify");
+
+    // Tampered x_last: one flipped endpoint bit must reject.
+    let mut bad_xlast = xlast_phys.clone();
+    bad_xlast[0] ^= true;
+    let mut ch = FsChallenger::new(b"succinct-chain-test-v0");
+    assert!(
+        super::verify_succinct_chain_veil_r1cs(
+            &r1cs,
+            &pcs_params,
+            &proof,
+            &commitment,
+            &circuit,
+            &keccak::CHAIN_LAYOUT,
+            &shape,
+            &x0_phys,
+            &bad_xlast,
+            &lig_verifier,
+            &mut ch,
+        )
+        .is_err(),
+        "tampered x_last must reject",
+    );
+
+    // Tampered x_0.
+    let mut bad_x0 = x0_phys.clone();
+    bad_x0[7] ^= true;
+    let mut ch = FsChallenger::new(b"succinct-chain-test-v0");
+    assert!(
+        super::verify_succinct_chain_veil_r1cs(
+            &r1cs,
+            &pcs_params,
+            &proof,
+            &commitment,
+            &circuit,
+            &keccak::CHAIN_LAYOUT,
+            &shape,
+            &bad_x0,
+            &xlast_phys,
+            &lig_verifier,
+            &mut ch,
+        )
+        .is_err(),
+        "tampered x_0 must reject",
+    );
+
+    // Tampered public chain value: the PCS must catch the mismatch.
+    let mut bad_proof = proof.clone();
+    bad_proof.chain_value += flock_core::field::F128::ONE;
+    let mut ch = FsChallenger::new(b"succinct-chain-test-v0");
+    assert!(
+        super::verify_succinct_chain_veil_r1cs(
+            &r1cs,
+            &pcs_params,
+            &bad_proof,
+            &commitment,
+            &circuit,
+            &keccak::CHAIN_LAYOUT,
+            &shape,
+            &x0_phys,
+            &xlast_phys,
+            &lig_verifier,
+            &mut ch,
+        )
+        .is_err(),
+        "tampered chain value must reject",
+    );
+
+    // Tampered masked chain round message.
+    let mut bad_proof = proof.clone();
+    bad_proof.masked_chain.rounds[0].0 += flock_core::field::F128::ONE;
+    let mut ch = FsChallenger::new(b"succinct-chain-test-v0");
+    assert!(
+        super::verify_succinct_chain_veil_r1cs(
+            &r1cs,
+            &pcs_params,
+            &bad_proof,
+            &commitment,
+            &circuit,
+            &keccak::CHAIN_LAYOUT,
+            &shape,
+            &x0_phys,
+            &xlast_phys,
+            &lig_verifier,
+            &mut ch,
+        )
+        .is_err(),
+        "tampered chain round message must reject",
+    );
+}

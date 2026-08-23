@@ -56,6 +56,30 @@ pub struct MaskedZerocheckProof {
     pub final_b_eval: F128,
 }
 
+/// Masked chain-shift wire format (succinct-chain composition, Part 7).
+/// Exactly the `2 · (n + 1 + |S|)` round messages the extended shift
+/// sumcheck observes, each one-time padded. The opened evaluation value is
+/// NOT here: like `final_c_eval`, it is not maskable — the PCS checks it
+/// verbatim — so it travels as the public `chain_value` field.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaskedChainShiftProof {
+    pub rounds: Vec<(F128, F128)>,
+}
+
+/// Succinct-VEIL proof of a hash chain with in-circuit linkage: the base
+/// succinct proof (whose mask commitment, circuit, and opening already
+/// carry the chain section) plus the masked chain wire and the public
+/// opened value.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SuccinctChainVeilProof {
+    pub base: SuccinctVeilProof,
+    pub masked_chain: MaskedChainShiftProof,
+    /// The extended shift sumcheck's opened evaluation `V` — a public
+    /// proof field mirroring `ab_value`/`c_value`, made witness-independent
+    /// by the chain-mask slot pair inside the opened combination.
+    pub chain_value: F128,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SuccinctVeilError {
     InvalidParameters,
@@ -535,10 +559,31 @@ fn dot(expressions: &[LinearCombination], coefficients: &[F128]) -> LinearCombin
     )
 }
 
-fn observe_claims<C: Challenger>(challenger: &mut C, ab: F128, c: F128) {
+/// Observe the explicit PCS claim values. The chain value is CONDITIONAL:
+/// observed only on the chain-aware path, so the shipping chainless entry
+/// points' transcripts stay byte-identical.
+fn observe_claims_ext<C: Challenger>(challenger: &mut C, ab: F128, c: F128, chain: Option<F128>) {
     challenger.observe_label(CLAIMS_LABEL);
     challenger.observe_f128(ab);
     challenger.observe_f128(c);
+    if let Some(value) = chain {
+        challenger.observe_f128(value);
+    }
+}
+
+fn observe_claims<C: Challenger>(challenger: &mut C, ab: F128, c: F128) {
+    observe_claims_ext(challenger, ab, c, None);
+}
+
+/// Inputs for the chain section of [`shifted_verifier_circuit`].
+struct ChainCircuitInput<'a> {
+    chain_layout: &'a crate::r1cs_hashes::chain_common::ChainLayout,
+    shape: &'a ChainMaskShape,
+    masked_rounds: &'a [(F128, F128)],
+    chain_value: F128,
+    /// Public endpoints in physical within-slot bit order.
+    x0_phys: &'a [bool],
+    xlast_phys: &'a [bool],
 }
 
 /// Replay the public, masked PIOP transcript and construct
@@ -553,7 +598,40 @@ fn shifted_verifier_circuit<C: Challenger>(
     lincheck_circuit: &dyn LincheckCircuit,
     challenger: &mut C,
 ) -> Result<(ArithmeticCircuit, ZClaim, ZClaim), SuccinctVeilError> {
-    let layout = MaskLayout::new(r1cs)?;
+    let (circuit, ab, c, chain) = shifted_verifier_circuit_ext(
+        r1cs,
+        zc,
+        lc,
+        ab_value,
+        c_value,
+        lincheck_circuit,
+        None,
+        challenger,
+    )?;
+    debug_assert!(chain.is_none());
+    Ok((circuit, ab, c))
+}
+
+/// Chain-aware replay: when `chain` is present, the circuit also replays
+/// the extended shift sumcheck — running claim from the verifier-formed
+/// public `C`, degree-2 round evaluation over the unmasked messages, and
+/// ONE linear final constraint tying the claim to `W'_final · V` — and
+/// returns the chain packed-direct claim `(point, value)` rebuilt from the
+/// replayed challenges. The chain section sits after the FULL lincheck
+/// (including its `r_inner_skip` sample) and before the claim
+/// observations, matching the prover's transcript order.
+#[allow(clippy::too_many_arguments)]
+fn shifted_verifier_circuit_ext<C: Challenger>(
+    r1cs: &BlockR1cs,
+    zc: &MaskedZerocheckProof,
+    lc: &LincheckProof,
+    ab_value: F128,
+    c_value: F128,
+    lincheck_circuit: &dyn LincheckCircuit,
+    chain: Option<&ChainCircuitInput<'_>>,
+    challenger: &mut C,
+) -> Result<(ArithmeticCircuit, ZClaim, ZClaim, Option<(Vec<F128>, F128)>), SuccinctVeilError> {
+    let layout = MaskLayout::with_chain(r1cs, chain.map(|input| input.shape))?;
     if zc.round1_ab.len() != layout.ell
         || zc.round1_c.len() != layout.ell
         || zc.multilinear_rounds.len() != layout.zc_rounds
@@ -657,6 +735,75 @@ fn shifted_verifier_circuit<C: Challenger>(
     let lambda = lincheck::build_quirky_eq_table(r_inner_skip, &[], r1cs.k_skip);
     let w = dot(&z_partial, &lambda);
     builder.assert_zero(&w.add(&LinearCombination::constant(ab_value)));
+
+    // -- chain section (succinct-chain composition, Part 7) ---------------
+    let chain_out = if let Some(input) = chain {
+        let n = r1cs.m - r1cs.k_log;
+        let d = n + 1 + input.shape.extra_rounds();
+        if input.masked_rounds.len() != d {
+            return Err(SuccinctVeilError::InvalidShape("chain proof geometry"));
+        }
+        let tau_pos = challenger.sample_f128_vec(input.chain_layout.tau_pos_len());
+        let fold = crate::r1cs_hashes::chain_common::ChainFold::new(input.chain_layout, tau_pos);
+        let x0_r = fold.fold_public_phys(input.x0_phys);
+        let xlast_r = fold.fold_public_phys(input.xlast_phys);
+        let tau = challenger.sample_f128_vec(n);
+        let chain_alpha = challenger.sample_f128();
+        let eq_tau_ones = tau.iter().copied().fold(F128::ONE, |acc, t| acc * t);
+        let initial = eq_tau_ones * xlast_r + chain_alpha * x0_r;
+
+        let mut running = LinearCombination::constant(initial);
+        let mut r_pts = Vec::with_capacity(d);
+        for (masked_1, masked_inf) in input.masked_rounds {
+            let e1 = expressions.unmask(*masked_1);
+            let einf = expressions.unmask(*masked_inf);
+            challenger.observe_f128(*masked_1);
+            challenger.observe_f128(*masked_inf);
+            let rho = challenger.sample_f128();
+            let e0 = running.add(&e1);
+            let c1 = e0.add(&e1).add(&einf);
+            running = einf.scale(rho * rho).add(&c1.scale(rho)).add(&e0);
+            r_pts.push(rho);
+        }
+        let mut full = vec![F128::ZERO; d];
+        for (k, &rho) in r_pts.iter().enumerate() {
+            full[d - 1 - k] = rho;
+        }
+        let claims = crate::chain::ChainClaimsExt {
+            instance_point: full[..n].to_vec(),
+            sel0: full[n],
+            s_high: full[n + 1..].to_vec(),
+            value: input.chain_value,
+        };
+
+        // Verifier-computed final weight W'(tau', s0*, h*).
+        let s = crate::chain::shift_mle(&tau, &claims.instance_point);
+        let eq_tt = zerocheck::multilinear::eq_eval(&tau, &claims.instance_point);
+        let zero_n = vec![F128::ZERO; n];
+        let eq_t0 = zerocheck::multilinear::eq_eval(&claims.instance_point, &zero_n);
+        let one_plus_s0 = F128::ONE + claims.sel0;
+        let base_w = s * one_plus_s0 + eq_tt * claims.sel0 + chain_alpha * eq_t0 * one_plus_s0;
+        let w_final = claims
+            .s_high
+            .iter()
+            .fold(base_w, |acc, &h| acc * (F128::ONE + h));
+
+        // ONE linear constraint: claim_final == W'_final * V.
+        builder
+            .assert_zero(&running.add(&LinearCombination::constant(w_final * input.chain_value)));
+
+        let point = crate::r1cs_hashes::chain_common::build_chain_claim_point_ext(
+            input.chain_layout,
+            r1cs.layout,
+            &fold,
+            &claims,
+            &input.shape.s_coords,
+        );
+        Some((point, input.chain_value))
+    } else {
+        None
+    };
+
     if expressions.cursor != layout.observed_count() {
         return Err(SuccinctVeilError::InvalidShape("mask expression cursor"));
     }
@@ -670,7 +817,7 @@ fn shifted_verifier_circuit<C: Challenger>(
         point: r1cs.c_claim_point(z, &r[zerocheck::K_SKIP..]),
         value: c_value,
     };
-    Ok((builder.finish(), ab, c))
+    Ok((builder.finish(), ab, c, chain_out))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -949,6 +1096,372 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         challenger,
     )?;
     verify_constraints(&circuit, &proof.veil, &mut veil_challenger, &ro)?;
+    Ok(())
+}
+
+/// Succinct-VEIL prover for a hash chain with in-circuit linkage (Part 7
+/// design D5'). Public statement: the endpoints only (`x0_phys` /
+/// `xlast_phys`, physical within-slot bit order); the committed witness
+/// enforces every interior link through the extended shift sumcheck.
+///
+/// A separate entry point rather than a `packed_direct` closure because
+/// the chain glue needs three things that seam cannot give: the VEIL
+/// circuit gains chain constraints, the mask budget gains the chain tail,
+/// and the fold reads `z_packed` before the opening consumes it.
+///
+/// EXPERIMENTAL, uncertified (like the whole succinct path), and it
+/// forgoes the `SuccinctZerocheckSource` simulation seam: this entry point
+/// claims masking-by-construction, not simulatability.
+#[allow(clippy::too_many_arguments)]
+pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    z_packed: Vec<F128>,
+    a_packed: Vec<F128>,
+    b_packed: Vec<F128>,
+    z_lincheck: Vec<u8>,
+    lincheck_circuit: &dyn LincheckCircuit,
+    chain_layout: &crate::r1cs_hashes::chain_common::ChainLayout,
+    shape: &ChainMaskShape,
+    x0_phys: &[bool],
+    xlast_phys: &[bool],
+    lig_config: &pcs::ligerito::ProverConfig,
+    rng: &mut ZkRng,
+    challenger: &mut Ch,
+) -> Result<(SuccinctChainVeilProof, Commitment), SuccinctVeilError> {
+    if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    let layout = MaskLayout::with_chain(r1cs, Some(shape))?;
+    let mut masks = vec![F128::ZERO; layout.observed_count()];
+    let mut mask_rng = rng.fork(b"succinct-veil-transcript-masks");
+    mask_rng.fill_f128(&mut masks);
+
+    let mut nonce_rng = rng.fork(b"succinct-veil-proof-nonce");
+    let mut nonce_words = [0u64; 4];
+    nonce_rng.fill_u64s(&mut nonce_words);
+    let mut proof_nonce = [0u8; 32];
+    for (chunk, word) in proof_nonce
+        .as_chunks_mut::<8>()
+        .0
+        .iter_mut()
+        .zip(nonce_words)
+    {
+        chunk.copy_from_slice(&word.to_le_bytes());
+    }
+    let ro = challenger.ro_context(proof_nonce);
+
+    let placeholder = CircuitBuilder::new(layout.observed_count()).finish();
+    let veil_parameters = ConstraintParameters::succinct_flock_experimental();
+    let mut veil_rng = rng.fork(b"succinct-veil-inner-proof");
+    let veil_commitment =
+        commit_constraint_inputs(&placeholder, &masks, veil_parameters, &mut veil_rng, &ro)?;
+    let mut witness_rng = rng.fork(b"succinct-veil-witness-pcs");
+    let (commitment, prover_data) = pcs::commit::commit_zk_with_ro(
+        &z_packed,
+        pcs_params,
+        &mut witness_rng,
+        &ro,
+        RoChannel::Witness,
+    );
+
+    bind_statement(challenger, r1cs, &commitment, &proof_nonce);
+    challenger.observe_label(MASK_ROOT_LABEL);
+    challenger.observe_bytes(&veil_commitment.root());
+    let circuit_start = challenger.clone();
+
+    let padding = r1cs.padding_spec();
+    let (honest_zc, zc_claim, s_hat_v_c) = {
+        let a_bytes = unsafe {
+            std::slice::from_raw_parts(
+                a_packed.as_ptr() as *const u8,
+                std::mem::size_of_val(a_packed.as_slice()),
+            )
+        };
+        let b_bytes = unsafe {
+            std::slice::from_raw_parts(
+                b_packed.as_ptr() as *const u8,
+                std::mem::size_of_val(b_packed.as_slice()),
+            )
+        };
+        let z_bytes = unsafe {
+            std::slice::from_raw_parts(
+                z_packed.as_ptr() as *const u8,
+                std::mem::size_of_val(z_packed.as_slice()),
+            )
+        };
+        let mut masking = MaskingChallenger::new(challenger, &masks);
+        let (proof, claim, s_hat_v_c) = zerocheck::prove_packed_padded_capture_s_hat_v_c(
+            a_bytes,
+            b_bytes,
+            z_bytes,
+            r1cs.m,
+            &padding,
+            &mut masking,
+        );
+        if masking.cursor != 2 * layout.ell + 2 * layout.zc_rounds + 2 {
+            return Err(SuccinctVeilError::InvalidShape(
+                "zerocheck mask observation count",
+            ));
+        }
+        (proof, claim, Some(s_hat_v_c))
+    };
+    flock_core::scratch::give_f128(a_packed);
+    flock_core::scratch::give_f128(b_packed);
+
+    let x_ab = r1cs.x_ab_from_mlv(zc_claim.z, &zc_claim.mlv_challenges);
+    let zc_mask_count = 2 * layout.ell + 2 * layout.zc_rounds + 2;
+    let core_mask_count = masks.len() - 2 * layout.chain_rounds;
+    let (honest_lc, lc_claim, z_vec) = {
+        let mut masking = MaskingChallenger {
+            inner: challenger,
+            masks: &masks,
+            cursor: zc_mask_count,
+        };
+        let result = lincheck::prove_padded_capture_z_vec(
+            &z_lincheck,
+            r1cs.m,
+            r1cs.k_log,
+            r1cs.k_skip,
+            r1cs.useful_bits,
+            lincheck_circuit,
+            &x_ab,
+            &mut masking,
+        );
+        if masking.cursor != core_mask_count {
+            return Err(SuccinctVeilError::InvalidShape(
+                "lincheck mask observation count",
+            ));
+        }
+        result
+    };
+    drop(z_lincheck);
+
+    // -- chain section: extended shift sumcheck on the masking challenger.
+    let (honest_chain, chain_claims, chain_fold) = {
+        let mut masking = MaskingChallenger {
+            inner: challenger,
+            masks: &masks,
+            cursor: core_mask_count,
+        };
+        let tau_pos = masking.sample_f128_vec(chain_layout.tau_pos_len());
+        let fold = crate::r1cs_hashes::chain_common::ChainFold::new(chain_layout, tau_pos);
+        let tables = crate::r1cs_hashes::chain_common::fold_in_out_subcube(
+            chain_layout,
+            r1cs.layout,
+            &z_packed,
+            &fold,
+            &shape.s_coords,
+        );
+        let (proof, claims) = crate::chain::prove_chain_shift_ext(&tables, &mut masking);
+        if masking.cursor != masks.len() {
+            return Err(SuccinctVeilError::InvalidShape(
+                "chain mask observation count",
+            ));
+        }
+        (proof, claims, fold)
+    };
+    let chain_pd = crate::r1cs_hashes::chain_common::assemble_chain_claim_ext(
+        chain_layout,
+        r1cs.layout,
+        &chain_fold,
+        &chain_claims,
+        &shape.s_coords,
+    );
+
+    let ab = ZClaim {
+        point: r1cs.ab_claim_point(lc_claim.r_inner_skip, &lc_claim.r_inner_rest, &x_ab.x_outer),
+        value: lc_claim.w,
+    };
+    let c = ZClaim {
+        point: r1cs.c_claim_point(zc_claim.z, &zc_claim.r_rest),
+        value: zc_claim.c_eval,
+    };
+    let (masked_zerocheck, masked_lincheck) =
+        mask_proofs(&honest_zc, &honest_lc, &masks[..core_mask_count]);
+    let masked_chain = MaskedChainShiftProof {
+        rounds: honest_chain
+            .rounds
+            .iter()
+            .enumerate()
+            .map(|(i, &(e1, einf))| {
+                (
+                    e1 + masks[core_mask_count + 2 * i],
+                    einf + masks[core_mask_count + 2 * i + 1],
+                )
+            })
+            .collect(),
+    };
+    let chain_value = chain_claims.value;
+
+    let mut circuit_challenger = circuit_start;
+    let chain_input = ChainCircuitInput {
+        chain_layout,
+        shape,
+        masked_rounds: &masked_chain.rounds,
+        chain_value,
+        x0_phys,
+        xlast_phys,
+    };
+    let (circuit, circuit_ab, circuit_c, circuit_chain) = shifted_verifier_circuit_ext(
+        r1cs,
+        &masked_zerocheck,
+        &masked_lincheck,
+        ab.value,
+        c.value,
+        lincheck_circuit,
+        Some(&chain_input),
+        &mut circuit_challenger,
+    )?;
+    if circuit_ab != ab {
+        return Err(SuccinctVeilError::InvalidShape(
+            "shifted verifier AB output claim",
+        ));
+    }
+    if circuit_c != c {
+        return Err(SuccinctVeilError::InvalidShape(
+            "shifted verifier C output claim",
+        ));
+    }
+    match circuit_chain {
+        Some((point, value)) if point == chain_pd.point && value == chain_value => {}
+        _ => {
+            return Err(SuccinctVeilError::InvalidShape(
+                "shifted verifier chain output claim",
+            ));
+        }
+    }
+
+    observe_claims_ext(challenger, ab.value, c.value, Some(chain_value));
+    let pd = vec![chain_pd];
+    let mut veil_challenger = challenger.clone();
+    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    let s_hat_v_ab = if r1cs.k_log >= pcs::LOG_PACKING {
+        Some(pcs::ring_switch::s_hat_v_from_z_vec(
+            &z_vec,
+            &lc_claim.r_inner_rest[1..],
+        ))
+    } else {
+        None
+    };
+    let (pcs_open, veil) = rayon::join(
+        || {
+            open_claims_with_precomputed_ligerito_pd_ro(
+                z_packed,
+                &prover_data,
+                &commitment,
+                &[ab.clone(), c.clone()],
+                &[s_hat_v_ab.as_deref(), s_hat_v_c.as_deref()],
+                &pd,
+                &padding,
+                lig_config,
+                &ro,
+                RoChannel::Witness,
+                challenger,
+            )
+        },
+        || {
+            prove_constraints_from_commitment(
+                &circuit,
+                veil_commitment,
+                &mut veil_rng,
+                &mut veil_challenger,
+                &ro,
+            )
+        },
+    );
+    let veil = veil?;
+    Ok((
+        SuccinctChainVeilProof {
+            base: SuccinctVeilProof {
+                proof_nonce,
+                masked_zerocheck,
+                masked_lincheck,
+                ab_value: ab.value,
+                c_value: c.value,
+                pcs_open,
+                veil,
+            },
+            masked_chain,
+            chain_value,
+        },
+        commitment,
+    ))
+}
+
+/// Verify a [`prove_succinct_chain_veil_r1cs`] proof against public
+/// endpoints only.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_succinct_chain_veil_r1cs<Ch: Challenger + Clone>(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+    proof: &SuccinctChainVeilProof,
+    commitment: &Commitment,
+    lincheck_circuit: &dyn LincheckCircuit,
+    chain_layout: &crate::r1cs_hashes::chain_common::ChainLayout,
+    shape: &ChainMaskShape,
+    x0_phys: &[bool],
+    xlast_phys: &[bool],
+    lig_config: &pcs::ligerito::VerifierConfig,
+    challenger: &mut Ch,
+) -> Result<(), SuccinctVeilError> {
+    if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    MaskLayout::with_chain(r1cs, Some(shape))?;
+    if commitment.params != *pcs_params
+        || proof.base.veil.parameters != ConstraintParameters::succinct_flock_experimental()
+    {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    let ro = challenger.ro_context(proof.base.proof_nonce);
+    bind_statement(challenger, r1cs, commitment, &proof.base.proof_nonce);
+    challenger.observe_label(MASK_ROOT_LABEL);
+    challenger.observe_bytes(&proof.base.veil.linear.commitment);
+    let chain_input = ChainCircuitInput {
+        chain_layout,
+        shape,
+        masked_rounds: &proof.masked_chain.rounds,
+        chain_value: proof.chain_value,
+        x0_phys,
+        xlast_phys,
+    };
+    let (circuit, ab, c, chain_out) = shifted_verifier_circuit_ext(
+        r1cs,
+        &proof.base.masked_zerocheck,
+        &proof.base.masked_lincheck,
+        proof.base.ab_value,
+        proof.base.c_value,
+        lincheck_circuit,
+        Some(&chain_input),
+        challenger,
+    )?;
+    let (chain_point, chain_value) =
+        chain_out.ok_or(SuccinctVeilError::InvalidShape("missing chain claim"))?;
+    observe_claims_ext(
+        challenger,
+        proof.base.ab_value,
+        proof.base.c_value,
+        Some(chain_value),
+    );
+    let mut veil_challenger = challenger.clone();
+    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    let pd_refs = [pcs::PackedDirectClaimRef {
+        point: chain_point.as_slice(),
+        value: chain_value,
+    }];
+    flock_core::verifier::verify_claims_ligerito_with_config_pd_ro(
+        commitment,
+        &[ab, c],
+        &pd_refs,
+        &proof.base.pcs_open,
+        pcs_params,
+        lig_config,
+        &ro,
+        RoChannel::Witness,
+        challenger,
+    )?;
+    verify_constraints(&circuit, &proof.base.veil, &mut veil_challenger, &ro)?;
     Ok(())
 }
 
