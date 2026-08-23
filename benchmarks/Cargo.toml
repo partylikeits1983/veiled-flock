@@ -1,0 +1,28 @@
+[package]
+name = "veiled-flock-benchmarks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "End-to-end proving benchmarks for the veiled-FLOCK backends."
+publish = false
+
+# No direct flock-core dep: flock-prover re-exports it wholesale (`pub use
+# flock_core::*`), and the `zk` feature must arrive through flock-prover's
+# `veil` feature to keep feature unification correct.
+# No `unsound-challenger` feature: `FsChallenger` serves every benched path.
+[dependencies]
+flock-prover = { path = "../crates/flock-prover", features = ["veil"] }
+blake3 = { workspace = true }
+
+[dev-dependencies]
+# Proof-size measurement uses one fixint encoder for all size columns.
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[[bench]]
+name = "blake3_hashchain_e2e"
+harness = false
+
+[lints]
+workspace = true
