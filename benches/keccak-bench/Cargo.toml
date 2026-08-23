@@ -13,5 +13,15 @@ flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
 # blake3-bench's lib and is shared from there.
 blake3-bench = { path = "../blake3-bench" }
 
+[dev-dependencies]
+# Proof-size measurement uses one fixint encoder for all size columns.
+bincode = { workspace = true }
+serde = { workspace = true }
+
+[[bench]]
+name = "keccak_hashchain_e2e"
+path = "keccak_hashchain_e2e.rs"
+harness = false
+
 [lints]
 workspace = true

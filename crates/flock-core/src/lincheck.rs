@@ -232,6 +232,74 @@ impl<'a> LincheckCircuit for SparseMatrixCircuit<'a> {
     }
 }
 
+/// Randomizer-row decorator for hand-written circuit walkers (zk mode).
+///
+/// Encoders with materialized matrices (BLAKE3, SHA-2) write their zk
+/// randomizer rows into `A_0`/`B_0`, so a matrix-derived circuit claims
+/// them for free. Encoders with a hand-written [`LincheckCircuit`] walker
+/// (Keccak) do not: the walker knows nothing about the randomizer rows,
+/// while `write_zk_randomizers` fills the committed witness at exactly
+/// those rows. This wrapper closes that gap. It adds the randomizer rows'
+/// matrix contributions on top of the inner walker's fold, in the same row
+/// convention the matrix encoders use:
+///
+/// - A-type row `s` (`u · 1 = u`): `A[s, s] = 1`, `B[s, pin] = 1`.
+/// - B-type row `s` (`1 · u′ = u′`): `A[s, pin] = 1`, `B[s, s] = 1`.
+///
+/// [`crate::zk::ZkBlockLayout::a_bits`] already chains the chain-mask slot
+/// pair, so one loop per side covers every randomizer section.
+///
+/// Pass the wrapper — never the bare walker — to BOTH the succinct prover
+/// and verifier when `r1cs.zk` is set.
+pub struct ZkLincheckCircuit<'a> {
+    inner: &'a dyn LincheckCircuit,
+    layout: &'a crate::zk::ZkBlockLayout,
+    /// The constant-one wire the randomizer B rows select. Cached from the
+    /// inner walker at construction.
+    pin: usize,
+}
+
+impl<'a> ZkLincheckCircuit<'a> {
+    /// Wrap `inner` so the fold also claims `layout`'s randomizer rows.
+    ///
+    /// Panics when the inner circuit has no constant-one wire: the A-type
+    /// row convention needs one for its B side.
+    pub fn new(inner: &'a dyn LincheckCircuit, layout: &'a crate::zk::ZkBlockLayout) -> Self {
+        let pin = inner
+            .const_pin_col()
+            .expect("zk randomizer rows need a constant-one wire in the inner circuit");
+        Self { inner, layout, pin }
+    }
+}
+
+impl LincheckCircuit for ZkLincheckCircuit<'_> {
+    fn n_cols(&self) -> usize {
+        self.inner.n_cols()
+    }
+
+    /// Forward the inner pin. The trait default is `None`; dropping the
+    /// override here would silently lose the lincheck's β pin term and
+    /// reopen the all-zero-witness soundness gap.
+    fn const_pin_col(&self) -> Option<usize> {
+        self.inner.const_pin_col()
+    }
+
+    fn fold_alpha_batched(&self, alpha: F128, eq_inner: &[F128]) -> Vec<F128> {
+        let mut comb = self.inner.fold_alpha_batched(alpha, eq_inner);
+        for s in self.layout.a_bits() {
+            let e = eq_inner[s];
+            comb[s] += alpha * e;
+            comb[self.pin] += e;
+        }
+        for s in self.layout.b_bits() {
+            let e = eq_inner[s];
+            comb[self.pin] += alpha * e;
+            comb[s] += e;
+        }
+        comb
+    }
+}
+
 /// Column-major (CSC) `LincheckCircuit`: `(A_0, B_0)` transposed once into
 /// flat `col_ptr`/`row_idx` arrays. `fold_alpha_batched` becomes a gather —
 /// each column reads its own row list and sums `eq_inner[r]`, so columns are
@@ -2586,5 +2654,81 @@ mod tests {
             ),
             Err(VerifyError::KSkipExceedsKLog { .. })
         ));
+    }
+
+    /// Inner stub whose fold contributes nothing: isolates the decorator's
+    /// own contributions for the matrix-convention equivalence check.
+    struct ZeroFold {
+        k: usize,
+    }
+    impl LincheckCircuit for ZeroFold {
+        fn n_cols(&self) -> usize {
+            self.k
+        }
+        fn fold_alpha_batched(&self, _alpha: F128, _eq_inner: &[F128]) -> Vec<F128> {
+            vec![F128::ZERO; self.k]
+        }
+        fn const_pin_col(&self) -> Option<usize> {
+            Some(0)
+        }
+    }
+
+    #[test]
+    fn zk_decorator_matches_sparse_matrix_convention() {
+        // k_log = 10, useful_bits = 512: A rows [512, 640), B rows
+        // [640, 768), chain-mask pair [768, 1024). Full K x K matrices —
+        // SparseMatrixCircuit folds over every row.
+        let cfg = crate::zk::ZkConfig {
+            rand_chunks_a: 1,
+            rand_chunks_b: 1,
+            chain_mask: true,
+        };
+        let layout = crate::zk::ZkBlockLayout::new(10, 512, Some(7), &cfg);
+        let k = 1usize << 10;
+        let mut a_rows = vec![Vec::new(); k];
+        let mut b_rows = vec![Vec::new(); k];
+        for s in layout.a_bits() {
+            a_rows[s] = vec![s];
+            b_rows[s] = vec![0];
+        }
+        for s in layout.b_bits() {
+            a_rows[s] = vec![0];
+            b_rows[s] = vec![s];
+        }
+        let a_0 = SparseBinaryMatrix {
+            num_rows: k,
+            num_cols: k,
+            rows: a_rows,
+        };
+        let b_0 = SparseBinaryMatrix {
+            num_rows: k,
+            num_cols: k,
+            rows: b_rows,
+        };
+        let oracle = SparseMatrixCircuit::new(&a_0, &b_0);
+        let stub = ZeroFold { k };
+        let decorated = ZkLincheckCircuit::new(&stub, &layout);
+
+        let mut rng = Rng::new(0x5EED_CAFE);
+        let alpha = rng.f128();
+        let eq_inner: Vec<F128> = (0..k).map(|_| rng.f128()).collect();
+        assert_eq!(
+            decorated.fold_alpha_batched(alpha, &eq_inner),
+            oracle.fold_alpha_batched(alpha, &eq_inner),
+        );
+    }
+
+    #[test]
+    fn zk_decorator_forwards_inner_surface() {
+        let cfg = crate::zk::ZkConfig {
+            rand_chunks_a: 1,
+            rand_chunks_b: 1,
+            chain_mask: false,
+        };
+        let layout = crate::zk::ZkBlockLayout::new(10, 512, None, &cfg);
+        let stub = ZeroFold { k: 1 << 10 };
+        let decorated = ZkLincheckCircuit::new(&stub, &layout);
+        assert_eq!(decorated.const_pin_col(), Some(0));
+        assert_eq!(decorated.n_cols(), 1 << 10);
     }
 }

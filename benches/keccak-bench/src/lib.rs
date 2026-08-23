@@ -33,6 +33,39 @@ pub fn keccak_honest_chain(n: usize, seed: u64) -> (Vec<State>, State, State) {
     (inputs, x0, cur)
 }
 
+/// Measure the native keccak-f chain rate once, in permutations per second.
+///
+/// One calibration serves every row: state chains scale linearly, so
+/// `native seconds at n = n / rate`. The measurement warms up first and
+/// then times a fixed link count, so small-n rows never divide by a
+/// noise-level baseline.
+pub fn keccak_native_rate() -> f64 {
+    let links = if blake3_bench::smoke() {
+        10_000
+    } else {
+        100_000
+    };
+    let chain = |count: usize| {
+        let mut state = random_state(&mut SplitMix(0xBA5E_11E5));
+        for _ in 0..count {
+            keccak_f(std::hint::black_box(&mut state));
+        }
+        std::hint::black_box(state);
+    };
+    chain(links / 10); // warmup
+    let start = std::time::Instant::now();
+    chain(links);
+    links as f64 / start.elapsed().as_secs_f64()
+}
+
+/// Check chain linkage over public state lists: `outputs[i] == inputs[i+1]`
+/// for every interior link. With every state public, linkage is a pure
+/// equality check — no hashing. Benched verify paths run this so the
+/// measured time covers the full public-chain relation.
+pub fn verify_state_linkage(inputs: &[State], outputs: &[State]) -> bool {
+    inputs.len() == outputs.len() && (1..inputs.len()).all(|i| outputs[i - 1] == inputs[i])
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
