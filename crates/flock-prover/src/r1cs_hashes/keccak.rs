@@ -1383,21 +1383,25 @@ pub fn generate_witness_batch_major(
 // Keccak's constraints live in [`KeccakLincheckCircuit`], not in matrices,
 // so the zk path keeps the empty matrix stubs and claims the randomizer
 // rows through [`flock_core::lincheck::ZkLincheckCircuit`]. Only the block
-// layout and the witness generator change.
+// layout and the witness generator change. The layout/witness builders are
+// deliberately NOT `veil`-gated: sha2/keccak3 reuse is intended, and only
+// the succinct prove/verify entry points need the veil-f128 dependency.
 // ---------------------------------------------------------------------------
 
-/// zk randomizer sizing for one keccak batch of `2^(m - K_LOG)` blocks.
+/// zk randomizer sizing for one keccak batch of `2^(m - K_LOG)` blocks
+/// (`m = K_LOG + n_keccaks_log` — the total witness log, not the outer log).
 ///
 /// Sized per batch with [`flock_core::zk::ZkConfig::sized_for`]: keccak's
 /// block floor is far smaller than BLAKE3's, so a fixed chunk count cannot
 /// amortize the `128·V_free` entropy budget the way `blake3::zk_config`
-/// does. The chain-mask pair uses keccak's own I/O slot geometry
-/// (`CHAIN_LAYOUT.region_log`).
+/// does.
 pub fn zk_config(m: usize) -> flock_core::zk::ZkConfig {
     flock_core::zk::ZkConfig::sized_for(m, K_LOG, true)
 }
 
-/// zk block layout for this encoder at batch size `2^(m - K_LOG)`.
+/// zk block layout for this encoder at batch size `2^(m - K_LOG)`. The
+/// chain-mask pair uses keccak's own I/O slot geometry
+/// (`CHAIN_LAYOUT.region_log`).
 pub fn zk_layout(m: usize) -> flock_core::zk::ZkBlockLayout {
     flock_core::zk::ZkBlockLayout::new(
         K_LOG,
@@ -1431,6 +1435,9 @@ pub fn build_block_r1cs_zk(n_keccaks_log: usize) -> BlockR1cs {
 /// block slot — real or padding — gets its randomizer sections filled from
 /// `rand_words` (see [`super::common::zk_rand_words_per_block`]). Padding
 /// slots keep the honest `keccak_f(0)` computation for the const-wire pin.
+///
+/// `layout` MUST be the layout bound into the target R1CS (`r1cs.zk`) —
+/// a foreign layout writes randomizer rows the statement does not cover.
 pub fn generate_witness_with_ab_packed_and_lincheck_zk(
     initial_states: &[State],
     n_keccaks_log: usize,
@@ -1471,8 +1478,13 @@ pub fn state_out_digest_layout() -> crate::digest_bind::DigestLayout {
 /// Errors from the succinct keccak zk path.
 #[derive(Debug)]
 pub enum KeccakZkError {
-    /// Input/output list lengths do not match the setup's batch size.
-    BatchSizeMismatch { expected: usize, got: usize },
+    /// One list's length does not match the setup's batch size. `which`
+    /// names the failing side (`"inputs"` or `"outputs"`).
+    BatchSizeMismatch {
+        which: &'static str,
+        expected: usize,
+        got: usize,
+    },
     /// `outputs[index] != keccak_f(inputs[index])` — dishonest witness.
     OutputMismatch { index: usize },
     /// The succinct VEIL layer rejected.
@@ -1505,7 +1517,7 @@ impl KeccakZkSetup {
     /// `m = K_LOG + n_log ≥ 22`: every row stays on an audited Ligerito
     /// config (m ∈ [22, 35]) with no deprecated fallback.
     pub fn new(n_keccaks: usize) -> Self {
-        assert!(n_keccaks >= 1);
+        assert!(n_keccaks >= 1, "n_keccaks must be >= 1");
         let n_log = min_n_keccaks_log(n_keccaks).max(22 - K_LOG);
         // Upper bound BEFORE any allocation: Ligerito configs stop at
         // m = 35, and `prewarm_prover(36)` would fault in ~24 GB of
@@ -1587,11 +1599,14 @@ impl KeccakZkSetup {
     }
 
     fn validate_io(&self, inputs: &[State], outputs: &[State]) -> Result<(), KeccakZkError> {
-        if inputs.len() != self.n_keccaks || outputs.len() != self.n_keccaks {
-            return Err(KeccakZkError::BatchSizeMismatch {
-                expected: self.n_keccaks,
-                got: inputs.len().max(outputs.len()),
-            });
+        for (which, len) in [("inputs", inputs.len()), ("outputs", outputs.len())] {
+            if len != self.n_keccaks {
+                return Err(KeccakZkError::BatchSizeMismatch {
+                    which,
+                    expected: self.n_keccaks,
+                    got: len,
+                });
+            }
         }
         Ok(())
     }
@@ -2330,5 +2345,29 @@ mod tests {
             ),
             "dishonest witness must be refused",
         );
+    }
+
+    /// Non-full batch: exercises the `PaddingDigest::Constant` statement
+    /// entries together with the padding witness slots — a phys-bit
+    /// disagreement between `keccak_f(0)`'s statement bits and the padding
+    /// trace would fail every non-full batch and no full-batch test would
+    /// catch it.
+    #[cfg(feature = "veil")]
+    #[test]
+    fn keccak_zk_succinct_roundtrip_with_padding_slots() {
+        let n = 100;
+        let setup = KeccakZkSetup::new(n);
+        assert_eq!(setup.n_keccak_slots(), 128, "100 real + 28 padding");
+        let (inputs, outputs) = random_states(n, 0xFEED);
+
+        let mut rng = flock_core::zk::ZkRng::from_seed([0x35; 32]);
+        let mut chp = FsChallenger::new(b"keccak-zk-pad-test-v0");
+        let (proof, commitment) = setup
+            .prove_succinct(&inputs, &outputs, &mut rng, &mut chp)
+            .expect("honest prove with padding slots");
+        let mut chv = FsChallenger::new(b"keccak-zk-pad-test-v0");
+        setup
+            .verify_succinct(&commitment, &proof, &inputs, &outputs, &mut chv)
+            .expect("honest verify with padding slots");
     }
 }

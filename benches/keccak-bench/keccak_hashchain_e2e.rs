@@ -22,7 +22,7 @@ use blake3_bench::{
     smoke, time_best, write_json,
 };
 use flock_prover::challenger::FsChallenger;
-use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup, State, keccak_f};
+use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup, State};
 use flock_prover::zk::ZkRng;
 use keccak_bench::{keccak_honest_chain, keccak_native_rate, verify_state_linkage};
 
@@ -39,7 +39,8 @@ fn sweep() -> Vec<usize> {
         12,
         6,
         19,
-        "m = 16 + log; configs stop at m = 35",
+        "m = 16 + log; configs stop at m = 35; the sweep steps by 2, so an odd \
+         value tops out at the even log below it",
     );
     (6..=max_log).step_by(2).map(|k| 1usize << k).collect()
 }
@@ -47,6 +48,7 @@ fn sweep() -> Vec<usize> {
 /// The chain's per-block output states: `outputs[i] = inputs[i + 1]`, and
 /// the last output is `x_last`.
 fn chain_outputs(inputs: &[State], x_last: &State) -> Vec<State> {
+    assert!(!inputs.is_empty(), "a chain has at least one link");
     let mut outputs: Vec<State> = inputs[1..].to_vec();
     outputs.push(*x_last);
     outputs
@@ -130,6 +132,12 @@ fn succinct_row(n: usize, native_rate: f64) -> BenchRow {
 }
 
 fn main() {
+    // Resolve and probe the --json path FIRST: a bad path found after the
+    // sweep would discard every measured row.
+    let json_path = json_path_from_args();
+    if let Some(path) = &json_path {
+        blake3_bench::probe_json_path(path);
+    }
     flock_prover::init_perf_thread_pool();
     if smoke() {
         println!("BENCH_SMOKE: n = 64 only, 1 timing run per row");
@@ -139,14 +147,6 @@ fn main() {
         "native keccak-f chain rate: {:.2} Mperm/s",
         native_rate / 1e6
     );
-    // Sanity: keep the two provers' witnesses on the same chain rule.
-    {
-        let (inputs, _x0, x_last) = keccak_honest_chain(4, CHAIN_SEED);
-        let outputs = chain_outputs(&inputs, &x_last);
-        let mut image = inputs[0];
-        keccak_f(&mut image);
-        assert_eq!(image, outputs[0]);
-    }
 
     let mut rows = Vec::new();
     for n in sweep() {
@@ -156,7 +156,7 @@ fn main() {
         print_table("keccak hashchain e2e (in progress)", &rows);
     }
     print_table("keccak hashchain e2e (final)", &rows);
-    if let Some(path) = json_path_from_args() {
+    if let Some(path) = json_path {
         write_json(&path, "keccak_hashchain_e2e", &rows).expect("write --json results");
         println!("wrote {path}");
     }

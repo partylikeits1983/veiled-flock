@@ -294,17 +294,24 @@ impl LincheckCircuit for ZkLincheckCircuit<'_> {
     }
 
     fn fold_alpha_batched(&self, alpha: F128, eq_inner: &[F128]) -> Vec<F128> {
+        debug_assert_eq!(eq_inner.len(), self.n_cols());
         let mut comb = self.inner.fold_alpha_batched(alpha, eq_inner);
+        // Accumulate the pin column's contributions locally: one
+        // read-modify-write and one alpha multiply per side, instead of
+        // one of each per randomizer row.
+        let mut pin_plain = F128::ZERO;
+        let mut pin_alpha = F128::ZERO;
         for s in self.layout.a_bits() {
             let e = eq_inner[s];
             comb[s] += alpha * e;
-            comb[self.pin] += e;
+            pin_plain += e;
         }
         for s in self.layout.b_bits() {
             let e = eq_inner[s];
-            comb[self.pin] += alpha * e;
+            pin_alpha += e;
             comb[s] += e;
         }
+        comb[self.pin] += pin_plain + alpha * pin_alpha;
         comb
     }
 }
@@ -2725,6 +2732,29 @@ mod tests {
             decorated.fold_alpha_batched(alpha, &eq_inner),
             oracle.fold_alpha_batched(alpha, &eq_inner),
         );
+    }
+
+    /// Inner stub with no constant-one wire.
+    struct NoPin;
+    impl LincheckCircuit for NoPin {
+        fn n_cols(&self) -> usize {
+            1 << 10
+        }
+        fn fold_alpha_batched(&self, _alpha: F128, _eq_inner: &[F128]) -> Vec<F128> {
+            vec![F128::ZERO; 1 << 10]
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "constant-one wire")]
+    fn zk_decorator_rejects_inner_without_pin() {
+        let cfg = crate::zk::ZkConfig {
+            rand_chunks_a: 1,
+            rand_chunks_b: 1,
+            chain_mask: false,
+        };
+        let layout = crate::zk::ZkBlockLayout::new(10, 512, None, &cfg);
+        let _ = ZkLincheckCircuit::new(&NoPin, &layout);
     }
 
     #[test]

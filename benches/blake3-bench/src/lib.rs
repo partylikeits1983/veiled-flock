@@ -100,6 +100,7 @@ pub fn verify_chain_linkage(digests: &[[u8; DIGEST_BYTES]]) -> bool {
 /// `native seconds at n = n / rate`, and small-n rows never divide by a
 /// noise-level baseline.
 pub fn amortized_rate(links: usize, chain: impl Fn(usize)) -> f64 {
+    assert!(links >= 10, "too few links for a warmup pass");
     chain(links / 10); // warmup
     let start = Instant::now();
     chain(links);
@@ -145,12 +146,21 @@ pub fn fmt_ms(s: f64) -> String {
 pub fn smoke() -> bool {
     match std::env::var("BENCH_SMOKE") {
         Err(_) => false,
-        Ok(v) if v.is_empty() => false,
-        Ok(v) => match v.to_ascii_lowercase().as_str() {
-            "1" | "true" | "yes" | "on" => true,
-            "0" | "false" | "no" | "off" => false,
-            other => panic!("BENCH_SMOKE set to unrecognized value {other:?}; use 1 or 0"),
-        },
+        Ok(v) => parse_smoke(&v),
+    }
+}
+
+/// Pure core of [`smoke`]: parse one `BENCH_SMOKE` value.
+///
+/// Panics on an unrecognized non-empty value.
+pub fn parse_smoke(value: &str) -> bool {
+    if value.is_empty() {
+        return false;
+    }
+    match value.to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => true,
+        "0" | "false" | "no" | "off" => false,
+        other => panic!("BENCH_SMOKE set to unrecognized value {other:?}; use 1 or 0"),
     }
 }
 
@@ -210,6 +220,8 @@ impl BenchRow {
     /// `hashes_per_s = n_real / prove_s` and
     /// `slowdown = prove_s / (n_real / native_rate)`. Every backend row
     /// function uses this constructor, so the formulas exist once.
+    /// Precondition: `prove_s > 0` and `native_rate > 0` — both come from
+    /// real timed work, never from a synthetic zero.
     pub fn new(
         backend: &'static str,
         relation: &'static str,
@@ -257,33 +269,48 @@ pub fn proof_size<T: serde::Serialize>(value: &T) -> usize {
 pub fn max_log_from_env(name: &str, default: u32, min: u32, max: u32, hint: &str) -> u32 {
     match std::env::var(name) {
         Err(_) => default,
-        Ok(v) => {
-            let k: u32 = v
-                .trim()
-                .parse()
-                .unwrap_or_else(|_| panic!("{name} must be an integer"));
-            assert!(
-                (min..=max).contains(&k),
-                "{name} must be in {min}..={max} ({hint})"
-            );
-            k
-        }
+        Ok(v) => parse_max_log(name, &v, min, max, hint),
     }
+}
+
+/// Pure core of [`max_log_from_env`]: parse and range-check one value.
+pub fn parse_max_log(name: &str, value: &str, min: u32, max: u32, hint: &str) -> u32 {
+    let k: u32 = value
+        .trim()
+        .parse()
+        .unwrap_or_else(|_| panic!("{name} must be an integer"));
+    assert!(
+        (min..=max).contains(&k),
+        "{name} must be in {min}..={max} ({hint})"
+    );
+    k
 }
 
 /// Return the path after a `--json` argument, or `None` when absent.
 ///
 /// Cargo forwards bench arguments after `--`, so the call shape is:
 /// `cargo bench -p <crate> -- --json results.json`. A `--json` flag
-/// without a path stops the bench loudly.
+/// without a path stops the bench loudly. Call this — and probe the path
+/// with [`probe_json_path`] — at the TOP of `main`, before any sweep: a
+/// bad path discovered after the sweep discards every measured row.
 pub fn json_path_from_args() -> Option<String> {
-    let mut args = std::env::args().skip(1);
+    json_path_from(std::env::args().skip(1))
+}
+
+/// Pure core of [`json_path_from_args`].
+pub fn json_path_from<I: Iterator<Item = String>>(mut args: I) -> Option<String> {
     while let Some(arg) = args.next() {
         if arg == "--json" {
             return Some(args.next().expect("--json needs a file path"));
         }
     }
     None
+}
+
+/// Fail fast on an unwritable `--json` path: create (or truncate) the file
+/// before the sweep starts.
+pub fn probe_json_path(path: &str) {
+    std::fs::write(path, b"").unwrap_or_else(|error| panic!("--json path {path:?}: {error}"));
 }
 
 /// Write the rows as pretty JSON: `{ "bench": <title>, "rows": [...] }`.
@@ -396,5 +423,54 @@ mod tests {
         assert!(fmt_ms(0.000_5).ends_with("µs"));
         assert!(fmt_ms(0.5).ends_with("ms"));
         assert!(fmt_ms(2.0).ends_with("s "));
+    }
+
+    #[test]
+    fn parse_smoke_accepts_truthy_and_falsy_forms() {
+        for v in ["1", "true", "YES", "On"] {
+            assert!(parse_smoke(v), "{v}");
+        }
+        for v in ["", "0", "false", "NO", "off"] {
+            assert!(!parse_smoke(v), "{v:?}");
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "unrecognized value")]
+    fn parse_smoke_rejects_unknown_values() {
+        parse_smoke("maybe");
+    }
+
+    #[test]
+    fn parse_max_log_accepts_in_range_values() {
+        assert_eq!(parse_max_log("X", " 7 ", 1, 14, "hint"), 7);
+    }
+
+    #[test]
+    #[should_panic(expected = "must be in 1..=14")]
+    fn parse_max_log_rejects_out_of_range() {
+        parse_max_log("X", "15", 1, 14, "hint");
+    }
+
+    #[test]
+    #[should_panic(expected = "must be an integer")]
+    fn parse_max_log_rejects_garbage() {
+        parse_max_log("X", "8x", 1, 14, "hint");
+    }
+
+    #[test]
+    fn json_path_from_finds_flag_and_path() {
+        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            json_path_from(args(&["--json", "out.json"]).into_iter()),
+            Some("out.json".to_string()),
+        );
+        assert_eq!(json_path_from(args(&["--other"]).into_iter()), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "--json needs a file path")]
+    fn json_path_from_rejects_missing_path() {
+        json_path_from(["--json".to_string()].into_iter());
     }
 }

@@ -21,8 +21,8 @@
 //! is ~805 MB of expansion plus multi-GB codewords. Set
 //! `BENCH_FRAMED_MAX_LOG` above 6 only after measuring.
 //!
-//! Run: `cargo bench -p veiled-flock-benchmarks`.
-//! Smoke: `BENCH_SMOKE=1 cargo bench -p veiled-flock-benchmarks`.
+//! Run: `cargo bench -p blake3-bench`.
+//! Smoke: `BENCH_SMOKE=1 cargo bench -p blake3-bench`.
 
 use blake3_bench::{
     BenchRow, RowTimings, blake3_chain, blake3_native_rate, json_path_from_args, max_log_from_env,
@@ -133,6 +133,12 @@ fn succinct_row(n_real: usize, native_rate: f64) -> BenchRow {
 }
 
 fn main() {
+    // Resolve and probe the --json path FIRST: a bad path found after the
+    // sweep would discard every measured row.
+    let json_path = json_path_from_args();
+    if let Some(path) = &json_path {
+        blake3_bench::probe_json_path(path);
+    }
     flock_prover::init_perf_thread_pool();
     if smoke() {
         println!("BENCH_SMOKE: shrunken sweeps, 1 timing run per row");
@@ -150,7 +156,7 @@ fn main() {
         print_table("blake3 hashchain e2e (in progress)", &rows);
     }
     print_table("blake3 hashchain e2e (final)", &rows);
-    if let Some(path) = json_path_from_args() {
+    if let Some(path) = json_path {
         write_json(&path, "blake3_hashchain_e2e", &rows).expect("write --json results");
         println!("wrote {path}");
     }

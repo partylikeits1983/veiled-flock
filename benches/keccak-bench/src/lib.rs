@@ -1,9 +1,8 @@
-//! Keccak chain builders for the end-to-end keccak proving benchmark.
-//!
-//! The bench target itself lands with Phase 2 of the e2e bench plan
-//! (`KeccakZkSetup` over succinct VEIL, plus the native `prove_chain`
-//! reference rows). This lib holds the keccak-side witness builders,
-//! lifted from `crates/flock-prover/examples/keccak_chain_bench.rs`.
+//! Keccak chain builders for the end-to-end keccak proving benchmark
+//! (`keccak_hashchain_e2e.rs` in this crate). This lib holds the
+//! keccak-side witness builders, lifted from
+//! `crates/flock-prover/examples/keccak_chain_bench.rs`, plus the keccak
+//! native-rate calibration and the public linkage check.
 
 use blake3_bench::SplitMix;
 use flock_prover::r1cs_hashes::keccak::{STATE_BITS, State, keccak_f};
@@ -40,22 +39,13 @@ pub fn keccak_honest_chain(n: usize, seed: u64) -> (Vec<State>, State, State) {
 /// then times a fixed link count, so small-n rows never divide by a
 /// noise-level baseline.
 pub fn keccak_native_rate() -> f64 {
-    let links = if blake3_bench::smoke() {
-        10_000
-    } else {
-        100_000
-    };
-    let chain = |count: usize| {
+    blake3_bench::amortized_rate(blake3_bench::calibration_links(), |count| {
         let mut state = random_state(&mut SplitMix(0xBA5E_11E5));
         for _ in 0..count {
             keccak_f(std::hint::black_box(&mut state));
         }
         std::hint::black_box(state);
-    };
-    chain(links / 10); // warmup
-    let start = std::time::Instant::now();
-    chain(links);
-    links as f64 / start.elapsed().as_secs_f64()
+    })
 }
 
 /// Check chain linkage over public state lists: `outputs[i] == inputs[i+1]`
@@ -69,6 +59,21 @@ pub fn verify_state_linkage(inputs: &[State], outputs: &[State]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn verify_state_linkage_accepts_honest_and_rejects_tampered() {
+        let (inputs, _x0, x_last) = keccak_honest_chain(4, 0xFACE);
+        let mut outputs: Vec<State> = inputs[1..].to_vec();
+        outputs.push(x_last);
+        assert!(verify_state_linkage(&inputs, &outputs));
+
+        let mut bad = outputs.clone();
+        bad[0][3] ^= true;
+        assert!(!verify_state_linkage(&inputs, &bad));
+        assert!(!verify_state_linkage(&inputs, &outputs[..3]));
+        assert!(verify_state_linkage(&inputs[..1], &outputs[..1]));
+        assert!(verify_state_linkage(&[], &[]));
+    }
 
     #[test]
     fn keccak_chain_links_are_honest() {
