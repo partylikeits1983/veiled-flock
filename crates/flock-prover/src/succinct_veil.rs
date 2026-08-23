@@ -57,10 +57,11 @@ pub struct MaskedZerocheckProof {
 }
 
 /// Masked chain-shift wire format (succinct-chain composition, Part 7).
-/// Exactly the `2 · (n + 1 + |S|)` round messages the extended shift
-/// sumcheck observes, each one-time padded. The opened evaluation value is
-/// NOT here: like `final_c_eval`, it is not maskable — the PCS checks it
-/// verbatim — so it travels as the public `chain_value` field.
+/// Exactly the `n + 1 + |S|` round message pairs (`2 · (n + 1 + |S|)`
+/// field elements) the extended shift sumcheck observes, each one-time
+/// padded. The opened evaluation value is NOT here: like `final_c_eval`,
+/// it is not maskable — the PCS checks it verbatim — so it travels as the
+/// public `chain_value` field.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaskedChainShiftProof {
     pub rounds: Vec<(F128, F128)>,
@@ -72,6 +73,9 @@ pub struct MaskedChainShiftProof {
 /// opened value.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctChainVeilProof {
+    /// NOT a valid standalone succinct proof: its transcript, mask
+    /// commitment, and circuit all carry the chain section. Feeding it to
+    /// `verify_succinct_veil_r1cs` fails (safely).
     pub base: SuccinctVeilProof,
     pub masked_chain: MaskedChainShiftProof,
     /// The extended shift sumcheck's opened evaluation `V` — a public
@@ -337,6 +341,10 @@ impl ChainMaskShape {
     /// Panics when the layout has no chain-mask pair, or when the pair
     /// index does not fit the slot-address coordinate space.
     pub fn from_layout(layout: &flock_core::zk::ZkBlockLayout, k_log: usize) -> Self {
+        assert!(
+            k_log > layout.mask_region_log,
+            "mask region does not fit the block"
+        );
         let base = layout
             .mask_pair_bit_base
             .expect("succinct chain composition needs the chain-mask slot pair");
@@ -575,6 +583,67 @@ fn observe_claims<C: Challenger>(challenger: &mut C, ab: F128, c: F128) {
     observe_claims_ext(challenger, ab, c, None);
 }
 
+/// Absorb the chain endpoints into the transcript, length-framed, BEFORE
+/// any challenge. The entry points call this themselves: endpoint binding
+/// is part of the construction, never a caller obligation — without it a
+/// prover can solve for a passing `x_last` after seeing the challenges
+/// (the running claim is affine in the verifier-formed initial claim, and
+/// `fold_public_phys` is F2-linear and surjective in the endpoint bits).
+fn absorb_chain_endpoints<Ch: Challenger>(
+    challenger: &mut Ch,
+    x0_phys: &[bool],
+    xlast_phys: &[bool],
+) {
+    let pack = |bits: &[bool]| {
+        let mut out = vec![0u8; bits.len().div_ceil(8)];
+        for (i, &bit) in bits.iter().enumerate() {
+            if bit {
+                out[i / 8] |= 1 << (i % 8);
+            }
+        }
+        out
+    };
+    challenger.observe_label(b"veil-flock-chain-endpoints-v0");
+    challenger.observe_bytes(&(x0_phys.len() as u64).to_le_bytes());
+    challenger.observe_bytes(&pack(x0_phys));
+    challenger.observe_bytes(&(xlast_phys.len() as u64).to_le_bytes());
+    challenger.observe_bytes(&pack(xlast_phys));
+}
+
+/// Validate that the caller's `(chain_layout, shape, endpoints)` triple is
+/// internally consistent with the R1CS's own zk layout. A mismatched shape
+/// silently removes the mask pair from the opened combination — the proof
+/// still verifies while `chain_value` degrades to a raw witness
+/// evaluation — so this is an error path, not a caller convention.
+fn validate_chain_shape(
+    r1cs: &BlockR1cs,
+    chain_layout: &crate::r1cs_hashes::chain_common::ChainLayout,
+    shape: &ChainMaskShape,
+    x0_phys: &[bool],
+    xlast_phys: &[bool],
+) -> Result<(), SuccinctVeilError> {
+    let zk = r1cs.zk.ok_or(SuccinctVeilError::InvalidParameters)?;
+    if zk.mask_region_log != chain_layout.region_log {
+        return Err(SuccinctVeilError::InvalidShape(
+            "zk mask_region_log vs chain layout region_log",
+        ));
+    }
+    if *shape != ChainMaskShape::from_layout(&zk, r1cs.k_log) {
+        return Err(SuccinctVeilError::InvalidShape(
+            "chain mask shape vs zk layout",
+        ));
+    }
+    if shape.s_coords.is_empty() {
+        return Err(SuccinctVeilError::InvalidShape(
+            "mask pair coincides with the state pair — no blinding",
+        ));
+    }
+    if x0_phys.len() != chain_layout.region_bits || xlast_phys.len() != chain_layout.region_bits {
+        return Err(SuccinctVeilError::InvalidShape("endpoint bit length"));
+    }
+    Ok(())
+}
+
 /// Inputs for the chain section of [`shifted_verifier_circuit`].
 struct ChainCircuitInput<'a> {
     chain_layout: &'a crate::r1cs_hashes::chain_common::ChainLayout,
@@ -787,6 +856,14 @@ fn shifted_verifier_circuit_ext<C: Challenger>(
             .s_high
             .iter()
             .fold(base_w, |acc, &h| acc * (F128::ONE + h));
+        if w_final == F128::ZERO {
+            // Negligible (~2^-128) and not grindable, but a zero weight
+            // would leave `chain_value` unconstrained — reject, matching
+            // the zerocheck degenerate-challenge convention.
+            return Err(SuccinctVeilError::InvalidShape(
+                "degenerate chain final weight",
+            ));
+        }
 
         // ONE linear constraint: claim_final == W'_final * V.
         builder
@@ -820,6 +897,10 @@ fn shifted_verifier_circuit_ext<C: Challenger>(
     Ok((builder.finish(), ab, c, chain_out))
 }
 
+// MIRROR: `prove_succinct_chain_veil_r1cs` duplicates this body (through
+// the pre-`circuit_start` transcript prefix and the zerocheck/lincheck
+// sections) to keep this shipping path byte-identical. Replicate any
+// change here in the chain variant, and vice versa.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
@@ -1112,6 +1193,12 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
 /// EXPERIMENTAL, uncertified (like the whole succinct path), and it
 /// forgoes the `SuccinctZerocheckSource` simulation seam: this entry point
 /// claims masking-by-construction, not simulatability.
+// MIRROR: this body duplicates `prove_succinct_veil_r1cs` (transcript
+// prefix, zerocheck, lincheck) deliberately — the shipping path must stay
+// byte-identical, so a shared parameterized core was rejected. Replicate
+// any change to either body in the other. The veil challenger fork below
+// happens after all linkage data is bound but before the terminal opening,
+// for the same reason as in the base prover.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
@@ -1132,6 +1219,11 @@ pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
     if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
         return Err(SuccinctVeilError::InvalidParameters);
     }
+    validate_chain_shape(r1cs, chain_layout, shape, x0_phys, xlast_phys)?;
+    // Endpoint binding is part of the construction (see
+    // `absorb_chain_endpoints`) — before the nonce, the commitments, and
+    // every challenge.
+    absorb_chain_endpoints(challenger, x0_phys, xlast_phys);
     let layout = MaskLayout::with_chain(r1cs, Some(shape))?;
     let mut masks = vec![F128::ZERO; layout.observed_count()];
     let mut mask_rng = rng.fork(b"succinct-veil-transcript-masks");
@@ -1172,6 +1264,10 @@ pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
 
     let padding = r1cs.padding_spec();
     let (honest_zc, zc_claim, s_hat_v_c) = {
+        // SAFETY (all three blocks): reinterpreting a live `&[F128]` as
+        // `&[u8]` of the same byte length; F128 is a plain-old-data pair
+        // of u64s with no padding, the source outlives the borrow, and
+        // the zerocheck kernel only reads. Mirrors the base prover.
         let a_bytes = unsafe {
             std::slice::from_raw_parts(
                 a_packed.as_ptr() as *const u8,
@@ -1408,6 +1504,8 @@ pub fn verify_succinct_chain_veil_r1cs<Ch: Challenger + Clone>(
     if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
         return Err(SuccinctVeilError::InvalidParameters);
     }
+    validate_chain_shape(r1cs, chain_layout, shape, x0_phys, xlast_phys)?;
+    absorb_chain_endpoints(challenger, x0_phys, xlast_phys);
     MaskLayout::with_chain(r1cs, Some(shape))?;
     if commitment.params != *pcs_params
         || proof.base.veil.parameters != ConstraintParameters::succinct_flock_experimental()

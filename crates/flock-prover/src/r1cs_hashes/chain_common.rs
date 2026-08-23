@@ -197,17 +197,20 @@ pub fn fold_in_out_subcube(
     fold: &ChainFold,
     s_coords: &[usize],
 ) -> Vec<(Vec<F128>, Vec<F128>)> {
-    let bits_per_packed = 1usize << LOG_PACKING;
-    let n_packed_per_region = 1usize << fold.tau_pos.len();
     assert_eq!(
-        layout.input_byte_off * 8,
-        0,
+        layout.input_byte_off, 0,
         "subcube fold needs the input slot at pair-0 offset 0"
     );
+    // Bit-exact: a truncating word-level comparison would accept an output
+    // slot misaligned by up to 15 bytes and fold the wrong words.
     assert_eq!(
-        (layout.output_byte_off * 8) / bits_per_packed,
-        n_packed_per_region,
+        layout.output_byte_off * 8,
+        1usize << layout.region_log,
         "subcube fold needs the output slot as pair 0's second half"
+    );
+    assert!(
+        layout.region_log >= 3,
+        "pair stride must be a whole number of bytes"
     );
     for &c in s_coords {
         assert!(c < layout.high_zeros(), "S coordinate outside slot space");

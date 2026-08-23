@@ -407,6 +407,13 @@ pub fn prove_chain_shift_ext<Ch: Challenger>(
 /// Verify a [`prove_chain_shift_ext`] proof. `s_len = |S|`. Mirrors
 /// [`verify_chain_shift`], with the final weight multiplied by
 /// `Π_{j∈S}(1 + h*_j)`.
+///
+/// NORMATIVE SPEC: the succinct chain section of
+/// `succinct_veil::shifted_verifier_circuit_ext` re-derives this exact
+/// recurrence over `LinearCombination`s. Any change here (guards
+/// included) MUST be replicated there — an honest-behavior divergence
+/// fails loudly at prove time (the circuit becomes unsatisfiable), but a
+/// rejection-path divergence does not.
 pub fn verify_chain_shift_ext<Ch: Challenger>(
     proof: &ChainShiftProof,
     x0_r: F128,
@@ -451,6 +458,12 @@ pub fn verify_chain_shift_ext<Ch: Challenger>(
     let one_plus_s0 = F128::ONE + s0;
     let base_w = s * one_plus_s0 + eq_tt * s0 + alpha * eq_t0 * one_plus_s0;
     let w_final = s_high.iter().fold(base_w, |acc, &h| acc * (F128::ONE + h));
+    if w_final == F128::ZERO {
+        // Negligible (~2^-128) and not grindable, but a zero weight would
+        // leave `g_at_point` unconstrained by the final check — reject,
+        // matching the zerocheck degenerate-challenge convention.
+        return Err(ChainError::SumcheckFinal);
+    }
 
     if claim != w_final * proof.g_at_point {
         return Err(ChainError::SumcheckFinal);
@@ -1033,5 +1046,22 @@ mod tests {
             claims.instance_point[1],
         ];
         assert_eq!(point, hand_built);
+
+        // BatchMajor: instance coords lead: [inst..., sel0, h*_0, h*_1].
+        let point_bm = crate::r1cs_hashes::chain_common::build_chain_claim_point_ext(
+            &layout,
+            flock_core::r1cs::WitnessLayout::BatchMajor,
+            &fold,
+            &claims,
+            &s_coords,
+        );
+        let hand_built_bm = vec![
+            claims.instance_point[0],
+            claims.instance_point[1],
+            claims.sel0,
+            claims.s_high[0],
+            claims.s_high[1],
+        ];
+        assert_eq!(point_bm, hand_built_bm);
     }
 }

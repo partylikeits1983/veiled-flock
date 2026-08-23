@@ -1770,7 +1770,11 @@ impl KeccakZkSetup {
         challenger.observe_bytes(&(CHAIN_LAYOUT.region_log as u64).to_le_bytes());
         challenger.observe_bytes(&(CHAIN_LAYOUT.input_byte_off as u64).to_le_bytes());
         challenger.observe_bytes(&(CHAIN_LAYOUT.output_byte_off as u64).to_le_bytes());
+        // Length-framed: unambiguous even if a variable-width endpoint
+        // encoder reuses this pattern.
+        challenger.observe_bytes(&(x0_phys.len() as u64).to_le_bytes());
         challenger.observe_bytes(&Self::phys_bits_to_bytes(x0_phys));
+        challenger.observe_bytes(&(xlast_phys.len() as u64).to_le_bytes());
         challenger.observe_bytes(&Self::phys_bits_to_bytes(xlast_phys));
     }
 
@@ -1787,11 +1791,15 @@ impl KeccakZkSetup {
         rng: &mut flock_core::zk::ZkRng,
         challenger: &mut Ch,
     ) -> Result<(crate::succinct_veil::SuccinctChainVeilProof, Commitment), KeccakZkError> {
-        assert_eq!(
-            self.n_keccaks,
-            self.n_keccak_slots(),
-            "the chain forbids padding: n_keccaks must fill the slots exactly"
-        );
+        if self.n_keccaks != self.n_keccak_slots() {
+            // The chain forbids padding: a non-power-of-two setup is a
+            // caller error, not a panic — this runs on the verifier path.
+            return Err(KeccakZkError::BatchSizeMismatch {
+                which: "chain slots",
+                expected: self.n_keccak_slots(),
+                got: self.n_keccaks,
+            });
+        }
         if inputs.len() != self.n_keccaks {
             return Err(KeccakZkError::BatchSizeMismatch {
                 which: "inputs",
@@ -1854,11 +1862,15 @@ impl KeccakZkSetup {
         x_last: &State,
         challenger: &mut Ch,
     ) -> Result<(), KeccakZkError> {
-        assert_eq!(
-            self.n_keccaks,
-            self.n_keccak_slots(),
-            "the chain forbids padding: n_keccaks must fill the slots exactly"
-        );
+        if self.n_keccaks != self.n_keccak_slots() {
+            // The chain forbids padding: a non-power-of-two setup is a
+            // caller error, not a panic — this runs on the verifier path.
+            return Err(KeccakZkError::BatchSizeMismatch {
+                which: "chain slots",
+                expected: self.n_keccak_slots(),
+                got: self.n_keccaks,
+            });
+        }
         let x0_phys = state_to_phys_bits(x0);
         let xlast_phys = state_to_phys_bits(x_last);
         Self::absorb_chain_statement(challenger, self.n_keccaks_log(), &x0_phys, &xlast_phys);
