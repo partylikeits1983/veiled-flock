@@ -1499,6 +1499,12 @@ impl From<crate::succinct_veil::SuccinctVeilError> for KeccakZkError {
 
 /// Succinct-VEIL setup for a batch of public keccak-f permutation claims.
 ///
+/// EXPERIMENTAL, like the sibling `Blake3PreimageZkSetup` succinct path:
+/// this entry point is NOT gated by [`crate::zk_certificate`] — statements
+/// that bind public I/O are outside the certified zk scope by design, and
+/// no mask-coverage certificate exists for this shape. Do not use for
+/// production secrets.
+///
 /// The statement binds BOTH endpoints of every block: `keccak_f` is a
 /// permutation, so an output-only statement is satisfied by anyone via the
 /// inverse permutation. Two [`crate::digest_bind::DigestStatement`]s (input
