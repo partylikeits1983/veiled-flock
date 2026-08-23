@@ -22,6 +22,7 @@ serde = { workspace = true }
 
 [[bench]]
 name = "blake3_hashchain_e2e"
+path = "blake3_hashchain_e2e.rs"
 harness = false
 
 [lints]
