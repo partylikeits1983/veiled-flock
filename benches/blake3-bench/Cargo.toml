@@ -1,10 +1,10 @@
 [package]
-name = "veiled-flock-benchmarks"
+name = "blake3-bench"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "End-to-end proving benchmarks for the veiled-FLOCK backends."
+description = "End-to-end BLAKE3 proving benchmark and the shared bench harness."
 publish = false
 
 # No direct flock-core dep: flock-prover re-exports it wholesale (`pub use
@@ -12,7 +12,7 @@ publish = false
 # `veil` feature to keep feature unification correct.
 # No `unsound-challenger` feature: `FsChallenger` serves every benched path.
 [dependencies]
-flock-prover = { path = "../crates/flock-prover", features = ["veil"] }
+flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
 blake3 = { workspace = true }
 
 [dev-dependencies]

@@ -1,17 +1,18 @@
-//! Shared harness for the end-to-end proving benchmarks.
+//! End-to-end BLAKE3 proving benchmark and the shared bench harness.
 //!
-//! This crate holds the workspace-level e2e benchmarks. The bench targets
-//! measure full prove and verify cycles. The existing micro-benches in
-//! `crates/flock-prover/benches/` stay separate. They measure raw hash
-//! throughput only.
+//! The e2e bench crates live under `benches/`: this crate (BLAKE3) and
+//! `keccak-bench`. This lib also holds the generic harness (Rng, timer,
+//! row/table reporter), which `keccak-bench` reuses via a path dependency.
+//! The bench targets measure full prove and verify cycles. The existing
+//! micro-benches in `crates/flock-prover/benches/` stay separate. They
+//! measure raw hash throughput only.
 //!
-//! The Rng, the time formatter, and the keccak chain builder come from
+//! The Rng and the time formatter come from
 //! `crates/flock-prover/examples/keccak_chain_bench.rs`.
 
 use std::time::Instant;
 
 use flock_prover::r1cs_hashes::blake3_preimage::{DIGEST_BYTES, MESSAGE_BYTES};
-use flock_prover::r1cs_hashes::keccak::{STATE_BITS, State, keccak_f};
 
 /// Deterministic splitmix64 generator for bench inputs.
 pub struct SplitMix(pub u64);
@@ -34,31 +35,6 @@ impl SplitMix {
         }
         out
     }
-
-    /// Return one pseudo-random keccak state.
-    pub fn keccak_state(&mut self) -> State {
-        let mut s = [false; STATE_BITS];
-        for b in s.iter_mut() {
-            *b = self.next_u64() & 1 == 1;
-        }
-        s
-    }
-}
-
-/// Build an honest keccak-f chain of `n` permutations.
-///
-/// Returns `(inputs, x0, x_last)` with `inputs[i] = keccak_f^i(x0)` and
-/// `x_last = keccak_f(inputs[n - 1])`.
-pub fn keccak_honest_chain(n: usize, seed: u64) -> (Vec<State>, State, State) {
-    let mut rng = SplitMix(seed);
-    let x0 = rng.keccak_state();
-    let mut inputs = Vec::with_capacity(n);
-    let mut cur = x0;
-    for _ in 0..n {
-        inputs.push(cur);
-        keccak_f(&mut cur);
-    }
-    (inputs, x0, cur)
 }
 
 /// Build an honest BLAKE3 hash chain of `n` single-block messages.
@@ -315,21 +291,6 @@ mod tests {
                 assert_eq!(messages[i][..DIGEST_BYTES], digests[i - 1]);
             }
         }
-    }
-
-    #[test]
-    fn keccak_chain_links_are_honest() {
-        let (inputs, x0, x_last) = keccak_honest_chain(4, 0xDEAD_BEEF);
-        assert_eq!(inputs.len(), 4);
-        assert_eq!(inputs[0], x0);
-        for i in 0..3 {
-            let mut next = inputs[i];
-            keccak_f(&mut next);
-            assert_eq!(next, inputs[i + 1]);
-        }
-        let mut last = inputs[3];
-        keccak_f(&mut last);
-        assert_eq!(last, x_last);
     }
 
     #[test]

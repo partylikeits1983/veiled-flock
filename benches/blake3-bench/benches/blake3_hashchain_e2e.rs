@@ -25,15 +25,15 @@
 //! Smoke: `BENCH_SMOKE=1 cargo bench -p veiled-flock-benchmarks`.
 
 use bincode::Options;
+use blake3_bench::{
+    BenchRow, RowTimings, blake3_chain, blake3_native_rate, print_table, runs, smoke, time_best,
+    verify_chain_linkage,
+};
 use flock_prover::challenger::FsChallenger;
 use flock_prover::proof_io::fixint_options;
 use flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 use flock_prover::veiled_preimage::VeiledBlake3Setup;
 use flock_prover::zk::ZkRng;
-use veiled_flock_benchmarks::{
-    BenchRow, RowTimings, blake3_chain, blake3_native_rate, print_table, runs, smoke, time_best,
-    verify_chain_linkage,
-};
 
 const DOMAIN: &[u8] = b"veiled-flock-bench-blake3-e2e-v0";
 const CHAIN_SEED: u64 = 0xC0FFEE_42;
