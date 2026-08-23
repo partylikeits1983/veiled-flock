@@ -286,16 +286,81 @@ impl From<pcs::VerifyError> for SuccinctVeilError {
     }
 }
 
+/// Geometry of the chain-mask slot pair, for the succinct chain
+/// composition (Part 7 of the e2e bench plan).
+///
+/// Derive this at RUNTIME from the zk layout — never hardcode `p` or
+/// `|S|`: keccak's layout routes through `ZkConfig::sized_for`, so the
+/// pair index is batch-dependent in principle. This shape is an EXPLICIT
+/// parameter of the chain entry points; it is never derived from
+/// `r1cs.zk` inside the shared code paths, because both shipping
+/// encoders already allocate the pair (`chain_mask: true`) and deriving
+/// it there would silently flip the existing public-chain entry points
+/// into chain mode.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChainMaskShape {
+    /// The mask pair's slot-pair index `p`.
+    pub pair_index: usize,
+    /// The slot-address coordinate set `S`: the set bit positions of `p`
+    /// (LSB first). The extended shift sumcheck runs `|S|` extra rounds.
+    pub s_coords: Vec<usize>,
+}
+
+impl ChainMaskShape {
+    /// Derive the shape from a zk block layout. `k_log` is the block's
+    /// witness log (the layout does not store it).
+    ///
+    /// Panics when the layout has no chain-mask pair, or when the pair
+    /// index does not fit the slot-address coordinate space.
+    pub fn from_layout(layout: &flock_core::zk::ZkBlockLayout, k_log: usize) -> Self {
+        let base = layout
+            .mask_pair_bit_base
+            .expect("succinct chain composition needs the chain-mask slot pair");
+        let pair_index = base >> (layout.mask_region_log + 1);
+        let high_zeros = k_log - layout.mask_region_log - 1;
+        assert!(
+            pair_index < (1usize << high_zeros),
+            "mask-pair index {pair_index} does not fit 2^{high_zeros} slot-pairs"
+        );
+        let s_coords = (0..high_zeros)
+            .filter(|j| (pair_index >> j) & 1 == 1)
+            .collect();
+        Self {
+            pair_index,
+            s_coords,
+        }
+    }
+
+    /// Extra shift-sumcheck rounds the extension adds: `|S|`.
+    pub fn extra_rounds(&self) -> usize {
+        self.s_coords.len()
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 struct MaskLayout {
     ell: usize,
     zc_rounds: usize,
     lc_rounds: usize,
     z_partial: usize,
+    /// Shift-sumcheck rounds of the chain section, `n_log + 1 + |S|`;
+    /// zero for the (unchanged) chainless entry points. Each round
+    /// observes two values.
+    chain_rounds: usize,
 }
 
 impl MaskLayout {
     fn new(r1cs: &BlockR1cs) -> Result<Self, SuccinctVeilError> {
+        Self::with_chain(r1cs, None)
+    }
+
+    /// Chain-aware constructor. `observed_count` grows by `2 ·
+    /// (n_log + 1 + |S|)` ONLY when `chain` is present, so the chainless
+    /// entry points' mask commitments and circuits stay byte-identical.
+    fn with_chain(
+        r1cs: &BlockR1cs,
+        chain: Option<&ChainMaskShape>,
+    ) -> Result<Self, SuccinctVeilError> {
         let k = r1cs.k();
         if r1cs.k_skip != zerocheck::K_SKIP
             || r1cs.m < zerocheck::K_SKIP + zerocheck::N_INNER
@@ -308,16 +373,26 @@ impl MaskLayout {
         {
             return Err(SuccinctVeilError::InvalidShape("R1CS mask geometry"));
         }
+        let chain_rounds = match chain {
+            None => 0,
+            Some(shape) => (r1cs.m - r1cs.k_log) + 1 + shape.extra_rounds(),
+        };
         Ok(Self {
             ell: 1usize << zerocheck::K_SKIP,
             zc_rounds: r1cs.m - zerocheck::K_SKIP,
             lc_rounds: r1cs.k_log - r1cs.k_skip,
             z_partial: 1usize << r1cs.k_skip,
+            chain_rounds,
         })
     }
 
     fn observed_count(self) -> usize {
-        2 * self.ell + 2 * self.zc_rounds + 2 + 2 * self.lc_rounds + self.z_partial
+        2 * self.ell
+            + 2 * self.zc_rounds
+            + 2
+            + 2 * self.lc_rounds
+            + self.z_partial
+            + 2 * self.chain_rounds
     }
 }
 
