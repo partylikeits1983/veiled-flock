@@ -37,11 +37,19 @@ Sweep overrides (validated, and loud on bad values):
 - `BENCH_KECCAK_MAX_LOG` — keccak rows above n = 4096 (m = 28). Ligerito
   configs stop at m = 35.
 
+## Backends
+
+| Backend | What it is |
+|---|---|
+| `veil-framed` | The direct VEIL argument (BLAKE3 only): `VeiledBlake3Setup` over `veil_f128::prove_block_r1cs`. The witness is proven inside the VEIL code itself, with materialized sparse matrices. Largest proofs, no Ligerito layer. |
+| `veil-succinct` | The succinct VEIL argument (BLAKE3 and keccak): `Blake3PreimageZkSetup` / `KeccakZkSetup` over `succinct_veil::prove_succinct_veil_r1cs`. The witness stays in FLOCK's hiding Ligerito commitment; a small VEIL circuit proves the additively-masked zerocheck/lincheck transcript. This is the path the `veiled_flock` CLI ships. Experimental — see the setup rustdoc. |
+| `native-ligerito` | FLOCK's native chain prover (keccak only): `KeccakSetup::prove_chain`. No VEIL layer, no zk masking. It enforces chain linkage in-circuit and serves as the in-circuit reference row. |
+
 ## Columns
 
 | Column | Meaning |
 |---|---|
-| `backend` | Prover: `veil-framed`, `veil-succinct`, or `native-ligerito`. |
+| `backend` | Prover label. See the Backends table above. |
 | `relation` | What the circuit enforces. See the caveat below. |
 | `n_real` / `n_slots` / `util` | Real chain links, padded witness slots, and their ratio. |
 | `setup`, `witness`, `prove`, `verify` | Wall time per section. Prove and verify are best-of-N. |
