@@ -42,7 +42,7 @@ Sweep overrides (validated, and loud on bad values):
 | Backend | What it is |
 |---|---|
 | `veil-framed` | The direct VEIL argument (BLAKE3 only): `VeiledBlake3Setup` over `veil_f128::prove_block_r1cs`. The witness is proven inside the VEIL code itself, with materialized sparse matrices. Largest proofs, no Ligerito layer. |
-| `veil-succinct` | The succinct VEIL argument (BLAKE3 and keccak): `Blake3PreimageZkSetup` / `KeccakZkSetup` over `succinct_veil::prove_succinct_veil_r1cs`. The witness stays in FLOCK's hiding Ligerito commitment; a small VEIL circuit proves the additively-masked zerocheck/lincheck transcript. This is the path the `veiled_flock` CLI ships. Experimental — see the setup rustdoc. |
+| `veil-succinct` | The succinct VEIL argument (BLAKE3 and keccak): `Blake3PreimageZkSetup` / `KeccakZkSetup` over `succinct_veil`. The witness stays in FLOCK's hiding Ligerito commitment; a small VEIL circuit proves the additively-masked transcript. Keccak has two relations on this backend: per-block with public states (`public-chain`) and, via `prove_succinct_chain`, in-circuit linkage with endpoints-only publics (`chain-in-circuit`). This is the path the `veiled_flock` CLI ships. Experimental — see the setup rustdoc. |
 | `native-ligerito` | FLOCK's native chain prover (keccak only): `KeccakSetup::prove_chain`. No VEIL layer, no zk masking. It enforces chain linkage in-circuit and serves as the in-circuit reference row. |
 
 ## Columns
@@ -72,8 +72,13 @@ The `relation` column separates two different statements:
 The `public-chain` rows have no secret witness at all: with every digest
 or state public, each block's input is publicly derivable. Those rows
 measure batch throughput of independent per-block relations. They do not
-measure chain-statement proving. A cross-backend comparison at equal
-relation is future work (Part 7 of the plan).
+measure chain-statement proving.
+
+The keccak bench also runs `veil-succinct` at `chain-in-circuit`
+(`prove_succinct_chain`, Part 7): the succinct backend proving the SAME
+relation as the native row. Compare those two rows for the cost of the
+zk masking layer at equal relation. The BLAKE3 backends stay
+`public-chain` only.
 
 ## Verification behavior
 

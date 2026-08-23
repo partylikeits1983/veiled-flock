@@ -266,3 +266,73 @@ fn succinct_chain_roundtrip_and_tamper() {
         "tampered chain round message must reject",
     );
 }
+
+/// Chain-value mask coverage (Part 7e, scoped audit): the chain claim's eq
+/// weight on the mask-pair words is nonzero, so the pair's committed
+/// uniform bits one-time-pad the opened value. One nonzero F128
+/// coefficient `c` suffices: `{c * basis_b}` over the 128 field basis
+/// elements spans F128 over F2, so a single mask WORD with nonzero weight
+/// makes `chain_value` uniform. The JOINT uniformity of
+/// (ab_value, c_value, chain_value) over the shared pool remains a
+/// certification-scope audit — the path is EXPERIMENTAL and uncertified.
+#[test]
+fn chain_value_has_nonzero_mask_pair_weight() {
+    use flock_core::zerocheck::multilinear::eq_eval;
+    let layout = crate::r1cs_hashes::keccak::zk_layout(22);
+    let shape = super::ChainMaskShape::from_layout(&layout, 16);
+    let chain_layout = &crate::r1cs_hashes::keccak::CHAIN_LAYOUT;
+    let fold = crate::r1cs_hashes::chain_common::ChainFold::new(
+        chain_layout,
+        (0..chain_layout.tau_pos_len())
+            .map(|i| flock_core::field::F128 {
+                lo: 0x1111 * (i as u64 + 3),
+                hi: 0x7,
+            })
+            .collect(),
+    );
+    // Pseudo-random bound challenges standing in for the FS transcript.
+    let claims = crate::chain::ChainClaimsExt {
+        instance_point: (0..6)
+            .map(|i| flock_core::field::F128 {
+                lo: 0xABCD + i as u64,
+                hi: 0x99,
+            })
+            .collect(),
+        sel0: flock_core::field::F128 { lo: 0x5, hi: 0x1 },
+        s_high: (0..shape.extra_rounds())
+            .map(|i| flock_core::field::F128 {
+                lo: 0xF0F0 + i as u64,
+                hi: 0x3,
+            })
+            .collect(),
+        value: flock_core::field::F128::ZERO,
+    };
+    let point = crate::r1cs_hashes::chain_common::build_chain_claim_point_ext(
+        chain_layout,
+        flock_core::r1cs::WitnessLayout::RowMajor,
+        &fold,
+        &claims,
+        &shape.s_coords,
+    );
+    assert_eq!(point.len(), 22 - 7);
+
+    // First word of the mask pair's IN slot, instance 0 (RowMajor):
+    // within-block word index = pair_index * 2 * words_per_region.
+    let words_per_region = 1usize << chain_layout.tau_pos_len();
+    let word = shape.pair_index * 2 * words_per_region;
+    let word_bits: Vec<flock_core::field::F128> = (0..point.len())
+        .map(|j| {
+            if (word >> j) & 1 == 1 {
+                flock_core::field::F128::ONE
+            } else {
+                flock_core::field::F128::ZERO
+            }
+        })
+        .collect();
+    let weight = eq_eval(&point, &word_bits);
+    assert_ne!(
+        weight,
+        flock_core::field::F128::ZERO,
+        "the chain claim must reach the mask pair",
+    );
+}

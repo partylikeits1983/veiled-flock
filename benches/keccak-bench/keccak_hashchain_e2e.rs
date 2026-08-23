@@ -1,6 +1,6 @@
 //! End-to-end keccak-f hash-chain proving benchmark.
 //!
-//! Two provers per sweep point:
+//! Three rows per sweep point:
 //! - `native-ligerito`, relation `chain-in-circuit`: `KeccakSetup::prove_chain`
 //!   enforces `state_24[i] == state_0[i + 1]` in the committed witness; only
 //!   the endpoints `x_0` / `x_last` are public.
@@ -9,6 +9,10 @@
 //!   checks linkage over the public states (`outputs[i] == inputs[i + 1]`) —
 //!   a pure equality check, so the `verify` column covers the full
 //!   public-chain relation.
+//! - `veil-succinct`, relation `chain-in-circuit`: `prove_succinct_chain`
+//!   enforces linkage in the committed witness with only the endpoints
+//!   public — the same relation as the native row, so those two rows are
+//!   directly comparable.
 //!
 //! Sweep: n in {64, 256, 1024, 4096} (m = 22, 24, 26, 28). The valid chain
 //! range reaches n = 524288 (m = 35), but the upper range is unrunnable on a
@@ -131,6 +135,50 @@ fn succinct_row(n: usize, native_rate: f64) -> BenchRow {
     )
 }
 
+/// The succinct-VEIL prover with IN-CIRCUIT linkage (Part 7): endpoints
+/// only are public; the committed witness enforces every interior link.
+/// This row and the native row prove the SAME relation — the first
+/// equal-relation cross-backend comparison in the suite.
+fn succinct_chain_row(n: usize, native_rate: f64) -> BenchRow {
+    let (setup, setup_s) = time_best(1, || KeccakZkSetup::new(n));
+    assert_eq!(
+        setup.n_keccak_slots(),
+        n,
+        "chain rows must fill their slots"
+    );
+    let ((inputs, x0, x_last), witness_s) = time_best(1, || keccak_honest_chain(n, CHAIN_SEED));
+
+    let ((proof, commitment), prove_s) = time_best(runs(), || {
+        let mut rng = ZkRng::from_seed(ZK_SEED);
+        let mut challenger = FsChallenger::new(DOMAIN);
+        setup
+            .prove_succinct_chain(&inputs, &mut rng, &mut challenger)
+            .expect("succinct chain prove on an honest witness")
+    });
+    let ((), verify_s) = time_best(runs(), || {
+        let mut challenger = FsChallenger::new(DOMAIN);
+        setup
+            .verify_succinct_chain(&commitment, &proof, &x0, &x_last, &mut challenger)
+            .expect("succinct chain verify of a fresh proof");
+    });
+
+    BenchRow::new(
+        "veil-succinct",
+        "chain-in-circuit",
+        n,
+        setup.n_keccak_slots(),
+        RowTimings {
+            setup_s,
+            witness_s,
+            prove_s,
+            verify_s,
+        },
+        proof_size(&proof) + proof_size(&commitment),
+        native_rate,
+        format!("{:?}", setup.pcs_params),
+    )
+}
+
 fn main() {
     // Resolve and probe the --json path FIRST: a bad path found after the
     // sweep would discard every measured row.
@@ -153,6 +201,8 @@ fn main() {
         rows.push(native_row(n, native_rate));
         print_table("keccak hashchain e2e (in progress)", &rows);
         rows.push(succinct_row(n, native_rate));
+        print_table("keccak hashchain e2e (in progress)", &rows);
+        rows.push(succinct_chain_row(n, native_rate));
         print_table("keccak hashchain e2e (in progress)", &rows);
     }
     print_table("keccak hashchain e2e (final)", &rows);
