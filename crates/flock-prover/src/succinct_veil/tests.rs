@@ -125,7 +125,8 @@ fn succinct_chain_roundtrip_and_tamper() {
         &rand_words,
     );
 
-    let circuit = flock_core::lincheck::ZkLincheckCircuit::new(&keccak::KeccakLincheckCircuit, &layout);
+    let circuit =
+        flock_core::lincheck::ZkLincheckCircuit::new(&keccak::KeccakLincheckCircuit, &layout);
     let lig_prover = flock_core::pcs::ligerito::prover_config_for(
         pcs_params.log_msg_len(),
         pcs_params.log_batch_size,
