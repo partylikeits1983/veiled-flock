@@ -262,12 +262,21 @@ pub struct ZkLincheckCircuit<'a> {
 impl<'a> ZkLincheckCircuit<'a> {
     /// Wrap `inner` so the fold also claims `layout`'s randomizer rows.
     ///
-    /// Panics when the inner circuit has no constant-one wire: the A-type
-    /// row convention needs one for its B side.
+    /// Panics when the inner circuit has no constant-one wire (the A-type
+    /// row convention needs one for its B side), or when `layout` does not
+    /// fit inside the inner circuit's column space — a mismatched pair
+    /// would index out of bounds inside the prover AND the verifier fold.
     pub fn new(inner: &'a dyn LincheckCircuit, layout: &'a crate::zk::ZkBlockLayout) -> Self {
         let pin = inner
             .const_pin_col()
             .expect("zk randomizer rows need a constant-one wire in the inner circuit");
+        assert!(
+            layout.useful_bits_zk <= inner.n_cols(),
+            "zk layout ends at bit {} but the inner circuit has {} columns",
+            layout.useful_bits_zk,
+            inner.n_cols(),
+        );
+        assert!(pin < inner.n_cols(), "const pin outside the column space");
         Self { inner, layout, pin }
     }
 }

@@ -1507,6 +1507,16 @@ impl KeccakZkSetup {
     pub fn new(n_keccaks: usize) -> Self {
         assert!(n_keccaks >= 1);
         let n_log = min_n_keccaks_log(n_keccaks).max(22 - K_LOG);
+        // Upper bound BEFORE any allocation: Ligerito configs stop at
+        // m = 35, and `prewarm_prover(36)` would fault in ~24 GB of
+        // scratch before the config lookup could report the honest error.
+        assert!(
+            n_log <= 35 - K_LOG,
+            "n_keccaks = {n_keccaks} needs m = {} but Ligerito configs stop at m = 35 \
+             (max batch: 2^{} permutations)",
+            K_LOG + n_log,
+            35 - K_LOG,
+        );
         let r1cs = build_block_r1cs_zk(n_log);
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = PcsParams {
