@@ -45,10 +45,11 @@ cargo bench -p flock-prover --bench keccak_native_chain
 ```
 
 End-to-end proving benchmarks (full prove + verify cycles, both veil-f128
-backends) live in [`benches/`](benches/README.md):
+backends and the native chain prover) live in [`benches/`](benches/README.md):
 
 ```sh
 cargo bench -p blake3-bench
+cargo bench -p keccak-bench
 ```
 
 ## Documentation
