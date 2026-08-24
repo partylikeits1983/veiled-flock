@@ -823,6 +823,14 @@ pub fn zk_layout() -> flock_core::zk::ZkBlockLayout {
     flock_core::zk::ZkBlockLayout::new(K_LOG, USEFUL_BITS, Some(8), &zk_config())
 }
 
+// The literal `Some(8)` above is declared independently of this encoder's
+// chain geometry; pin them together. Keccak needs no such pin — it derives
+// its region_log from its own CHAIN_LAYOUT.
+const _: () = assert!(
+    CHAIN_LAYOUT.region_log == 8,
+    "blake3 zk_layout hardcodes region_log 8; CHAIN_LAYOUT drifted"
+);
+
 /// zk variant of [`build_block_r1cs`]: randomizer rows in the matrices, the
 /// zk layout bound into the statement, and `useful_bits` extended to cover
 /// the randomizer sections (they are real witness rows — the padded kernels
