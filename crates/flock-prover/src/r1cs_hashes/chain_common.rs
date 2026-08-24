@@ -180,6 +180,109 @@ pub fn fold_in_out(
     (in_vals, out_vals)
 }
 
+/// Extended region fold over the `S`-subcube (succinct-chain composition,
+/// Part 7 design D2').
+///
+/// Returns one `(In, Out)` pair per subcube cell `t ∈ [0, 2^|S|)`: cell `t`
+/// folds slot-pair `j(t)`, the pair whose bit at slot-address coordinate
+/// `s_coords[b]` equals bit `b` of `t` (zeros elsewhere). Cell 0 is the
+/// state pair — identical to [`fold_in_out`]'s output. Requires the
+/// layout's in/out slots to be the two halves of pair 0 (both encoders
+/// satisfy this: `input_byte_off = 0`, `output_byte_off = 2^region_log`
+/// bits).
+pub fn fold_in_out_subcube(
+    layout: &ChainLayout,
+    wl: flock_core::r1cs::WitnessLayout,
+    packed: &[F128],
+    fold: &ChainFold,
+    s_coords: &[usize],
+) -> Vec<(Vec<F128>, Vec<F128>)> {
+    assert_eq!(
+        layout.input_byte_off, 0,
+        "subcube fold needs the input slot at pair-0 offset 0"
+    );
+    // Bit-exact: a truncating word-level comparison would accept an output
+    // slot misaligned by up to 15 bytes and fold the wrong words.
+    assert_eq!(
+        layout.output_byte_off * 8,
+        1usize << layout.region_log,
+        "subcube fold needs the output slot as pair 0's second half"
+    );
+    assert!(
+        layout.region_log >= 3,
+        "pair stride must be a whole number of bytes"
+    );
+    for &c in s_coords {
+        assert!(c < layout.high_zeros(), "S coordinate outside slot space");
+    }
+
+    (0..1usize << s_coords.len())
+        .map(|t| {
+            let pair: usize = s_coords
+                .iter()
+                .enumerate()
+                .map(|(b, &c)| ((t >> b) & 1) << c)
+                .sum();
+            let pair_layout = ChainLayout {
+                input_byte_off: layout.input_byte_off + pair * ((2 << layout.region_log) / 8),
+                output_byte_off: layout.output_byte_off + pair * ((2 << layout.region_log) / 8),
+                ..*layout
+            };
+            fold_in_out(&pair_layout, wl, packed, fold)
+        })
+        .collect()
+}
+
+/// Extended-claim variant of [`assemble_chain_claim`]: the `h*` values from
+/// the extended sumcheck replace the zeros at the `s_coords` positions of
+/// the high slot-address coords. `eq_ind` stays sparse over the coords
+/// outside `S`.
+pub fn assemble_chain_claim_ext(
+    layout: &ChainLayout,
+    wl: flock_core::r1cs::WitnessLayout,
+    fold: &ChainFold,
+    claims: &crate::chain::ChainClaimsExt,
+    s_coords: &[usize],
+) -> PackedDirectClaim {
+    let point = build_chain_claim_point_ext(layout, wl, fold, claims, s_coords);
+    let sparse_eq = flock_core::pcs::ring_switch::build_eq_sparse(&point);
+    PackedDirectClaim {
+        point,
+        value: claims.value,
+        eq_ind: DirectEqInd::Sparse(sparse_eq),
+    }
+}
+
+/// Point builder for [`assemble_chain_claim_ext`] — public so the verifier
+/// side can rebuild the point without the sparse tensor.
+pub fn build_chain_claim_point_ext(
+    layout: &ChainLayout,
+    wl: flock_core::r1cs::WitnessLayout,
+    fold: &ChainFold,
+    claims: &crate::chain::ChainClaimsExt,
+    s_coords: &[usize],
+) -> Vec<F128> {
+    assert_eq!(claims.s_high.len(), s_coords.len(), "S arity mismatch");
+    let high = layout.high_zeros();
+    let mut high_coords = vec![F128::ZERO; high];
+    for (b, &c) in s_coords.iter().enumerate() {
+        high_coords[c] = claims.s_high[b];
+    }
+    let point_len = fold.tau_pos.len() + 1 + high + claims.instance_point.len();
+    let mut point = Vec::with_capacity(point_len);
+    if wl == flock_core::r1cs::WitnessLayout::BatchMajor {
+        point.extend_from_slice(&claims.instance_point);
+    }
+    point.extend_from_slice(&fold.tau_pos);
+    point.push(claims.sel0);
+    point.extend_from_slice(&high_coords);
+    if wl == flock_core::r1cs::WitnessLayout::RowMajor {
+        point.extend_from_slice(&claims.instance_point);
+    }
+    debug_assert_eq!(point.len(), point_len);
+    point
+}
+
 /// Assemble the packed-direct chain claim from the fold and the shift
 /// sumcheck output. The point layout (LSB-first over `L = m − LOG_PACKING`
 /// coords):

@@ -18,7 +18,6 @@ use crate::field::F128;
 use crate::merkle::{self, Hash};
 use crate::ntt::AdditiveNttF128;
 use crate::pcs::pack::LOG_PACKING;
-#[cfg(feature = "zk")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 

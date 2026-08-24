@@ -43,7 +43,6 @@ use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::multilinear::eq_eval;
-#[cfg(feature = "zk")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 

@@ -58,7 +58,7 @@ use crate::r1cs_hashes::blake3::{
     build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
     generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
-#[cfg(feature = "veil")]
+#[cfg(feature = "zk")]
 use flock_core::zk::MaskSampler;
 
 /// Bytes of message covered by one instance of this relation.
@@ -897,7 +897,9 @@ pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &Diges
     challenger.observe_bytes(&stmt.public_digest());
 }
 
-#[cfg(test)]
+// The whole module exercises zk-gated provers/simulators (veil-only tests
+// carry their own additional gate).
+#[cfg(all(test, feature = "zk"))]
 mod tests {
     use super::*;
     use crate::preimage_simulator::simulate;
