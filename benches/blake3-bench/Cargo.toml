@@ -1,0 +1,33 @@
+[package]
+name = "blake3-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "End-to-end BLAKE3 proving benchmark and the shared bench harness."
+publish = false
+
+# No direct flock-core dep: flock-prover re-exports it wholesale (`pub use
+# flock_core::*`), and the `zk` feature must arrive through flock-prover's
+# `veil` feature to keep feature unification correct.
+# No `unsound-challenger` feature: `FsChallenger` serves every benched path.
+[dependencies]
+flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
+blake3 = { workspace = true }
+# Proof-size measurement uses one fixint encoder for all size columns.
+bincode = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Keep libtest's default bench harness off the lib so `cargo bench -- <args>`
+# reaches only the custom bench target.
+[lib]
+bench = false
+
+[[bench]]
+name = "blake3_hashchain_e2e"
+path = "blake3_hashchain_e2e.rs"
+harness = false
+
+[lints]
+workspace = true

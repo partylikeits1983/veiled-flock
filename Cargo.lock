@@ -38,6 +38,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "blake3-bench"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "blake3",
+ "flock-prover",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "block-buffer"
 version = "0.10.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"

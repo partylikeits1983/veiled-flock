@@ -161,10 +161,7 @@ fn read_bundle(path: &str) -> Result<Vec<u8>, String> {
 }
 
 fn bundle_options() -> impl Options {
-    bincode::DefaultOptions::new()
-        .with_fixint_encoding()
-        .with_limit(MAX_BUNDLE_BYTES)
-        .reject_trailing_bytes()
+    flock_prover::proof_io::fixint_options().with_limit(MAX_BUNDLE_BYTES)
 }
 
 fn encode_bundle(bundle: &Bundle) -> Result<Vec<u8>, String> {
