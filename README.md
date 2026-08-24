@@ -1,6 +1,7 @@
-# zk-FLOCK
+# VEIL + FLOCK
 
-Experimental succinct VEIL wrapper for FLOCK.
+Experimental succinct VEIL wrapper for FLOCK. This is a research prototype,
+not a production-ready zero-knowledge system.
 
 The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
 digest in an ordered batch:
@@ -13,10 +14,13 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 
 ## Security status
 
-The implementation has completeness, mutation, serialization, and simulator
-tests. It does not have end-to-end zero-knowledge, soundness, or knowledge
-proofs. It is unaudited and unsuitable for production secrets. See
-[SECURITY.md](docs/SECURITY.md).
+VEIL covers the masked zerocheck and lincheck verifier equations. The witness
+commitment/opening and the explicit AB/C evaluation claims still require the
+active hiding-PCS and witness-randomizer mechanisms. The implementation has
+completeness, mutation, serialization, algebraic-invariant, and simulator
+tests, but it does not yet have end-to-end zero-knowledge, soundness, or
+knowledge proofs. It is unaudited and unsuitable for production secrets. See
+[SECURITY.md](docs/SECURITY.md) for the component audit and release gates.
 
 ## Usage
 
@@ -36,6 +40,22 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
 proof bundle includes the ordered public digests.
 
 ## Benchmarks
+
+The comparison benchmark proves the same batch-256 relation in ordinary FLOCK
+and VEIL+FLOCK, then emits median/MAD timings and a JSON proof-size breakdown:
+
+```sh
+VEIL_BENCH_BATCH=256 VEIL_BENCH_RUNS=10 \
+  cargo bench --locked -p flock-prover --features veil --bench veil_vs_flock
+```
+
+For commitment-plus-proof serialization (excluding the public digest list and
+setup), the current sample measured ordinary FLOCK at 271,814 bytes and
+VEIL+FLOCK at 580,526 bytes. Roughly 76% of the increase is the hiding witness
+PCS and 24% is the inner VEIL proof. See the security audit for the exact
+component table and commitment geometry.
+
+Native hash-chain microbenchmarks remain available:
 
 ```sh
 cargo bench -p flock-prover --bench blake3_native_chain

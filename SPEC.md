@@ -1,8 +1,8 @@
-# zk-FLOCK with VEIL specification
+# VEIL + FLOCK specification
 
 ## 1. Status
 
-This document specifies the intended succinct zk-FLOCK protocol and wire
+This document specifies the intended succinct VEIL+FLOCK protocol and wire
 format. The implementation is experimental and lacks an end-to-end
 zero-knowledge proof. Section 15 lists known deviations.
 
@@ -194,9 +194,11 @@ query positions.
 
 ## 9. PCS linkage
 
-The proof contains explicit AB and C evaluation values. These values are not
-one-time-padded. FLOCK's randomizer rows are intended to make them independent
-of the private witness.
+The proof contains explicit AB and C evaluation values and two 128-element
+ring-switch `s_hat_v` vectors. These values are not one-time-padded. FLOCK's
+randomizer rows are intended to make their joint distribution independent of
+the private witness. The hiding Ligerito recursion does not independently hide
+the ring-switch vectors, which are computed before that recursion.
 
 The verifier derives three openings from one witness commitment:
 
@@ -306,14 +308,15 @@ The intended privacy argument has three parts:
 
 1. uniform VEIL masks hide the algebraic FLOCK transcript;
 2. the hiding PCS hides the committed witness and its openings; and
-3. FLOCK randomizer rows hide the explicit AB and C values.
+3. FLOCK randomizer rows hide the explicit AB/C values and ring-switch
+   vectors.
 
 The current implementation does not formally prove the complete composition.
 The following remain required:
 
 - a proof of the additive RS projection, distance, and product-code
-  properties for the registered dimensions;
-- an all-challenge rank proof for the AB/C randomizer map;
+  properties for the pinned dimensions;
+- an all-challenge rank proof for the joint AB/C/ring-switch randomizer map;
 - a hiding proof for recursive Ligerito, including its terminal residual;
 - a proof that the pre-PCS transcript fork is a valid composition boundary;
   and

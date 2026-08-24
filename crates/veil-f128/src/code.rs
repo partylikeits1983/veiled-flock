@@ -1,4 +1,4 @@
-//! Multiplicative Reed--Solomon code over disjoint additive domains.
+//! Reed--Solomon code over disjoint additive domains.
 //!
 //! The message is represented by evaluations on a linear subspace `V`. The
 //! codeword evaluates the interpolating polynomial on an affine coset disjoint
@@ -6,6 +6,16 @@
 //! bounded set of codeword coordinates by the usual RS interpolation argument.
 //! Pointwise codeword products are evaluations of the product polynomial, so a
 //! twice-degree square code supplies VEIL's Hadamard reduction.
+//!
+//! More precisely, let `X` be the base-domain points assigned to uniform
+//! padding and let `Y` be any equally sized set of distinct output-domain
+//! queries.  The padding-to-query matrix is a diagonally scaled Cauchy matrix:
+//! `L_x(y) = Z(y) / (Z'(x) (y - x))`, where `L_x` is a Lagrange basis
+//! polynomial for the full base domain.  Its determinant is non-zero because
+//! the two domains are disjoint and all points within either set are distinct.
+//! Thus every query set no larger than the padding is perfectly masked.  The
+//! tests below check the transform/evaluation correspondence independently and
+//! exercise this rank invariant at the pinned production geometries.
 
 use std::fmt;
 
@@ -202,6 +212,11 @@ impl AdditiveRsCode {
 mod tests {
     use super::*;
 
+    const SUCCINCT_MASK_VECTOR_LENGTH: usize = 248;
+    const SUCCINCT_PRODUCT_VECTOR_LENGTH: usize = 3;
+    const MAX_SQUARE_RATE: f64 = 0.25;
+    const MIN_PROXIMITY_BITS: f64 = 108.0;
+
     struct Rng(u64);
 
     impl Rng {
@@ -251,6 +266,66 @@ mod tests {
         pivot_row
     }
 
+    fn domain_point(log_size: usize, offset: F128, index: usize) -> F128 {
+        let mut point = offset;
+        for bit in 0..log_size {
+            if (index >> bit) & 1 == 1 {
+                point += if bit < 64 {
+                    F128::new(1u64 << bit, 0)
+                } else {
+                    F128::new(0, 1u64 << (bit - 64))
+                };
+            }
+        }
+        point
+    }
+
+    fn monomial_coefficients(points: &[F128], evaluations: &[F128]) -> Vec<F128> {
+        assert_eq!(points.len(), evaluations.len());
+        let size = points.len();
+        let mut augmented = Vec::with_capacity(size);
+        for (&point, &evaluation) in points.iter().zip(evaluations) {
+            let mut row = Vec::with_capacity(size + 1);
+            let mut power = F128::ONE;
+            for _ in 0..size {
+                row.push(power);
+                power *= point;
+            }
+            row.push(evaluation);
+            augmented.push(row);
+        }
+        for column in 0..size {
+            let pivot = (column..size)
+                .find(|row| !augmented[*row][column].is_zero())
+                .expect("Vandermonde matrix on distinct points is invertible");
+            augmented.swap(column, pivot);
+            let inverse = augmented[column][column].inv();
+            for value in &mut augmented[column][column..] {
+                *value *= inverse;
+            }
+            let pivot_row = augmented[column].clone();
+            for (row, values) in augmented.iter_mut().enumerate() {
+                if row == column || values[column].is_zero() {
+                    continue;
+                }
+                let scale = values[column];
+                for index in column..=size {
+                    values[index] += scale * pivot_row[index];
+                }
+            }
+        }
+        augmented.into_iter().map(|row| row[size]).collect()
+    }
+
+    fn evaluate_polynomial(coefficients: &[F128], point: F128) -> F128 {
+        coefficients
+            .iter()
+            .rev()
+            .fold(F128::ZERO, |value, coefficient| {
+                *coefficient + point * value
+            })
+    }
+
     #[test]
     fn encode_decode_roundtrip() {
         for length in [1usize, 2, 3, 8, 13, 64] {
@@ -289,6 +364,41 @@ mod tests {
     }
 
     #[test]
+    fn additive_ntt_encoding_matches_naive_polynomial_evaluation() {
+        // This is independent of the novel-basis butterfly: interpolate the
+        // same base evaluations through a monomial Vandermonde system and
+        // compare every affine-output evaluation.
+        for message_length in [3usize, 5, 8] {
+            let padded = message_length.next_power_of_two();
+            let code_length = 4 * padded;
+            let code =
+                AdditiveRsCode::new(CodeParameters::new(message_length, code_length).unwrap());
+            let mut base_evaluations = Rng(0x6e77 + message_length as u64).vector(message_length);
+            base_evaluations.resize(padded, F128::ZERO);
+            let base_log = padded.trailing_zeros() as usize;
+            let base_points = (0..padded)
+                .map(|index| domain_point(base_log, F128::ZERO, index))
+                .collect::<Vec<_>>();
+            let coefficients = monomial_coefficients(&base_points, &base_evaluations);
+            let output_log = code_length.trailing_zeros() as usize;
+            let output_offset = disjoint_coset_offset(output_log);
+            let expected = (0..code_length)
+                .map(|index| {
+                    evaluate_polynomial(
+                        &coefficients,
+                        domain_point(output_log, output_offset, index),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                code.encode(&base_evaluations[..message_length]).unwrap(),
+                expected,
+                "message_length={message_length}"
+            );
+        }
+    }
+
+    #[test]
     fn every_two_queries_are_masked_by_two_padding_symbols_in_tiny_code() {
         // Four base-domain message evaluations: two data followed by two
         // uniform pads. Check all C(16, 2) query sets exactly.
@@ -321,5 +431,155 @@ mod tests {
             CodeParameters::new(9, 16),
             Err(CodeError::InsufficientProductDistance { .. })
         ));
+    }
+
+    fn unique_positions(code_length: usize, count: usize, seed: u64) -> Vec<usize> {
+        let mut state = seed;
+        let mut positions = std::collections::BTreeSet::new();
+        while positions.len() < count {
+            state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut value = state;
+            value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            value ^= value >> 31;
+            positions.insert(value as usize & (code_length - 1));
+        }
+        positions.into_iter().collect()
+    }
+
+    fn assert_padding_projection_full_rank(
+        vector_length: usize,
+        padding_length: usize,
+        inverse_rate: usize,
+    ) {
+        let message_length = vector_length + padding_length;
+        let code_length = message_length.next_power_of_two() * inverse_rate;
+        let code = AdditiveRsCode::new(CodeParameters::new(message_length, code_length).unwrap());
+
+        // Columns of the linear map from the uniform padding evaluations to
+        // the output codeword. A k-query view is perfectly hidden exactly
+        // when its k-by-padding_length projection has row rank k.
+        let padding_columns = (0..padding_length)
+            .map(|padding_index| {
+                let mut basis = vec![F128::ZERO; message_length];
+                basis[vector_length + padding_index] = F128::ONE;
+                code.encode(&basis).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let mut query_sets = vec![
+            (0..padding_length).collect::<Vec<_>>(),
+            (code_length - padding_length..code_length).collect::<Vec<_>>(),
+            (0..padding_length)
+                .map(|index| index * code_length / padding_length)
+                .collect::<Vec<_>>(),
+        ];
+        query_sets.push(unique_positions(code_length, padding_length, 0x51a7));
+        query_sets.push(unique_positions(code_length, padding_length, 0xc0de));
+
+        for positions in query_sets {
+            let projection = positions
+                .iter()
+                .map(|position| {
+                    padding_columns
+                        .iter()
+                        .map(|column| column[*position])
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                rank(projection),
+                padding_length,
+                "padding projection lost rank for vector={vector_length}, padding={padding_length}, \
+                 inverse_rate={inverse_rate}, positions={positions:?}"
+            );
+        }
+    }
+
+    fn production_veil_geometries() -> [(usize, usize, usize); 2] {
+        let profile = crate::constraints::ConstraintParameters::succinct_flock_experimental();
+        [
+            (
+                SUCCINCT_MASK_VECTOR_LENGTH,
+                profile.linear_padding,
+                profile.inverse_rate,
+            ),
+            (
+                SUCCINCT_PRODUCT_VECTOR_LENGTH,
+                profile.hadamard_padding,
+                profile.inverse_rate,
+            ),
+        ]
+    }
+
+    #[test]
+    fn production_veil_geometries_have_full_rank_mask_projections() {
+        for (vector_length, padding_length, inverse_rate) in production_veil_geometries() {
+            assert_padding_projection_full_rank(vector_length, padding_length, inverse_rate);
+        }
+    }
+
+    #[test]
+    fn production_veil_geometries_preserve_products_and_reduction() {
+        for (vector_length, padding_length, inverse_rate) in production_veil_geometries() {
+            let message_length = vector_length + padding_length;
+            let padded = message_length.next_power_of_two();
+            let code = AdditiveRsCode::new(
+                CodeParameters::new(message_length, inverse_rate * padded).unwrap(),
+            );
+            let a = Rng(0xa11c + message_length as u64).vector(message_length);
+            let b = Rng(0xb11c + message_length as u64).vector(message_length);
+            let encoded_a = code.encode(&a).unwrap();
+            let encoded_b = code.encode(&b).unwrap();
+            let encoded_product = encoded_a
+                .iter()
+                .zip(&encoded_b)
+                .map(|(left, right)| *left * *right)
+                .collect::<Vec<_>>();
+            let square_message = code.decode_square(&encoded_product).unwrap();
+            assert_eq!(
+                code.encode_square(&square_message).unwrap(),
+                encoded_product
+            );
+            assert_eq!(
+                code.square_to_base(&square_message).unwrap(),
+                a.iter()
+                    .zip(&b)
+                    .map(|(left, right)| *left * *right)
+                    .collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
+    fn production_output_cosets_are_disjoint_from_interpolation_domains() {
+        for (vector_length, padding_length, inverse_rate) in production_veil_geometries() {
+            let code_length = (vector_length + padding_length).next_power_of_two() * inverse_rate;
+            let log = code_length.trailing_zeros() as usize;
+            let offset = disjoint_coset_offset(log);
+            // The code domain spans standard basis elements 0..log. The
+            // offset is the next basis element, so it cannot be in that span.
+            let expected = if log < 64 {
+                F128::new(1u64 << log, 0)
+            } else {
+                F128::new(0, 1u64 << (log - 64))
+            };
+            assert_eq!(offset, expected);
+            assert!(!offset.is_zero());
+        }
+    }
+
+    #[test]
+    fn production_square_code_proximity_bound_exceeds_108_bits() {
+        for (vector_length, padding_length, inverse_rate) in production_veil_geometries() {
+            let message_length = vector_length + padding_length;
+            let padded = message_length.next_power_of_two();
+            let parameters = CodeParameters::new(message_length, inverse_rate * padded).unwrap();
+            let square_rate =
+                parameters.square_message_length() as f64 / parameters.code_length as f64;
+            let proximity_bits = -(padding_length as f64) * ((1.0 + square_rate) / 2.0).log2();
+            assert!(square_rate <= MAX_SQUARE_RATE);
+            assert!(proximity_bits > MIN_PROXIMITY_BITS);
+        }
     }
 }

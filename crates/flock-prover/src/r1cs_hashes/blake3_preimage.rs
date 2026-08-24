@@ -402,13 +402,12 @@ impl Blake3PreimageSetup {
 // Zero-knowledge mode
 // ---------------------------------------------------------------------------
 
-/// The zk-mode fixed-digest setup: the same relation, proved through the
-/// amended (masked) A1′ pipeline with a hiding commitment.
+/// The fixed-digest setup used by the experimental succinct VEIL path.
 ///
-/// The proving path is fail-closed: it runs only for a circuit digest and PCS
-/// shape registered as [`crate::zk_certificate::StatementFamily::Blake3Preimage`].
-/// Its computational-ZK claim is separate from the standalone knowledge
-/// label; see the paper for the exact bounds and assumptions.
+/// [`Self::prove_succinct`] masks FLOCK's algebraic verifier transcript,
+/// proves the shifted verifier with `veil-f128`, and opens the randomized
+/// witness through the hiding Ligerito path. The end-to-end security claims
+/// and remaining proof obligations are documented in `docs/SECURITY.md`.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -521,9 +520,9 @@ impl Blake3PreimageZkSetup {
         }
     }
 
-    /// Experimental succinct VEIL mode. Unlike the older A1 reference path,
-    /// this makes one hiding witness opening and proves only FLOCK's small
-    /// algebraic verifier transcript inside VEIL.
+    /// Experimental succinct VEIL mode. This makes one hiding witness opening
+    /// and proves only FLOCK's small algebraic verifier transcript inside
+    /// VEIL.
     #[cfg(feature = "veil")]
     pub fn prove_succinct<Ch: Challenger + Clone + Send>(
         &self,
@@ -1020,7 +1019,7 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_output_claims_move_with_fresh_randomizers() {
+    fn succinct_unmasked_pcs_values_move_with_fresh_randomizers() {
         let setup = Blake3PreimageZkSetup::new_succinct(2);
         let messages = msgs_of(0x5A17, 2);
         let digests = Blake3PreimageSetup::digests_of(&messages);
@@ -1036,6 +1035,22 @@ mod tests {
         let second = prove(0x32);
         assert_ne!(first.ab_value, second.ab_value);
         assert_ne!(first.c_value, second.c_value);
+        assert_eq!(first.pcs_open.ring_switches.len(), 2);
+        assert!(
+            first
+                .pcs_open
+                .ring_switches
+                .iter()
+                .all(|proof| proof.s_hat_v.len() == 128)
+        );
+        assert_ne!(
+            first.pcs_open.ring_switches[0].s_hat_v,
+            second.pcs_open.ring_switches[0].s_hat_v
+        );
+        assert_ne!(
+            first.pcs_open.ring_switches[1].s_hat_v,
+            second.pcs_open.ring_switches[1].s_hat_v
+        );
     }
 
     #[cfg(feature = "veil")]
