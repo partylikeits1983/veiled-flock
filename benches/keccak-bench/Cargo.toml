@@ -1,0 +1,27 @@
+[package]
+name = "keccak-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "End-to-end keccak proving benchmark (Phase 2 of the e2e bench plan)."
+publish = false
+
+[dependencies]
+flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
+# The generic bench harness (Rng, timer, row/table reporter) lives in
+# blake3-bench's lib and is shared from there.
+blake3-bench = { path = "../blake3-bench" }
+
+# Keep libtest's default bench harness off the lib so `cargo bench -- <args>`
+# reaches only the custom bench target.
+[lib]
+bench = false
+
+[[bench]]
+name = "keccak_hashchain_e2e"
+path = "keccak_hashchain_e2e.rs"
+harness = false
+
+[lints]
+workspace = true
