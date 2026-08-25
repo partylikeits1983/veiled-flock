@@ -1,22 +1,5 @@
-//! End-to-end BLAKE3 hash-chain proving runner over both veil-f128
-//! backends — the `blake3_e2e` bin.
-//!
-//! Backends:
-//! - `veil-framed`: `VeiledBlake3Setup` over `veil_f128::prove_block_r1cs`.
-//! - `veil-succinct`: `Blake3PreimageZkSetup` over
-//!   `succinct_veil::prove_succinct_veil_r1cs`.
-//!
-//! Relation: every row is `public-chain`. Each block proves one preimage
-//! relation with a public digest. The circuit does not check chain linkage.
-//! The chain rule is public, so the benched verify closure recomputes
-//! `blake3(digest_i || zeros) == digest_{i + 1}` for every link — the
-//! `verify` column therefore covers the full public-chain relation.
-//!
-//! Run: `cargo run --profile bench -p blake3-bench --bin blake3_e2e --`
-//! Smoke: append `--smoke` (the `BENCH_SMOKE=1` env var stays as a
-//! fallback; a flag wins over its env var). Flag parsing and the run
-//! prologue live in the `bench-harness` driver ([`E2eBench`]); this bin
-//! owns the sweeps and row functions.
+//! End-to-end BLAKE3 hash-chain proving runner — the `blake3_e2e` bin.
+//! Rows, sweep shapes, flags, results: `benches/blake3-bench/README.md`.
 
 use bench_harness::{BenchRow, BenchSpec, E2eBench, MaxLogFlag, RowTimings, proof_size, time_best};
 use blake3_bench::{
@@ -65,16 +48,7 @@ fn main() {
 // overrides, so unit tests need no env vars. ----
 
 /// Framed sweep: `n_blocks = 2^1 ..= 2^max_log`, or `[2]` in smoke mode.
-///
-/// Framed memory model: let `m = 14 + n_blocks_log` and `N = 2^m` (witness
-/// bits). `VeiledBlake3Setup::prove` expands z, a, and b to one `F128` per
-/// witness bit — `3 * 16 * N` bytes — and `prove_block_r1cs` commits vectors
-/// of length `N + 6` and `2N + 2` at inverse rate 4. At `n_blocks = 64`
-/// (m = 20) that is ~50 MB of expansion plus ~0.5 GB of rate-4 codewords —
-/// about a 1 GB peak, the default budget. At `n_blocks = 1024` (m = 24) it
-/// is ~805 MB of expansion plus multi-GB codewords. Set the sweep bound
-/// (`--framed-max-log` or `BENCH_FRAMED_MAX_LOG`) above 6 only after
-/// measuring.
+/// Memory model, and why 6 is the bound: `benches/blake3-bench/README.md`.
 fn framed_sweep_for(smoke: bool, max_log: u32) -> Vec<usize> {
     if smoke {
         return vec![2];

@@ -1,28 +1,5 @@
 //! End-to-end keccak-f hash-chain proving runner — the `keccak_e2e` bin.
-//!
-//! Three rows per sweep point:
-//! - `native-ligerito`, relation `chain-in-circuit`: `KeccakSetup::prove_chain`
-//!   enforces `state_24[i] == state_0[i + 1]` in the committed witness; only
-//!   the endpoints `x_0` / `x_last` are public.
-//! - `veil-succinct`, relation `public-chain`: `KeccakZkSetup` proves each
-//!   permutation with both states public. The benched verify closure also
-//!   checks linkage over the public states (`outputs[i] == inputs[i + 1]`) —
-//!   a pure equality check, so the `verify` column covers the full
-//!   public-chain relation.
-//! - `veil-succinct`, relation `chain-in-circuit`: `prove_succinct_chain`
-//!   enforces linkage in the committed witness with only the endpoints
-//!   public — the same relation as the native row, so those two rows are
-//!   directly comparable.
-//!
-//! Sweep: n in {64, 256, 1024, 4096} (m = 22, 24, 26, 28). The valid chain
-//! range reaches n = 524288 (m = 35), but the upper range is unrunnable on a
-//! workstation — set `--max-log` above 12 only after measuring.
-//!
-//! Run: `cargo run --profile bench -p keccak-bench --bin keccak_e2e --`
-//! Smoke: append `--smoke` (the `BENCH_SMOKE=1` env var stays as a
-//! fallback; a flag wins over its env var). Flag parsing and the run
-//! prologue live in the `bench-harness` driver ([`E2eBench`]); this bin
-//! owns the sweep and row functions.
+//! Rows, sweep bounds, flags, results: `benches/keccak-bench/README.md`.
 
 use bench_harness::{BenchRow, BenchSpec, E2eBench, MaxLogFlag, RowTimings, proof_size, time_best};
 use flock_prover::challenger::FsChallenger;
@@ -162,10 +139,8 @@ fn succinct_row(n: usize, native_rate: f64, runs: usize) -> BenchRow {
     )
 }
 
-/// The succinct-VEIL prover with IN-CIRCUIT linkage (Part 7): endpoints
-/// only are public; the committed witness enforces every interior link.
-/// This row and the native row prove the SAME relation — the first
-/// equal-relation cross-backend comparison in the suite.
+/// The succinct-VEIL prover with IN-CIRCUIT linkage: endpoints only are public.
+/// Same relation as the native row — the suite's equal-relation comparison.
 fn succinct_chain_row(n: usize, native_rate: f64, runs: usize) -> BenchRow {
     let (setup, setup_s) = time_best(1, || KeccakZkSetup::new(n));
     assert_eq!(

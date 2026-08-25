@@ -1,15 +1,5 @@
-//! Unit tests for the keccak-bench crate: the domain lib, the bin's
-//! sweep shape, and the pin on this crate's real flag spec.
-//!
-//! One file serves both test sets (layout directive; precedent:
-//! `benches/blake3-bench/src/tests.rs`). It attaches to the `keccak_e2e`
-//! bin as a `#[path]` module in `src/keccak.rs`, so the bin-private items
-//! stay reachable; the domain lib is exercised through `keccak_bench::`
-//! like any downstream consumer. The harness's tests (parser mechanism,
-//! timer, rows) live in `bench-harness`. The spec test here pins the
-//! REAL flag name/env/bounds so a `SPEC` typo fails a test instead of
-//! shipping. No test reads an env var (testing.md forbids
-//! order-dependent tests).
+//! Unit tests for keccak-bench: domain lib, the bin's sweep shape, and a pin
+//! on the REAL flag spec. No test reads an env var (testing.md).
 
 use bench_harness::BenchArgs;
 use flock_prover::r1cs_hashes::keccak::{STATE_BITS, keccak_f};

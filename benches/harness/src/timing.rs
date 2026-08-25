@@ -2,10 +2,8 @@
 
 use std::time::Instant;
 
-/// Time one closure and keep the best of `runs` executions.
-///
-/// Returns the last output and the best wall time in seconds. `runs` must
-/// be at least 1.
+/// Time one closure and keep the best of `runs` executions. Returns the last
+/// output and the best wall time in seconds; `runs` must be at least 1.
 pub fn time_best<T>(runs: usize, mut f: impl FnMut() -> T) -> (T, f64) {
     assert!(runs >= 1, "time_best needs at least one run");
     let start = Instant::now();
@@ -22,12 +20,8 @@ pub fn time_best<T>(runs: usize, mut f: impl FnMut() -> T) -> (T, f64) {
     (out, best)
 }
 
-/// Measure an amortized native rate: warm up on `links / 10`, then time
-/// `links` executions of `chain` and return executions per second.
-///
-/// One calibration serves every bench row: hash chains scale linearly, so
-/// `native seconds at n = n / rate`, and small-n rows never divide by a
-/// noise-level baseline.
+/// Measure an amortized native rate: warm up on `links / 10`, then time `links`
+/// executions. One calibration serves every row — chains scale linearly.
 pub fn amortized_rate(links: usize, chain: impl Fn(usize)) -> f64 {
     assert!(links >= 10, "too few links for a warmup pass");
     chain(links / 10); // warmup

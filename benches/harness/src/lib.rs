@@ -1,27 +1,5 @@
-//! Shared harness for the e2e proving bench crates.
-//!
-//! The bench crates under `benches/` (`blake3-bench`, `keccak-bench`)
-//! keep only domain code — chain builders, native-rate closures, sweep
-//! shapes, row functions — and import everything generic from here:
-//!
-//! - [`SplitMix`] — deterministic Rng for bench inputs;
-//! - [`time_best`], [`amortized_rate`], [`calibration_links_for`] —
-//!   timing and calibration;
-//! - [`smoke`], [`runs_for`], [`max_log_from_env`] and their pure
-//!   cores — the env-var fallback UX both bins share;
-//! - [`MaxLogFlag`], [`BenchArgs`] — the shared flag parser
-//!   (`--smoke`, `--runs`, one crate-specific sweep-bound flag,
-//!   `--json`);
-//! - [`BenchSpec`], [`E2eBench`] — the run driver owning the
-//!   order-sensitive prologue and the reporting cadence;
-//! - [`BenchRow`], [`RowTimings`], [`print_table`], [`write_json`],
-//!   [`proof_size`] — the row schema and reporters.
-//!
-//! The row schema and each crate's JSON `bench` title are cross-commit
-//! tracking keys — changes here are schema changes, not refactors.
-//!
-//! The Rng and the time formatter come from
-//! `crates/flock-prover/examples/keccak_chain_bench.rs`.
+//! Shared harness for the e2e bench crates: timing, CLI, run driver, rows.
+//! Row schema and JSON `bench` titles are cross-commit keys — schema, not refactor.
 
 mod cli;
 mod env;

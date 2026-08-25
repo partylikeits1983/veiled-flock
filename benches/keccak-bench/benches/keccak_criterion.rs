@@ -1,19 +1,5 @@
 //! Criterion stage-timing target for the cheap keccak stages.
-//!
-//! Criterion COMPLEMENTS the e2e bin, it does not replace it: the e2e
-//! rows are multi-metric records (four timed sections, proof size,
-//! params, cross-row slowdown) with an end-to-end verify gate, which
-//! criterion's single-metric closures cannot express. Only stages with
-//! cheap iterations run here — witness generation, the three verifies,
-//! and one succinct-chain prove shape. The native chain prove and the
-//! succinct public-chain prove stay in the e2e bin: their expensive
-//! iterations gain nothing from criterion's 10-sample floor.
-//!
-//! Run: `cargo bench -p keccak-bench -- --save-baseline <name>`.
-//!
-//! Every group calls `init_perf_thread_pool()` first (idempotent):
-//! without it, criterion would measure a default-sized rayon pool while
-//! the e2e bin measures the perf pool, and baselines would drift.
+//! Scope, run command, e2e divergences: `benches/keccak-bench/README.md`.
 
 use std::time::Duration;
 
@@ -26,12 +12,11 @@ use keccak_bench::{
     CHAIN_SEED, DOMAIN, ZK_SEED, chain_outputs, keccak_honest_chain, verify_state_linkage,
 };
 
-/// Witness generation at the smoke shape.
-///
-/// The bit-level `keccak_f` makes this ms-scale (unlike blake3's µs-scale
-/// witness): ~1.5 ms/iter needs more than the default 5 s window for 100
-/// linear samples. 8 s fits (criterion's own suggestion).
+/// Witness generation at the smoke shape. The bit-level `keccak_f` makes this
+/// ms-scale: ~1.5 ms/iter needs 8 s, not criterion's default 5 s window.
 fn witness(c: &mut Criterion) {
+    // Idempotent, and required in every group: without it criterion would
+    // measure a default rayon pool while the e2e bin measures the perf pool.
     flock_prover::init_perf_thread_pool();
     let mut group = c.benchmark_group("witness");
     group.measurement_time(Duration::from_secs(8));
@@ -43,10 +28,8 @@ fn witness(c: &mut Criterion) {
     group.finish();
 }
 
-/// Native chain verify on one hoisted proof at n = 64.
-///
-/// A FRESH challenger per iteration is mandatory: verify consumes the
-/// Fiat–Shamir transcript, so a reused challenger fails from iteration 2.
+/// Native chain verify on one hoisted proof at n = 64. A FRESH challenger per
+/// iteration is mandatory: verify consumes the Fiat–Shamir transcript.
 fn verify_native(c: &mut Criterion) {
     flock_prover::init_perf_thread_pool();
     let setup = KeccakSetup::new(64);
@@ -70,16 +53,8 @@ fn verify_native(c: &mut Criterion) {
     group.finish();
 }
 
-/// Succinct public-chain verify on one hoisted proof at n = 64.
-///
-/// The `verify_state_linkage` equality check comes along, exactly as in
-/// the e2e verify closure — with every state public it is part of the
-/// measured relation (and it is noise-level next to the circuit verify).
-/// DELIBERATE divergence from blake3's criterion convention: blake3's
-/// verify groups time the circuit verify ONLY and exclude the linkage
-/// recompute (a real hash per link there); this group matches the e2e
-/// `verify` column instead, because keccak's linkage check is a pure
-/// equality.
+/// Succinct public-chain verify at n = 64, linkage check included — matching the
+/// e2e `verify` column. DELIBERATE divergence from blake3; see the crate README.
 fn verify_succinct(c: &mut Criterion) {
     flock_prover::init_perf_thread_pool();
     let setup = KeccakZkSetup::new(64);
@@ -136,17 +111,8 @@ fn verify_succinct_chain(c: &mut Criterion) {
     group.finish();
 }
 
-/// Succinct chain prove: ONE shape at n = 64 (the smoke shape; chain
-/// setups fill their slots, so every n is its own shape).
-///
-/// Like the blake3 prove group, this reuses one hoisted setup, so it
-/// measures the WARM-setup steady-state prove; the e2e row pays any lazy
-/// first-prove cost. Do not compare this number against the e2e `prove`
-/// column.
-///
-/// Sampling: `Flat` + `sample_size(10)` keeps the iteration count fixed
-/// per sample. A criterion "unable to complete N samples" warning here
-/// is a config error to fix, not a pass.
+/// Succinct chain prove, ONE shape at n = 64. Reuses a hoisted setup: WARM-setup
+/// steady-state, not the e2e `prove` column. `Flat` + `sample_size(10)`.
 fn prove_succinct_chain(c: &mut Criterion) {
     flock_prover::init_perf_thread_pool();
     let setup = KeccakZkSetup::new(64);

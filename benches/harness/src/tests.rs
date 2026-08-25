@@ -1,11 +1,5 @@
-//! Unit tests for the shared harness, including the parser mechanism.
-//!
-//! The parser tests here run against a synthetic [`MaxLogFlag`] and
-//! cover the MECHANISM (flag-wins, validation, fail-loud). Each bench
-//! crate keeps one test pinning its REAL spec (flag name, env var,
-//! bounds) — a typo in a `BenchSpec` const must fail a test, not ship.
-//! No test reads an env var — env-dependent wrappers stay uncovered by
-//! design (testing.md forbids order-dependent tests).
+//! Unit tests for the shared harness. Parser tests cover the MECHANISM against
+//! a synthetic spec; each bench crate pins its REAL spec. No env vars (testing.md).
 
 use crate::{
     BenchArgs, BenchRow, MaxLogFlag, RowTimings, SplitMix, fmt_ms, parse_max_log, parse_smoke,

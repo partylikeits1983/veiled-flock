@@ -24,9 +24,7 @@ pub struct BenchSpec {
 }
 
 /// One e2e bench run: parsed args, calibrated rate, accumulated rows.
-///
-/// [`E2eBench::start`] owns the order-sensitive prologue; the bin owns
-/// only its sweep loops and row functions.
+/// [`E2eBench::start`] owns the prologue; the bin owns its sweeps and rows.
 pub struct E2eBench {
     spec: &'static BenchSpec,
     args: BenchArgs,
@@ -35,14 +33,8 @@ pub struct E2eBench {
 }
 
 impl E2eBench {
-    /// Parse the args and run the prologue, in the load-bearing order:
-    ///
-    /// 1. probe the `--json` path BEFORE anything — a bad path found
-    ///    after the sweep would discard every measured row;
-    /// 2. build the perf rayon pool;
-    /// 3. print the smoke banner;
-    /// 4. calibrate the native rate once via `calibrate(smoke)` and
-    ///    print the rate line.
+    /// Parse args and run the prologue in load-bearing order: probe `--json` FIRST
+    /// (a bad path after the sweep discards every row), pool, banner, calibrate.
     pub fn start(spec: &'static BenchSpec, calibrate: impl FnOnce(bool) -> f64) -> Self {
         let args = BenchArgs::parse(&spec.max_log);
         if let Some(path) = &args.json {

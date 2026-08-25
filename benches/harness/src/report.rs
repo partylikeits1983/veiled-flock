@@ -12,11 +12,8 @@ pub fn fmt_ms(s: f64) -> String {
     }
 }
 
-/// One measured benchmark row.
-///
-/// Serializes for the `--json` dump. Every field is mandatory — a row
-/// without its `params`, `backend`, and `relation` is not comparable
-/// across commits, and the schema does not permit one.
+/// One measured benchmark row, serialized for the `--json` dump. Every field is
+/// mandatory — a row without `params`/`backend`/`relation` is not comparable.
 #[derive(serde::Serialize)]
 pub struct BenchRow {
     /// Backend label, for example `veil-framed`.
@@ -58,13 +55,8 @@ pub struct RowTimings {
 }
 
 impl BenchRow {
-    /// Build a row and compute the derived metrics in one place.
-    ///
-    /// `hashes_per_s = n_real / prove_s` and
-    /// `slowdown = prove_s / (n_real / native_rate)`. Every backend row
-    /// function uses this constructor, so the formulas exist once.
-    /// Precondition: `prove_s > 0` and `native_rate > 0` — both come from
-    /// real timed work, never from a synthetic zero.
+    /// Build a row and compute the derived metrics in one place, so the formulas
+    /// exist once. Precondition: `prove_s > 0` and `native_rate > 0`.
     pub fn new(
         backend: &'static str,
         relation: &'static str,
@@ -93,10 +85,8 @@ impl BenchRow {
     }
 }
 
-/// Size a value with the canonical fixint encoder
-/// ([`flock_prover::proof_io::fixint_options`], no size limit — framed
-/// proofs exceed the CLI's untrusted-read cap by design). One encoder
-/// serves every proof-size column.
+/// Size a value with the canonical fixint encoder (no size limit — framed proofs
+/// exceed the CLI's untrusted-read cap by design). One encoder, every size column.
 pub fn proof_size<T: serde::Serialize>(value: &T) -> usize {
     use bincode::Options;
     flock_prover::proof_io::fixint_options()
@@ -104,10 +94,8 @@ pub fn proof_size<T: serde::Serialize>(value: &T) -> usize {
         .expect("bincode size of an in-memory proof") as usize
 }
 
-/// Fail fast on an unwritable `--json` path: create (or truncate) the file
-/// before the sweep starts. Call it at the TOP of `main`, before any
-/// sweep — a bad path discovered after the sweep discards every measured
-/// row.
+/// Fail fast on an unwritable `--json` path. Call at the TOP of `main`: a bad
+/// path discovered after the sweep discards every measured row.
 pub fn probe_json_path(path: &str) {
     std::fs::write(path, b"").unwrap_or_else(|error| panic!("--json path {path:?}: {error}"));
 }

@@ -71,6 +71,10 @@ the re-baseline caveat live in `benches/README.md`.
 cargo bench -p keccak-bench -- --save-baseline main
 ```
 
+Sampling: the prove group uses `Flat` + `sample_size(10)` to keep the
+iteration count fixed per sample. A criterion "unable to complete N
+samples" warning there is a config error to fix, not a pass.
+
 Scope: witness generation, native chain verify, succinct verify (both
 relations), succinct-chain prove — all at n = 64. The native chain
 prove and the succinct public-chain prove stay out; the e2e bin owns

@@ -1,14 +1,5 @@
-//! Unit tests for the blake3-bench crate: the domain lib and the bin's
-//! sweep shapes, plus the pin on this crate's real flag spec.
-//!
-//! One file serves both test sets (layout directive; repo precedent:
-//! `crates/flock-prover/src/succinct_veil/tests.rs`). It attaches to the
-//! `blake3_e2e` bin as a `#[path]` module in `src/blake3.rs`; the domain
-//! lib is exercised through `blake3_bench::` like any downstream
-//! consumer. The harness's own tests (parser mechanism, timer, rows)
-//! live in `bench-harness`; the spec test here pins the REAL flag
-//! name/env/bounds so a `SPEC` typo fails a test instead of shipping.
-//! No test reads an env var (testing.md forbids order-dependent tests).
+//! Unit tests for blake3-bench: domain lib, the bin's sweep shapes, and a pin
+//! on the REAL flag spec. No test reads an env var (testing.md).
 
 use bench_harness::BenchArgs;
 use blake3_bench::{blake3_chain, verify_chain_linkage};

@@ -1,19 +1,5 @@
 //! Criterion stage-timing target for the cheap BLAKE3 stages.
-//!
-//! Criterion COMPLEMENTS the e2e bin, it does not replace it: the e2e
-//! rows are multi-metric records (four timed sections, proof size,
-//! params, cross-row slowdown) with an end-to-end verify gate, which
-//! criterion's single-metric closures cannot express. Only stages with
-//! cheap iterations run here — witness generation, framed verify,
-//! succinct verify, and one succinct prove shape. The framed prove stays
-//! in the e2e bin: its multi-second iterations gain nothing from
-//! criterion's 10-sample floor.
-//!
-//! Run: `cargo bench -p blake3-bench -- --save-baseline <name>`.
-//!
-//! Every group calls `init_perf_thread_pool()` first (idempotent):
-//! without it, criterion would measure a default-sized rayon pool while
-//! the e2e bin measures the perf pool, and baselines would drift.
+//! Scope, run command, e2e divergences: `benches/blake3-bench/README.md`.
 
 use std::time::Duration;
 
@@ -27,6 +13,8 @@ use flock_prover::zk::ZkRng;
 
 /// Witness generation at the 256-slot succinct floor. µs-scale.
 fn witness(c: &mut Criterion) {
+    // Idempotent, and required in every group: without it criterion would
+    // measure a default rayon pool while the e2e bin measures the perf pool.
     flock_prover::init_perf_thread_pool();
     let mut group = c.benchmark_group("witness");
     group.bench_function("blake3_chain/n=256", |b| {
@@ -37,14 +25,8 @@ fn witness(c: &mut Criterion) {
     group.finish();
 }
 
-/// Framed verify on one hoisted proof at n = 2.
-///
-/// A FRESH challenger per iteration is mandatory: verify consumes the
-/// Fiat–Shamir transcript, so a reused challenger fails from iteration 2.
-///
-/// Unlike the e2e `verify` column, this group times the circuit verify
-/// ONLY — the public chain-linkage recompute (`verify_chain_linkage`)
-/// stays out, so the two numbers are slightly different statistics.
+/// Framed verify on one hoisted proof at n = 2. A FRESH challenger per iteration
+/// is mandatory; times the circuit verify ONLY, so it is not the e2e `verify`.
 fn verify_framed(c: &mut Criterion) {
     flock_prover::init_perf_thread_pool();
     let setup = VeiledBlake3Setup::new(2);
@@ -57,10 +39,8 @@ fn verify_framed(c: &mut Criterion) {
             .expect("framed prove on an honest witness")
     };
     let mut group = c.benchmark_group("verify-framed");
-    // ~80 ms/iter measured: the default 5 s window cannot hold 100
-    // samples and criterion warns. 8 s fit when this landed, then a
-    // ~79-80 ms/iter run nudged criterion's own suggestion to 8.1 s —
-    // 9 s buys headroom against that drift.
+    // ~80 ms/iter measured: the default 5 s window cannot hold 100 samples.
+    // 9 s buys headroom against criterion's own drifting 8.1 s suggestion.
     group.measurement_time(Duration::from_secs(9));
     group.bench_function("n=2", |b| {
         b.iter_batched(
@@ -76,11 +56,8 @@ fn verify_framed(c: &mut Criterion) {
     group.finish();
 }
 
-/// Succinct verify on one hoisted (commitment, proof) pair at n = 256.
-///
-/// Like `verify_framed`, this times the circuit verify ONLY — no
-/// chain-linkage recompute — so do not read it as the e2e `verify`
-/// column (~0.4% difference at n = 256).
+/// Succinct verify on one hoisted (commitment, proof) pair at n = 256. Circuit
+/// verify ONLY — not the e2e `verify` column (~0.4% difference at n = 256).
 fn verify_succinct(c: &mut Criterion) {
     flock_prover::init_perf_thread_pool();
     let setup = Blake3PreimageZkSetup::new_succinct(256);
@@ -107,18 +84,8 @@ fn verify_succinct(c: &mut Criterion) {
     group.finish();
 }
 
-/// Succinct prove: ONE shape at the 256-slot floor. (n = 64 and n = 256
-/// resolve to the SAME padded shape — never give them separate IDs.)
-///
-/// MEASURED SEMANTIC (2026-08-25): this group reuses one hoisted setup,
-/// so it measures the WARM-setup steady-state prove — ~15 ms/iter. The
-/// first prove on a fresh setup pays a lazy one-time cost (~0.4 s) and
-/// that is what the e2e row reports; both proofs verify (checked). Do
-/// not compare this number against the e2e `prove` column.
-///
-/// Sampling: `Flat` + `sample_size(10)` keeps the iteration count fixed
-/// per sample. A criterion "unable to complete N samples" warning here
-/// is a config error to fix, not a pass.
+/// Succinct prove, ONE shape at the 256-slot floor (n = 64 and n = 256 pad to the
+/// SAME shape). WARM-setup steady-state, not the e2e `prove`. `Flat`, 10 samples.
 fn prove_succinct(c: &mut Criterion) {
     flock_prover::init_perf_thread_pool();
     let setup = Blake3PreimageZkSetup::new_succinct(256);

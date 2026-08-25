@@ -54,8 +54,7 @@ which ignore that env var.
 Sweep overrides (validated, and loud on bad values):
 
 - `--framed-max-log` / `BENCH_FRAMED_MAX_LOG` — framed BLAKE3 rows above
-  n = 64. Read the memory model in `blake3-bench/src/blake3.rs`
-  first.
+  n = 64. Read "Framed memory model" in `blake3-bench/README.md` first.
 - `--max-log` / `BENCH_KECCAK_MAX_LOG` — keccak rows above n = 4096
   (m = 28). Ligerito configs stop at m = 35.
 

@@ -52,7 +52,7 @@ Flags (each flag wins over its env-var fallback):
 |---|---|---|
 | `--smoke` | `BENCH_SMOKE=1` | One small row per sweep, 1 timing run. |
 | `--runs <1..=16>` | derived from smoke | Timing runs per row (best-of-N). |
-| `--framed-max-log <1..=14>` | `BENCH_FRAMED_MAX_LOG` | Framed sweep bound. Read the memory model in `src/blake3.rs` before raising it above 6. |
+| `--framed-max-log <1..=14>` | `BENCH_FRAMED_MAX_LOG` | Framed sweep bound. Read "Framed memory model" below before raising it above 6. |
 | `--json <path>` | — | Write the rows as JSON for cross-commit tracking. |
 
 ```sh
@@ -63,11 +63,27 @@ cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --json results.jso
 The binary lands at `target/release/blake3_e2e`. Profile mapping and
 the re-baseline caveat live in `benches/README.md`.
 
+### Framed memory model
+
+Let `m = 14 + n_blocks_log` and `N = 2^m` (witness bits).
+`VeiledBlake3Setup::prove` expands z, a, and b to one `F128` per witness
+bit — `3 * 16 * N` bytes — and `prove_block_r1cs` commits vectors of
+length `N + 6` and `2N + 2` at inverse rate 4.
+
+At `n_blocks = 64` (m = 20) that is ~50 MB of expansion plus ~0.5 GB of
+rate-4 codewords — about a 1 GB peak, the default budget. At
+`n_blocks = 1024` (m = 24) it is ~805 MB of expansion plus multi-GB
+codewords. Raise `--framed-max-log` above 6 only after measuring.
+
 ## criterion mode
 
 ```sh
 cargo bench -p blake3-bench -- --save-baseline main
 ```
+
+Sampling: the prove groups use `Flat` + `sample_size(10)` to keep the
+iteration count fixed per sample. A criterion "unable to complete N
+samples" warning there is a config error to fix, not a pass.
 
 Scope: witness generation, framed verify (n = 2), succinct verify
 (n = 256), succinct prove (one shape at the 256-slot floor). The framed

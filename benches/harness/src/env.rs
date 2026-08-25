@@ -1,11 +1,7 @@
 //! Env-var fallback UX shared by the e2e bins, with pure cores for tests.
 
-/// Report `true` when `BENCH_SMOKE` is set to a truthy value.
-///
-/// Smoke mode shrinks each sweep and the run count. CI uses it. Accepted
-/// truthy values: `1`, `true`, `yes`, `on` (case-insensitive). Any other
-/// non-empty value stops the bench loudly — a silently ignored setting
-/// would run the full sweep against the operator's intent.
+/// Report `true` when `BENCH_SMOKE` is truthy (`1`/`true`/`yes`/`on`). Any other
+/// non-empty value stops the bench loudly — a silently ignored setting is worse.
 pub fn smoke() -> bool {
     match std::env::var("BENCH_SMOKE") {
         Err(_) => false,
@@ -14,7 +10,6 @@ pub fn smoke() -> bool {
 }
 
 /// Pure core of [`smoke`]: parse one `BENCH_SMOKE` value.
-///
 /// Panics on an unrecognized non-empty value.
 pub fn parse_smoke(value: &str) -> bool {
     if value.is_empty() {
@@ -33,11 +28,8 @@ pub fn runs_for(smoke: bool) -> usize {
     if smoke { 1 } else { 3 }
 }
 
-/// Read an optional `MAX_LOG`-style sweep override from the environment.
-///
-/// Returns `default` when `name` is unset. A value that does not parse as
-/// an integer, or falls outside `min..=max`, stops the bench loudly —
-/// a silently adjusted override would run the wrong sweep.
+/// Read an optional `MAX_LOG`-style sweep override; `default` when `name` is unset.
+/// A bad or out-of-range value stops the bench loudly, never silently adjusts.
 pub fn max_log_from_env(name: &str, default: u32, min: u32, max: u32, hint: &str) -> u32 {
     match std::env::var(name) {
         Err(_) => default,

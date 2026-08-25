@@ -1,15 +1,10 @@
-//! Shared flag parser for the e2e bins.
-//!
-//! Both bins take the same flag shape — `--smoke`, `--runs`, one
-//! crate-specific sweep-bound flag, `--json` — with env vars as
-//! fallbacks; a flag always wins over its env var.
+//! Shared flag parser for the e2e bins: `--smoke`, `--runs`, one crate-specific
+//! sweep-bound flag, `--json`. A flag always wins over its env-var fallback.
 
 use crate::env::{max_log_from_env, parse_max_log, runs_for, smoke};
 
-/// Spec for the one crate-specific sweep-bound flag.
-///
-/// The bench crate defines this once next to its domain code (inside its
-/// [`crate::BenchSpec`]); the parser and the run driver read it.
+/// Spec for the one crate-specific sweep-bound flag. The bench crate defines it
+/// once next to its domain code; the parser and the run driver read it.
 pub struct MaxLogFlag {
     /// Flag name, for example `"--max-log"`.
     pub flag: &'static str,
@@ -25,11 +20,8 @@ pub struct MaxLogFlag {
     pub hint: &'static str,
 }
 
-/// Parsed invocation of one e2e bin.
-///
-/// Flags: `--smoke`, `--runs <1..=16>`, the spec's sweep-bound flag,
-/// `--json <path>`. Each flag wins over its env-var fallback
-/// (`BENCH_SMOKE`, smoke-derived run count, the spec's env var).
+/// Parsed invocation of one e2e bin: `--smoke`, `--runs <1..=16>`, the spec's
+/// sweep-bound flag, `--json <path>`. Each flag wins over its env fallback.
 pub struct BenchArgs {
     /// Shrink the sweep to one small point.
     pub smoke: bool,
@@ -42,12 +34,8 @@ pub struct BenchArgs {
 }
 
 impl BenchArgs {
-    /// Parse the process arguments, fail-loud on anything unknown.
-    ///
-    /// Env vars serve as fallbacks only; a flag always wins. The spec's
-    /// env fallback is read and validated here even when the sweep will
-    /// not use it (smoke mode) — fail-fast on a bad override is
-    /// intended.
+    /// Parse the process arguments, fail-loud on anything unknown. The spec's env
+    /// fallback is validated even in smoke mode — fail-fast on a bad override.
     pub fn parse(spec: &MaxLogFlag) -> Self {
         Self::from_parts(
             std::env::args().skip(1),
@@ -57,10 +45,8 @@ impl BenchArgs {
         )
     }
 
-    /// Env-free core of [`BenchArgs::parse`]: `env_smoke` and
-    /// `env_max_log` carry the already-resolved env fallbacks, so unit
-    /// tests need no env vars. Generic over the item type so tests pass
-    /// `&str` arrays directly.
+    /// Env-free core of [`BenchArgs::parse`]: callers pass resolved env fallbacks,
+    /// so unit tests need none. Generic over item type for `&str` arrays.
     pub fn from_parts(
         args: impl IntoIterator<Item: Into<String>>,
         spec: &MaxLogFlag,
