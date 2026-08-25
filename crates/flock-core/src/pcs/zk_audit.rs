@@ -94,7 +94,16 @@ fn revealed_vector(mask: &[F128], g: &[F128], z_packed: &[F128]) -> Vec<F128> {
     assert_eq!(g.len(), G_SLOTS);
     assert_eq!(z_packed.len(), W);
     let params = tiny_params();
-    let playback: Vec<F128> = mask.iter().chain(g.iter()).copied().collect();
+    // `commit_zk` consumes two field elements for each 256-bit initial-leaf
+    // salt after the algebraic mask and blinder. The Merkle salts are not
+    // part of this algebraic rank audit, so fix them to zero while preserving
+    // the production sampler schedule.
+    let playback: Vec<F128> = mask
+        .iter()
+        .chain(g.iter())
+        .copied()
+        .chain(std::iter::repeat_n(F128::ZERO, 2 * params.n_leaves()))
+        .collect();
     let mut sampler = PlaybackSampler {
         data: &playback,
         pos: 0,

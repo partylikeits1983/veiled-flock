@@ -114,8 +114,7 @@ pub fn verify_claims_ligerito<Ch: Challenger>(
 }
 
 /// [`verify_claims_ligerito`] with an explicit Ligerito verifier config, for
-/// audit fixtures at shapes outside the production config ladder (the A1′
-/// m=15 certificate fixture). Production callers use
+/// audit fixtures at shapes outside the production config ladder. Production callers use
 /// [`verify_claims_ligerito`], which derives the config from `pcs_params`.
 pub fn verify_claims_ligerito_with_config<Ch: Challenger>(
     commitment: &Commitment,

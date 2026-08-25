@@ -154,14 +154,8 @@ pub struct VerifierConfig {
     pub ood_samples: Vec<usize>,
 }
 
-/// Proximity loss `ε*` for the UDR (unique-decoding regime) analysis. It
-/// would back the proximity radius off to `γ = δ/2 − ε*` (δ = 1 − ρ the
-/// code's relative distance); set to `0`, so we decode to the full
-/// unique-decoding radius `γ = δ/2` with no backoff. Per our paper's Appendix
-/// C.3 (Theorem `ca-udr`, BCHKS25 Cor. 1.4) the proximity-gap exceptional set
-/// is then `a = γ·n + 1` — length-dependent (see [`paper_thm_1_4_log_a`]), so
-/// `eps_pg = 128 − log₂ a` shrinks ~1 bit per witness doubling and is
-/// recovered by `fold_grinding_bits`.
+/// Extra proximity loss `ε*` beyond the finite-length theorem backoff. Even
+/// at zero, [`udr_gamma`] uses `γ = δ/2 - 3/(δN)`, not the boundary `δ/2`.
 pub const UDR_PROXIMITY_LOSS: f64 = 0.0;
 
 /// Soundness (in bits) the query phase must close on its own at every level
@@ -460,8 +454,8 @@ pub fn default_verifier_config(
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SoundnessRegime {
-    /// Unique decoding radius: γ = δ/2 (δ = 1 − ρ the code's relative
-    /// distance; no proximity-loss backoff). Theorem `ca-udr` of our paper's
+    /// Unique decoding radius: γ = δ/2 − 3/(δ·n) − ε* (δ = 1 − ρ the
+    /// code's relative distance). Theorem `ca-udr` of our paper's
     /// Appendix C.3 (adapted from Ben-Sasson–Carmon–Haböck–Kopparty–Saraf
     /// "On Proximity Gaps for Reed–Solomon Codes", 2025, Corollary 1.4): the
     /// exceptional set is `a = γ·n + 1`, growing with the codeword length `n`,
@@ -518,9 +512,10 @@ pub struct LigeritoLevelConfig {
     /// Slack from the Johnson radius. Required for the `JohnsonOod` regime;
     /// must be `None` for `Udr`.
     pub eta: Option<f64>,
-    /// Proximity loss `ε*` for the UDR radius `γ = δ/2 − ε*` (our paper
-    /// App. C.3 / BCHKS25 Cor. 1.4); `0` in the shipped configs (full
-    /// unique-decoding radius δ/2, no backoff). Required for `Udr`; must be
+    /// Additional proximity loss `ε*` below the theorem-mandated UDR radius
+    /// `γ = δ/2 − 3/(δ·n) − ε*` (our paper App. C.3 / BCHKS25 Cor. 1.4).
+    /// `0` in the shipped configs means no *additional* loss; the finite-size
+    /// `3/(δ·n)` backoff is still always applied. Required for `Udr`; must be
     /// `None` for `JohnsonOod`. The exceptional set is `a = γ·n + 1`,
     /// length-dependent (see [`paper_thm_1_4_log_a`]).
     #[serde(default)]
@@ -593,16 +588,15 @@ pub struct LigeritoSecurityConfig {
     /// L0 lane fold. Must equal the upstream `PcsParams::log_batch_size` so
     /// the L0 commit can be reused without re-committing.
     pub initial_k: usize,
-    /// Round-by-round security target (bits): validate() asserts every error
-    /// term at every round (round-by-round soundness) clears at least this
-    /// much. Total security is the *minimum* over rounds — the notion that
-    /// governs Fiat-Shamir security (cf. Ethereum's `soundcalc`) — so there is
-    /// deliberately no whole-protocol union bound over terms.
+    /// Per-component security target (bits): `validate()` checks every error
+    /// term at every level against this floor. This is not the final
+    /// whole-opening claim; use [`Self::aggregate_soundness_bound`] for the
+    /// additive composition over all registered bad events.
     pub target_security_bits: usize,
     /// Identifier of the proximity-gap analysis used. Self-documents which
     /// theorem the per-level parameters were derived from. Example:
     /// `"ben_sasson_2025_thm_4_6"`.
-    pub analysis_version: String,
+    pub analysis: String,
     /// Field of the protocol. Example: `"f128"`.
     pub field: String,
     /// Hash function used by Merkle + FS challenger. Example: `"sha256"`.
@@ -613,6 +607,23 @@ pub struct LigeritoSecurityConfig {
     pub levels: Vec<LigeritoLevelConfig>,
     /// Final residual block descriptor.
     pub final_block: FinalBlockConfig,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AggregateSoundnessBound {
+    pub proximity_probability: f64,
+    pub query_probability: f64,
+    pub ood_probability: f64,
+}
+
+impl AggregateSoundnessBound {
+    pub fn probability(self) -> f64 {
+        self.proximity_probability + self.query_probability + self.ood_probability
+    }
+
+    pub fn bits(self) -> f64 {
+        -self.probability().log2()
+    }
 }
 
 /// Default field size used for soundness analysis: `q = 2^128` (our F128).
@@ -839,7 +850,7 @@ impl LigeritoLevelConfig {
             }
             SoundnessRegime::Udr => {
                 // App. C.3 Thm `ca-udr` (BCHKS25 Cor. 1.4): a = γ·n + 1 for
-                // radius γ = δ/2 (ε* = 0, no backoff).
+                // maximal theorem radius γ = δ/2 − 3/(δ·n) when ε* = 0.
                 let proximity_loss = self
                     .proximity_loss
                     .expect("Udr regime must carry proximity_loss");
@@ -874,6 +885,35 @@ impl LigeritoLevelConfig {
 }
 
 impl LigeritoSecurityConfig {
+    /// Additive whole-opening bound over every registered proximity fold,
+    /// query phase, and OOD event. This is intentionally separate from the
+    /// historical per-round minimum diagnostic: callers making an aggregate
+    /// security claim must use this union bound.
+    pub fn aggregate_soundness_bound(&self) -> Result<AggregateSoundnessBound, String> {
+        self.validate()?;
+        let mut proximity_probability = 0.0;
+        let mut query_probability = 0.0;
+        let mut ood_probability = 0.0;
+        for level in &self.levels {
+            let (pg_bits, query_bits) = level.paper_predicted_bits();
+            let fold_count = level.log_num_interleaved.max(1) as f64;
+            proximity_probability +=
+                fold_count * 2f64.powf(-(pg_bits + level.fold_grinding_bits as f64));
+            query_probability += 2f64.powf(-(query_bits + level.grinding_bits as f64));
+            if let Some(ood_bits) = level.expected_eps_ood_bits {
+                // Stored diagnostics are rounded to one decimal place. Back
+                // off by half a unit in the last place for a conservative
+                // aggregate bound.
+                ood_probability += 2f64.powf(-(ood_bits - 0.05));
+            }
+        }
+        Ok(AggregateSoundnessBound {
+            proximity_probability,
+            query_probability,
+            ood_probability,
+        })
+    }
+
     /// Validate that the config is internally consistent and matches the
     /// declared analysis. Returns the first violation found, if any.
     pub fn validate(&self) -> Result<(), String> {
@@ -943,13 +983,41 @@ impl LigeritoSecurityConfig {
                 (SoundnessRegime::Udr, None) => {
                     return Err(format!("L{i}: regime=udr but proximity_loss is missing"));
                 }
-                (SoundnessRegime::Udr, Some(eps)) if eps < 0.0 => {
-                    return Err(format!("L{i}: proximity_loss must be ≥ 0, got {eps}"));
+                (SoundnessRegime::Udr, Some(eps)) if !eps.is_finite() || eps < 0.0 => {
+                    return Err(format!(
+                        "L{i}: proximity_loss must be finite and ≥ 0, got {eps}"
+                    ));
                 }
                 (SoundnessRegime::JohnsonOod, Some(_)) => {
                     return Err(format!("L{i}: proximity_loss is only valid for regime=udr"));
                 }
                 _ => {}
+            }
+
+            // BCHKS25 Cor. 1.4 is used only in its proved finite-length
+            // interval: delta/3 <= gamma <= delta/2 - 3/(delta*N), with
+            // delta >= 3*sqrt(2)/sqrt(N). The formula supplies the upper
+            // bound; validate every remaining precondition explicitly.
+            if lv.regime == SoundnessRegime::Udr {
+                let rho = (-(lv.log_inv_rate as f64)).exp2();
+                let delta = 1.0 - rho;
+                let n = ((lv.log_msg_cols + lv.log_inv_rate) as f64).exp2();
+                let eps = lv
+                    .proximity_loss
+                    .expect("UDR proximity loss was checked above");
+                let gamma = udr_gamma(lv.log_inv_rate, lv.log_msg_cols, eps);
+                let theorem_ceiling = delta / 2.0 - 3.0 / (delta * n);
+                let size_floor = 3.0 * 2.0f64.sqrt() / n.sqrt();
+                if delta < size_floor
+                    || gamma < delta / 3.0
+                    || gamma > theorem_ceiling
+                    || gamma <= 0.0
+                {
+                    return Err(format!(
+                        "L{i}: UDR theorem range fails: delta={delta}, gamma={gamma}, \
+                         ceiling={theorem_ceiling}, size_floor={size_floor}"
+                    ));
+                }
             }
 
             // OOD samples match regime: UDR has no list, so no OOD; under
@@ -1019,7 +1087,7 @@ impl LigeritoSecurityConfig {
                     lv.expected_eps_pg_bits,
                     pg_pred,
                     PAPER_COMPAT_TOL_BITS,
-                    analysis = self.analysis_version,
+                    analysis = self.analysis,
                 ));
             }
             if (lv.expected_eps_query_bits - q_pred).abs() > PAPER_COMPAT_TOL_BITS {
@@ -1029,7 +1097,7 @@ impl LigeritoSecurityConfig {
                     lv.expected_eps_query_bits,
                     q_pred,
                     PAPER_COMPAT_TOL_BITS,
-                    analysis = self.analysis_version,
+                    analysis = self.analysis,
                 ));
             }
 
@@ -1140,7 +1208,9 @@ impl LigeritoSecurityConfig {
         }
         for i in 0..=r {
             let rate = prover.log_inv_rates[i];
-            // UDR: γ = δ/2 = (1−ρ)/2 (ε* = UDR_PROXIMITY_LOSS = 0, no backoff).
+            // UDR: γ = δ/2 − 3/(δ·n) when the additional
+            // UDR_PROXIMITY_LOSS is zero. The finite-length backoff is always
+            // present.
             // Thm `ca-udr`'s exceptional set a = γ·n + 1 grows with the
             // codeword length, so eps_pg falls ~1 bit per witness doubling and
             // is recovered by fold_grinding_bits below.
@@ -1183,7 +1253,7 @@ impl LigeritoSecurityConfig {
             log_n,
             initial_k,
             target_security_bits,
-            analysis_version: "no_row_union_over_ben_sasson_2025_cor_1_4".into(),
+            analysis: "no_row_union_over_ben_sasson_2025_cor_1_4".into(),
             field: "f128".into(),
             hash: "sha256".into(),
             grinding_step: GrindingStep::PostCommitPreQueries,
@@ -1338,7 +1408,7 @@ impl LigeritoSecurityConfig {
             });
         }
 
-        let analysis_version = match profile {
+        let analysis = match profile {
             LigeritoProfile::Secure => "no_row_union_over_ben_sasson_2025_cor_1_4",
             LigeritoProfile::Fast | LigeritoProfile::Slim => {
                 "johnson_ood_row_union_over_bchks25_thm_4_6"
@@ -1349,7 +1419,7 @@ impl LigeritoSecurityConfig {
             log_n,
             initial_k,
             target_security_bits: target_bits,
-            analysis_version: analysis_version.into(),
+            analysis: analysis.into(),
             field: "f128".into(),
             hash: "sha256".into(),
             grinding_step: GrindingStep::PostCommitPreQueries,
@@ -1442,6 +1512,8 @@ pub struct RecursiveProof {
     /// emitted in **sorted** query-position order so they align with the
     /// merkle multi-proof.
     pub opened_rows: Vec<Vec<F128>>,
+    /// Present only for the initial witness-dependent ZK commitment.
+    pub leaf_salts: Vec<[u8; 32]>,
     /// Single octopus multi-proof shared across all queries at this level.
     pub merkle_proof: Vec<Hash>,
 }
@@ -1485,7 +1557,9 @@ impl LigeritoProof {
     pub fn size_bytes(&self) -> usize {
         const ELEM: usize = core::mem::size_of::<F128>();
         let level_bytes = |p: &RecursiveProof| -> usize {
-            p.opened_rows.iter().map(|r| r.len() * ELEM).sum::<usize>() + p.merkle_proof.len() * 32
+            p.opened_rows.iter().map(|r| r.len() * ELEM).sum::<usize>()
+                + p.leaf_salts.len() * 32
+                + p.merkle_proof.len() * 32
         };
         let mut total = 32;
         total += self.recursive_roots.len() * 32;
@@ -1527,7 +1601,8 @@ impl LigeritoProof {
             .iter()
             .map(|r| r.len() * ELEM)
             .sum();
-        let init_merkle: usize = self.initial_proof.merkle_proof.len() * 32;
+        let init_merkle: usize =
+            (self.initial_proof.leaf_salts.len() + self.initial_proof.merkle_proof.len()) * 32;
         eprintln!(
             "  L0 (initial): opened={} ({}q × {}lanes × {}B)  merkle={}",
             kb(init_opened),
@@ -2859,7 +2934,7 @@ pub fn recursive_prover<Ch: Challenger>(
     );
     assert!(r >= 1, "recursive_steps must be ≥ 1");
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -2942,7 +3017,7 @@ pub fn recursive_prover_with_l0<Ch: Challenger>(
         "external L0 tree wrong size"
     );
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -2997,6 +3072,7 @@ pub fn recursive_prover_with_basis<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        &[],
         None,
         None,
         false,
@@ -3029,6 +3105,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
     target: F128,
     l0_codeword: &[F128],
     l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
     round0_uv: (F128, F128),
     zk_l0: ZkL0,
     challenger: &mut Ch,
@@ -3041,6 +3118,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        l0_leaf_salts,
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3063,6 +3141,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
     target: F128,
     l0_codeword: &[F128],
     l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
     round0_uv: (F128, F128),
     zk_l0: ZkL0,
     ro: &crate::ro::RoContext,
@@ -3076,6 +3155,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
         target,
         l0_codeword,
         l0_tree,
+        l0_leaf_salts,
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3112,6 +3192,7 @@ pub fn recursive_prover_with_basis_precomputed_round0<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        &[],
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3145,6 +3226,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_with_ro<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        &[],
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3165,6 +3247,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     target: F128,
     l0_codeword: &[F128],
     l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
     first_msg: Option<SumcheckMessage>,
     zk_l0: Option<ZkL0>,
     framed: bool,
@@ -3193,6 +3276,11 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         block_len_0 * num_interleaved_0 * l0_lane_mult
     );
     assert_eq!(l0_tree.len(), 2 * block_len_0 - 1);
+    if zk_l0.is_some() {
+        assert_eq!(l0_leaf_salts.len(), block_len_0);
+    } else {
+        assert!(l0_leaf_salts.is_empty());
+    }
 
     let trace = std::env::var("LIG_PROVE_TRACE").is_ok();
     let mut t_init_sumcheck = std::time::Duration::ZERO;
@@ -3205,7 +3293,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 
     let t_total = std::time::Instant::now();
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
 
     // L0 codeword + tree are borrowed (reused from upstream `pcs::commit`).
@@ -3360,6 +3448,14 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     };
     let initial_proof = RecursiveProof {
         opened_rows: opened_rows_0,
+        leaf_salts: if l0_leaf_salts.is_empty() {
+            Vec::new()
+        } else {
+            queries_0
+                .iter()
+                .map(|&query| l0_leaf_salts[query])
+                .collect()
+        },
         merkle_proof: merkle_proof_0,
     };
 
@@ -3564,6 +3660,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         }
         recursive_proofs.push(RecursiveProof {
             opened_rows: opened_rows_i.clone(),
+            leaf_salts: Vec::new(),
             merkle_proof: merkle_proof_i,
         });
 
@@ -3702,7 +3799,7 @@ where
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
     challenger.observe_bytes(&proof.initial_root);
 
@@ -3823,6 +3920,9 @@ where
         t_sample_q += _t.elapsed();
     }
     let alpha_0 = challenger.sample_f128_vec(ceil_log2(num_queries_0));
+    if zk_l0.is_some() && proof.initial_proof.leaf_salts.len() != queries_0.len() {
+        return false;
+    }
     let _t = std::time::Instant::now();
     // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
     // rows, then combine each into an F-row with c for the enforced sum.
@@ -3832,6 +3932,7 @@ where
         block_len_0,
         &queries_0,
         &proof.initial_proof.opened_rows,
+        &proof.initial_proof.leaf_salts,
         num_interleaved_0 * l0_lane_mult,
         &proof.initial_proof.merkle_proof,
         ro_context,
@@ -3990,6 +4091,7 @@ where
                 prev_block_len,
                 &queries_last,
                 &proof.final_proof.opened_rows,
+                &[],
                 prev_num_interleaved,
                 &proof.final_proof.merkle_proof,
                 ro_context,
@@ -4200,6 +4302,7 @@ where
             prev_block_len,
             &queries_i,
             &rp.opened_rows,
+            &rp.leaf_salts,
             prev_num_interleaved,
             &rp.merkle_proof,
             ro_context,
@@ -4276,7 +4379,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
     challenger.observe_bytes(&proof.initial_root);
 
@@ -4742,6 +4845,7 @@ fn recursive_prover_inner<Ch: Challenger>(
     t_opens += t.elapsed();
     let initial_proof = RecursiveProof {
         opened_rows: opened_rows_0.clone(),
+        leaf_salts: Vec::new(),
         merkle_proof: merkle_proof_0,
     };
 
@@ -4875,6 +4979,7 @@ fn recursive_prover_inner<Ch: Challenger>(
         t_opens += t.elapsed();
         recursive_proofs.push(RecursiveProof {
             opened_rows: opened_rows_i.clone(),
+            leaf_salts: Vec::new(),
             merkle_proof: merkle_proof_i,
         });
 
@@ -4980,31 +5085,70 @@ fn verify_level_opens_maybe_ro(
     block_len: usize,
     queries: &[usize],
     opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
     expected_num_interleaved: usize,
     multi_proof: &[Hash],
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     tree_depth: u8,
 ) -> bool {
     match ro_context {
-        Some((ro, channel)) => verify_level_opens_with_ro(
-            root,
-            block_len,
-            queries,
-            opened_rows,
-            expected_num_interleaved,
-            multi_proof,
-            ro,
-            channel,
-            tree_depth,
-        ),
-        None => verify_level_opens(
-            root,
-            block_len,
-            queries,
-            opened_rows,
-            expected_num_interleaved,
-            multi_proof,
-        ),
+        Some((ro, channel)) => {
+            if leaf_salts.is_empty() {
+                verify_level_opens_with_ro(
+                    root,
+                    block_len,
+                    queries,
+                    opened_rows,
+                    expected_num_interleaved,
+                    multi_proof,
+                    ro,
+                    channel,
+                    tree_depth,
+                )
+            } else {
+                if leaf_salts.len() != opened_rows.len() {
+                    return false;
+                }
+                let mut payloads = Vec::with_capacity(opened_rows.len());
+                for (row, salt) in opened_rows.iter().zip(leaf_salts) {
+                    if row.len() != expected_num_interleaved {
+                        return false;
+                    }
+                    let row_bytes: &[u8] = unsafe {
+                        core::slice::from_raw_parts(
+                            row.as_ptr() as *const u8,
+                            row.len() * core::mem::size_of::<F128>(),
+                        )
+                    };
+                    let mut payload = Vec::with_capacity(32 + row_bytes.len());
+                    payload.extend_from_slice(salt);
+                    payload.extend_from_slice(row_bytes);
+                    payloads.push(payload);
+                }
+                let refs = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
+                merkle::verify_merkle_multi_proof_framed(
+                    root,
+                    block_len,
+                    queries,
+                    &refs,
+                    multi_proof,
+                    ro,
+                    channel,
+                    tree_depth,
+                )
+            }
+        }
+        None => {
+            leaf_salts.is_empty()
+                && verify_level_opens(
+                    root,
+                    block_len,
+                    queries,
+                    opened_rows,
+                    expected_num_interleaved,
+                    multi_proof,
+                )
+        }
     }
 }
 
@@ -5030,7 +5174,7 @@ pub fn recursive_verifier<Ch: Challenger>(
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -5468,6 +5612,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn secure_profile_reports_additive_whole_opening_soundness() {
+        let source = embedded_security_config(23, LigeritoProfile::Secure).unwrap();
+        let config = LigeritoSecurityConfig::from_toml_str(source).unwrap();
+        let bound = config.aggregate_soundness_bound().unwrap();
+        assert!(bound.proximity_probability > 0.0);
+        assert!(bound.query_probability > 0.0);
+        assert_eq!(bound.ood_probability, 0.0);
+        assert!(
+            bound.bits() > 114.0 && bound.bits() < 120.0,
+            "aggregate bits = {}",
+            bound.bits()
+        );
+    }
+
     /// TOML round-trip via `to_toml_string` ↔ `from_toml_str` preserves
     /// the config exactly (modulo validated invariants).
     #[test]
@@ -5518,6 +5677,18 @@ mod tests {
             err.contains("udr") && err.contains("proximity_loss"),
             "err = {err}"
         );
+    }
+
+    #[test]
+    fn ligerito_security_config_rejects_udr_outside_theorem_range() {
+        let mut cfg = blake3_m29_udr_example();
+        cfg.levels[0].proximity_loss = Some(0.2);
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("UDR theorem range"), "err = {err}");
+
+        cfg.levels[0].proximity_loss = Some(f64::NAN);
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("finite"), "err = {err}");
     }
 
     /// `proximity_loss` is only valid for the UDR regime.
@@ -5576,8 +5747,8 @@ mod tests {
         let back: LigeritoSecurityConfig = serde_json::from_str(&json).expect("deserialize");
         back.validate().expect("roundtripped config validates");
         assert_eq!(back.levels.len(), cfg.levels.len());
-        // rate 1/2, 100-bit target, full UD radius γ = δ/2 (ε* = 0):
-        // per-query = log₂(1/(1−1/4)) ≈ 0.415 b/q → ⌈100/0.415⌉ = 241.
+        // At this large rate-1/2 fixture, the finite-length UDR radius is just
+        // below 1/4, so the rounded 100-bit query count remains 241.
         assert_eq!(back.levels[0].queries, 241);
         assert_eq!(back.levels[0].grinding_bits, 0);
     }

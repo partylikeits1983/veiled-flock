@@ -188,11 +188,11 @@ fn prove_verify_roundtrip() {
         let packed = pack_witness(&z, m);
 
         // Prover.
-        let mut ch_p = FsChallenger::new(b"flock-test-v0");
+        let mut ch_p = FsChallenger::new(b"flock-test");
         let (proof, out_p) = prove(&packed, &x_outer, &mut ch_p);
 
         // Verifier (matched challenger).
-        let mut ch_v = FsChallenger::new(b"flock-test-v0");
+        let mut ch_v = FsChallenger::new(b"flock-test");
         let out_v = verify(claim, z_skip, &x_outer, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("verify rejected honest at m={m}: {e:?}"));
 
@@ -217,7 +217,7 @@ fn dp24_identity_holds() {
         let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
 
         let packed = pack_witness(&z, m);
-        let mut ch = FsChallenger::new(b"flock-test-v0");
+        let mut ch = FsChallenger::new(b"flock-test");
         let (_proof, out) = prove(&packed, &x_outer, &mut ch);
 
         // The DP24 identity: T = ⟨packed_witness, rs_eq_ind⟩.
@@ -237,12 +237,12 @@ fn verify_rejects_mutated_proof() {
     let claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
     let packed = pack_witness(&z, m);
 
-    let mut ch_p = FsChallenger::new(b"flock-test-v0");
+    let mut ch_p = FsChallenger::new(b"flock-test");
     let (mut proof, _) = prove(&packed, &x_outer, &mut ch_p);
     // Flip one bit of s_hat_v.
     proof.s_hat_v[0].lo ^= 1;
 
-    let mut ch_v = FsChallenger::new(b"flock-test-v0");
+    let mut ch_v = FsChallenger::new(b"flock-test");
     let res = verify(claim, z_skip, &x_outer, &proof, &mut ch_v);
     assert!(matches!(res, Err(VerifyError::ClaimMismatch)));
 }
@@ -267,7 +267,7 @@ fn prove_batched_matches_sequential() {
         let packed = pack_witness(&z, m);
 
         // Sequential reference.
-        let mut ch_seq = FsChallenger::new(b"flock-test-v0");
+        let mut ch_seq = FsChallenger::new(b"flock-test");
         let (p_a, o_a) = prove(&packed, &x_a, &mut ch_seq);
         let (p_b, o_b) = prove(&packed, &x_b, &mut ch_seq);
 
@@ -277,7 +277,7 @@ fn prove_batched_matches_sequential() {
         // its sample point, which is identical to sequential) and that
         // sumcheck_claim matches (γ doesn't enter sumcheck_claim).
         // rs_eq_ind has γ baked in, so it differs from sequential.
-        let mut ch_batch = FsChallenger::new(b"flock-test-v0");
+        let mut ch_batch = FsChallenger::new(b"flock-test");
         let (results, _gammas_rs) = prove_batched(&packed, &[&x_a, &x_b], &mut ch_batch);
 
         assert_eq!(results[0].0, p_a, "s_hat_v[0] mismatch at m={m}");
@@ -590,7 +590,7 @@ fn prove_batched_with_precomputed_matches_unprecomputed() {
         let packed = pack_witness(&z, m);
 
         // Baseline: no precomputes.
-        let mut ch_base = FsChallenger::new(b"flock-test-v0");
+        let mut ch_base = FsChallenger::new(b"flock-test");
         let (base, _) = prove_batched(&packed, &[&x_a, &x_b], &mut ch_base);
         let s_hat_v_a = base[0].0.s_hat_v.clone();
         let s_hat_v_b = base[1].0.s_hat_v.clone();
@@ -606,7 +606,7 @@ fn prove_batched_with_precomputed_matches_unprecomputed() {
         ] {
             let pa: Option<&[F128]> = if pre_a { Some(&s_hat_v_a) } else { None };
             let pb: Option<&[F128]> = if pre_b { Some(&s_hat_v_b) } else { None };
-            let mut ch = FsChallenger::new(b"flock-test-v0");
+            let mut ch = FsChallenger::new(b"flock-test");
             let (got, _) = prove_batched_padded_with_precomputed(
                 &packed,
                 &[&x_a, &x_b],

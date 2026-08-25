@@ -97,6 +97,11 @@ pub const OPENING_FUNCTIONAL_MANIFEST: &[OpeningFunctionalEntry] = &[
         disposition: "conditional_entropy_boundary",
     },
     OpeningFunctionalEntry {
+        proof_path: "ligerito.initial_proof.leaf_salts",
+        category: "fresh_public_randomness",
+        disposition: "independent_256_bit_salt_per_opened_leaf",
+    },
+    OpeningFunctionalEntry {
         proof_path: "ligerito.{grinding_nonces,fold_grinding_nonces};zk_blind.c_grind_nonce",
         category: "grinding_nonces",
         disposition: "regrind_on_invariant_prefix",
@@ -137,11 +142,13 @@ pub fn assert_proof_fields_classified(proof: &BatchOpeningProofLigerito) {
     } = ligerito;
     let RecursiveProof {
         opened_rows: _,
+        leaf_salts: _,
         merkle_proof: _,
     } = initial_proof;
     for recursive in recursive_proofs {
         let RecursiveProof {
             opened_rows: _,
+            leaf_salts: _,
             merkle_proof: _,
         } = recursive;
     }
@@ -259,6 +266,42 @@ pub fn translate_mask_for_queries(
         delta_codeword[query * wide..(query + 1) * wide]
             .iter()
             .any(|value| *value != F128::ZERO)
+    }) {
+        return None;
+    }
+    Some(translation)
+}
+
+/// Joint VEIL coupling for the exact initial PCS view. In addition to the
+/// opened L0 rows and global blinded vector `F`, require every exposed direct
+/// functional to be public-statement-derived: its basis must annihilate the
+/// witness difference. The returned affine mask translation then preserves
+/// those blinder evaluations as well because
+/// `delta_g_top = c^-1 * witness_delta`.
+pub fn translate_joint_view_for_queries(
+    params: &PcsParams,
+    c: F128,
+    queries: &[usize],
+    witness_delta: &[F128],
+    public_functional_bases: &[&[F128]],
+) -> Option<PcsMaskTranslation> {
+    if public_functional_bases.iter().any(|basis| {
+        basis.len() != witness_delta.len()
+            || basis
+                .iter()
+                .zip(witness_delta)
+                .fold(F128::ZERO, |acc, (weight, value)| acc + *weight * *value)
+                != F128::ZERO
+    }) {
+        return None;
+    }
+    let translation = translate_mask_for_queries(params, c, queries, witness_delta)?;
+    if public_functional_bases.iter().any(|basis| {
+        basis
+            .iter()
+            .zip(&translation.delta_g_top)
+            .fold(F128::ZERO, |acc, (weight, value)| acc + *weight * *value)
+            != F128::ZERO
     }) {
         return None;
     }

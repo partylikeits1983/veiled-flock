@@ -44,10 +44,6 @@ pub const ROLE_NODE: u8 = 0x11;
 /// Role byte for a proof-of-work query.
 pub const ROLE_POW: u8 = 0x12;
 
-/// Framing/version tag for the point-oracle encoding. Bumped only if the byte
-/// layout below changes.
-pub const RO_FRAMING_VERSION: u64 = 1;
-
 /// Which committed object a tree belongs to. Distinct channels get disjoint
 /// leaf/node domains so an opened leaf of one commitment can never be reused as
 /// a leaf of another.
@@ -80,7 +76,7 @@ impl RoChannel {
 }
 
 /// The immutable context every point-oracle call is framed against: the
-/// per-proof nonce (public; provides freshness) and the backend that answers
+/// per-tree/object nonce (public; provides freshness) and the backend that answers
 /// queries (native SHA-256, or an external recording/programmable oracle used
 /// in the simulator and extractor).
 #[derive(Clone)]
@@ -100,7 +96,7 @@ pub enum RoBackend {
 }
 
 impl RoContext {
-    /// A production context with a fresh per-proof `nonce`.
+    /// A production context with a fresh per-tree/object `nonce`.
     pub fn native(nonce: [u8; 32]) -> Self {
         Self {
             nonce,
@@ -147,7 +143,7 @@ impl RoContext {
 ///   [10..16] reserved (zero)
 ///   [16..48] nonce
 ///   [48..56] leaf_len (u64 LE)
-///   [56..64] framing version (u64 LE)
+///   [56..64] reserved (zero)
 /// ```
 pub fn encode_header(
     role: u8,
@@ -164,7 +160,6 @@ pub fn encode_header(
     // h[10..16] reserved, already zero.
     h[16..48].copy_from_slice(nonce);
     h[48..56].copy_from_slice(&leaf_len.to_le_bytes());
-    h[56..64].copy_from_slice(&RO_FRAMING_VERSION.to_le_bytes());
     h
 }
 

@@ -44,7 +44,6 @@ use crate::field::F128;
 use crate::ro::{RoChannel, RoContext};
 use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::multilinear::eq_eval;
-#[cfg(feature = "zk")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -413,6 +412,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
         target_combined,
         &prover_data.codeword,
         &prover_data.merkle_tree,
+        &prover_data.initial_leaf_salts,
         round0_prime,
         ligerito::ZkL0 { c: challenge },
         ro,
@@ -476,7 +476,7 @@ fn open_zk_blinded<Ch: Challenger>(
 
     // (2) y_g before c — a prover that could pick y_g after seeing c could
     //     shift the combined target to prove a false claim.
-    challenger.observe_label(b"flock-pcs-zk-blind-v0");
+    challenger.observe_label(b"flock-pcs-zk-blind");
     challenger.observe_f128(y_g);
     let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
     let c_grind_nonce = challenger.grind_pow(c_bits);
@@ -512,6 +512,7 @@ fn open_zk_blinded<Ch: Challenger>(
         target_prime,
         &prover_data.codeword,
         &prover_data.merkle_tree,
+        &prover_data.initial_leaf_salts,
         prime_wide,
         ligerito::ZkL0 { c },
         ro,
@@ -560,7 +561,7 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         precomputed_s_hat_v.len(),
     );
 
-    challenger.observe_label(b"flock-pcs-open-batch-v0");
+    challenger.observe_label(b"flock-pcs-open-batch");
 
     // 1. Ring-switching for all x_outers.
     let t = std::time::Instant::now();
@@ -588,11 +589,11 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
 
     // 2. Observe packed-direct claim values + sample γ_pd.
     for pd in packed_direct {
-        challenger.observe_label(b"flock-pcs-packed-direct-v0");
+        challenger.observe_label(b"flock-pcs-packed-direct");
         challenger.observe_f128(pd.value);
     }
     for pl in packed_linear {
-        challenger.observe_label(b"flock-pcs-packed-linear-v0");
+        challenger.observe_label(b"flock-pcs-packed-linear");
         challenger.observe_f128(pl.value);
     }
     let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
@@ -1132,7 +1133,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         return Err(VerifyError::Ligerito);
     }
 
-    challenger.observe_label(b"flock-pcs-open-batch-v0");
+    challenger.observe_label(b"flock-pcs-open-batch");
 
     // 1. Ring-switch SUCCINCT verify per claim — gets sumcheck_claim and a
     //    length-128 `eq_r_dprime` instead of the dense `rs_eq_ind`. Saves
@@ -1153,11 +1154,11 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
 
     // 2. PD claim values + γ_pd.
     for pd in packed_direct {
-        challenger.observe_label(b"flock-pcs-packed-direct-v0");
+        challenger.observe_label(b"flock-pcs-packed-direct");
         challenger.observe_f128(pd.value);
     }
     for pl in packed_linear {
-        challenger.observe_label(b"flock-pcs-packed-linear-v0");
+        challenger.observe_label(b"flock-pcs-packed-linear");
         challenger.observe_f128(pl.value);
     }
     let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
@@ -1187,7 +1188,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         let Some(zkb) = &proof.zk_blind else {
             return Err(VerifyError::Ligerito);
         };
-        challenger.observe_label(b"flock-pcs-zk-blind-v0");
+        challenger.observe_label(b"flock-pcs-zk-blind");
         challenger.observe_f128(zkb.y_g);
         let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
         if !challenger.verify_pow(zkb.c_grind_nonce, c_bits) {
@@ -1482,7 +1483,7 @@ mod tests {
             if tamper_mask {
                 prover_data.zk_mask[0] += F128::ONE;
             }
-            let mut ch_p = FsChallenger::new(b"flock-test-lig-zk-v0");
+            let mut ch_p = FsChallenger::new(b"flock-test-lig-zk");
             let mut proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
                 z_packed.clone(),
                 &prover_data,
@@ -1507,7 +1508,7 @@ mod tests {
             (commitment, proof)
         };
         let verify = |commitment: &Commitment, proof: &BatchOpeningProofLigerito| {
-            let mut ch_v = FsChallenger::new(b"flock-test-lig-zk-v0");
+            let mut ch_v = FsChallenger::new(b"flock-test-lig-zk");
             verify_opening_batch_ligerito_mixed_ro(
                 commitment,
                 &[rs_claim],
@@ -1600,7 +1601,7 @@ mod tests {
                 &ro,
                 crate::ro::RoChannel::MaskP,
             );
-            let mut ch = FsChallenger::new(b"flock-z2-v0");
+            let mut ch = FsChallenger::new(b"flock-z2");
             ch.observe_bytes(&comm_p.root);
             let (mut zkproof, claim) =
                 crate::zerocheck::prove_packed_padded_zk(&ap, &bp, &cp, &p_small, m, &pad, &mut ch);
@@ -1648,7 +1649,7 @@ mod tests {
                       zkproof: &crate::zerocheck::ZkZerocheckProof,
                       proof_p: &BatchOpeningProofLigerito|
          -> bool {
-            let mut ch = FsChallenger::new(b"flock-z2-v0");
+            let mut ch = FsChallenger::new(b"flock-z2");
             ch.observe_bytes(&comm_p.root);
             let claim = match crate::zerocheck::verify_zk(m, zkproof, &mut ch) {
                 Ok(c) => c,
@@ -1752,7 +1753,7 @@ mod tests {
             ood_samples: vec![0; n_levels],
         };
 
-        let mut ch_p = FsChallenger::new(b"flock-test-lig-v0");
+        let mut ch_p = FsChallenger::new(b"flock-test-lig");
         let proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
             z_packed.clone(),
             &prover_data,
@@ -1765,7 +1766,7 @@ mod tests {
             &mut ch_p,
         );
 
-        let mut ch_v = FsChallenger::new(b"flock-test-lig-v0");
+        let mut ch_v = FsChallenger::new(b"flock-test-lig");
         verify_opening_batch_ligerito_mixed(
             &commitment,
             &[rs_claim],

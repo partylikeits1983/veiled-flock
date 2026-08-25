@@ -1,6 +1,6 @@
 # zk-FLOCK
 
-Experimental succinct VEIL wrapper for FLOCK.
+Succinct end-to-end zero-knowledge VEIL composition for FLOCK.
 
 The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
 digest in an ordered batch:
@@ -13,10 +13,12 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 
 ## Security status
 
-The implementation has completeness, mutation, serialization, and simulator
-tests. It does not have end-to-end zero-knowledge, soundness, or knowledge
-proofs. It is unaudited and unsuitable for production secrets. See
-[SECURITY.md](docs/SECURITY.md).
+The implemented claim is multi-theorem zero knowledge in the classical
+programmable random-oracle model, plus completeness and concrete soundness for
+the pinned 64-byte BLAKE3-preimage relation. It is not a claim that concrete
+SHA-256 is a random oracle, does not cover quantum random-oracle queries, and
+does not claim argument-of-knowledge extraction. The code remains unaudited;
+see [SECURITY.md](docs/SECURITY.md) for the exact theorem boundary.
 
 ## Usage
 

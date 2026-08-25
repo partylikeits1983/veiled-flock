@@ -101,26 +101,15 @@ fn fold_sumcheck_round(
     Some(running * running_weight + msg_1 * one_weight + msg_inf * infinity_weight)
 }
 
-/// Versioned public polynomial used as the fixed second factor in the
-/// field-valued zerocheck mask channel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum QStarKind {
-    AffineLinearV1,
-}
-
 /// Protocol description of the small-domain field-valued mask channel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SmallMaskSpec {
     pub d_log: usize,
-    pub q_star: QStarKind,
 }
 
 impl Default for SmallMaskSpec {
     fn default() -> Self {
-        Self {
-            d_log: 12,
-            q_star: QStarKind::AffineLinearV1,
-        }
+        Self { d_log: 12 }
     }
 }
 
@@ -187,18 +176,12 @@ impl SmallMaskSpec {
     pub fn alphas(self, m: usize) -> Vec<F128> {
         let n = m - K_SKIP;
         (0..n)
-            .map(|j| match self.q_star {
-                QStarKind::AffineLinearV1 => {
-                    Self::hash_coefficient(b"flock-qstar-affine-lin-v1", j as u64 + 1)
-                }
-            })
+            .map(|j| Self::hash_coefficient(b"flock-qstar-affine-lin", j as u64 + 1))
             .collect()
     }
 
     pub fn q_star_constant(self) -> F128 {
-        match self.q_star {
-            QStarKind::AffineLinearV1 => Self::hash_coefficient(b"flock-qstar-affine-lin-v1", 0),
-        }
+        Self::hash_coefficient(b"flock-qstar-affine-lin", 0)
     }
 
     pub fn q_star_at(self, rho: &[F128]) -> F128 {
@@ -502,7 +485,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     assert_eq!(c_packed.len(), expected_bytes);
     let n_mlv = m - k_skip;
 
-    challenger.observe_label(b"flock-zerocheck-v0");
+    challenger.observe_label(b"flock-zerocheck");
 
     // ---- 1. Sample r (with protocol-fixed constants in the inner 7 dims) ----
     //
@@ -767,7 +750,7 @@ pub fn verify<C: Challenger>(
         });
     }
 
-    challenger.observe_label(b"flock-zerocheck-v0");
+    challenger.observe_label(b"flock-zerocheck");
 
     // ---- Re-derive r (in lockstep with prove_packed) ----
     let r = sample_eq_point(m, challenger);
@@ -999,7 +982,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     assert_eq!(p_small.len(), mask_spec.d(m));
     let dense = PaddingSpec::dense(m);
 
-    challenger.observe_label(b"flock-zerocheck-zk-v1");
+    challenger.observe_label(b"flock-zerocheck-zk");
 
     // ---- r (identical layout to prove_packed_padded_inner) ----
     let r = sample_eq_point(m, challenger);
@@ -1288,7 +1271,7 @@ pub fn mask_round_pairs<C: Challenger>(
     let mask_spec = SmallMaskSpec::default();
     assert_eq!(p_small.len(), mask_spec.d(m));
 
-    challenger.observe_label(b"flock-zerocheck-zk-v1");
+    challenger.observe_label(b"flock-zerocheck-zk");
     let r = sample_eq_point(m, challenger);
     let _z = challenger.sample_f128();
 
@@ -1359,7 +1342,7 @@ pub fn verify_zk_masked<C: Challenger>(
         });
     }
 
-    challenger.observe_label(b"flock-zerocheck-zk-v1");
+    challenger.observe_label(b"flock-zerocheck-zk");
     let r = sample_eq_point(m, challenger);
 
     challenger.observe_f128_slice(&proof.round1_ab);

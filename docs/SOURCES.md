@@ -12,4 +12,4 @@ directly to this `GF(2^128)` port.
 | [VEIL Lean formalization](https://github.com/succinctlabs/veil-formal-verification/commit/064fb9e16fc46448010266fb77e00076985a3a23) | `064fb9e16fc46448010266fb77e00076985a3a23` | Reference proofs |
 | [`slop-veil` crate documentation](https://docs.rs/crate/slop-veil/6.2.2) | `6.2.2` | Reference implementation |
 
-See [`SECURITY.md`](SECURITY.md) for remaining proof obligations.
+See [`SECURITY.md`](SECURITY.md) for the exact theorem scope and assumptions.

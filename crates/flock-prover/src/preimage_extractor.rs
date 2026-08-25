@@ -85,9 +85,10 @@ impl std::fmt::Display for ExtractError {
 impl std::error::Error for ExtractError {}
 
 /// Decode the packed witness from all depth-0 witness leaf queries recorded
-/// by the point oracle. Leaves contain the interleaved RS codeword; inverse
-/// NTT per lane recovers `[μ || z]` and the function returns only `z`, never
-/// the low mask block or the independent blinder lanes.
+/// by the point oracle. Each active ZK leaf is `salt || interleaved codeword`;
+/// the public salt is discarded before inverse NTT. Decoding recovers
+/// `[μ || z]` and the function returns only `z`, never the low mask block or
+/// the independent blinder lanes.
 pub fn recover_witness_from_leaf_queries(
     leaves: &[(u64, Vec<u8>)],
     params: &PcsParams,
@@ -103,11 +104,12 @@ pub fn recover_witness_from_leaf_queries(
     let mut seen = vec![false; positions];
     for (index, payload) in leaves {
         let index = usize::try_from(*index).map_err(|_| ExtractError::BadLeafQueries)?;
-        if index >= positions || seen[index] || payload.len() != leaf_len {
+        if index >= positions || seen[index] || payload.len() != 32 + leaf_len {
             return Err(ExtractError::BadLeafQueries);
         }
         seen[index] = true;
-        for (lane, bytes) in payload.as_chunks::<16>().0.iter().enumerate() {
+        let (_, row) = payload.split_at(32);
+        for (lane, bytes) in row.as_chunks::<16>().0.iter().enumerate() {
             codeword[index * lanes + lane] = F128 {
                 lo: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
                 hi: u64::from_le_bytes(bytes[8..].try_into().unwrap()),
@@ -234,7 +236,7 @@ mod tests {
         );
 
         let mut corrupted = leaves;
-        corrupted[0].1[0] ^= 1;
+        corrupted[0].1[32] ^= 1;
         assert_eq!(
             recover_witness_from_leaf_queries(&corrupted, &params),
             Err(ExtractError::Decode)

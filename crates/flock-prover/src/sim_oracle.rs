@@ -68,6 +68,25 @@ pub struct ProgrammableOracle {
     seen: HashSet<[u8; 32]>,
     record_roles: Option<Vec<u8>>,
     framed_channel_queries: [u64; 8],
+    total_answers: u64,
+    pow_answers: u64,
+}
+
+/// Runtime certificate for all Fiat--Shamir points programmed by one proof.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ProgrammingAudit {
+    pub programmed_points: usize,
+    pub expected_points: usize,
+    pub every_point_contains_framed_nonce: bool,
+    pub every_point_is_transcript_framed: bool,
+}
+
+impl ProgrammingAudit {
+    pub fn is_valid(self) -> bool {
+        self.programmed_points == self.expected_points
+            && self.every_point_contains_framed_nonce
+            && self.every_point_is_transcript_framed
+    }
 }
 
 impl ProgrammableOracle {
@@ -78,6 +97,10 @@ impl ProgrammableOracle {
     /// Answer at `point`: the programmed value if there is one, else the real
     /// hash. Records the query.
     fn answer(&mut self, point: &[u8], retain_point: bool) -> [u8; 32] {
+        self.total_answers = self.total_answers.saturating_add(1);
+        if point.first().copied() == Some(flock_core::ro::ROLE_POW) {
+            self.pow_answers = self.pow_answers.saturating_add(1);
+        }
         self.seen.insert(flock_core::ro::hash_point(point));
         if point.len() >= 9
             && matches!(
@@ -111,6 +134,17 @@ impl ProgrammableOracle {
         self.table.insert(point, value)
     }
 
+    /// Program a point only when it is both undefined and has never been
+    /// queried. A simulator must not overwrite an earlier lazy assignment,
+    /// even when that assignment has not yet been exposed to the verifier.
+    fn program_fresh(&mut self, point: Vec<u8>, value: [u8; 32]) -> bool {
+        if self.was_queried(&point) || self.table.contains_key(&point) {
+            return false;
+        }
+        self.table.insert(point, value);
+        true
+    }
+
     /// Whether `point` was already *queried* before being programmed. In the
     /// security argument this is the bad event: programming a point the
     /// distinguisher has already seen answered honestly is detectable. The
@@ -137,6 +171,41 @@ impl ProgrammableOracle {
 
     pub fn query_count(&self) -> usize {
         self.queries.len()
+    }
+
+    /// Total oracle calls, including non-retained Merkle hashing calls.
+    pub fn total_answer_count(&self) -> u64 {
+        self.total_answers
+    }
+
+    pub fn pow_answer_count(&self) -> u64 {
+        self.pow_answers
+    }
+
+    /// Verify that every programmed transcript point contains the injectively
+    /// framed fresh proof nonce absorbed before any simulated challenge.
+    pub fn audit_programming(
+        &self,
+        proof_nonce: &[u8; 32],
+        expected_points: usize,
+    ) -> ProgrammingAudit {
+        let mut framed_nonce = Vec::with_capacity(1 + 8 + proof_nonce.len());
+        framed_nonce.push(OP_BYTES);
+        framed_nonce.extend_from_slice(&(proof_nonce.len() as u64).to_le_bytes());
+        framed_nonce.extend_from_slice(proof_nonce);
+        let points = self.programmed_points();
+        ProgrammingAudit {
+            programmed_points: points.len(),
+            expected_points,
+            every_point_contains_framed_nonce: points.iter().all(|point| {
+                point
+                    .windows(framed_nonce.len())
+                    .any(|window| window == framed_nonce)
+            }),
+            every_point_is_transcript_framed: points
+                .iter()
+                .all(|point| point.first().copied() == Some(OP_DOMAIN)),
+        }
     }
 
     /// Number of framed Merkle queries made for one protocol channel.
@@ -348,16 +417,16 @@ impl OracleChallenger {
         while off < stream.len() {
             let point = probe.squeeze_point(ctr);
             let take = (stream.len() - off).min(32);
-            let mut block = [0u8; 32];
+            // Conditional random-oracle programming: bytes constrained by the
+            // requested field elements are fixed, while any unread suffix of
+            // the final SHA-256 block retains its uniform oracle value.
+            let mut block = flock_core::ro::hash_point(&point);
             block[..take].copy_from_slice(&stream[off..off + take]);
-            // Bytes past the requested length are never read by the squeeze,
-            // so leaving them zero is harmless.
             {
                 let mut oracle = lock_oracle(&self.oracle);
-                if oracle.was_queried(&point) {
+                if !oracle.program_fresh(point.clone(), block) {
                     return None;
                 }
-                oracle.program(point.clone(), block);
             }
             points.push(point);
             off += take;
@@ -371,14 +440,15 @@ impl OracleChallenger {
         let mut probe = self.clone();
         probe.absorb(&[OP_SQUEEZE, KIND_SCALAR]);
         let point = probe.squeeze_point(0);
-        let mut block = [0u8; 32];
+        // `sample_f128` consumes only half of this oracle block. The other
+        // half must remain uniform in the programmed-oracle experiment.
+        let mut block = flock_core::ro::hash_point(&point);
         block[..8].copy_from_slice(&value.lo.to_le_bytes());
         block[8..16].copy_from_slice(&value.hi.to_le_bytes());
         let mut oracle = lock_oracle(&self.oracle);
-        if oracle.was_queried(&point) {
+        if !oracle.program_fresh(point.clone(), block) {
             return None;
         }
-        oracle.program(point.clone(), block);
         Some(point)
     }
 }
@@ -577,6 +647,40 @@ mod tests {
         assert!(
             ch.program_next_scalar(F128 { lo: 1, hi: 2 }).is_none(),
             "programming an already-queried point must be refused"
+        );
+    }
+
+    #[test]
+    fn reprogramming_an_unqueried_defined_point_is_refused() {
+        let oracle = shared_oracle();
+        let mut ch = OracleChallenger::new(b"defined", oracle.clone());
+        ch.observe_bytes(b"p");
+        let first = F128 { lo: 3, hi: 4 };
+        let second = F128 { lo: 5, hi: 6 };
+        ch.program_next_scalar(first).expect("fresh point");
+        assert!(
+            ch.program_next_scalar(second).is_none(),
+            "an existing lazy assignment must not be overwritten"
+        );
+        assert_eq!(ch.sample_f128(), first);
+    }
+
+    #[test]
+    fn scalar_programming_keeps_the_unused_half_random() {
+        let oracle = shared_oracle();
+        let mut ch = OracleChallenger::new(b"conditional", oracle.clone());
+        ch.observe_bytes(b"prefix");
+        let value = F128 { lo: 7, hi: 8 };
+        let point = ch.program_next_scalar(value).expect("fresh point");
+        let programmed = oracle.lock().unwrap().table[&point];
+        assert_eq!(
+            &programmed[..16],
+            &[7u64.to_le_bytes(), 8u64.to_le_bytes()].concat()
+        );
+        assert_eq!(
+            &programmed[16..],
+            &flock_core::ro::hash_point(&point)[16..],
+            "the unused half must be sampled, not zero-filled"
         );
     }
 

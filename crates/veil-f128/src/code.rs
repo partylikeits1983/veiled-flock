@@ -20,6 +20,50 @@ pub struct CodeParameters {
     pub code_length: usize,
 }
 
+/// Structural certificate for the exact VEIL operand and accepted product
+/// codes. The operand image is a generalized RS code of dimension
+/// `message_length`; fixing the logical prefix leaves `padding_length`
+/// interpolation degrees of freedom. Distinct output queries are therefore
+/// perfectly hidden up to that padding budget because the output coset is
+/// disjoint from the interpolation domain.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ZkCodeCertificate {
+    pub logical_length: usize,
+    pub padding_length: usize,
+    pub query_count: usize,
+    pub interpolation_length: usize,
+    pub code_length: usize,
+    pub operand_min_distance: usize,
+    /// The exact product code is `RS[N, 2 * interpolation_length - 1]`.
+    pub accepted_product_min_distance: usize,
+}
+
+pub fn certify_zk_code(
+    logical_length: usize,
+    padding_length: usize,
+    query_count: usize,
+    code_length: usize,
+) -> Result<ZkCodeCertificate, CodeError> {
+    let message_length = logical_length
+        .checked_add(padding_length)
+        .ok_or(CodeError::InvalidZkGeometry)?;
+    if logical_length == 0 || padding_length == 0 || query_count > padding_length {
+        return Err(CodeError::InvalidZkGeometry);
+    }
+    let parameters = CodeParameters::new(message_length, code_length)?;
+    let interpolation_length = parameters.padded_message_length();
+    // CodeParameters::new enforces `2K <= N`, so both distances are positive.
+    Ok(ZkCodeCertificate {
+        logical_length,
+        padding_length,
+        query_count,
+        interpolation_length,
+        code_length,
+        operand_min_distance: code_length - message_length + 1,
+        accepted_product_min_distance: code_length - (2 * interpolation_length - 1) + 1,
+    })
+}
+
 impl CodeParameters {
     pub fn new(message_length: usize, code_length: usize) -> Result<Self, CodeError> {
         if message_length == 0 {
@@ -51,6 +95,10 @@ impl CodeParameters {
     pub fn square_message_length(self) -> usize {
         2 * self.padded_message_length()
     }
+
+    pub fn square_dimension(self) -> usize {
+        self.square_message_length() - 1
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,6 +109,8 @@ pub enum CodeError {
     DomainTooLarge,
     WrongInputLength { expected: usize, actual: usize },
     WrongCodewordLength { expected: usize, actual: usize },
+    InvalidZkGeometry,
+    InvalidProductCodeword,
 }
 
 impl fmt::Display for CodeError {
@@ -85,6 +135,10 @@ impl fmt::Display for CodeError {
                 f,
                 "wrong codeword length: expected {expected}, got {actual}"
             ),
+            Self::InvalidZkGeometry => write!(f, "invalid ZK code/query geometry"),
+            Self::InvalidProductCodeword => {
+                write!(f, "square word has a non-zero highest-degree coefficient")
+            }
         }
     }
 }
@@ -169,9 +223,29 @@ impl AdditiveRsCode {
         }
         let mut coefficients = intermediate.to_vec();
         self.square_base.inverse(&mut coefficients);
+        if !coefficients[self.parameters.square_dimension()].is_zero() {
+            return Err(CodeError::InvalidProductCodeword);
+        }
         coefficients.resize(self.parameters.code_length, F128::ZERO);
         self.output.forward(&mut coefficients);
         Ok(coefficients)
+    }
+
+    /// Convert the `2K-1` free coefficients of the exact product code into
+    /// its length-`2K` base-domain evaluation representation. The omitted
+    /// highest coefficient is fixed to zero.
+    pub fn square_from_coefficients(&self, coefficients: &[F128]) -> Result<Vec<F128>, CodeError> {
+        let expected = self.parameters.square_dimension();
+        if coefficients.len() != expected {
+            return Err(CodeError::WrongInputLength {
+                expected,
+                actual: coefficients.len(),
+            });
+        }
+        let mut intermediate = coefficients.to_vec();
+        intermediate.push(F128::ZERO);
+        self.square_base.forward(&mut intermediate);
+        Ok(intermediate)
     }
 
     /// VEIL's reduction `D`: restrict evaluations on the twice-wide base
@@ -286,6 +360,72 @@ mod tests {
                 a.iter().zip(b).map(|(a, b)| *a * b).collect::<Vec<_>>()
             );
         }
+    }
+
+    #[test]
+    fn hadamard_reduction_identity_holds_on_every_basis_pair() {
+        // Both sides are bilinear. Exhausting basis pairs therefore checks
+        // the exact encode -> pointwise multiply -> decode_square -> reduce
+        // implementation identity for this code geometry.
+        let length = 5usize;
+        let code = AdditiveRsCode::new(CodeParameters::new(length, 64).unwrap());
+        for i in 0..length {
+            for j in 0..length {
+                let mut a = vec![F128::ZERO; length];
+                let mut b = vec![F128::ZERO; length];
+                a[i] = F128::ONE;
+                b[j] = F128::ONE;
+                let a_code = code.encode(&a).unwrap();
+                let b_code = code.encode(&b).unwrap();
+                let product = a_code
+                    .iter()
+                    .zip(&b_code)
+                    .map(|(left, right)| *left * *right)
+                    .collect::<Vec<_>>();
+                let intermediate = code.decode_square(&product).unwrap();
+                assert_eq!(code.encode_square(&intermediate).unwrap(), product);
+                let reduced = code.square_to_base(&intermediate).unwrap();
+                let expected = (0..length)
+                    .map(|index| {
+                        if i == j && index == i {
+                            F128::ONE
+                        } else {
+                            F128::ZERO
+                        }
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(reduced, expected, "basis pair ({i}, {j})");
+            }
+        }
+    }
+
+    #[test]
+    fn zk_certificate_uses_exact_operand_and_product_dimensions() {
+        let certificate = certify_zk_code(37, 160, 160, 4096).unwrap();
+        assert_eq!(certificate.interpolation_length, 256);
+        assert_eq!(certificate.operand_min_distance, 4096 - 197 + 1);
+        assert_eq!(certificate.accepted_product_min_distance, 4096 - 511 + 1);
+        assert!(matches!(
+            certify_zk_code(37, 160, 161, 4096),
+            Err(CodeError::InvalidZkGeometry)
+        ));
+    }
+
+    #[test]
+    fn square_encoder_rejects_the_extra_highest_degree_coefficient() {
+        let code = AdditiveRsCode::new(CodeParameters::new(5, 64).unwrap());
+        let mut coefficients = vec![F128::ZERO; code.parameters().square_message_length()];
+        coefficients[code.parameters().square_dimension()] = F128::ONE;
+        code.square_base.forward(&mut coefficients);
+        assert_eq!(
+            code.encode_square(&coefficients),
+            Err(CodeError::InvalidProductCodeword)
+        );
+
+        let valid = code
+            .square_from_coefficients(&vec![F128::ONE; code.parameters().square_dimension()])
+            .unwrap();
+        assert!(code.encode_square(&valid).is_ok());
     }
 
     #[test]

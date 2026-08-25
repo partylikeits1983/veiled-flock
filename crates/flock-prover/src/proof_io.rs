@@ -8,15 +8,9 @@
 //! On-disk format:
 //! ```text
 //!   bytes 0..5    "FLOCK"                  (5-byte magic)
-//!   byte  5       VERSION                  (currently 6)
-//!   bytes 6..7    flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
-//!   bytes 7..     bincode-serialized payload
+//!   byte  5       flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
+//!   bytes 6..     bincode-serialized payload
 //! ```
-//!
-//! Versioning is here to make schema changes detectable cleanly: bump
-//! `VERSION` whenever a payload field is added/removed/reordered. Forward
-//! compatibility is NOT promised — `from_bytes` of a different version is
-//! rejected (`UnsupportedVersion`).
 //!
 //! ## Round-trip example
 //! ```ignore
@@ -32,6 +26,8 @@
 use std::io;
 use std::path::Path;
 
+#[cfg(feature = "veil")]
+use bincode::Options;
 use serde::{Deserialize, Serialize};
 
 use flock_core::pcs::Commitment;
@@ -39,15 +35,6 @@ use flock_core::pcs::Commitment;
 /// Magic bytes prepended to every serialized proof. Lets readers reject
 /// random binary data early.
 pub const MAGIC: [u8; 5] = *b"FLOCK";
-
-/// Format version. Bumped on incompatible serialization changes.
-/// v5 (current) adds the public proof nonce and framed random-oracle domains.
-/// v4 adds `ood_values` + `fold_grinding_nonces` to
-/// `LigeritoProof` and `profile` to `PcsParams` (Johnson+OOD profiles).
-/// v3 restructures `BaseFoldProof`: per-query Merkle paths are replaced by
-/// shared octopus multi-proofs (one per Merkle tree). v2 added `HashKind`
-/// to [`ChainProofBundle`].
-pub const VERSION: u8 = 6;
 
 /// Which hash function a chain proof is over. Carried in
 /// [`ChainProofBundle`] so the verifier (e.g. the CLI) can pick the right
@@ -81,31 +68,36 @@ impl HashKind {
 }
 
 /// Flavor discriminator (1 byte). Lets a generic reader peek what kind of
-/// bundle a file holds without parsing the payload first. Values 0/1 are
-/// reserved: they were the legacy BaseFold R1cs/Chain flavors.
+/// bundle a file holds without parsing the payload first.
 const FLAVOR_R1CS_LIGERITO: u8 = 2;
 const FLAVOR_CHAIN_LIGERITO: u8 = 3;
-/// A1′ reference zk proof bundle ([`R1csProofBundleZkA1`]).
-const FLAVOR_R1CS_ZK_A1: u8 = 4;
+/// Full-view VEIL-FLOCK proof for the fixed 64-byte BLAKE3-preimage relation.
+const FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE: u8 = 5;
 
 /// All flavor bytes this build understands (for the unknown-flavor check).
 const KNOWN_FLAVORS: [u8; 3] = [
     FLAVOR_R1CS_LIGERITO,
     FLAVOR_CHAIN_LIGERITO,
-    FLAVOR_R1CS_ZK_A1,
+    FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE,
 ];
 
-/// Header size = 5-byte magic + 1-byte version + 1-byte flavor.
-const HEADER_LEN: usize = 7;
+#[cfg(feature = "veil")]
+pub const VEIL_FLOCK_PROTOCOL_ID: [u8; 16] = *b"veil-flock______";
+#[cfg(feature = "veil")]
+pub const VEIL_FLOCK_RELATION_ID: [u8; 16] = *b"blake3-preimage_";
+#[cfg(feature = "veil")]
+pub const VEIL_FLOCK_PARAMETER_SUITE_ID: [u8; 16] = *b"secure-udr______";
+#[cfg(feature = "veil")]
+pub const MAX_VEIL_FLOCK_BUNDLE_BYTES: u64 = 1024 * 1024;
+
+/// Header size = 5-byte magic + 1-byte flavor.
+const HEADER_LEN: usize = 6;
 
 /// Errors from `from_bytes` / `read_from_file`.
 #[derive(Debug)]
 pub enum DeserializeError {
     /// The 5-byte magic prefix did not match `FLOCK`.
     BadMagic,
-    /// The version byte didn't match this build's `VERSION`. The number is
-    /// the version found in the file.
-    UnsupportedVersion(u8),
     /// The flavor byte was neither `2` (R1cs Ligerito) nor `3` (Chain Ligerito).
     UnknownFlavor(u8),
     /// `from_bytes` was called with a slice shorter than `HEADER_LEN`.
@@ -115,21 +107,24 @@ pub enum DeserializeError {
     FlavorMismatch { expected: u8, found: u8 },
     /// The bincode-deserialization step failed (corrupted payload, etc.).
     Bincode(bincode::Error),
+    /// A VEIL bundle names a protocol, relation, or parameter suite that this
+    /// verifier does not implement.
+    ProtocolMismatch(&'static str),
 }
 
 impl std::fmt::Display for DeserializeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadMagic => write!(f, "bad magic: not a FLOCK proof file"),
-            Self::UnsupportedVersion(v) => {
-                write!(f, "unsupported version {v} (this build expects {VERSION})")
-            }
             Self::UnknownFlavor(v) => write!(f, "unknown flavor byte: {v}"),
             Self::Truncated => write!(f, "input shorter than header ({HEADER_LEN} bytes)"),
             Self::FlavorMismatch { expected, found } => {
                 write!(f, "flavor mismatch: expected {expected}, found {found}")
             }
             Self::Bincode(e) => write!(f, "bincode error: {e}"),
+            Self::ProtocolMismatch(field) => {
+                write!(f, "unsupported VEIL-FLOCK {field} identifier")
+            }
         }
     }
 }
@@ -166,6 +161,79 @@ pub struct ChainProofBundleLigerito {
     pub cv_last_phys: Vec<bool>,
 }
 
+/// Canonical, fail-closed wire bundle for the full-view VEIL-FLOCK BLAKE3
+/// preimage instantiation. Protocol, relation, and parameter identifiers are
+/// carried inside the payload as well as the outer format/flavor header.
+#[cfg(feature = "veil")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VeilFlockProofBundle {
+    pub protocol_id: [u8; 16],
+    pub relation_id: [u8; 16],
+    pub parameter_suite_id: [u8; 16],
+    pub digests: Vec<[u8; 32]>,
+    pub commitment: Commitment,
+    pub proof: crate::succinct_veil::SuccinctVeilProof,
+}
+
+#[cfg(feature = "veil")]
+impl VeilFlockProofBundle {
+    pub fn new(
+        digests: Vec<[u8; 32]>,
+        commitment: Commitment,
+        proof: crate::succinct_veil::SuccinctVeilProof,
+    ) -> Self {
+        Self {
+            protocol_id: VEIL_FLOCK_PROTOCOL_ID,
+            relation_id: VEIL_FLOCK_RELATION_ID,
+            parameter_suite_id: VEIL_FLOCK_PARAMETER_SUITE_ID,
+            digests,
+            commitment,
+            proof,
+        }
+    }
+
+    pub fn validate_ids(&self) -> Result<(), DeserializeError> {
+        if self.protocol_id != VEIL_FLOCK_PROTOCOL_ID {
+            return Err(DeserializeError::ProtocolMismatch("protocol"));
+        }
+        if self.relation_id != VEIL_FLOCK_RELATION_ID {
+            return Err(DeserializeError::ProtocolMismatch("relation"));
+        }
+        if self.parameter_suite_id != VEIL_FLOCK_PARAMETER_SUITE_ID {
+            return Err(DeserializeError::ProtocolMismatch("parameter-suite"));
+        }
+        Ok(())
+    }
+
+    fn options() -> impl Options {
+        bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .with_limit(MAX_VEIL_FLOCK_BUNDLE_BYTES)
+            .reject_trailing_bytes()
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+        self.validate_ids()
+            .map_err(|error| Box::new(bincode::ErrorKind::Custom(error.to_string())))?;
+        let mut out = Vec::with_capacity(HEADER_LEN + 1024);
+        write_header(&mut out, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE);
+        Self::options().serialize_into(&mut out, self)?;
+        Ok(out)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
+        if bytes.len() as u64 > MAX_VEIL_FLOCK_BUNDLE_BYTES {
+            return Err(DeserializeError::Bincode(Box::new(
+                bincode::ErrorKind::SizeLimit,
+            )));
+        }
+        let payload = parse_header(bytes, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE)?;
+        let bundle: Self = Self::options().deserialize(payload)?;
+        bundle.validate_ids()?;
+        Ok(bundle)
+    }
+}
+
 impl R1csProofBundleLigerito {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
@@ -175,34 +243,6 @@ impl R1csProofBundleLigerito {
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
         let payload = parse_header(bytes, FLAVOR_R1CS_LIGERITO)?;
-        Ok(bincode::deserialize(payload)?)
-    }
-}
-
-/// Bundles an A1′ reference zk proof with its witness commitment. The
-/// verifier additionally needs the (public) statement setup and PCS params;
-/// `proof.comm_p` travels inside the proof itself.
-///
-/// The canonical field classification of everything in this bundle lives in
-/// [`crate::transcript_schema`]; `from_bytes` + `transcript_schema::flatten_a1`
-/// form the independent transcript parser.
-#[cfg(feature = "zk")]
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct R1csProofBundleZkA1 {
-    pub commitment: Commitment,
-    pub proof: crate::prover::R1csProofZkA1,
-}
-
-#[cfg(feature = "zk")]
-impl R1csProofBundleZkA1 {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(HEADER_LEN + 1024);
-        write_header(&mut out, FLAVOR_R1CS_ZK_A1);
-        bincode::serialize_into(&mut out, self).expect("bincode serialize R1csProofBundleZkA1");
-        out
-    }
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
-        let payload = parse_header(bytes, FLAVOR_R1CS_ZK_A1)?;
         Ok(bincode::deserialize(payload)?)
     }
 }
@@ -227,7 +267,6 @@ impl ChainProofBundleLigerito {
 
 fn write_header(out: &mut Vec<u8>, flavor: u8) {
     out.extend_from_slice(&MAGIC);
-    out.push(VERSION);
     out.push(flavor);
 }
 
@@ -238,11 +277,7 @@ fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeE
     if bytes[0..5] != MAGIC {
         return Err(DeserializeError::BadMagic);
     }
-    let v = bytes[5];
-    if v != VERSION {
-        return Err(DeserializeError::UnsupportedVersion(v));
-    }
-    let flavor = bytes[6];
+    let flavor = bytes[5];
     if !KNOWN_FLAVORS.contains(&flavor) {
         return Err(DeserializeError::UnknownFlavor(flavor));
     }
@@ -376,8 +411,7 @@ mod tests {
         };
         let bytes = bundle.to_bytes();
         assert_eq!(&bytes[0..5], &MAGIC);
-        assert_eq!(bytes[5], VERSION);
-        assert_eq!(bytes[6], FLAVOR_R1CS_LIGERITO);
+        assert_eq!(bytes[5], FLAVOR_R1CS_LIGERITO);
 
         let bundle2 = R1csProofBundleLigerito::from_bytes(&bytes).expect("must round-trip");
         assert_eq!(bundle2.commitment.root, commitment.root);
@@ -437,7 +471,7 @@ mod tests {
             cv_last_phys: cv_to_phys_bits(&cv_last),
         };
         let bytes = bundle.to_bytes();
-        assert_eq!(bytes[6], FLAVOR_CHAIN_LIGERITO);
+        assert_eq!(bytes[5], FLAVOR_CHAIN_LIGERITO);
 
         let bundle2 = ChainProofBundleLigerito::from_bytes(&bytes).expect("chain round-trip");
         assert_eq!(bundle2.cv_0_phys, bundle.cv_0_phys);
@@ -459,32 +493,9 @@ mod tests {
     fn rejects_bad_magic() {
         let mut bytes = vec![0u8; HEADER_LEN + 10];
         bytes[0..5].copy_from_slice(b"NOPE!");
-        bytes[5] = VERSION;
-        bytes[6] = FLAVOR_R1CS_LIGERITO;
+        bytes[5] = FLAVOR_R1CS_LIGERITO;
         let res = R1csProofBundleLigerito::from_bytes(&bytes);
         assert!(matches!(res, Err(DeserializeError::BadMagic)));
-    }
-
-    #[test]
-    fn rejects_unsupported_version() {
-        let mut bytes = vec![0u8; HEADER_LEN + 10];
-        bytes[0..5].copy_from_slice(&MAGIC);
-        bytes[5] = VERSION.wrapping_add(1);
-        bytes[6] = FLAVOR_R1CS_LIGERITO;
-        let res = R1csProofBundleLigerito::from_bytes(&bytes);
-        assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(_))));
-    }
-
-    #[test]
-    fn old_version_proofs_fail_closed() {
-        for old in [4, 5] {
-            let mut bytes = vec![0u8; HEADER_LEN + 10];
-            bytes[0..5].copy_from_slice(&MAGIC);
-            bytes[5] = old;
-            bytes[6] = FLAVOR_R1CS_ZK_A1;
-            let res = R1csProofBundleZkA1::from_bytes(&bytes);
-            assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(v)) if v == old));
-        }
     }
 
     #[test]
@@ -493,8 +504,7 @@ mod tests {
         // fails before any payload deserialization, so zero payload is fine.
         let mut bytes = vec![0u8; HEADER_LEN + 10];
         bytes[0..5].copy_from_slice(&MAGIC);
-        bytes[5] = VERSION;
-        bytes[6] = FLAVOR_R1CS_LIGERITO;
+        bytes[5] = FLAVOR_R1CS_LIGERITO;
         let res = ChainProofBundleLigerito::from_bytes(&bytes);
         assert!(matches!(
             res,
@@ -511,8 +521,7 @@ mod tests {
         for legacy in [0u8, 1u8] {
             let mut bytes = vec![0u8; HEADER_LEN + 10];
             bytes[0..5].copy_from_slice(&MAGIC);
-            bytes[5] = VERSION;
-            bytes[6] = legacy;
+            bytes[5] = legacy;
             let res = R1csProofBundleLigerito::from_bytes(&bytes);
             assert!(matches!(res, Err(DeserializeError::UnknownFlavor(f)) if f == legacy));
         }

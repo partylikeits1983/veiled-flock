@@ -1,5 +1,11 @@
-use super::{MaskLayout, RING_WIDTH, SuccinctVeilError, scale_ring_expressions};
+use super::{
+    MaskLayout, RING_WIDTH, SUCCINCT_PROOF_FIELD_MANIFEST, SuccinctVeilError,
+    certify_batch_opening, certify_flock_piop_soundness, certify_global_masking,
+    certify_shifted_veil_soundness, scale_ring_expressions, solve_sumcheck_messages,
+    validate_l0_hiding_budget, validate_succinct_parameters,
+};
 use crate::r1cs_hashes::blake3::build_block_r1cs_zk;
+use crate::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 use flock_core::field::F128;
 use veil_f128::LinearCombination;
 
@@ -11,6 +17,125 @@ fn succinct_shape_rejects_nonidentity_c() {
     assert!(matches!(
         MaskLayout::new(&r1cs),
         Err(SuccinctVeilError::InvalidShape("R1CS mask geometry"))
+    ));
+}
+
+#[test]
+fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
+    let setup = Blake3PreimageZkSetup::new(2);
+    assert_eq!(
+        setup.r1cs.statement_digest(),
+        super::SUPPORTED_BLAKE3_R1CS_DIGEST
+    );
+    validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
+    let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
+        .expect("production PIOP soundness certificate");
+    assert_eq!(piop.friendly_coordinate_rank_f2, 7);
+    assert!(piop.bits() > 119.0);
+    assert!(piop.bits() < 121.0);
+    let veil = certify_shifted_veil_soundness(&setup.r1cs).unwrap();
+    assert!(veil.bits() > 100.0);
+    assert!(veil.bits() < 110.0);
+
+    let mut wrong_relation = setup.r1cs.clone();
+    wrong_relation.a_0.rows[0].push(0);
+    assert_eq!(
+        validate_succinct_parameters(&wrong_relation, &setup.pcs_params),
+        Err(SuccinctVeilError::InvalidParameters)
+    );
+
+    let mut wrong_profile = setup.pcs_params.clone();
+    wrong_profile.profile = flock_core::pcs::ligerito::LigeritoProfile::Fast;
+    assert_eq!(
+        validate_succinct_parameters(&setup.r1cs, &wrong_profile),
+        Err(SuccinctVeilError::InvalidParameters)
+    );
+}
+
+#[test]
+fn production_mask_layout_covers_every_visible_private_degree_of_freedom() {
+    let r1cs = build_block_r1cs_zk(8);
+    let layout = MaskLayout::new(&r1cs).unwrap();
+    assert_eq!(layout.piop_count(), 242);
+    assert_eq!(2 * super::RING_CLAIM_COUNT * RING_WIDTH, 512);
+    assert_eq!(layout.observed_count(), 754);
+    assert_eq!(SUCCINCT_PROOF_FIELD_MANIFEST.len(), 9);
+
+    let certificate = certify_global_masking(&r1cs).unwrap();
+    assert!(certificate.is_full_identity_cover());
+    assert_eq!(certificate.visible_private_f128, 754);
+    assert_eq!(certificate.independent_mask_f128, 754);
+    assert_eq!(certificate.mask_matrix_rank_f128, 754);
+    assert_eq!(certificate.mask_matrix_rank_f2, 754 * 128);
+    assert_eq!(certificate.sections.len(), 10);
+
+    let shifted = layout.shifted_circuit_certificate(true);
+    assert_eq!(shifted.private_inputs, 754);
+    assert_eq!(shifted.flock_multiplications, 1);
+    assert_eq!(shifted.lincheck_linear_constraints, 1);
+    assert_eq!(shifted.ring_scale_linear_constraints, 2 * RING_WIDTH);
+    assert_eq!(shifted.ring_claim_linear_constraints, 2);
+    assert_eq!(shifted.linear_constraints(), 259);
+}
+
+#[test]
+fn global_mask_translation_couples_every_affine_visible_coordinate() {
+    let r1cs = build_block_r1cs_zk(8);
+    let certificate = certify_global_masking(&r1cs).unwrap();
+    let n = certificate.visible_private_f128;
+    let private = (0..n)
+        .map(|i| F128::new(i as u64, (i as u64).rotate_left(19)))
+        .collect::<Vec<_>>();
+    let witness_delta = (0..n)
+        .map(|i| F128::new((3 * i + 1) as u64, (5 * i + 7) as u64))
+        .collect::<Vec<_>>();
+    let masks = (0..n)
+        .map(|i| F128::new((11 * i + 9) as u64, (13 * i + 17) as u64))
+        .collect::<Vec<_>>();
+
+    let original = private
+        .iter()
+        .zip(&masks)
+        .map(|(value, mask)| *value + *mask)
+        .collect::<Vec<_>>();
+    let translated = private
+        .iter()
+        .zip(&witness_delta)
+        .zip(masks.iter().zip(&witness_delta))
+        .map(|((value, delta), (mask, mask_delta))| (*value + *delta) + (*mask + *mask_delta))
+        .collect::<Vec<_>>();
+    assert_eq!(original, translated);
+}
+
+#[test]
+fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
+    let params = flock_core::pcs::PcsParams {
+        m: 22,
+        log_inv_rate: 1,
+        log_batch_size: 6,
+        profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
+        zk: true,
+    };
+    assert!(validate_l0_hiding_budget(&params, &[512]).is_ok());
+    let certificate = certify_batch_opening(&params, &[512], &[0], &[1]).unwrap();
+    assert!(certificate.is_valid());
+    assert_eq!(certificate.witness_commitments, 1);
+    assert_eq!(certificate.batched_openings, 1);
+    assert_eq!(certificate.ring_claims, 2);
+    assert_eq!(certificate.public_direct_claims, 1);
+    assert_eq!(certificate.blind_grinding_bits, 2);
+    assert_eq!(certificate.max_blind_grind_trials, 1024);
+    assert!(matches!(
+        validate_l0_hiding_budget(&params, &[513]),
+        Err(SuccinctVeilError::InvalidParameters)
+    ));
+    assert!(matches!(
+        certify_batch_opening(&params, &[512], &[1], &[1]),
+        Err(SuccinctVeilError::InvalidParameters)
+    ));
+    assert!(matches!(
+        certify_batch_opening(&params, &[512], &[0], &[2]),
+        Err(SuccinctVeilError::InvalidParameters)
     ));
 }
 
@@ -32,4 +157,39 @@ fn ring_constraint_map_matches_packed_field_scaling() {
         evaluated,
         flock_core::pcs::ring_switch::scale_s_hat_v(&slices, scalar)
     );
+}
+
+#[test]
+fn simulator_sumcheck_solve_preserves_uniform_zero_and_one_challenges() {
+    let running = F128::new(0x1234, 0x5678);
+    let target = F128::new(0x9abc, 0xdef0);
+    let random_g1 = F128::new(11, 12);
+    let random_g_inf = F128::new(13, 14);
+    for (r_eq, rho) in [
+        (F128::new(9, 0), F128::ZERO),
+        (F128::ZERO, F128::ONE),
+        (F128::new(9, 0), F128::ONE),
+        (F128::new(9, 0), F128::new(7, 0)),
+    ] {
+        let (g1, g_inf) =
+            solve_sumcheck_messages(running, target, r_eq, rho, random_g1, random_g_inf)
+                .expect("non-identity round is solvable");
+        let weights = flock_core::zerocheck::sumcheck_round_weights(r_eq, rho).unwrap();
+        assert_eq!(
+            weights[0] * running + weights[1] * g1 + weights[2] * g_inf,
+            target
+        );
+    }
+
+    assert!(matches!(
+        solve_sumcheck_messages(
+            running,
+            target,
+            F128::ZERO,
+            F128::ZERO,
+            random_g1,
+            random_g_inf,
+        ),
+        Err(SuccinctVeilError::DegenerateSimulation)
+    ));
 }

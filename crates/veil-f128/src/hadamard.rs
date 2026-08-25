@@ -112,10 +112,11 @@ pub fn commit_hadamard<R: MaskSampler + ?Sized>(
     }
     let mut codewords = code.encode_batch(&messages)?;
 
-    let mut product_mask_intermediate = vec![F128::ZERO; code.parameters().square_message_length()];
-    rng.fill_f128(&mut product_mask_intermediate);
+    let mut product_mask_coefficients = vec![F128::ZERO; code.parameters().square_dimension()];
+    rng.fill_f128(&mut product_mask_coefficients);
+    let product_mask_intermediate = code.square_from_coefficients(&product_mask_coefficients)?;
     codewords.push(code.encode_square(&product_mask_intermediate)?);
-    let commitment = MerkleMatrix::new(&codewords, ctx, channel);
+    let commitment = MerkleMatrix::new(&codewords, rng, ctx, channel);
 
     Ok(HadamardProverData {
         parameters,
@@ -152,7 +153,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
     let code = code_for(parameters)?;
     let root = commitment.root();
 
-    challenger.observe_label(b"veil-f128-hadamard-v1");
+    challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&root);
     let evaluation_point = challenger.sample_f128();
     let product_mask_reduced = code.square_to_base(&product_mask_intermediate)?;
@@ -235,7 +236,7 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
     }
     let code = code_for(parameters)?;
 
-    challenger.observe_label(b"veil-f128-hadamard-v1");
+    challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&proof.commitment);
     let evaluation_point = challenger.sample_f128();
     challenger.observe_f128(proof.gamma);

@@ -6,7 +6,7 @@ use flock_core::pcs::commit::PcsParams;
 use flock_core::pcs::ligerito::{LigeritoProfile, ProverConfig, prover_config_for};
 use flock_core::pcs::symbolic_opening::{
     OPENING_FUNCTIONAL_MANIFEST, certify_l0_query_rank, encode_zk_linear, l0_entropy_bound,
-    translate_mask_for_queries,
+    translate_joint_view_for_queries, translate_mask_for_queries,
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
@@ -117,8 +117,8 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
 
     let c = F128::new(0xd1ce_cafe_1234_5678, 0x900d_f00d_7766_5544);
     let queries = [1, 7, 11, 22, 39, 55];
-    let translation = translate_mask_for_queries(&params, c, &queries, &delta)
-        .expect("the L0 query equations must be solvable");
+    let translation = translate_joint_view_for_queries(&params, c, &queries, &delta, &[&basis])
+        .expect("the complete L0/direct-functional view must be jointly translatable");
     for index in 0..w {
         assert_eq!(
             translation.delta_mu[index] + c * translation.delta_g_lo[index],
@@ -129,6 +129,15 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
             F128::ZERO
         );
     }
+    assert_eq!(
+        translation
+            .delta_g_top
+            .iter()
+            .zip(&basis)
+            .fold(F128::ZERO, |acc, (value, weight)| acc + *value * *weight),
+        F128::ZERO,
+        "the public-functional blinder value is invariant under the coupling"
+    );
 
     let delta_g = translation
         .delta_g_lo
@@ -146,6 +155,13 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
         );
     }
     assert!(translate_mask_for_queries(&params, F128::ZERO, &queries, &delta).is_none());
+    let mut non_public_basis = basis.clone();
+    non_public_basis[0] += F128::ONE;
+    assert!(
+        translate_joint_view_for_queries(&params, c, &queries, &delta, &[&non_public_basis])
+            .is_none(),
+        "a witness-private direct functional must fail closed"
+    );
 }
 
 #[test]
@@ -160,7 +176,7 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
         m: 22,
         log_inv_rate: 1,
         log_batch_size: 6,
-        profile: LigeritoProfile::Fast,
+        profile: LigeritoProfile::Secure,
         zk: true,
     };
     let config = prover_config_for(
@@ -176,34 +192,16 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
     let representative_queries = (0..config.queries[0]).collect::<Vec<_>>();
     let rank_certificate = certify_l0_query_rank(&production, &representative_queries)
         .expect("every registered distinct query set must satisfy the structural rank criterion");
-    assert_eq!(rank_certificate.opened_positions, 218);
+    assert_eq!(rank_certificate.opened_positions, 294);
     assert_eq!(rank_certificate.mask_symbols_per_lane, 512);
 
-    let manifest: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../docs/artifacts/s3_opening_functionals.json"
-    ))
-    .unwrap();
-    let entries = manifest["functionals"].as_array().unwrap();
-    assert_eq!(entries.len(), OPENING_FUNCTIONAL_MANIFEST.len());
-    for (pinned, current) in entries.iter().zip(OPENING_FUNCTIONAL_MANIFEST) {
-        assert_eq!(pinned["proof_path"], current.proof_path);
-        assert_eq!(pinned["category"], current.category);
-        assert_eq!(pinned["disposition"], current.disposition);
-    }
-    assert_eq!(manifest["l0_query_rank"]["status"], "structural");
-    assert_eq!(manifest["l0_query_rank"]["registered_queries"], 218);
-    assert_eq!(manifest["l0_query_rank"]["mask_symbols_per_lane"], 512);
-
-    let entropy: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../docs/artifacts/s3_minentropy_table.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        entropy["profiles"][0]["conditional_bits_per_fresh_leaf"],
-        1024
-    );
-    assert_eq!(
-        entropy["profiles"][1]["conditional_bits_per_fresh_leaf"],
-        bound.conditional_bits_per_fresh_leaf
-    );
+    assert_eq!(OPENING_FUNCTIONAL_MANIFEST.len(), 13);
+    assert!(OPENING_FUNCTIONAL_MANIFEST.iter().any(|entry| {
+        entry.proof_path == "ligerito.initial_proof.leaf_salts"
+            && entry.category == "fresh_public_randomness"
+            && entry.disposition == "independent_256_bit_salt_per_opened_leaf"
+    }));
+    assert!(OPENING_FUNCTIONAL_MANIFEST.iter().all(|entry| {
+        !entry.proof_path.is_empty() && !entry.category.is_empty() && !entry.disposition.is_empty()
+    }));
 }

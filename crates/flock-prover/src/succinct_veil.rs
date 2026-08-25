@@ -25,22 +25,43 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use veil_f128::{
     ArithmeticCircuit, CircuitBuilder, ConstraintError, ConstraintParameters, ConstraintProof,
-    LinearCombination, commit_constraint_inputs, prove_constraints_from_commitment,
-    verify_constraints,
+    ConstraintSoundnessBound, LinearCombination, certify_constraint_soundness,
+    commit_constraint_inputs, prove_constraints_from_commitment, verify_constraints,
 };
 
 use crate::prover::quirky_x_outer_full;
 
-const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root-v0";
-const RING_MASK_LABEL: &[u8] = b"veil-flock-ring-masks-v0";
-const PCS_BLIND_LABEL: &[u8] = b"veil-flock-pcs-blind-v0";
-const BLINDED_RING_LABEL: &[u8] = b"veil-flock-blinded-ring-v0";
+const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root";
+const RING_MASK_LABEL: &[u8] = b"veil-flock-ring-masks";
+const PCS_BLIND_LABEL: &[u8] = b"veil-flock-public-pcs-blind";
+const BLINDED_RING_LABEL: &[u8] = b"veil-flock-blinded-ring";
+const PCS_FORK_LABEL: &[u8] = b"veil-flock-pcs-fork";
+const VEIL_FORK_LABEL: &[u8] = b"veil-flock-inner-fork";
+const TREE_NONCES_LABEL: &[u8] = b"veil-flock-tree-nonces";
 const RING_CLAIM_COUNT: usize = 2;
+const PUBLIC_DIRECT_CLAIM_COUNT: usize = 1;
 const RING_WIDTH: usize = 1 << pcs::LOG_PACKING;
+/// Digest of the only relation accepted by the full-ZK entry point:
+/// `build_block_r1cs_zk_pinned(8, RootHash64)`.
+const SUPPORTED_BLAKE3_R1CS_DIGEST: [u8; 32] = [
+    0x33, 0xcb, 0x2a, 0x40, 0x4f, 0x1b, 0x19, 0x77, 0x5e, 0x0c, 0x38, 0x11, 0x89, 0xd1, 0x4e, 0xc9,
+    0x0d, 0x00, 0xf9, 0xcd, 0x75, 0xa9, 0x68, 0x5d, 0x1f, 0xc0, 0x1c, 0x6b, 0x72, 0x58, 0x2d, 0x4f,
+];
+const SUPPORTED_MASK_COUNT: usize = 754;
+/// The active Secure profile has a two-bit outer blinding grind. Refusing a
+/// nonce outside the first 1024 trials charges the exact tail `(3/4)^1024`
+/// (more than 425 bits) and gives the pROM proof a deterministic query bound.
+pub const MAX_BLIND_GRIND_TRIALS: u64 = 1024;
+/// Every Ligerito query/fold grind is bounded for the same reason. The pinned
+/// profile has one live one-bit fold grind; the bound ledger conservatively
+/// reserves room for up to sixteen positive-bit sites.
+pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 1024;
+pub const MAX_LIGERITO_GRIND_SITES: u64 = 16;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctVeilProof {
     pub proof_nonce: [u8; 32],
+    pub tree_nonces: InitialTreeNonces,
     /// Exactly the zerocheck values observed by Fiat--Shamir, each one-time
     /// padded.
     pub masked_zerocheck: MaskedZerocheckProof,
@@ -50,16 +71,145 @@ pub struct SuccinctVeilProof {
     pub masked_ring_claims: Vec<MaskedRingClaim>,
     /// Evaluations of the uniform PCS blinder at packed-direct claim bases.
     /// They are bound before the non-zero witness-blinding challenge.
-    pub direct_blind_values: Vec<F128>,
+    pub public_direct_blind_values: Vec<F128>,
     pub blind_grind_nonce: u64,
     pub pcs_open: pcs::BatchOpeningProofLigerito,
     pub veil: ConstraintProof,
+}
+
+/// Independent public freshness domains for every initial
+/// witness-dependent Merkle tree in the full-ZK protocol.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct InitialTreeNonces {
+    pub outer: [u8; 32],
+    pub veil_linear: [u8; 32],
+    pub veil_hadamard: [u8; 32],
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaskedRingClaim {
     pub witness: Vec<F128>,
     pub blind: Vec<F128>,
+}
+
+/// Audit marker for a packed functional whose claimed value is derived only
+/// from the public statement. The succinct full-view-ZK entry point is crate
+/// private and accepts direct claims only through this wrapper: a relation
+/// adapter must explicitly attest the kernel condition
+/// `L(witness_0 - witness_1) = 0` for equal public statements.
+pub(crate) struct PublicPackedDirectClaim(pcs::PackedDirectClaim);
+
+impl PublicPackedDirectClaim {
+    pub(crate) fn from_public_statement(claim: pcs::PackedDirectClaim) -> Self {
+        Self(claim)
+    }
+}
+
+/// Verifier-side form of [`PublicPackedDirectClaim`].
+pub(crate) struct PublicPackedDirectClaimValue {
+    point: Vec<F128>,
+    value: F128,
+}
+
+impl PublicPackedDirectClaimValue {
+    pub(crate) fn from_public_statement(point: Vec<F128>, value: F128) -> Self {
+        Self { point, value }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SuccinctProofFieldClassification {
+    pub proof_path: &'static str,
+    pub privacy_argument: &'static str,
+}
+
+pub const SUCCINCT_PROOF_FIELD_MANIFEST: &[SuccinctProofFieldClassification] = &[
+    SuccinctProofFieldClassification {
+        proof_path: "proof_nonce",
+        privacy_argument: "fresh_public_randomness_and_ro_domain",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "tree_nonces",
+        privacy_argument: "independent_initial_tree_ro_domains",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "masked_zerocheck",
+        privacy_argument: "independent_field_one_time_pads",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "masked_lincheck",
+        privacy_argument: "independent_field_one_time_pads",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "masked_ring_claims",
+        privacy_argument: "independent_f2_linear_slice_pads",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "public_direct_blind_values",
+        privacy_argument: "joint_pcs_coupling_public_functional_kernel",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "blind_grind_nonce",
+        privacy_argument: "grinding_on_witness_independent_prefix",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "pcs_open",
+        privacy_argument: "joint_l0_q_coupling_then_postprocessing",
+    },
+    SuccinctProofFieldClassification {
+        proof_path: "veil",
+        privacy_argument: "veil_hadamard_and_dot_product_simulators",
+    },
+];
+
+/// Exhaustive destructuring makes a proof-schema addition fail compilation
+/// until its privacy argument is added to [`SUCCINCT_PROOF_FIELD_MANIFEST`].
+pub fn assert_succinct_proof_fields_classified(proof: &SuccinctVeilProof) {
+    let SuccinctVeilProof {
+        proof_nonce: _,
+        tree_nonces: _,
+        masked_zerocheck,
+        masked_lincheck,
+        masked_ring_claims,
+        public_direct_blind_values: _,
+        blind_grind_nonce: _,
+        pcs_open: _,
+        veil: _,
+    } = proof;
+    let MaskedZerocheckProof {
+        round1_ab: _,
+        round1_c: _,
+        multilinear_rounds: _,
+        final_a_eval: _,
+        final_b_eval: _,
+    } = masked_zerocheck;
+    let LincheckProof {
+        rounds: _,
+        z_partial: _,
+    } = masked_lincheck;
+    for claim in masked_ring_claims {
+        let MaskedRingClaim {
+            witness: _,
+            blind: _,
+        } = claim;
+    }
+}
+
+fn sample_nonce(rng: &mut impl MaskSampler) -> [u8; 32] {
+    let mut words = [0u64; 4];
+    rng.fill_u64s(&mut words);
+    let mut nonce = [0u8; 32];
+    for (chunk, word) in nonce.as_chunks_mut::<8>().0.iter_mut().zip(words) {
+        chunk.copy_from_slice(&word.to_le_bytes());
+    }
+    nonce
+}
+
+fn observe_tree_nonces<Ch: Challenger>(challenger: &mut Ch, nonces: &InitialTreeNonces) {
+    challenger.observe_label(TREE_NONCES_LABEL);
+    challenger.observe_bytes(&nonces.outer);
+    challenger.observe_bytes(&nonces.veil_linear);
+    challenger.observe_bytes(&nonces.veil_hadamard);
 }
 
 /// Masked zerocheck wire format for succinct VEIL. This intentionally differs
@@ -82,6 +232,7 @@ pub enum SuccinctVeilError {
     Pcs(pcs::VerifyError),
     DegenerateSimulation,
     ProgrammingCollision,
+    GrindingLimitExceeded,
 }
 
 pub struct SuccinctZerocheckInputs<'a> {
@@ -106,7 +257,7 @@ pub trait SuccinctZerocheckSource<Ch: Challenger> {
 
 /// Public-witness-free ROM zerocheck simulator. It samples a transcript and
 /// solves its final quadratic coefficient so the verifier lands on the true
-/// evaluations of the caller's committed pseudo-witness.
+/// evaluations of the caller's public-fiber representative.
 pub struct RomZerocheckSimulator {
     rng: ZkRng,
     z: F128,
@@ -114,18 +265,11 @@ pub struct RomZerocheckSimulator {
 }
 
 impl RomZerocheckSimulator {
-    pub fn new(m: usize, seed: [u8; 32]) -> Self {
-        let mut rng = ZkRng::from_seed(seed);
+    pub fn new(m: usize, mut rng: ZkRng) -> Self {
         let mut z_value = [F128::ZERO; 1];
         rng.fill_f128(&mut z_value);
         let mut rhos = vec![F128::ZERO; m - zerocheck::K_SKIP];
         rng.fill_f128(&mut rhos);
-        while rhos
-            .last()
-            .is_some_and(|rho| rho.is_zero() || *rho == F128::ONE)
-        {
-            rng.fill_f128(rhos.last_mut().map(std::slice::from_mut).unwrap());
-        }
         Self {
             rng,
             z: z_value[0],
@@ -137,6 +281,36 @@ impl RomZerocheckSimulator {
         let mut values = vec![F128::ZERO; length];
         self.rng.fill_f128(&mut values);
         values
+    }
+}
+
+fn solve_sumcheck_messages(
+    running: F128,
+    target: F128,
+    r_eq: F128,
+    rho: F128,
+    random_g1: F128,
+    random_g_inf: F128,
+) -> Result<(F128, F128), SuccinctVeilError> {
+    let denominator = F128::ONE + r_eq;
+    if denominator.is_zero() {
+        return Err(SuccinctVeilError::DegenerateSimulation);
+    }
+    let inverse_eq = denominator.inv();
+    let one_plus_rho = F128::ONE + rho;
+    let running_weight = one_plus_rho * inverse_eq;
+    let one_weight = (r_eq + rho) * inverse_eq;
+    let infinity_weight = rho * one_plus_rho;
+    if !infinity_weight.is_zero() {
+        let g_inf =
+            (target + running_weight * running + one_weight * random_g1) * infinity_weight.inv();
+        Ok((random_g1, g_inf))
+    } else if !one_weight.is_zero() {
+        let g1 =
+            (target + running_weight * running + infinity_weight * random_g_inf) * one_weight.inv();
+        Ok((g1, random_g_inf))
+    } else {
+        Err(SuccinctVeilError::DegenerateSimulation)
     }
 }
 
@@ -157,7 +331,7 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
             ));
         }
 
-        challenger.observe_label(b"flock-zerocheck-v0");
+        challenger.observe_label(b"flock-zerocheck");
         let r = zerocheck::sample_eq_point(inputs.m, challenger);
 
         // Reuse the shipped terminal evaluator with zero mask channels; only
@@ -196,6 +370,36 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
             });
         round1_c[pivot] = (terminal.c_eval + partial_c) * c_weights[pivot].inv();
 
+        // Normally one non-identity recursive round is used to solve the
+        // terminal constraint. If every `(rho, r_eq)` pair is `(0, 0)`, all
+        // recursive rounds are the identity. Cover that honest-support event
+        // exactly by solving one initial AB coefficient instead of aborting or
+        // conditioning the challenges.
+        let solve_round = (0..n_mlv)
+            .rev()
+            .find(|&i| !(self.rhos[i].is_zero() && r[zerocheck::K_SKIP + i].is_zero()));
+        let target = terminal.a_eval * terminal.b_eval;
+        if solve_round.is_none() {
+            let weights = zerocheck::multilinear::interpolate_at_z_combined_weights(
+                zerocheck::K_SKIP,
+                self.z,
+            );
+            let pivot = weights
+                .iter()
+                .position(|weight| !weight.is_zero())
+                .ok_or(SuccinctVeilError::DegenerateSimulation)?;
+            let partial = weights
+                .iter()
+                .zip(round1_ab.iter().zip(&round1_c))
+                .enumerate()
+                .filter(|(index, _)| *index != pivot)
+                .fold(F128::ZERO, |acc, (_, (weight, (ab, c)))| {
+                    acc + *weight * (*ab + *c)
+                });
+            round1_ab[pivot] =
+                (target + terminal.c_eval + partial) * weights[pivot].inv() + round1_c[pivot];
+        }
+
         let mut mask_cursor = 0usize;
         let masked_ab = round1_ab
             .iter()
@@ -228,24 +432,34 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
         let mut running =
             zerocheck::multilinear::interpolate_at_z_combined(&combined, zerocheck::K_SKIP, z)
                 + terminal.c_eval;
-        let target = terminal.a_eval * terminal.b_eval;
+        // A round with `(rho, r_eq) = (0, 0)` is the identity on `running`
+        // regardless of its two messages. Otherwise solve at the last
+        // non-identity round and let any identity suffix pass through. This
+        // handles rho=0 and rho=1 without conditioning the uniform challenge
+        // law.
         let mut rounds = Vec::with_capacity(n_mlv);
         for i in 0..n_mlv {
             let rho = self.rhos[i];
             let one_plus_rho = F128::ONE + rho;
             let r_eq = r[zerocheck::K_SKIP + i];
             let one_plus_r_eq = F128::ONE + r_eq;
-            let g1 = self.random_vec(1)[0];
-            let g0 = (running + r_eq * g1) * one_plus_r_eq.inv();
-            let g_inf = if i + 1 == n_mlv {
-                let denominator = rho * one_plus_rho;
-                if denominator.is_zero() {
-                    return Err(SuccinctVeilError::DegenerateSimulation);
-                }
-                (target + g0 * one_plus_rho + g1 * rho) * denominator.inv()
+            if one_plus_r_eq.is_zero() {
+                return Err(SuccinctVeilError::DegenerateSimulation);
+            }
+            let inverse_eq = one_plus_r_eq.inv();
+            let (g1, g_inf) = if solve_round == Some(i) {
+                solve_sumcheck_messages(
+                    running,
+                    target,
+                    r_eq,
+                    rho,
+                    self.random_vec(1)[0],
+                    self.random_vec(1)[0],
+                )?
             } else {
-                self.random_vec(1)[0]
+                (self.random_vec(1)[0], self.random_vec(1)[0])
             };
+            let g0 = (running + r_eq * g1) * inverse_eq;
             rounds.push((g1, g_inf));
             challenger.observe_f128(g1 + masks[mask_cursor]);
             mask_cursor += 1;
@@ -304,12 +518,255 @@ impl From<pcs::VerifyError> for SuccinctVeilError {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct MaskLayout {
     ell: usize,
     zc_rounds: usize,
     lc_rounds: usize,
     z_partial: usize,
+}
+
+/// One contiguous block in the independent-mask vector. The active compiler
+/// consumes these blocks in this exact order. Every block is an identity
+/// channel: visible value `i` is `private_value_i + mask_i`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct MaskSection {
+    pub name: &'static str,
+    pub start: usize,
+    pub length: usize,
+}
+
+/// Executable certificate for the global affine masking theorem.
+///
+/// Since every visible private `F128` coordinate has a distinct uniform pad,
+/// the random-coordinate matrix is the identity over `F128`, and therefore
+/// also has full rank after flattening to `F2`. This is stronger than merely
+/// checking `im(A_c) ⊆ im(B_c)`: `B_c` is surjective for every challenge
+/// history, with no challenge-dependent exceptional set.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct GlobalMaskCertificate {
+    pub sections: Vec<MaskSection>,
+    pub visible_private_f128: usize,
+    pub independent_mask_f128: usize,
+    pub mask_matrix_rank_f128: usize,
+    pub mask_matrix_rank_f2: usize,
+}
+
+impl GlobalMaskCertificate {
+    pub fn is_full_identity_cover(&self) -> bool {
+        self.visible_private_f128 == self.independent_mask_f128
+            && self.mask_matrix_rank_f128 == self.visible_private_f128
+            && self.mask_matrix_rank_f2 == 128 * self.visible_private_f128
+            && self
+                .sections
+                .iter()
+                .scan(0usize, |cursor, section| {
+                    let contiguous = section.start == *cursor && section.length > 0;
+                    *cursor += section.length;
+                    Some(contiguous)
+                })
+                .all(|contiguous| contiguous)
+            && self
+                .sections
+                .last()
+                .is_some_and(|section| section.start + section.length == self.visible_private_f128)
+    }
+}
+
+/// Exact constraint inventory for the shifted FLOCK verifier circuit before
+/// VEIL adds its two standard Hadamard-masking products.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct ShiftedCircuitCertificate {
+    pub private_inputs: usize,
+    pub flock_multiplications: usize,
+    pub lincheck_linear_constraints: usize,
+    pub ring_scale_linear_constraints: usize,
+    pub ring_claim_linear_constraints: usize,
+}
+
+/// Exact one-commitment/one-opening inventory for the active relation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct BatchOpeningCertificate {
+    pub witness_commitments: usize,
+    pub batched_openings: usize,
+    pub ring_claims: usize,
+    pub public_direct_claims: usize,
+    pub distinct_l0_positions: usize,
+    pub padding_symbols_per_lane: usize,
+    pub blind_grinding_bits: u32,
+    pub max_blind_grind_trials: u64,
+}
+
+/// Additive algebraic soundness ledger for the FLOCK PIOP and its batched
+/// linkage to the single witness PCS opening. This is separate from both the
+/// VEIL constraint binding bound and the recursive Ligerito PCS bound.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FlockPiopSoundnessBound {
+    pub friendly_coordinate_rank_f2: usize,
+    pub zerocheck_relation_probability: f64,
+    pub zerocheck_univariate_probability: f64,
+    pub zerocheck_sumcheck_probability: f64,
+    pub lincheck_claim_batch_probability: f64,
+    pub constant_pin_probability: f64,
+    pub lincheck_sumcheck_probability: f64,
+    pub lincheck_skip_probability: f64,
+    pub ring_switch_probability: f64,
+    pub pcs_claim_batch_probability: f64,
+}
+
+impl FlockPiopSoundnessBound {
+    pub fn probability(self) -> f64 {
+        self.zerocheck_relation_probability
+            + self.zerocheck_univariate_probability
+            + self.zerocheck_sumcheck_probability
+            + self.lincheck_claim_batch_probability
+            + self.constant_pin_probability
+            + self.lincheck_sumcheck_probability
+            + self.lincheck_skip_probability
+            + self.ring_switch_probability
+            + self.pcs_claim_batch_probability
+    }
+
+    pub fn bits(self) -> f64 {
+        -self.probability().log2()
+    }
+}
+
+/// Certify every Schwartz--Zippel term in the active fixed-shape FLOCK PIOP.
+/// All challenges counted here are sampled after the polynomial/message they
+/// bind. The seven implementation-fixed zerocheck coordinates are checked for
+/// full F2 rank; the remaining `m-7` coordinates are uniform F128 values.
+pub fn certify_flock_piop_soundness(
+    r1cs: &BlockR1cs,
+    lincheck_circuit: &dyn LincheckCircuit,
+) -> Result<FlockPiopSoundnessBound, SuccinctVeilError> {
+    if r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    let layout = MaskLayout::new(r1cs)?;
+    let friendly = zerocheck::univariate_skip_optimized::small_challenges_ghash()
+        .into_iter()
+        .chain(zerocheck::univariate_skip_optimized::medium_challenges_ghash());
+    let mut rows = friendly
+        .map(|value| (u128::from(value.hi) << 64) | u128::from(value.lo))
+        .collect::<Vec<_>>();
+    let friendly_coordinate_rank_f2 = binary_rank(&mut rows);
+    if friendly_coordinate_rank_f2 != zerocheck::N_INNER
+        || r1cs.m < zerocheck::N_INNER
+        || layout.ell != 1usize << zerocheck::K_SKIP
+    {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+
+    let q = 2f64.powi(128);
+    let bound = FlockPiopSoundnessBound {
+        friendly_coordinate_rank_f2,
+        // MLE identity/collision at the partially fixed equality point.
+        zerocheck_relation_probability: (r1cs.m - zerocheck::N_INNER) as f64 / q,
+        // The round-one AB+C polynomial has degree < 2*ell.
+        zerocheck_univariate_probability: (2 * layout.ell - 1) as f64 / q,
+        // Every remaining compressed sumcheck polynomial is quadratic.
+        zerocheck_sumcheck_probability: (2 * layout.zc_rounds) as f64 / q,
+        // alpha batches the two terminal A/B claims.
+        lincheck_claim_batch_probability: 1.0 / q,
+        // beta pins the public constant column when the live circuit has one.
+        constant_pin_probability: if lincheck_circuit.const_pin_col().is_some() {
+            1.0 / q
+        } else {
+            0.0
+        },
+        lincheck_sumcheck_probability: (2 * layout.lc_rounds) as f64 / q,
+        // The final phi8/Lagrange polynomial has degree < ell.
+        lincheck_skip_probability: (layout.ell - 1) as f64 / q,
+        // Each of the two ring-switch tables is tested at LOG_PACKING fresh
+        // multilinear coordinates before its batch coefficient is sampled.
+        ring_switch_probability: (RING_CLAIM_COUNT * pcs::LOG_PACKING) as f64 / q,
+        // Independent coefficients batch both ring claims and the one public
+        // packed-direct claim into the single Ligerito opening.
+        pcs_claim_batch_probability: 1.0 / q,
+    };
+    if !bound.bits().is_finite() || bound.bits() < 110.0 {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    Ok(bound)
+}
+
+/// Compute the VEIL binding ledger from the exact production circuit
+/// inventory. Runtime proving and verification separately validate that the
+/// challenge-instantiated circuit has precisely this shape.
+pub fn certify_shifted_veil_soundness(
+    r1cs: &BlockR1cs,
+) -> Result<ConstraintSoundnessBound, SuccinctVeilError> {
+    if r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    let layout = MaskLayout::new(r1cs)?;
+    let inventory = layout.shifted_circuit_certificate(true);
+    let mut builder = CircuitBuilder::new(inventory.private_inputs);
+    let zero = builder.constant(F128::ZERO);
+    for _ in 0..inventory.flock_multiplications {
+        builder.assert_mul(&zero, &zero, &zero);
+    }
+    for _ in 0..inventory.linear_constraints() {
+        builder.assert_zero(&zero);
+    }
+    let circuit = builder.finish();
+    inventory.validate(&circuit)?;
+    Ok(certify_constraint_soundness(
+        &circuit,
+        ConstraintParameters::succinct_flock_secure(),
+    )?)
+}
+
+fn binary_rank(rows: &mut [u128]) -> usize {
+    let mut rank = 0usize;
+    for column in (0..128).rev() {
+        let Some(pivot) = (rank..rows.len()).find(|&row| ((rows[row] >> column) & 1) == 1) else {
+            continue;
+        };
+        rows.swap(rank, pivot);
+        for row in 0..rows.len() {
+            if row != rank && ((rows[row] >> column) & 1) == 1 {
+                rows[row] ^= rows[rank];
+            }
+        }
+        rank += 1;
+    }
+    rank
+}
+
+impl BatchOpeningCertificate {
+    pub fn is_valid(self) -> bool {
+        self.witness_commitments == 1
+            && self.batched_openings == 1
+            && self.ring_claims == RING_CLAIM_COUNT
+            && self.public_direct_claims == PUBLIC_DIRECT_CLAIM_COUNT
+            && self.distinct_l0_positions > 0
+            && self.distinct_l0_positions <= self.padding_symbols_per_lane
+            && self.blind_grinding_bits == 2
+            && self.max_blind_grind_trials == MAX_BLIND_GRIND_TRIALS
+    }
+}
+
+impl ShiftedCircuitCertificate {
+    pub fn linear_constraints(self) -> usize {
+        self.lincheck_linear_constraints
+            + self.ring_scale_linear_constraints
+            + self.ring_claim_linear_constraints
+    }
+
+    fn validate(self, circuit: &ArithmeticCircuit) -> Result<(), SuccinctVeilError> {
+        if circuit.num_inputs() != self.private_inputs
+            || circuit.num_variables() != self.private_inputs
+            || circuit.num_multiplications() != self.flock_multiplications
+            || circuit.num_linear_constraints() != self.linear_constraints()
+        {
+            return Err(SuccinctVeilError::InvalidShape(
+                "shifted verifier constraint inventory",
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl MaskLayout {
@@ -341,16 +798,155 @@ impl MaskLayout {
     fn observed_count(self) -> usize {
         self.piop_count() + 2 * RING_CLAIM_COUNT * RING_WIDTH
     }
+
+    fn global_mask_certificate(self) -> GlobalMaskCertificate {
+        let lengths = [
+            ("zerocheck.round1_ab", self.ell),
+            ("zerocheck.round1_c", self.ell),
+            ("zerocheck.multilinear_rounds", 2 * self.zc_rounds),
+            ("zerocheck.terminal_ab", 2),
+            ("lincheck.rounds", 2 * self.lc_rounds),
+            ("lincheck.z_partial", self.z_partial),
+            ("ring.ab.witness", RING_WIDTH),
+            ("ring.ab.blind", RING_WIDTH),
+            ("ring.c.witness", RING_WIDTH),
+            ("ring.c.blind", RING_WIDTH),
+        ];
+        let mut cursor = 0usize;
+        let sections = lengths
+            .into_iter()
+            .map(|(name, length)| {
+                let section = MaskSection {
+                    name,
+                    start: cursor,
+                    length,
+                };
+                cursor += length;
+                section
+            })
+            .collect::<Vec<_>>();
+        let certificate = GlobalMaskCertificate {
+            sections,
+            visible_private_f128: self.observed_count(),
+            independent_mask_f128: cursor,
+            mask_matrix_rank_f128: cursor,
+            mask_matrix_rank_f2: 128 * cursor,
+        };
+        debug_assert!(certificate.is_full_identity_cover());
+        certificate
+    }
+
+    fn shifted_circuit_certificate(self, with_ring_link: bool) -> ShiftedCircuitCertificate {
+        ShiftedCircuitCertificate {
+            private_inputs: if with_ring_link {
+                self.observed_count()
+            } else {
+                self.piop_count()
+            },
+            flock_multiplications: 1,
+            lincheck_linear_constraints: 1,
+            ring_scale_linear_constraints: if with_ring_link {
+                RING_CLAIM_COUNT * RING_WIDTH
+            } else {
+                0
+            },
+            ring_claim_linear_constraints: if with_ring_link { RING_CLAIM_COUNT } else { 0 },
+        }
+    }
+}
+
+/// Certify the exact independent-mask bijection for a supported FLOCK R1CS.
+pub fn certify_global_masking(
+    r1cs: &BlockR1cs,
+) -> Result<GlobalMaskCertificate, SuccinctVeilError> {
+    let certificate = MaskLayout::new(r1cs)?.global_mask_certificate();
+    if !certificate.is_full_identity_cover() {
+        return Err(SuccinctVeilError::InvalidShape(
+            "global mask identity cover",
+        ));
+    }
+    Ok(certificate)
 }
 
 fn validate_succinct_parameters(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
 ) -> Result<MaskLayout, SuccinctVeilError> {
-    if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
+    if !pcs_params.zk
+        || r1cs.zk.is_none()
+        || pcs_params.m != r1cs.m
+        || r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST
+        || pcs_params.log_inv_rate != 1
+        || pcs_params.log_batch_size != 6
+        || pcs_params.profile != pcs::ligerito::LigeritoProfile::Secure
+    {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    MaskLayout::new(r1cs)
+    let layout = MaskLayout::new(r1cs)?;
+    if layout.observed_count() != SUPPORTED_MASK_COUNT
+        || !layout.global_mask_certificate().is_full_identity_cover()
+    {
+        return Err(SuccinctVeilError::InvalidShape(
+            "global mask identity cover",
+        ));
+    }
+    Ok(layout)
+}
+
+fn validate_l0_hiding_budget(
+    pcs_params: &PcsParams,
+    queries: &[usize],
+) -> Result<(), SuccinctVeilError> {
+    let Some(&opened_positions) = queries.first() else {
+        return Err(SuccinctVeilError::InvalidParameters);
+    };
+    let mask_symbols_per_lane =
+        (1usize << pcs_params.witness_log_msg_len()) / pcs_params.num_ntts();
+    if opened_positions > mask_symbols_per_lane {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    Ok(())
+}
+
+fn certify_batch_opening(
+    pcs_params: &PcsParams,
+    queries: &[usize],
+    grinding_bits: &[usize],
+    fold_grinding_bits: &[usize],
+) -> Result<BatchOpeningCertificate, SuccinctVeilError> {
+    validate_l0_hiding_budget(pcs_params, queries)?;
+    let positive_fold_sites = fold_grinding_bits.iter().filter(|bits| **bits > 0).count();
+    if grinding_bits.iter().any(|bits| *bits != 0)
+        || fold_grinding_bits.iter().any(|bits| *bits > 1)
+        || positive_fold_sites > MAX_LIGERITO_GRIND_SITES as usize
+    {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    let blind_grinding_bits = fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let certificate = BatchOpeningCertificate {
+        witness_commitments: 1,
+        batched_openings: 1,
+        ring_claims: RING_CLAIM_COUNT,
+        public_direct_claims: PUBLIC_DIRECT_CLAIM_COUNT,
+        distinct_l0_positions: queries[0],
+        padding_symbols_per_lane: (1usize << pcs_params.witness_log_msg_len())
+            / pcs_params.num_ntts(),
+        blind_grinding_bits,
+        max_blind_grind_trials: MAX_BLIND_GRIND_TRIALS,
+    };
+    if !certificate.is_valid() {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    Ok(certificate)
+}
+
+fn ligerito_grinding_is_bounded(proof: &pcs::ligerito::LigeritoProof) -> bool {
+    proof
+        .grinding_nonces
+        .iter()
+        .chain(&proof.fold_grinding_nonces)
+        .all(|nonce| *nonce < MAX_LIGERITO_GRIND_TRIALS)
+        && proof.fold_grinding_nonces.len() <= MAX_LIGERITO_GRIND_SITES as usize
 }
 
 /// Challenger adapter used only while producing zerocheck and lincheck. It
@@ -592,6 +1188,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     challenger: &mut C,
 ) -> Result<(ArithmeticCircuit, ZClaim, ZClaim), SuccinctVeilError> {
     let layout = MaskLayout::new(r1cs)?;
+    let with_ring_link = ring_link.is_some();
     if zc.round1_ab.len() != layout.ell
         || zc.round1_c.len() != layout.ell
         || zc.multilinear_rounds.len() != layout.zc_rounds
@@ -609,7 +1206,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     let mut builder = CircuitBuilder::new(mask_count);
     let mut expressions = ExpressionCursor::new(mask_count);
 
-    challenger.observe_label(b"flock-zerocheck-v0");
+    challenger.observe_label(b"flock-zerocheck");
     let r = zerocheck::sample_eq_point(r1cs.m, challenger);
 
     let round1_ab = zc
@@ -663,7 +1260,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     challenger.observe_f128(zc.final_b_eval);
 
     let x_ab = r1cs.x_ab_from_mlv(z, &mlv_challenges);
-    challenger.observe_label(b"flock-lincheck-v0");
+    challenger.observe_label(b"flock-lincheck");
     let alpha = challenger.sample_f128();
     let eq_inner = lincheck::build_quirky_eq_table(x_ab.z_skip, &x_ab.x_inner_rest, r1cs.k_skip);
     let mut comb_vec = lincheck_circuit.fold_alpha_batched(alpha, &eq_inner);
@@ -762,11 +1359,15 @@ fn shifted_verifier_circuit<C: Challenger>(
         point: c_point,
         value: values[1],
     };
-    Ok((builder.finish(), ab, c))
+    let circuit = builder.finish();
+    layout
+        .shifted_circuit_certificate(with_ring_link)
+        .validate(&circuit)?;
+    Ok((circuit, ab, c))
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
+pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
     z_packed: Vec<F128>,
@@ -776,44 +1377,54 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     lincheck_circuit: &dyn LincheckCircuit,
     lig_config: &pcs::ligerito::ProverConfig,
     rng: &mut ZkRng,
-    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<pcs::PackedDirectClaim>,
+    public_packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<PublicPackedDirectClaim>,
     zerocheck_source: Option<&mut dyn SuccinctZerocheckSource<Ch>>,
     challenger: &mut Ch,
 ) -> Result<(SuccinctVeilProof, Commitment), SuccinctVeilError> {
     let layout = validate_succinct_parameters(r1cs, pcs_params)?;
+    certify_flock_piop_soundness(r1cs, lincheck_circuit)?;
+    certify_batch_opening(
+        pcs_params,
+        &lig_config.queries,
+        &lig_config.grinding_bits,
+        &lig_config.fold_grinding_bits,
+    )?;
     let mut masks = vec![F128::ZERO; layout.observed_count()];
     let mut mask_rng = rng.fork(b"succinct-veil-transcript-masks");
     mask_rng.fill_f128(&mut masks);
 
-    let mut nonce_rng = rng.fork(b"succinct-veil-proof-nonce");
-    let mut nonce_words = [0u64; 4];
-    nonce_rng.fill_u64s(&mut nonce_words);
-    let mut proof_nonce = [0u8; 32];
-    for (chunk, word) in proof_nonce
-        .as_chunks_mut::<8>()
-        .0
-        .iter_mut()
-        .zip(nonce_words)
-    {
-        chunk.copy_from_slice(&word.to_le_bytes());
-    }
-    let ro = challenger.ro_context(proof_nonce);
+    let mut nonce_rng = rng.fork(b"succinct-veil-public-nonces");
+    let proof_nonce = sample_nonce(&mut nonce_rng);
+    let tree_nonces = InitialTreeNonces {
+        outer: sample_nonce(&mut nonce_rng),
+        veil_linear: sample_nonce(&mut nonce_rng),
+        veil_hadamard: sample_nonce(&mut nonce_rng),
+    };
+    let outer_ro = challenger.ro_context(tree_nonces.outer);
+    let veil_linear_ro = challenger.ro_context(tree_nonces.veil_linear);
+    let veil_hadamard_ro = challenger.ro_context(tree_nonces.veil_hadamard);
 
     let placeholder = CircuitBuilder::new(layout.observed_count()).finish();
-    let veil_parameters = ConstraintParameters::succinct_flock_experimental();
+    let veil_parameters = ConstraintParameters::succinct_flock_secure();
     let mut veil_rng = rng.fork(b"succinct-veil-inner-proof");
-    let veil_commitment =
-        commit_constraint_inputs(&placeholder, &masks, veil_parameters, &mut veil_rng, &ro)?;
+    let veil_commitment = commit_constraint_inputs(
+        &placeholder,
+        &masks,
+        veil_parameters,
+        &mut veil_rng,
+        &veil_linear_ro,
+    )?;
     let mut witness_rng = rng.fork(b"succinct-veil-witness-pcs");
     let (commitment, prover_data) = pcs::commit::commit_zk_with_ro(
         &z_packed,
         pcs_params,
         &mut witness_rng,
-        &ro,
+        &outer_ro,
         RoChannel::Witness,
     );
 
     bind_statement(challenger, r1cs, &commitment, &proof_nonce);
+    observe_tree_nonces(challenger, &tree_nonces);
     challenger.observe_label(MASK_ROOT_LABEL);
     challenger.observe_bytes(&veil_commitment.root());
     let circuit_start = challenger.clone();
@@ -940,14 +1551,28 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     );
     observe_masked_ring_claims(challenger, &masked_ring_claims);
 
-    let mut pd = packed_direct(challenger);
-    let direct_blind_values = pd
+    let mut pd = public_packed_direct(challenger)
+        .into_iter()
+        .map(|claim| claim.0)
+        .collect::<Vec<_>>();
+    if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT {
+        return Err(SuccinctVeilError::InvalidShape(
+            "public packed-direct claim count",
+        ));
+    }
+    let public_direct_blind_values = pd
         .iter()
         .map(|claim| claim.evaluate(g_top))
         .collect::<Vec<_>>();
-    observe_direct_blinds(challenger, &direct_blind_values);
+    observe_direct_blinds(challenger, &public_direct_blind_values);
     let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    if blind_bits != 2 {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
     let blind_grind_nonce = challenger.grind_pow(blind_bits);
+    if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
+        return Err(SuccinctVeilError::GrindingLimitExceeded);
+    }
     let blind_challenge = sample_nonzero(challenger);
 
     let q_slices = witness_slices
@@ -963,7 +1588,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         })
         .collect::<Vec<_>>();
     observe_blinded_ring_claims(challenger, &q_slices);
-    for (claim, blind_value) in pd.iter_mut().zip(&direct_blind_values) {
+    for (claim, blind_value) in pd.iter_mut().zip(&public_direct_blind_values) {
         claim.value += blind_challenge * *blind_value;
     }
     let mut q_packed = z_packed;
@@ -990,11 +1615,14 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             "shifted verifier output points",
         ));
     }
+    certify_constraint_soundness(&circuit, veil_parameters)?;
 
     // The VEIL constraint proof and the PCS opening use independent terminal
     // transcript branches after their shared linkage data is bound.
+    let mut pcs_challenger = challenger.clone();
+    pcs_challenger.observe_label(PCS_FORK_LABEL);
     let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    veil_challenger.observe_label(VEIL_FORK_LABEL);
     let x_refs = x_fulls.iter().map(Vec::as_slice).collect::<Vec<_>>();
     let precomputed = q_slices
         .iter()
@@ -1013,10 +1641,10 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
                     packed_direct: &pd,
                     padding: &padding,
                     lig_config,
-                    ro: &ro,
+                    ro: &outer_ro,
                     channel: RoChannel::Witness,
                 },
-                challenger,
+                &mut pcs_challenger,
             )
         },
         || {
@@ -1025,18 +1653,22 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
                 veil_commitment,
                 &mut veil_rng,
                 &mut veil_challenger,
-                &ro,
+                &veil_hadamard_ro,
             )
         },
     );
+    if !ligerito_grinding_is_bounded(&pcs_open.ligerito) {
+        return Err(SuccinctVeilError::GrindingLimitExceeded);
+    }
     let veil = veil?;
     Ok((
         SuccinctVeilProof {
             proof_nonce,
+            tree_nonces,
             masked_zerocheck,
             masked_lincheck,
             masked_ring_claims,
-            direct_blind_values,
+            public_direct_blind_values,
             blind_grind_nonce,
             pcs_open,
             veil,
@@ -1046,24 +1678,34 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
+pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
     proof: &SuccinctVeilProof,
     commitment: &Commitment,
     lincheck_circuit: &dyn LincheckCircuit,
     lig_config: &pcs::ligerito::VerifierConfig,
-    packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
+    public_packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<PublicPackedDirectClaimValue>,
     challenger: &mut Ch,
 ) -> Result<(), SuccinctVeilError> {
     validate_succinct_parameters(r1cs, pcs_params)?;
+    certify_flock_piop_soundness(r1cs, lincheck_circuit)?;
+    certify_batch_opening(
+        pcs_params,
+        &lig_config.queries,
+        &lig_config.grinding_bits,
+        &lig_config.fold_grinding_bits,
+    )?;
     if commitment.params != *pcs_params
-        || proof.veil.parameters != ConstraintParameters::succinct_flock_experimental()
+        || proof.veil.parameters != ConstraintParameters::succinct_flock_secure()
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    let ro = challenger.ro_context(proof.proof_nonce);
+    let outer_ro = challenger.ro_context(proof.tree_nonces.outer);
+    let veil_linear_ro = challenger.ro_context(proof.tree_nonces.veil_linear);
+    let veil_hadamard_ro = challenger.ro_context(proof.tree_nonces.veil_hadamard);
     bind_statement(challenger, r1cs, commitment, &proof.proof_nonce);
+    observe_tree_nonces(challenger, &proof.tree_nonces);
     challenger.observe_label(MASK_ROOT_LABEL);
     challenger.observe_bytes(&proof.veil.linear.commitment);
     let circuit_start = challenger.clone();
@@ -1082,15 +1724,20 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         return Err(SuccinctVeilError::InvalidShape("ring claim count"));
     }
     observe_masked_ring_claims(challenger, &proof.masked_ring_claims);
-    let pd = packed_direct(challenger);
-    if proof.direct_blind_values.len() != pd.len() {
+    let pd = public_packed_direct(challenger);
+    if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT
+        || proof.public_direct_blind_values.len() != PUBLIC_DIRECT_CLAIM_COUNT
+    {
         return Err(SuccinctVeilError::InvalidShape(
             "packed-direct blind values",
         ));
     }
-    observe_direct_blinds(challenger, &proof.direct_blind_values);
+    observe_direct_blinds(challenger, &proof.public_direct_blind_values);
     let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
-    if !challenger.verify_pow(proof.blind_grind_nonce, blind_bits) {
+    if blind_bits != 2
+        || proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
+        || !challenger.verify_pow(proof.blind_grind_nonce, blind_bits)
+    {
         return Err(SuccinctVeilError::InvalidParameters);
     }
     let blind_challenge = sample_nonzero(challenger);
@@ -1120,17 +1767,23 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
             "shifted verifier output points",
         ));
     }
+    certify_constraint_soundness(&circuit, proof.veil.parameters)?;
 
+    let mut pcs_challenger = challenger.clone();
+    pcs_challenger.observe_label(PCS_FORK_LABEL);
     let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    veil_challenger.observe_label(VEIL_FORK_LABEL);
     let pd_refs = pd
         .iter()
-        .zip(&proof.direct_blind_values)
-        .map(|((point, value), blind)| pcs::PackedDirectClaimRef {
-            point: point.as_slice(),
-            value: *value + blind_challenge * *blind,
+        .zip(&proof.public_direct_blind_values)
+        .map(|(claim, blind)| pcs::PackedDirectClaimRef {
+            point: claim.point.as_slice(),
+            value: claim.value + blind_challenge * *blind,
         })
         .collect::<Vec<_>>();
+    if !ligerito_grinding_is_bounded(&proof.pcs_open.ligerito) {
+        return Err(SuccinctVeilError::GrindingLimitExceeded);
+    }
     flock_core::verifier::verify_claims_ligerito_with_config_pd_preblinded_ro(
         flock_core::verifier::PreblindedClaimVerification {
             commitment,
@@ -1140,12 +1793,18 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
             pcs_params,
             lig_v_config: lig_config,
             challenge: blind_challenge,
-            ro: &ro,
+            ro: &outer_ro,
             channel: RoChannel::Witness,
         },
-        challenger,
+        &mut pcs_challenger,
     )?;
-    verify_constraints(&circuit, &proof.veil, &mut veil_challenger, &ro)?;
+    verify_constraints(
+        &circuit,
+        &proof.veil,
+        &mut veil_challenger,
+        &veil_linear_ro,
+        &veil_hadamard_ro,
+    )?;
     Ok(())
 }
 

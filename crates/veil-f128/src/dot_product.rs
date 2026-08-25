@@ -17,7 +17,7 @@ use flock_core::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    code::{AdditiveRsCode, CodeError, CodeParameters},
+    code::{AdditiveRsCode, CodeError, CodeParameters, certify_zk_code},
     commitment::{MerkleMatrix, MerkleMatrixOpening},
 };
 
@@ -62,6 +62,10 @@ impl VectorParameters {
             .checked_mul(inverse_rate)
             .ok_or(DotProductError::InvalidParameters)?;
         CodeParameters::new(message_length, code_length)?;
+        // Every commitment is opened once at exactly `padding_length`
+        // distinct coordinates. Keep the k-ZK budget executable rather than
+        // relying on a caller-side convention.
+        certify_zk_code(vector_length, padding_length, padding_length, code_length)?;
         if padding_length > code_length {
             return Err(DotProductError::InvalidParameters);
         }
@@ -159,7 +163,7 @@ pub fn commit_vectors<R: MaskSampler + ?Sized>(
         messages.push(message);
     }
     let codewords = parameters.code().encode_batch(&messages)?;
-    let commitment = MerkleMatrix::new(&codewords, ctx, channel);
+    let commitment = MerkleMatrix::new(&codewords, rng, ctx, channel);
 
     Ok(DotProductProverData {
         parameters,
@@ -192,7 +196,7 @@ pub fn prove_dot_product<C: Challenger>(
         return Err(DotProductError::WrongDotVectorLength);
     }
 
-    challenger.observe_label(b"veil-f128-dot-product-v1");
+    challenger.observe_label(b"veil-f128-dot-product");
     let claimed_dot_products: Vec<F128> = vectors
         .iter()
         .map(|vector| dot_product(vector, dot_vector))
@@ -275,7 +279,7 @@ pub fn verify_dot_product<C: Challenger>(
         return Err(DotProductError::WrongProofShape);
     }
 
-    challenger.observe_label(b"veil-f128-dot-product-v1");
+    challenger.observe_label(b"veil-f128-dot-product");
     challenger.observe_f128_slice(dot_vector);
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);

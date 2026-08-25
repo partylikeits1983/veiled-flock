@@ -47,54 +47,69 @@ pub trait MaskSampler {
     }
 }
 
-/// Prover-side deterministic random bit generator: a BLAKE3 XOF keyed by a
-/// 32-byte seed. Deterministic given the seed (tests, the rank audit);
-/// [`ZkRng::from_entropy`] seeds from the OS. `fork` derives an independent,
-/// domain-separated child stream so one per-proof instance can feed both the
-/// witness randomizers and the PCS masks.
+/// Prover-side random source. Production [`ZkRng::from_entropy`] draws every
+/// requested byte directly from the OS random source, so the algebraic hiding
+/// theorem does not rely on a separate PRG assumption. [`ZkRng::from_seed`]
+/// is deterministic and exists for tests and reproducible audits only.
 pub struct ZkRng {
-    key: [u8; 32],
-    forks: u64,
-    reader: blake3::OutputReader,
+    source: ZkRngSource,
+}
+
+enum ZkRngSource {
+    Deterministic {
+        key: [u8; 32],
+        forks: u64,
+        reader: blake3::OutputReader,
+    },
+    #[cfg(feature = "zk")]
+    Os,
 }
 
 impl ZkRng {
     pub fn from_seed(key: [u8; 32]) -> Self {
         let mut h = blake3::Hasher::new_keyed(&key);
-        h.update(b"flock-zk-drbg-v0");
+        h.update(b"flock-zk-drbg");
         Self {
-            key,
-            forks: 0,
-            reader: h.finalize_xof(),
+            source: ZkRngSource::Deterministic {
+                key,
+                forks: 0,
+                reader: h.finalize_xof(),
+            },
         }
     }
 
-    /// Seed from OS entropy. Panics if the OS entropy source is unavailable
+    /// Draw directly from OS entropy. Panics if the source is unavailable
     /// (a proof produced without real entropy would silently not be hiding).
     #[cfg(feature = "zk")]
     pub fn from_entropy() -> Self {
-        let mut key = [0u8; 32];
-        getrandom::getrandom(&mut key).expect("flock-zk: OS entropy unavailable");
-        Self::from_seed(key)
+        Self {
+            source: ZkRngSource::Os,
+        }
     }
 
-    /// Derive an independent child stream. Children are domain-separated by
-    /// `label` and by a per-parent fork counter, and do not perturb the
-    /// parent's own output stream.
+    /// Derive an independent child source. Deterministic children are
+    /// domain-separated by `label` and a per-parent counter; production
+    /// children continue drawing independent bytes from the OS source.
     pub fn fork(&mut self, label: &[u8]) -> Self {
-        let mut h = blake3::Hasher::new_keyed(&self.key);
-        h.update(b"flock-zk-fork-v0");
-        h.update(&self.forks.to_le_bytes());
-        h.update(&(label.len() as u64).to_le_bytes());
-        h.update(label);
-        self.forks += 1;
-        Self::from_seed(*h.finalize().as_bytes())
+        match &mut self.source {
+            ZkRngSource::Deterministic { key, forks, .. } => {
+                let mut h = blake3::Hasher::new_keyed(key);
+                h.update(b"flock-zk-fork");
+                h.update(&forks.to_le_bytes());
+                h.update(&(label.len() as u64).to_le_bytes());
+                h.update(label);
+                *forks += 1;
+                Self::from_seed(*h.finalize().as_bytes())
+            }
+            #[cfg(feature = "zk")]
+            ZkRngSource::Os => Self::from_entropy(),
+        }
     }
 
     pub fn next_u64(&mut self) -> u64 {
-        let mut b = [0u8; 8];
-        self.reader.fill(&mut b);
-        u64::from_le_bytes(b)
+        let mut word = [0u64; 1];
+        self.fill_u64s(&mut word);
+        word[0]
     }
 }
 
@@ -103,7 +118,13 @@ impl MaskSampler for ZkRng {
         // One bulk XOF read; u64 has no invalid bit patterns.
         let bytes: &mut [u8] =
             unsafe { std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<u8>(), out.len() * 8) };
-        self.reader.fill(bytes);
+        match &mut self.source {
+            ZkRngSource::Deterministic { reader, .. } => reader.fill(bytes),
+            #[cfg(feature = "zk")]
+            ZkRngSource::Os => {
+                getrandom::getrandom(bytes).expect("flock-zk: OS entropy unavailable")
+            }
+        }
         // Canonicalize endianness so streams are platform-independent.
         for v in out.iter_mut() {
             *v = u64::from_le(*v);
@@ -296,7 +317,7 @@ impl ZkBlockLayout {
     /// layout determines which polynomial family the statement quantifies
     /// over, so it is part of the statement).
     pub fn absorb_into(&self, h: &mut blake3::Hasher) {
-        h.update(b"flock-zk-layout-v0");
+        h.update(b"flock-zk-layout");
         h.update(&(self.rand_bit_base as u64).to_le_bytes());
         h.update(&(self.chunks_a as u64).to_le_bytes());
         h.update(&(self.chunks_b as u64).to_le_bytes());

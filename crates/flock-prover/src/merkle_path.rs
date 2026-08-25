@@ -677,11 +677,11 @@ mod tests {
             let (x_l, x_r, z, iv, b, leaf, root) = build_honest_scenario(n, 0xC0FFEE + n as u64);
             let layout = canonical_layout();
 
-            let mut ch_p = FsChallenger::new(b"merkle-test-v0");
+            let mut ch_p = FsChallenger::new(b"merkle-test");
             let (proof, claims_p) =
                 prove_merkle_path_shift(0, &x_l, &x_r, &z, &iv, &b, layout, &mut ch_p);
 
-            let mut ch_v = FsChallenger::new(b"merkle-test-v0");
+            let mut ch_v = FsChallenger::new(b"merkle-test");
             let claims_v =
                 verify_merkle_path_shift(0, &proof, &[leaf], root, &b, n, layout, &mut ch_v)
                     .unwrap_or_else(|e| panic!("verify rejected honest proof at n={n}: {e:?}"));
@@ -702,9 +702,9 @@ mod tests {
             }
         }
         let layout = canonical_layout();
-        let mut ch_p = FsChallenger::new(b"merkle-test-v0");
+        let mut ch_p = FsChallenger::new(b"merkle-test");
         let (proof, _) = prove_merkle_path_shift(0, &x_l, &x_r, &z, &iv, &b, layout, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"merkle-test-v0");
+        let mut ch_v = FsChallenger::new(b"merkle-test");
         let res = verify_merkle_path_shift(0, &proof, &[leaf], root, &b, n, layout, &mut ch_v);
         assert!(matches!(res, Err(MerklePathError::SumcheckFinal)));
     }
@@ -714,12 +714,12 @@ mod tests {
         let n = 4;
         let (x_l, x_r, z, iv, b, leaf, root) = build_honest_scenario(n, 0xC0DE);
         let layout = canonical_layout();
-        let mut ch_p = FsChallenger::new(b"merkle-test-v0");
+        let mut ch_p = FsChallenger::new(b"merkle-test");
         let (proof, _) = prove_merkle_path_shift(0, &x_l, &x_r, &z, &iv, &b, layout, &mut ch_p);
         // Verify with a tampered leaf.
         let mut bad_leaf = leaf;
         bad_leaf.lo ^= 1;
-        let mut ch_v = FsChallenger::new(b"merkle-test-v0");
+        let mut ch_v = FsChallenger::new(b"merkle-test");
         let res = verify_merkle_path_shift(0, &proof, &[bad_leaf], root, &b, n, layout, &mut ch_v);
         assert!(matches!(res, Err(MerklePathError::SumcheckFinal)));
     }
@@ -729,11 +729,11 @@ mod tests {
         let n = 4;
         let (x_l, x_r, z, iv, b, leaf, root) = build_honest_scenario(n, 0xDEAD);
         let layout = canonical_layout();
-        let mut ch_p = FsChallenger::new(b"merkle-test-v0");
+        let mut ch_p = FsChallenger::new(b"merkle-test");
         let (proof, _) = prove_merkle_path_shift(0, &x_l, &x_r, &z, &iv, &b, layout, &mut ch_p);
         let mut bad_root = root;
         bad_root.lo ^= 1;
-        let mut ch_v = FsChallenger::new(b"merkle-test-v0");
+        let mut ch_v = FsChallenger::new(b"merkle-test");
         let res = verify_merkle_path_shift(0, &proof, &[leaf], bad_root, &b, n, layout, &mut ch_v);
         assert!(matches!(res, Err(MerklePathError::SumcheckFinal)));
     }

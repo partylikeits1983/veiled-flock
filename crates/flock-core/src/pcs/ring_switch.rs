@@ -246,7 +246,7 @@ pub fn prove<Ch: Challenger>(
 
     let trace = std::env::var("PCS_TRACE").is_ok();
 
-    challenger.observe_label(b"flock-ring-switch-v0");
+    challenger.observe_label(b"flock-ring-switch");
 
     // Suffix is x_outer[1..] (length m-7); first coord becomes the 7th-bit factor.
     let suffix = &x_outer[1..];
@@ -540,7 +540,7 @@ pub fn prove_batched_padded_with_precomputed<Ch: Challenger>(
     }
     let mut work: Vec<ClaimWork> = Vec::with_capacity(n);
     for i in 0..n {
-        challenger.observe_label(b"flock-ring-switch-v0");
+        challenger.observe_label(b"flock-ring-switch");
         let s_hat_v: Vec<F128> = match kinds[i] {
             Kind::Dense(d) => dense_s_hat_v[d].clone(),
             Kind::Sparse(s) => sparse_s_hat_v[s].clone(),
@@ -635,7 +635,7 @@ pub fn verify<Ch: Challenger>(
     let l = 1usize << (x_outer.len() - 1);
     assert_eq!(proof.s_hat_v.len(), 1 << LOG_PACKING);
 
-    challenger.observe_label(b"flock-ring-switch-v0");
+    challenger.observe_label(b"flock-ring-switch");
 
     // Verifier observes s_hat_v.
     challenger.observe_f128_slice(&proof.s_hat_v);
@@ -694,7 +694,7 @@ pub fn verify_succinct<Ch: Challenger>(
     assert!(!x_outer.is_empty());
     assert_eq!(proof.s_hat_v.len(), 1 << LOG_PACKING);
 
-    challenger.observe_label(b"flock-ring-switch-v0");
+    challenger.observe_label(b"flock-ring-switch");
     challenger.observe_f128_slice(&proof.s_hat_v);
 
     let weights = build_claim_weights(z_skip, x_outer[0]);
