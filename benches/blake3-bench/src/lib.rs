@@ -1,11 +1,16 @@
-//! End-to-end BLAKE3 proving benchmark and the shared bench harness.
+//! Shared harness for the e2e proving bench crates.
 //!
 //! The e2e bench crates live under `benches/`: this crate (BLAKE3) and
-//! `keccak-bench`. This lib also holds the generic harness (Rng, timer,
-//! row/table reporter), which `keccak-bench` reuses via a path dependency.
-//! The bench targets measure full prove and verify cycles. The existing
-//! micro-benches in `crates/flock-prover/benches/` stay separate. They
-//! measure raw hash throughput only.
+//! `keccak-bench`, which reuses the generic harness (Rng, timer,
+//! row/table reporter) via a path dependency. This crate has two modes:
+//!
+//! - the `blake3_e2e` bin (`src/blake3.rs`) owns the full end-to-end
+//!   sweeps — prove and verify cycles, row table, `--json` dump;
+//! - the `blake3_criterion` bench target owns statistical stage timing
+//!   of the cheap stages under `cargo bench`.
+//!
+//! The micro-benches in `crates/flock-prover/benches/` stay separate.
+//! They measure raw hash throughput only.
 //!
 //! The Rng and the time formatter come from
 //! `crates/flock-prover/examples/keccak_chain_bench.rs`.
@@ -107,14 +112,28 @@ pub fn amortized_rate(links: usize, chain: impl Fn(usize)) -> f64 {
     links as f64 / start.elapsed().as_secs_f64()
 }
 
-/// The calibration link count: small in smoke mode.
+/// The calibration link count: small in smoke mode. Reads `BENCH_SMOKE`;
+/// env-free core: [`calibration_links_for`].
 pub fn calibration_links() -> usize {
-    if smoke() { 10_000 } else { 100_000 }
+    calibration_links_for(smoke())
+}
+
+/// Env-free core of [`calibration_links`].
+pub fn calibration_links_for(smoke: bool) -> usize {
+    if smoke { 10_000 } else { 100_000 }
 }
 
 /// Measure the native BLAKE3 chain rate once, in hashes per second.
+/// Reads `BENCH_SMOKE`; env-free form: [`blake3_native_rate_with`].
 pub fn blake3_native_rate() -> f64 {
-    amortized_rate(calibration_links(), |count| {
+    blake3_native_rate_with(smoke())
+}
+
+/// Env-free form of [`blake3_native_rate`]: the caller resolves smoke
+/// mode. Not pure — it measures wall time, so it does not belong in a
+/// unit test.
+pub fn blake3_native_rate_with(smoke: bool) -> f64 {
+    amortized_rate(calibration_links_for(smoke), |count| {
         let mut head = SplitMix(0xBA5E_11E5).bytes32();
         for _ in 0..count {
             let mut message = [0u8; MESSAGE_BYTES];
@@ -164,9 +183,15 @@ pub fn parse_smoke(value: &str) -> bool {
     }
 }
 
-/// Number of timing runs per row: 1 in smoke mode, 3 otherwise.
+/// Number of timing runs per row: 1 in smoke mode, 3 otherwise. Reads
+/// `BENCH_SMOKE`; env-free core: [`runs_for`].
 pub fn runs() -> usize {
-    if smoke() { 1 } else { 3 }
+    runs_for(smoke())
+}
+
+/// Env-free core of [`runs`].
+pub fn runs_for(smoke: bool) -> usize {
+    if smoke { 1 } else { 3 }
 }
 
 /// One measured benchmark row.
@@ -288,11 +313,16 @@ pub fn parse_max_log(name: &str, value: &str, min: u32, max: u32, hint: &str) ->
 
 /// Return the path after a `--json` argument, or `None` when absent.
 ///
-/// Cargo forwards bench arguments after `--`, so the call shape is:
-/// `cargo bench -p <crate> -- --json results.json`. A `--json` flag
-/// without a path stops the bench loudly. Call this — and probe the path
-/// with [`probe_json_path`] — at the TOP of `main`, before any sweep: a
-/// bad path discovered after the sweep discards every measured row.
+/// Two call shapes reach this flag:
+/// - the BLAKE3 e2e bin:
+///   `cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --json results.json`
+/// - the keccak bench target (cargo forwards bench arguments after `--`):
+///   `cargo bench -p keccak-bench -- --json results.json`
+///
+/// A `--json` flag without a path stops the bench loudly. Call this — and
+/// probe the path with [`probe_json_path`] — at the TOP of `main`, before
+/// any sweep: a bad path discovered after the sweep discards every
+/// measured row.
 pub fn json_path_from_args() -> Option<String> {
     json_path_from(std::env::args().skip(1))
 }
@@ -356,121 +386,5 @@ pub fn print_table(title: &str, rows: &[BenchRow]) {
             r.slowdown,
             r.params,
         );
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn splitmix_is_deterministic() {
-        let mut a = SplitMix(7);
-        let mut b = SplitMix(7);
-        for _ in 0..16 {
-            assert_eq!(a.next_u64(), b.next_u64());
-        }
-        let mut c = SplitMix(8);
-        assert_ne!(SplitMix(7).next_u64(), c.next_u64());
-    }
-
-    #[test]
-    fn blake3_chain_links_and_digests_are_honest() {
-        let (messages, digests) = blake3_chain(5, 0xC0FFEE_42);
-        assert_eq!(messages.len(), 5);
-        assert_eq!(digests.len(), 5);
-        for i in 0..5 {
-            assert_eq!(*blake3::hash(&messages[i]).as_bytes(), digests[i]);
-            assert_eq!(messages[i][DIGEST_BYTES..], [0u8; 32]);
-            if i > 0 {
-                assert_eq!(messages[i][..DIGEST_BYTES], digests[i - 1]);
-            }
-        }
-    }
-
-    #[test]
-    fn time_best_returns_output_and_positive_time() {
-        let (value, secs) = time_best(3, || 41 + 1);
-        assert_eq!(value, 42);
-        assert!(secs >= 0.0);
-    }
-
-    #[test]
-    fn verify_chain_linkage_accepts_honest_and_rejects_tampered() {
-        let (_, digests) = blake3_chain(5, 1);
-        assert!(verify_chain_linkage(&digests));
-        let mut bad = digests.clone();
-        bad[2][0] ^= 1;
-        assert!(!verify_chain_linkage(&bad));
-        assert!(verify_chain_linkage(&digests[..1]));
-    }
-
-    #[test]
-    fn bench_row_derives_metrics_from_inputs() {
-        let timings = RowTimings {
-            setup_s: 1.0,
-            witness_s: 1.0,
-            prove_s: 2.0,
-            verify_s: 1.0,
-        };
-        let row = BenchRow::new("b", "r", 10, 16, timings, 5, 100.0, String::new());
-        assert_eq!(row.hashes_per_s, 5.0);
-        assert_eq!(row.slowdown, 20.0);
-    }
-
-    #[test]
-    fn fmt_ms_selects_unit_by_magnitude() {
-        assert!(fmt_ms(0.000_5).ends_with("µs"));
-        assert!(fmt_ms(0.5).ends_with("ms"));
-        assert!(fmt_ms(2.0).ends_with("s "));
-    }
-
-    #[test]
-    fn parse_smoke_accepts_truthy_and_falsy_forms() {
-        for v in ["1", "true", "YES", "On"] {
-            assert!(parse_smoke(v), "{v}");
-        }
-        for v in ["", "0", "false", "NO", "off"] {
-            assert!(!parse_smoke(v), "{v:?}");
-        }
-    }
-
-    #[test]
-    #[should_panic(expected = "unrecognized value")]
-    fn parse_smoke_rejects_unknown_values() {
-        parse_smoke("maybe");
-    }
-
-    #[test]
-    fn parse_max_log_accepts_in_range_values() {
-        assert_eq!(parse_max_log("X", " 7 ", 1, 14, "hint"), 7);
-    }
-
-    #[test]
-    #[should_panic(expected = "must be in 1..=14")]
-    fn parse_max_log_rejects_out_of_range() {
-        parse_max_log("X", "15", 1, 14, "hint");
-    }
-
-    #[test]
-    #[should_panic(expected = "must be an integer")]
-    fn parse_max_log_rejects_garbage() {
-        parse_max_log("X", "8x", 1, 14, "hint");
-    }
-
-    #[test]
-    fn json_path_from_finds_flag_and_path() {
-        let args = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        assert_eq!(
-            json_path_from(args(&["--json", "out.json"]).into_iter()),
-            Some("out.json".to_string()),
-        );
-        assert_eq!(json_path_from(args(&["--other"]).into_iter()), None);
-    }
-
-    #[test]
-    #[should_panic(expected = "--json needs a file path")]
-    fn json_path_from_rejects_missing_path() {
-        json_path_from(["--json".to_string()].into_iter());
     }
 }

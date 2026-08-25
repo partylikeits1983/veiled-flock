@@ -48,7 +48,7 @@ End-to-end proving benchmarks (full prove + verify cycles, both veil-f128
 backends and the native chain prover) live in [`benches/`](benches/README.md):
 
 ```sh
-cargo bench -p blake3-bench
+cargo run --profile bench -p blake3-bench --bin blake3_e2e
 cargo bench -p keccak-bench
 ```
 
