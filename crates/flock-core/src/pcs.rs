@@ -41,6 +41,7 @@ pub use ring_switch::{RingSwitchProof, SparseEqTensor};
 
 use crate::challenger::Challenger;
 use crate::field::F128;
+use crate::ro::{RoChannel, RoContext};
 use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::multilinear::eq_eval;
 #[cfg(feature = "zk")]
@@ -320,27 +321,44 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
 /// the committed wide codeword is opened through the virtual combination
 /// `[mask || z] + c·g`.
 #[cfg(feature = "zk")]
-#[allow(clippy::too_many_arguments)]
+pub struct PreblindedOpening<'a> {
+    pub q_packed: Vec<F128>,
+    pub prover_data: &'a ProverData,
+    pub commitment: &'a Commitment,
+    pub challenge: F128,
+    pub x_outers: &'a [&'a [F128]],
+    pub precomputed_s_hat_v: &'a [Option<&'a [F128]>],
+    pub packed_direct: &'a [PackedDirectClaim],
+    pub padding: &'a PaddingSpec,
+    pub lig_config: &'a ligerito::ProverConfig,
+    pub ro: &'a RoContext,
+    pub channel: RoChannel,
+}
+
+#[cfg(feature = "zk")]
 pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
-    q_packed: Vec<F128>,
-    prover_data: &ProverData,
-    commitment: &Commitment,
-    c: F128,
-    x_outers: &[&[F128]],
-    precomputed_s_hat_v: &[Option<&[F128]>],
-    packed_direct: &[PackedDirectClaim],
-    padding: &PaddingSpec,
-    lig_config: &ligerito::ProverConfig,
-    ro: &crate::ro::RoContext,
-    channel: crate::ro::RoChannel,
+    opening: PreblindedOpening<'_>,
     challenger: &mut Ch,
 ) -> BatchOpeningProofLigerito {
+    let PreblindedOpening {
+        q_packed,
+        prover_data,
+        commitment,
+        challenge,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        padding,
+        lig_config,
+        ro,
+        channel,
+    } = opening;
     assert!(
         commitment.params.zk,
         "preblinded opening requires zk PCS params"
     );
     assert!(
-        !c.is_zero(),
+        !challenge.is_zero(),
         "preblinded opening challenge must be non-zero"
     );
     assert_eq!(lig_config.initial_k, commitment.params.log_batch_size);
@@ -376,7 +394,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
     lo.par_iter_mut()
         .zip(prover_data.zk_mask.par_iter())
         .zip(g_lo.par_iter())
-        .for_each(|((out, mask), blind)| *out = *mask + c * *blind);
+        .for_each(|((out, mask), blind)| *out = *mask + challenge * *blind);
     hi.copy_from_slice(&q_packed);
 
     let mut b_wide = crate::scratch::take_f128(2 * w);
@@ -396,7 +414,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
         &prover_data.codeword,
         &prover_data.merkle_tree,
         round0_prime,
-        ligerito::ZkL0 { c },
+        ligerito::ZkL0 { c: challenge },
         ro,
         channel,
         challenger,
@@ -926,6 +944,34 @@ pub struct PackedLinearClaimRef<'a> {
     pub value: F128,
 }
 
+/// Inputs for verifying a PCS opening evaluated on `q = z + c·g_top`.
+pub struct PreblindedOpeningVerification<'a> {
+    pub commitment: &'a Commitment,
+    pub claims: &'a [F128],
+    pub z_skips: &'a [F128],
+    pub x_outers: &'a [&'a [F128]],
+    pub packed_direct: &'a [PackedDirectClaimRef<'a>],
+    pub proof: &'a BatchOpeningProofLigerito,
+    pub lig_config: &'a ligerito::VerifierConfig,
+    pub challenge: F128,
+    pub ro: &'a RoContext,
+    pub channel: RoChannel,
+}
+
+struct MixedOpeningVerification<'a> {
+    commitment: &'a Commitment,
+    claims: &'a [F128],
+    z_skips: &'a [F128],
+    x_outers: &'a [&'a [F128]],
+    packed_direct: &'a [PackedDirectClaimRef<'a>],
+    packed_linear: &'a [PackedLinearClaimRef<'a>],
+    proof: &'a BatchOpeningProofLigerito,
+    lig_config: &'a ligerito::VerifierConfig,
+    preblinded_challenge: Option<F128>,
+    ro: &'a RoContext,
+    channel: RoChannel,
+}
+
 /// Verify a mixed-claim batched opening (mirror of
 /// [`open_batch_mixed_ligerito_with_precomputed_s_hat_v`]). Uses
 /// `ring_switch::verify_succinct` per claim (no dense `rs_eq_ind`
@@ -1002,6 +1048,67 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
     challenger: &mut Ch,
 ) -> Result<(), VerifyError> {
     verify_opening_batch_ligerito_mixed_linear_mode_ro(
+        MixedOpeningVerification {
+            commitment,
+            claims,
+            z_skips,
+            x_outers,
+            packed_direct,
+            packed_linear,
+            proof,
+            lig_config,
+            preblinded_challenge: None,
+            ro,
+            channel,
+        },
+        challenger,
+    )
+}
+
+/// Verify an opening whose ring-switch and Ligerito claims are evaluated on
+/// `q = z + c·g_top`, using the same `c` for the committed wide codeword.
+pub fn verify_opening_batch_ligerito_mixed_preblinded_ro<Ch: Challenger>(
+    verification: PreblindedOpeningVerification<'_>,
+    challenger: &mut Ch,
+) -> Result<(), VerifyError> {
+    let PreblindedOpeningVerification {
+        commitment,
+        claims,
+        z_skips,
+        x_outers,
+        packed_direct,
+        proof,
+        lig_config,
+        challenge,
+        ro,
+        channel,
+    } = verification;
+    if !commitment.params.zk || challenge.is_zero() {
+        return Err(VerifyError::Ligerito);
+    }
+    verify_opening_batch_ligerito_mixed_linear_mode_ro(
+        MixedOpeningVerification {
+            commitment,
+            claims,
+            z_skips,
+            x_outers,
+            packed_direct,
+            packed_linear: &[],
+            proof,
+            lig_config,
+            preblinded_challenge: Some(challenge),
+            ro,
+            channel,
+        },
+        challenger,
+    )
+}
+
+fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
+    verification: MixedOpeningVerification<'_>,
+    challenger: &mut Ch,
+) -> Result<(), VerifyError> {
+    let MixedOpeningVerification {
         commitment,
         claims,
         z_skips,
@@ -1010,63 +1117,10 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
         packed_linear,
         proof,
         lig_config,
-        None,
+        preblinded_challenge,
         ro,
         channel,
-        challenger,
-    )
-}
-
-/// Verify an opening whose ring-switch and Ligerito claims are evaluated on
-/// `q = z + c·g_top`, using the same `c` for the committed wide codeword.
-#[allow(clippy::too_many_arguments)]
-pub fn verify_opening_batch_ligerito_mixed_preblinded_ro<Ch: Challenger>(
-    commitment: &Commitment,
-    claims: &[F128],
-    z_skips: &[F128],
-    x_outers: &[&[F128]],
-    packed_direct: &[PackedDirectClaimRef<'_>],
-    proof: &BatchOpeningProofLigerito,
-    lig_config: &ligerito::VerifierConfig,
-    c: F128,
-    ro: &crate::ro::RoContext,
-    channel: crate::ro::RoChannel,
-    challenger: &mut Ch,
-) -> Result<(), VerifyError> {
-    if !commitment.params.zk || c.is_zero() {
-        return Err(VerifyError::Ligerito);
-    }
-    verify_opening_batch_ligerito_mixed_linear_mode_ro(
-        commitment,
-        claims,
-        z_skips,
-        x_outers,
-        packed_direct,
-        &[],
-        proof,
-        lig_config,
-        Some(c),
-        ro,
-        channel,
-        challenger,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
-    commitment: &Commitment,
-    claims: &[F128],
-    z_skips: &[F128],
-    x_outers: &[&[F128]],
-    packed_direct: &[PackedDirectClaimRef<'_>],
-    packed_linear: &[PackedLinearClaimRef<'_>],
-    proof: &BatchOpeningProofLigerito,
-    lig_config: &ligerito::VerifierConfig,
-    preblinded_c: Option<F128>,
-    ro: &crate::ro::RoContext,
-    channel: crate::ro::RoChannel,
-    challenger: &mut Ch,
-) -> Result<(), VerifyError> {
+    } = verification;
     let n_rs = claims.len();
     let n_pd = packed_direct.len();
     let n_pl = packed_linear.len();
@@ -1124,7 +1178,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
     // 3b. Select the committed wide-codeword combination. An enclosing
     //     protocol may supply a challenge sampled before ring switching;
     //     otherwise the opening binds y_g and samples its own challenge.
-    let zk_l0 = if let Some(c) = preblinded_c {
+    let zk_l0 = if let Some(c) = preblinded_challenge {
         if proof.zk_blind.is_some() {
             return Err(VerifyError::Ligerito);
         }

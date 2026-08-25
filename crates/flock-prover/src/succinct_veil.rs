@@ -1003,17 +1003,19 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     let (pcs_open, veil) = rayon::join(
         || {
             pcs::open_batch_mixed_ligerito_preblinded_ro(
-                q_packed,
-                &prover_data,
-                &commitment,
-                blind_challenge,
-                &x_refs,
-                &precomputed,
-                &pd,
-                &padding,
-                lig_config,
-                &ro,
-                RoChannel::Witness,
+                pcs::PreblindedOpening {
+                    q_packed,
+                    prover_data: &prover_data,
+                    commitment: &commitment,
+                    challenge: blind_challenge,
+                    x_outers: &x_refs,
+                    precomputed_s_hat_v: &precomputed,
+                    packed_direct: &pd,
+                    padding: &padding,
+                    lig_config,
+                    ro: &ro,
+                    channel: RoChannel::Witness,
+                },
                 challenger,
             )
         },
@@ -1130,15 +1132,17 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         })
         .collect::<Vec<_>>();
     flock_core::verifier::verify_claims_ligerito_with_config_pd_preblinded_ro(
-        commitment,
-        &[ab, c],
-        &pd_refs,
-        &proof.pcs_open,
-        pcs_params,
-        lig_config,
-        blind_challenge,
-        &ro,
-        RoChannel::Witness,
+        flock_core::verifier::PreblindedClaimVerification {
+            commitment,
+            claims: &[ab, c],
+            packed_direct: &pd_refs,
+            pcs_open: &proof.pcs_open,
+            pcs_params,
+            lig_v_config: lig_config,
+            challenge: blind_challenge,
+            ro: &ro,
+            channel: RoChannel::Witness,
+        },
         challenger,
     )?;
     verify_constraints(&circuit, &proof.veil, &mut veil_challenger, &ro)?;
