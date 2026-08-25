@@ -1,6 +1,6 @@
-# zk-FLOCK
+# VEIL + FLOCK
 
-Experimental succinct VEIL wrapper for FLOCK.
+Succinct VEIL wrapper for FLOCK.
 
 The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
 digest in an ordered batch:
@@ -13,10 +13,14 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 
 ## Security status
 
-The implementation has completeness, mutation, serialization, and simulator
+VEIL covers the masked zerocheck and lincheck verifier equations. The witness
+commitment and opening, together with the explicit AB/C evaluation claims,
+use a hiding PCS and randomized witness rows. The implementation has
+completeness, mutation, serialization, algebraic-invariant, and simulator
 tests. It does not have end-to-end zero-knowledge, soundness, or knowledge
-proofs. It is unaudited and unsuitable for production secrets. See
-[SECURITY.md](docs/SECURITY.md).
+proofs and is unsuitable for production secrets. See
+[SECURITY.md](docs/SECURITY.md) for the component audit and remaining proof
+obligations.
 
 ## Usage
 

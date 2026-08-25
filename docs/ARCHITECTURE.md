@@ -14,9 +14,8 @@ The implementation has three proof layers.
 | VEIL | Prove that the masked PIOP transcript is an accepting FLOCK transcript | `veil-f128` constraint, dot-product, and Hadamard protocols |
 
 The public API is `Blake3PreimageZkSetup::{prove_succinct,
-verify_succinct,simulate_succinct}`. The CLI uses these methods. The older
-direct whole-R1CS implementation in `veiled_preimage.rs` is not on the active
-path.
+verify_succinct,simulate_succinct}`. The CLI uses these methods.
+`veiled_preimage.rs` is not on the active path.
 
 ## Baseline FLOCK flow
 
@@ -182,10 +181,13 @@ shifted circuit checks `value_ab` and `value_c`; Ligerito checks all three
 claims against `Com(z)`. The verifier, not the prover, derives the value for
 `D` from the digest list.
 
-FLOCK randomizer rows change `value_ab` and `value_c` between proofs of the
-same witness. These rows are the privacy mechanism for the two values that are
-not covered by the transcript one-time pad. A formal all-challenge rank proof
-for this two-value map remains required.
+FLOCK randomizer rows change `value_ab`, `value_c`, and both 128-element
+ring-switch `s_hat_v` vectors between proofs of the same witness. These rows
+are the privacy mechanism for every witness-dependent PCS frontend value that
+is not covered by the transcript one-time pad. The hiding Ligerito backend
+does not by itself hide `s_hat_v`, because ring switching computes those
+values from the packed witness before the blinded recursion. A formal
+all-challenge rank proof for their joint map remains required.
 
 ## Step 7: separate the terminal transcripts
 
@@ -261,6 +263,7 @@ Public proof data:
 - proof nonce and commitment roots;
 - masked zerocheck and lincheck messages;
 - AB and C evaluation values;
+- two ring-switch `s_hat_v` vectors inside the PCS opening;
 - hiding Ligerito opening; and
 - VEIL dot-product and Hadamard proofs.
 
