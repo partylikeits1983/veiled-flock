@@ -45,6 +45,11 @@ harness = false
 name = "blake3_native_chain"
 harness = false
 
+[[bench]]
+name = "veil_vs_flock"
+harness = false
+required-features = ["veil"]
+
 [[example]]
 name = "chain_bench"
 required-features = ["unsound-challenger"]

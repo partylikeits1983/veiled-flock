@@ -37,6 +37,19 @@ proof bundle includes the ordered public digests.
 
 ## Benchmarks
 
+Compare ordinary FLOCK and VEIL+FLOCK on the same batch of 64-byte BLAKE3
+preimages:
+
+```sh
+VEIL_BENCH_BATCH=256 VEIL_BENCH_RUNS=10 \
+  cargo bench --locked -p flock-prover --features veil --bench veil_vs_flock
+```
+
+The benchmark reports median and median-absolute-deviation timings, serialized
+proof sizes by component, and the PCS commitment geometry as JSON.
+
+Native hash-chain benchmarks:
+
 ```sh
 cargo bench -p flock-prover --bench blake3_native_chain
 cargo bench -p flock-prover --bench keccak_native_chain
