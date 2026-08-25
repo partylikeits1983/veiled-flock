@@ -10,8 +10,8 @@
 //! forbids order-dependent tests).
 
 use blake3_bench::{
-    BenchRow, RowTimings, SplitMix, blake3_chain, fmt_ms, json_path_from, parse_max_log,
-    parse_smoke, time_best, verify_chain_linkage,
+    BenchRow, RowTimings, SplitMix, blake3_chain, fmt_ms, parse_max_log, parse_smoke, time_best,
+    verify_chain_linkage,
 };
 use flock_prover::r1cs_hashes::blake3_preimage::DIGEST_BYTES;
 
@@ -120,21 +120,6 @@ fn parse_max_log_rejects_out_of_range() {
 #[should_panic(expected = "must be an integer")]
 fn parse_max_log_rejects_garbage() {
     parse_max_log("X", "8x", 1, 14, "hint");
-}
-
-#[test]
-fn json_path_from_finds_flag_and_path() {
-    assert_eq!(
-        json_path_from(flags(&["--json", "out.json"])),
-        Some("out.json".to_string()),
-    );
-    assert_eq!(json_path_from(flags(&["--other"])), None);
-}
-
-#[test]
-#[should_panic(expected = "--json needs a file path")]
-fn json_path_from_rejects_missing_path() {
-    json_path_from(flags(&["--json"]));
 }
 
 // ---- Bin: flag parsing ----

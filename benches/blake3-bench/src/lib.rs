@@ -112,26 +112,15 @@ pub fn amortized_rate(links: usize, chain: impl Fn(usize)) -> f64 {
     links as f64 / start.elapsed().as_secs_f64()
 }
 
-/// The calibration link count: small in smoke mode. Reads `BENCH_SMOKE`;
-/// env-free core: [`calibration_links_for`].
-pub fn calibration_links() -> usize {
-    calibration_links_for(smoke())
-}
-
-/// Env-free core of [`calibration_links`].
+/// The calibration link count: small in smoke mode. Env-free: the caller
+/// resolves smoke mode.
 pub fn calibration_links_for(smoke: bool) -> usize {
     if smoke { 10_000 } else { 100_000 }
 }
 
 /// Measure the native BLAKE3 chain rate once, in hashes per second.
-/// Reads `BENCH_SMOKE`; env-free form: [`blake3_native_rate_with`].
-pub fn blake3_native_rate() -> f64 {
-    blake3_native_rate_with(smoke())
-}
-
-/// Env-free form of [`blake3_native_rate`]: the caller resolves smoke
-/// mode. Not pure — it measures wall time, so it does not belong in a
-/// unit test.
+/// Env-free: the caller resolves smoke mode. Not pure — it measures wall
+/// time, so it does not belong in a unit test.
 pub fn blake3_native_rate_with(smoke: bool) -> f64 {
     amortized_rate(calibration_links_for(smoke), |count| {
         let mut head = SplitMix(0xBA5E_11E5).bytes32();
@@ -183,13 +172,8 @@ pub fn parse_smoke(value: &str) -> bool {
     }
 }
 
-/// Number of timing runs per row: 1 in smoke mode, 3 otherwise. Reads
-/// `BENCH_SMOKE`; env-free core: [`runs_for`].
-pub fn runs() -> usize {
-    runs_for(smoke())
-}
-
-/// Env-free core of [`runs`].
+/// Number of timing runs per row: 1 in smoke mode, 3 otherwise. Env-free:
+/// the caller resolves smoke mode.
 pub fn runs_for(smoke: bool) -> usize {
     if smoke { 1 } else { 3 }
 }
@@ -311,34 +295,10 @@ pub fn parse_max_log(name: &str, value: &str, min: u32, max: u32, hint: &str) ->
     k
 }
 
-/// Return the path after a `--json` argument, or `None` when absent.
-///
-/// Two call shapes reach this flag:
-/// - the BLAKE3 e2e bin:
-///   `cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --json results.json`
-/// - the keccak bench target (cargo forwards bench arguments after `--`):
-///   `cargo bench -p keccak-bench -- --json results.json`
-///
-/// A `--json` flag without a path stops the bench loudly. Call this — and
-/// probe the path with [`probe_json_path`] — at the TOP of `main`, before
-/// any sweep: a bad path discovered after the sweep discards every
-/// measured row.
-pub fn json_path_from_args() -> Option<String> {
-    json_path_from(std::env::args().skip(1))
-}
-
-/// Pure core of [`json_path_from_args`].
-pub fn json_path_from<I: Iterator<Item = String>>(mut args: I) -> Option<String> {
-    while let Some(arg) = args.next() {
-        if arg == "--json" {
-            return Some(args.next().expect("--json needs a file path"));
-        }
-    }
-    None
-}
-
 /// Fail fast on an unwritable `--json` path: create (or truncate) the file
-/// before the sweep starts.
+/// before the sweep starts. Call it at the TOP of `main`, before any
+/// sweep — a bad path discovered after the sweep discards every measured
+/// row.
 pub fn probe_json_path(path: &str) {
     std::fs::write(path, b"").unwrap_or_else(|error| panic!("--json path {path:?}: {error}"));
 }

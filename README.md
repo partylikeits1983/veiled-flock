@@ -49,7 +49,7 @@ backends and the native chain prover) live in [`benches/`](benches/README.md):
 
 ```sh
 cargo run --profile bench -p blake3-bench --bin blake3_e2e
-cargo bench -p keccak-bench
+cargo run --profile bench -p keccak-bench --bin keccak_e2e
 ```
 
 ## Documentation

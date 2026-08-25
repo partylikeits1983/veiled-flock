@@ -13,44 +13,43 @@ measure raw hash throughput only. These crates are the e2e proving suite.
 
 ## How to run
 
-The two crates take different invocations. The BLAKE3 e2e suite is a bin
-(run under the tuned `bench` profile — never bare `--release`, which
-changes codegen); its `cargo bench` target is a criterion stage-timing
-complement. The keccak e2e suite stays a `cargo bench` target:
+Both crates are dual mode. The e2e suite is a bin (run under the tuned
+`bench` profile — never bare `--release`, which changes codegen); the
+`cargo bench` target is a criterion stage-timing complement:
 
 ```sh
 cargo run --profile bench -p blake3-bench --bin blake3_e2e
-cargo bench -p keccak-bench
+cargo run --profile bench -p keccak-bench --bin keccak_e2e
 ```
 
-Smoke mode shrinks each sweep to one small row with one timing run:
+Smoke mode shrinks each sweep to one small point with one timing run:
 
 ```sh
 cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --smoke
-BENCH_SMOKE=1 cargo bench -p keccak-bench
+cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --smoke
 ```
 
 Write the rows as JSON for tracking across commits:
 
 ```sh
 cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --json blake3-results.json
-cargo bench -p keccak-bench -- --json keccak-results.json
+cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --json keccak-results.json
 ```
 
-Interface divergence: `blake3-bench` takes flags (`--smoke`, `--runs`,
-`--framed-max-log`, `--json`) with env vars as fallbacks; `keccak-bench`
-keeps the env-var interface for now. A flag wins over its env var.
-Muscle-memory trap: `BENCH_SMOKE=1 cargo bench -p blake3-bench` no
-longer runs the e2e suite — `cargo bench` on blake3-bench reaches the
-criterion target, which ignores that env var.
+Both bins take the same flag shape with env vars as fallbacks
+(`--smoke`/`BENCH_SMOKE`, `--runs`, one sweep-bound flag, `--json`); a
+flag wins over its env var. The per-crate READMEs carry the full flag
+tables. Muscle-memory trap: `BENCH_SMOKE=1 cargo bench -p <crate>` no
+longer runs an e2e suite — `cargo bench` reaches the criterion targets,
+which ignore that env var.
 
 Sweep overrides (validated, and loud on bad values):
 
 - `--framed-max-log` / `BENCH_FRAMED_MAX_LOG` — framed BLAKE3 rows above
   n = 64. Read the memory model in `blake3-bench/src/blake3.rs`
   first.
-- `BENCH_KECCAK_MAX_LOG` — keccak rows above n = 4096 (m = 28). Ligerito
-  configs stop at m = 35.
+- `--max-log` / `BENCH_KECCAK_MAX_LOG` — keccak rows above n = 4096
+  (m = 28). Ligerito configs stop at m = 35.
 
 ## Backends
 
