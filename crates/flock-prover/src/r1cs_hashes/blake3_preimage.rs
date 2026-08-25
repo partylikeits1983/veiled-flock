@@ -402,13 +402,10 @@ impl Blake3PreimageSetup {
 // Zero-knowledge mode
 // ---------------------------------------------------------------------------
 
-/// The zk-mode fixed-digest setup: the same relation, proved through the
-/// amended (masked) A1′ pipeline with a hiding commitment.
+/// Fixed-digest setup for the masked FLOCK and succinct VEIL proving modes.
 ///
-/// The proving path is fail-closed: it runs only for a circuit digest and PCS
-/// shape registered as [`crate::zk_certificate::StatementFamily::Blake3Preimage`].
-/// Its computational-ZK claim is separate from the standalone knowledge
-/// label; see the paper for the exact bounds and assumptions.
+/// Security claims and open proof obligations are documented in
+/// `docs/SECURITY.md`.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -521,9 +518,8 @@ impl Blake3PreimageZkSetup {
         }
     }
 
-    /// Experimental succinct VEIL mode. Unlike the older A1 reference path,
-    /// this makes one hiding witness opening and proves only FLOCK's small
-    /// algebraic verifier transcript inside VEIL.
+    /// Proves FLOCK's zerocheck and lincheck verifier equations with succinct
+    /// VEIL and opens the committed witness through the hiding PCS.
     #[cfg(feature = "veil")]
     pub fn prove_succinct<Ch: Challenger + Clone + Send>(
         &self,
