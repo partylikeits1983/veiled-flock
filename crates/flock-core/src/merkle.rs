@@ -22,9 +22,6 @@
 
 use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
 use rayon::prelude::*;
-// Consumed only by the hash-count instrumentation blocks below; without
-// the gate the import is dead under default features.
-#[cfg(feature = "hash-count")]
 use std::sync::atomic::Ordering::Relaxed;
 
 pub type Hash = [u8; 32];
