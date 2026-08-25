@@ -1,7 +1,7 @@
 //! Zero-knowledge mode support: the prover-side DRBG that feeds every mask,
 //! and the randomizer-witness block layout shared by the hash encoders.
 //!
-//! Two mask species support the earlier FLOCK transcript-masking construction:
+//! Two mask species support the randomized witness and hiding commitment:
 //!
 //! 1. **Randomizer witness rows** — extra R1CS rows of the form `u·1 = u`
 //!    (A-type; the row's A entry is a self-loop on a fresh witness column
