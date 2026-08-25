@@ -1,10 +1,14 @@
-//! Succinct experimental VEIL compilation for FLOCK's algebraic transcript.
+//! Succinct VEIL compilation for FLOCK's algebraic transcript.
 //!
-//! The witness stays in FLOCK's hiding Ligerito commitment. Only the
-//! zerocheck/lincheck messages are additively masked. A small VEIL circuit
-//! proves that subtracting those masks (addition in characteristic two)
-//! yields an accepting FLOCK verifier transcript whose two output claims are
-//! the claims opened by Ligerito.
+//! VEIL masks the zerocheck and lincheck messages and the terminal ring-switch
+//! slices. A non-zero transcript challenge combines the witness with the
+//! committed uniform PCS blinder before ring switching. The VEIL circuit
+//! checks the FLOCK transcript, its terminal claims, and the characteristic-two
+//! linear map relating the masked slices to the blinded PCS opening.
+//!
+//! For a ring-switch slice map `S` and packed-field multiplication map `M_c`,
+//! `S(z + c·g) = S(z) + M_c(S(g))`. Every masked slice is bound before `c` is
+//! sampled, and `M_c` is invertible for non-zero `c`.
 
 use flock_core::{
     challenger::Challenger,
@@ -17,6 +21,7 @@ use flock_core::{
     zerocheck::{self, ZerocheckProof},
     zk::{MaskSampler, ZkRng},
 };
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use veil_f128::{
     ArithmeticCircuit, CircuitBuilder, ConstraintError, ConstraintParameters, ConstraintProof,
@@ -24,24 +29,37 @@ use veil_f128::{
     verify_constraints,
 };
 
-use crate::prover::open_claims_with_precomputed_ligerito_pd_ro;
+use crate::prover::quirky_x_outer_full;
 
 const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root-v0";
-const CLAIMS_LABEL: &[u8] = b"veil-flock-output-claims-v0";
+const RING_MASK_LABEL: &[u8] = b"veil-flock-ring-masks-v0";
+const PCS_BLIND_LABEL: &[u8] = b"veil-flock-pcs-blind-v0";
+const BLINDED_RING_LABEL: &[u8] = b"veil-flock-blinded-ring-v0";
+const RING_CLAIM_COUNT: usize = 2;
+const RING_WIDTH: usize = 1 << pcs::LOG_PACKING;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctVeilProof {
     pub proof_nonce: [u8; 32],
     /// Exactly the zerocheck values observed by Fiat--Shamir, each one-time
-    /// padded. The derived C evaluation is carried once in `c_value`.
+    /// padded.
     pub masked_zerocheck: MaskedZerocheckProof,
     pub masked_lincheck: LincheckProof,
-    /// The two values checked by the hiding PCS. Randomizer rows in the ZK
-    /// circuit make these evaluation claims witness-independent.
-    pub ab_value: F128,
-    pub c_value: F128,
+    /// Masked slice evaluations for the witness and the PCS blinder at the
+    /// two terminal FLOCK points.
+    pub masked_ring_claims: Vec<MaskedRingClaim>,
+    /// Evaluations of the uniform PCS blinder at packed-direct claim bases.
+    /// They are bound before the non-zero witness-blinding challenge.
+    pub direct_blind_values: Vec<F128>,
+    pub blind_grind_nonce: u64,
     pub pcs_open: pcs::BatchOpeningProofLigerito,
     pub veil: ConstraintProof,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaskedRingClaim {
+    pub witness: Vec<F128>,
+    pub blind: Vec<F128>,
 }
 
 /// Masked zerocheck wire format for succinct VEIL. This intentionally differs
@@ -316,8 +334,12 @@ impl MaskLayout {
         })
     }
 
-    fn observed_count(self) -> usize {
+    fn piop_count(self) -> usize {
         2 * self.ell + 2 * self.zc_rounds + 2 + 2 * self.lc_rounds + self.z_partial
+    }
+
+    fn observed_count(self) -> usize {
+        self.piop_count() + 2 * RING_CLAIM_COUNT * RING_WIDTH
     }
 }
 
@@ -460,21 +482,112 @@ fn dot(expressions: &[LinearCombination], coefficients: &[F128]) -> LinearCombin
     )
 }
 
-fn observe_claims<C: Challenger>(challenger: &mut C, ab: F128, c: F128) {
-    challenger.observe_label(CLAIMS_LABEL);
-    challenger.observe_f128(ab);
-    challenger.observe_f128(c);
+fn mask_ring_claims(
+    witness: &[Vec<F128>],
+    blind: &[Vec<F128>],
+    masks: &[F128],
+) -> Vec<MaskedRingClaim> {
+    assert_eq!(witness.len(), RING_CLAIM_COUNT);
+    assert_eq!(blind.len(), RING_CLAIM_COUNT);
+    assert_eq!(masks.len(), 2 * RING_CLAIM_COUNT * RING_WIDTH);
+    let mut cursor = 0;
+    witness
+        .iter()
+        .zip(blind)
+        .map(|(witness, blind)| {
+            assert_eq!(witness.len(), RING_WIDTH);
+            assert_eq!(blind.len(), RING_WIDTH);
+            let witness = witness
+                .iter()
+                .map(|value| {
+                    let masked = *value + masks[cursor];
+                    cursor += 1;
+                    masked
+                })
+                .collect();
+            let blind = blind
+                .iter()
+                .map(|value| {
+                    let masked = *value + masks[cursor];
+                    cursor += 1;
+                    masked
+                })
+                .collect();
+            MaskedRingClaim { witness, blind }
+        })
+        .collect()
+}
+
+fn observe_masked_ring_claims<C: Challenger>(challenger: &mut C, claims: &[MaskedRingClaim]) {
+    challenger.observe_label(RING_MASK_LABEL);
+    for claim in claims {
+        challenger.observe_f128_slice(&claim.witness);
+        challenger.observe_f128_slice(&claim.blind);
+    }
+}
+
+fn observe_direct_blinds<C: Challenger>(challenger: &mut C, values: &[F128]) {
+    challenger.observe_label(PCS_BLIND_LABEL);
+    challenger.observe_f128_slice(values);
+}
+
+fn observe_blinded_ring_claims<C: Challenger>(challenger: &mut C, slices: &[Vec<F128>]) {
+    challenger.observe_label(BLINDED_RING_LABEL);
+    for slice in slices {
+        challenger.observe_f128_slice(slice);
+    }
+}
+
+fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
+    loop {
+        let value = challenger.sample_f128();
+        if !value.is_zero() {
+            return value;
+        }
+    }
+}
+
+fn scale_ring_expressions(
+    expressions: &[LinearCombination],
+    scalar: F128,
+) -> Vec<LinearCombination> {
+    assert_eq!(expressions.len(), RING_WIDTH);
+    let mut out = vec![LinearCombination::zero(); RING_WIDTH];
+    for (input_bit, expression) in expressions.iter().enumerate() {
+        let basis = if input_bit < 64 {
+            F128::new(1u64 << input_bit, 0)
+        } else {
+            F128::new(0, 1u64 << (input_bit - 64))
+        };
+        let product = scalar * basis;
+        for output_bit in 0..RING_WIDTH {
+            let present = if output_bit < 64 {
+                (product.lo >> output_bit) & 1
+            } else {
+                (product.hi >> (output_bit - 64)) & 1
+            };
+            if present == 1 {
+                out[output_bit] = out[output_bit].add(expression);
+            }
+        }
+    }
+    out
+}
+
+struct RingLink<'a> {
+    masked: &'a [MaskedRingClaim],
+    q_slices: &'a [Vec<F128>],
+    challenge: F128,
 }
 
 /// Replay the public, masked PIOP transcript and construct
-/// `C'(h) = C(masked + h)`. The returned points are public; the returned
-/// values are the two explicit PCS claim values supplied by the proof.
+/// `C'(h) = C(masked + h)`. When ring linkage is present, the returned claims
+/// are evaluations of the blinded witness at the two terminal FLOCK points.
 fn shifted_verifier_circuit<C: Challenger>(
     r1cs: &BlockR1cs,
     zc: &MaskedZerocheckProof,
     lc: &LincheckProof,
-    ab_value: F128,
-    c_value: F128,
+    ring_link: Option<RingLink<'_>>,
     lincheck_circuit: &dyn LincheckCircuit,
     challenger: &mut C,
 ) -> Result<(ArithmeticCircuit, ZClaim, ZClaim), SuccinctVeilError> {
@@ -488,8 +601,13 @@ fn shifted_verifier_circuit<C: Challenger>(
         return Err(SuccinctVeilError::InvalidShape("PIOP proof geometry"));
     }
 
-    let mut builder = CircuitBuilder::new(layout.observed_count());
-    let mut expressions = ExpressionCursor::new(layout.observed_count());
+    let mask_count = if ring_link.is_some() {
+        layout.observed_count()
+    } else {
+        layout.piop_count()
+    };
+    let mut builder = CircuitBuilder::new(mask_count);
+    let mut expressions = ExpressionCursor::new(mask_count);
 
     challenger.observe_label(b"flock-zerocheck-v0");
     let r = zerocheck::sample_eq_point(r1cs.m, challenger);
@@ -510,7 +628,6 @@ fn shifted_verifier_circuit<C: Challenger>(
 
     let c_weights = zerocheck::multilinear::lagrange_weights_lambda_naive(zerocheck::K_SKIP, z);
     let computed_c = dot(&round1_c, &c_weights);
-    builder.assert_zero(&computed_c.add(&LinearCombination::constant(c_value)));
 
     let combined_weights =
         zerocheck::multilinear::interpolate_at_z_combined_weights(zerocheck::K_SKIP, z);
@@ -581,19 +698,69 @@ fn shifted_verifier_circuit<C: Challenger>(
     let r_inner_skip = challenger.sample_f128();
     let lambda = lincheck::build_quirky_eq_table(r_inner_skip, &[], r1cs.k_skip);
     let w = dot(&z_partial, &lambda);
-    builder.assert_zero(&w.add(&LinearCombination::constant(ab_value)));
-    if expressions.cursor != layout.observed_count() {
+
+    lc_challenges.reverse();
+    let ab_point = r1cs.ab_claim_point(r_inner_skip, &lc_challenges, &x_ab.x_outer);
+    let c_point = r1cs.c_claim_point(z, &r[zerocheck::K_SKIP..]);
+    let mut values = [F128::ZERO; RING_CLAIM_COUNT];
+
+    if let Some(link) = ring_link {
+        if link.masked.len() != RING_CLAIM_COUNT
+            || link.q_slices.len() != RING_CLAIM_COUNT
+            || link.challenge.is_zero()
+        {
+            return Err(SuccinctVeilError::InvalidShape("ring claim geometry"));
+        }
+        let points = [&ab_point, &c_point];
+        for (index, ((masked, q_slice), point)) in link
+            .masked
+            .iter()
+            .zip(link.q_slices)
+            .zip(points)
+            .enumerate()
+        {
+            if masked.witness.len() != RING_WIDTH
+                || masked.blind.len() != RING_WIDTH
+                || q_slice.len() != RING_WIDTH
+            {
+                return Err(SuccinctVeilError::InvalidShape("ring claim width"));
+            }
+            let witness = masked
+                .witness
+                .iter()
+                .map(|value| expressions.unmask(*value))
+                .collect::<Vec<_>>();
+            let blind = masked
+                .blind
+                .iter()
+                .map(|value| expressions.unmask(*value))
+                .collect::<Vec<_>>();
+            let scaled_blind = scale_ring_expressions(&blind, link.challenge);
+            for ((q, witness), blind) in q_slice.iter().zip(&witness).zip(&scaled_blind) {
+                builder.assert_zero(&LinearCombination::constant(*q).add(witness).add(blind));
+            }
+            let x_outer = quirky_x_outer_full(point);
+            let weights = pcs::ring_switch::build_claim_weights(point.z_skip, x_outer[0]);
+            let witness_value = dot(&witness, &weights);
+            if index == 0 {
+                builder.assert_zero(&w.add(&witness_value));
+            } else {
+                builder.assert_zero(&computed_c.add(&witness_value));
+            }
+            values[index] = pcs::ring_switch::claim_check(&weights, q_slice);
+        }
+    }
+    if expressions.cursor != mask_count {
         return Err(SuccinctVeilError::InvalidShape("mask expression cursor"));
     }
 
-    lc_challenges.reverse();
     let ab = ZClaim {
-        point: r1cs.ab_claim_point(r_inner_skip, &lc_challenges, &x_ab.x_outer),
-        value: ab_value,
+        point: ab_point,
+        value: values[0],
     };
     let c = ZClaim {
-        point: r1cs.c_claim_point(z, &r[zerocheck::K_SKIP..]),
-        value: c_value,
+        point: c_point,
+        value: values[1],
     };
     Ok((builder.finish(), ab, c))
 }
@@ -723,7 +890,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             &x_ab,
             &mut masking,
         );
-        if masking.cursor != masks.len() {
+        if masking.cursor != layout.piop_count() {
             return Err(SuccinctVeilError::InvalidShape(
                 "lincheck mask observation count",
             ));
@@ -740,37 +907,14 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         point: r1cs.c_claim_point(zc_claim.z, &zc_claim.r_rest),
         value: zc_claim.c_eval,
     };
-    let (masked_zerocheck, masked_lincheck) = mask_proofs(&honest_zc, &honest_lc, &masks);
+    let (masked_zerocheck, masked_lincheck) =
+        mask_proofs(&honest_zc, &honest_lc, &masks[..layout.piop_count()]);
 
-    let mut circuit_challenger = circuit_start;
-    let (circuit, circuit_ab, circuit_c) = shifted_verifier_circuit(
-        r1cs,
-        &masked_zerocheck,
-        &masked_lincheck,
-        ab.value,
-        c.value,
-        lincheck_circuit,
-        &mut circuit_challenger,
-    )?;
-    if circuit_ab != ab {
-        return Err(SuccinctVeilError::InvalidShape(
-            "shifted verifier AB output claim",
-        ));
-    }
-    if circuit_c != c {
-        return Err(SuccinctVeilError::InvalidShape(
-            "shifted verifier C output claim",
-        ));
-    }
-
-    observe_claims(challenger, ab.value, c.value);
-    let pd = packed_direct(challenger);
-    // Ligerito's prover and verifier historically did not need to preserve a
-    // byte-identical transcript state after the terminal opening. Fork the
-    // inner VEIL transcript here, after all linkage data is bound but before
-    // entering that terminal protocol.
-    let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    let points = [&ab.point, &c.point];
+    let x_fulls = points
+        .iter()
+        .map(|point| quirky_x_outer_full(point))
+        .collect::<Vec<_>>();
     let s_hat_v_ab = if r1cs.k_log >= pcs::LOG_PACKING {
         Some(pcs::ring_switch::s_hat_v_from_z_vec(
             &z_vec,
@@ -779,15 +923,92 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     } else {
         None
     };
-    // The terminal proofs use independent transcripts and randomness.
+    let witness_slices = vec![
+        s_hat_v_ab.unwrap_or_else(|| pcs::ring_switch::s_hat_v_at_point(&z_packed, &x_fulls[0])),
+        s_hat_v_c.unwrap_or_else(|| pcs::ring_switch::s_hat_v_at_point(&z_packed, &x_fulls[1])),
+    ];
+    let witness_len = z_packed.len();
+    let g_top = &prover_data.zk_blind[witness_len..];
+    let blind_slices = x_fulls
+        .iter()
+        .map(|point| pcs::ring_switch::s_hat_v_at_point(g_top, point))
+        .collect::<Vec<_>>();
+    let masked_ring_claims = mask_ring_claims(
+        &witness_slices,
+        &blind_slices,
+        &masks[layout.piop_count()..],
+    );
+    observe_masked_ring_claims(challenger, &masked_ring_claims);
+
+    let mut pd = packed_direct(challenger);
+    let direct_blind_values = pd
+        .iter()
+        .map(|claim| claim.evaluate(g_top))
+        .collect::<Vec<_>>();
+    observe_direct_blinds(challenger, &direct_blind_values);
+    let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let blind_grind_nonce = challenger.grind_pow(blind_bits);
+    let blind_challenge = sample_nonzero(challenger);
+
+    let q_slices = witness_slices
+        .iter()
+        .zip(&blind_slices)
+        .map(|(witness, blind)| {
+            let scaled = pcs::ring_switch::scale_s_hat_v(blind, blind_challenge);
+            witness
+                .iter()
+                .zip(scaled)
+                .map(|(witness, blind)| *witness + blind)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+    observe_blinded_ring_claims(challenger, &q_slices);
+    for (claim, blind_value) in pd.iter_mut().zip(&direct_blind_values) {
+        claim.value += blind_challenge * *blind_value;
+    }
+    let mut q_packed = z_packed;
+    q_packed
+        .par_iter_mut()
+        .zip(g_top.par_iter())
+        .for_each(|(witness, blind)| *witness += blind_challenge * *blind);
+
+    let mut circuit_challenger = circuit_start;
+    let (circuit, circuit_ab, circuit_c) = shifted_verifier_circuit(
+        r1cs,
+        &masked_zerocheck,
+        &masked_lincheck,
+        Some(RingLink {
+            masked: &masked_ring_claims,
+            q_slices: &q_slices,
+            challenge: blind_challenge,
+        }),
+        lincheck_circuit,
+        &mut circuit_challenger,
+    )?;
+    if circuit_ab.point != ab.point || circuit_c.point != c.point {
+        return Err(SuccinctVeilError::InvalidShape(
+            "shifted verifier output points",
+        ));
+    }
+
+    // The VEIL constraint proof and the PCS opening use independent terminal
+    // transcript branches after their shared linkage data is bound.
+    let mut veil_challenger = challenger.clone();
+    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    let x_refs = x_fulls.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    let precomputed = q_slices
+        .iter()
+        .map(|slice| Some(slice.as_slice()))
+        .collect::<Vec<_>>();
     let (pcs_open, veil) = rayon::join(
         || {
-            open_claims_with_precomputed_ligerito_pd_ro(
-                z_packed,
+            pcs::open_batch_mixed_ligerito_preblinded_ro(
+                q_packed,
                 &prover_data,
                 &commitment,
-                &[ab.clone(), c.clone()],
-                &[s_hat_v_ab.as_deref(), s_hat_v_c.as_deref()],
+                blind_challenge,
+                &x_refs,
+                &precomputed,
                 &pd,
                 &padding,
                 lig_config,
@@ -812,8 +1033,9 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             proof_nonce,
             masked_zerocheck,
             masked_lincheck,
-            ab_value: ab.value,
-            c_value: c.value,
+            masked_ring_claims,
+            direct_blind_values,
+            blind_grind_nonce,
             pcs_open,
             veil,
         },
@@ -842,33 +1064,79 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     bind_statement(challenger, r1cs, commitment, &proof.proof_nonce);
     challenger.observe_label(MASK_ROOT_LABEL);
     challenger.observe_bytes(&proof.veil.linear.commitment);
+    let circuit_start = challenger.clone();
+    let (_, preliminary_ab, preliminary_c) = shifted_verifier_circuit(
+        r1cs,
+        &proof.masked_zerocheck,
+        &proof.masked_lincheck,
+        None,
+        lincheck_circuit,
+        challenger,
+    )?;
+
+    if proof.masked_ring_claims.len() != RING_CLAIM_COUNT
+        || proof.pcs_open.ring_switches.len() != RING_CLAIM_COUNT
+    {
+        return Err(SuccinctVeilError::InvalidShape("ring claim count"));
+    }
+    observe_masked_ring_claims(challenger, &proof.masked_ring_claims);
+    let pd = packed_direct(challenger);
+    if proof.direct_blind_values.len() != pd.len() {
+        return Err(SuccinctVeilError::InvalidShape(
+            "packed-direct blind values",
+        ));
+    }
+    observe_direct_blinds(challenger, &proof.direct_blind_values);
+    let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    if !challenger.verify_pow(proof.blind_grind_nonce, blind_bits) {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    let blind_challenge = sample_nonzero(challenger);
+
+    let q_slices = proof
+        .pcs_open
+        .ring_switches
+        .iter()
+        .map(|ring| ring.s_hat_v.clone())
+        .collect::<Vec<_>>();
+    observe_blinded_ring_claims(challenger, &q_slices);
+    let mut circuit_challenger = circuit_start;
     let (circuit, ab, c) = shifted_verifier_circuit(
         r1cs,
         &proof.masked_zerocheck,
         &proof.masked_lincheck,
-        proof.ab_value,
-        proof.c_value,
+        Some(RingLink {
+            masked: &proof.masked_ring_claims,
+            q_slices: &q_slices,
+            challenge: blind_challenge,
+        }),
         lincheck_circuit,
-        challenger,
+        &mut circuit_challenger,
     )?;
-    observe_claims(challenger, proof.ab_value, proof.c_value);
-    let pd = packed_direct(challenger);
+    if ab.point != preliminary_ab.point || c.point != preliminary_c.point {
+        return Err(SuccinctVeilError::InvalidShape(
+            "shifted verifier output points",
+        ));
+    }
+
     let mut veil_challenger = challenger.clone();
     veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
     let pd_refs = pd
         .iter()
-        .map(|(point, value)| pcs::PackedDirectClaimRef {
+        .zip(&proof.direct_blind_values)
+        .map(|((point, value), blind)| pcs::PackedDirectClaimRef {
             point: point.as_slice(),
-            value: *value,
+            value: *value + blind_challenge * *blind,
         })
         .collect::<Vec<_>>();
-    flock_core::verifier::verify_claims_ligerito_with_config_pd_ro(
+    flock_core::verifier::verify_claims_ligerito_with_config_pd_preblinded_ro(
         commitment,
         &[ab, c],
         &pd_refs,
         &proof.pcs_open,
         pcs_params,
         lig_config,
+        blind_challenge,
         &ro,
         RoChannel::Witness,
         challenger,

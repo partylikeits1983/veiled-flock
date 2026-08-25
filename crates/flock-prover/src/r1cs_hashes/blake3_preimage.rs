@@ -521,9 +521,7 @@ impl Blake3PreimageZkSetup {
         }
     }
 
-    /// Experimental succinct VEIL mode. Unlike the older A1 reference path,
-    /// this makes one hiding witness opening and proves only FLOCK's small
-    /// algebraic verifier transcript inside VEIL.
+    /// Prove the fixed-digest relation with the succinct VEIL composition.
     #[cfg(feature = "veil")]
     pub fn prove_succinct<Ch: Challenger + Clone + Send>(
         &self,
@@ -988,9 +986,28 @@ mod tests {
         changed_lincheck.masked_lincheck.z_partial[0] += flock_core::field::F128::ONE;
         rejects(&changed_lincheck, &commitment, &digests);
 
-        let mut changed_claim = proof.clone();
-        changed_claim.ab_value += flock_core::field::F128::ONE;
-        rejects(&changed_claim, &commitment, &digests);
+        let mut changed_ring_claim = proof.clone();
+        changed_ring_claim.masked_ring_claims[0].witness[0] += flock_core::field::F128::ONE;
+        rejects(&changed_ring_claim, &commitment, &digests);
+
+        let mut changed_ring_blind = proof.clone();
+        changed_ring_blind.masked_ring_claims[1].blind[0] += flock_core::field::F128::ONE;
+        rejects(&changed_ring_blind, &commitment, &digests);
+
+        let mut changed_direct_blind = proof.clone();
+        changed_direct_blind.direct_blind_values[0] += flock_core::field::F128::ONE;
+        rejects(&changed_direct_blind, &commitment, &digests);
+
+        let mut changed_blinded_slice = proof.clone();
+        changed_blinded_slice.pcs_open.ring_switches[0].s_hat_v[0] += flock_core::field::F128::ONE;
+        rejects(&changed_blinded_slice, &commitment, &digests);
+
+        let mut changed_pcs_mode = proof.clone();
+        changed_pcs_mode.pcs_open.zk_blind = Some(flock_core::pcs::ZkBlindOpening {
+            y_g: flock_core::field::F128::ZERO,
+            c_grind_nonce: 0,
+        });
+        rejects(&changed_pcs_mode, &commitment, &digests);
 
         let mut changed_veil = proof.clone();
         changed_veil.veil.linear.rlc_vector[0] += flock_core::field::F128::ONE;
@@ -1020,7 +1037,7 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_output_claims_move_with_fresh_randomizers() {
+    fn succinct_ring_messages_use_fresh_masks() {
         let setup = Blake3PreimageZkSetup::new_succinct(2);
         let messages = msgs_of(0x5A17, 2);
         let digests = Blake3PreimageSetup::digests_of(&messages);
@@ -1034,8 +1051,14 @@ mod tests {
         };
         let first = prove(0x31);
         let second = prove(0x32);
-        assert_ne!(first.ab_value, second.ab_value);
-        assert_ne!(first.c_value, second.c_value);
+        assert_ne!(
+            first.masked_ring_claims[0].witness,
+            second.masked_ring_claims[0].witness
+        );
+        assert_ne!(
+            first.masked_ring_claims[1].witness,
+            second.masked_ring_claims[1].witness
+        );
     }
 
     #[cfg(feature = "veil")]

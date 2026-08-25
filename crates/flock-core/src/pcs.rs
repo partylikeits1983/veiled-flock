@@ -57,8 +57,8 @@ pub struct BatchOpeningProofLigerito {
     /// zk mode only: the blinder-combination opening. `y_g = ⟨g_top,
     /// b_combined⟩` is observed BEFORE the combination challenge `c` is
     /// sampled (soundness-critical: `y_g` shifts the combined target), with a
-    /// PoW grind pricing the extra fold round. `None` for non-zk proofs
-    /// (serde-default keeps old proofs readable).
+    /// PoW grind pricing the extra fold round. `None` when the enclosing
+    /// protocol supplies the blinding challenge, and for non-zk proofs.
     #[serde(default)]
     pub zk_blind: Option<ZkBlindOpening>,
 }
@@ -114,6 +114,25 @@ pub struct PackedDirectClaim {
     /// match the claim's `point` — the contribution to `b_combined` is read
     /// directly from this tensor.
     pub eq_ind: DirectEqInd,
+}
+
+impl PackedDirectClaim {
+    /// Evaluate this claim's linear functional on a packed field vector.
+    pub fn evaluate(&self, packed: &[F128]) -> F128 {
+        match &self.eq_ind {
+            DirectEqInd::Dense(basis) => {
+                assert_eq!(basis.len(), packed.len());
+                ring_switch::inner_product(packed, basis)
+            }
+            DirectEqInd::Sparse(eq) => eq
+                .live_tensor
+                .iter()
+                .enumerate()
+                .fold(F128::ZERO, |acc, (i, value)| {
+                    acc + packed[eq.scatter_idx(i)] * *value
+                }),
+        }
+    }
 }
 
 /// A claim against an arbitrary public linear functional of the packed
@@ -291,6 +310,102 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
         ring_switches,
         ligerito: ligerito_proof,
         zk_blind,
+    }
+}
+
+/// Open claims on the uniformly blinded packed vector `q = z + c·g_top`.
+///
+/// The caller samples the non-zero challenge `c` after binding every masked
+/// protocol message. Ring switching and Ligerito then operate on `q`, while
+/// the committed wide codeword is opened through the virtual combination
+/// `[mask || z] + c·g`.
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
+    q_packed: Vec<F128>,
+    prover_data: &ProverData,
+    commitment: &Commitment,
+    c: F128,
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[PackedDirectClaim],
+    padding: &PaddingSpec,
+    lig_config: &ligerito::ProverConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> BatchOpeningProofLigerito {
+    assert!(
+        commitment.params.zk,
+        "preblinded opening requires zk PCS params"
+    );
+    assert!(
+        !c.is_zero(),
+        "preblinded opening challenge must be non-zero"
+    );
+    assert_eq!(lig_config.initial_k, commitment.params.log_batch_size);
+    assert_eq!(lig_config.log_inv_rates[0], commitment.params.log_inv_rate);
+
+    let CombinedClaim {
+        ring_switches,
+        b_combined,
+        target_combined,
+        round0_prime,
+    } = compute_combined_basis_and_target(
+        &q_packed,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        &[],
+        padding,
+        challenger,
+        false,
+    );
+
+    let w = q_packed.len();
+    assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
+    assert_eq!(
+        prover_data.zk_blind.len(),
+        2 * w,
+        "commit_zk blinder missing"
+    );
+    let (g_lo, _) = prover_data.zk_blind.split_at(w);
+
+    let mut f_blinded = crate::scratch::take_f128(2 * w);
+    let (lo, hi) = f_blinded.split_at_mut(w);
+    lo.par_iter_mut()
+        .zip(prover_data.zk_mask.par_iter())
+        .zip(g_lo.par_iter())
+        .for_each(|((out, mask), blind)| *out = *mask + c * *blind);
+    hi.copy_from_slice(&q_packed);
+
+    let mut b_wide = crate::scratch::take_f128(2 * w);
+    let (basis_lo, basis_hi) = b_wide.split_at_mut(w);
+    basis_lo
+        .par_iter_mut()
+        .for_each(|value| *value = F128::ZERO);
+    basis_hi.copy_from_slice(&b_combined);
+    crate::scratch::give_f128(b_combined);
+    crate::scratch::give_f128(q_packed);
+
+    let ligerito = ligerito::recursive_prover_with_basis_precomputed_round0_zk_with_ro(
+        lig_config,
+        f_blinded,
+        b_wide,
+        target_combined,
+        &prover_data.codeword,
+        &prover_data.merkle_tree,
+        round0_prime,
+        ligerito::ZkL0 { c },
+        ro,
+        channel,
+        challenger,
+    );
+
+    BatchOpeningProofLigerito {
+        ring_switches,
+        ligerito,
+        zk_blind: None,
     }
 }
 
@@ -886,6 +1001,72 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> Result<(), VerifyError> {
+    verify_opening_batch_ligerito_mixed_linear_mode_ro(
+        commitment,
+        claims,
+        z_skips,
+        x_outers,
+        packed_direct,
+        packed_linear,
+        proof,
+        lig_config,
+        None,
+        ro,
+        channel,
+        challenger,
+    )
+}
+
+/// Verify an opening whose ring-switch and Ligerito claims are evaluated on
+/// `q = z + c·g_top`, using the same `c` for the committed wide codeword.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_opening_batch_ligerito_mixed_preblinded_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[F128],
+    z_skips: &[F128],
+    x_outers: &[&[F128]],
+    packed_direct: &[PackedDirectClaimRef<'_>],
+    proof: &BatchOpeningProofLigerito,
+    lig_config: &ligerito::VerifierConfig,
+    c: F128,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), VerifyError> {
+    if !commitment.params.zk || c.is_zero() {
+        return Err(VerifyError::Ligerito);
+    }
+    verify_opening_batch_ligerito_mixed_linear_mode_ro(
+        commitment,
+        claims,
+        z_skips,
+        x_outers,
+        packed_direct,
+        &[],
+        proof,
+        lig_config,
+        Some(c),
+        ro,
+        channel,
+        challenger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[F128],
+    z_skips: &[F128],
+    x_outers: &[&[F128]],
+    packed_direct: &[PackedDirectClaimRef<'_>],
+    packed_linear: &[PackedLinearClaimRef<'_>],
+    proof: &BatchOpeningProofLigerito,
+    lig_config: &ligerito::VerifierConfig,
+    preblinded_c: Option<F128>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), VerifyError> {
     let n_rs = claims.len();
     let n_pd = packed_direct.len();
     let n_pl = packed_linear.len();
@@ -940,10 +1121,15 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
         target_combined += *g * pl.value;
     }
 
-    // 3b. zk: mirror the blinder combination — observe y_g, check its PoW,
-    //     sample c, shift the target. Reject a zk/non-zk mode mismatch
-    //     between params and proof either way.
-    let zk_l0 = if commitment.params.zk {
+    // 3b. Select the committed wide-codeword combination. An enclosing
+    //     protocol may supply a challenge sampled before ring switching;
+    //     otherwise the opening binds y_g and samples its own challenge.
+    let zk_l0 = if let Some(c) = preblinded_c {
+        if proof.zk_blind.is_some() {
+            return Err(VerifyError::Ligerito);
+        }
+        Some(ligerito::ZkL0 { c })
+    } else if commitment.params.zk {
         let Some(zkb) = &proof.zk_blind else {
             return Err(VerifyError::Ligerito);
         };

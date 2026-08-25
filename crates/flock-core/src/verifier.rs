@@ -222,6 +222,51 @@ pub fn verify_claims_ligerito_with_config_pd_ro<Ch: Challenger>(
     })
 }
 
+/// Verify claims on the uniformly blinded witness `q = z + c·g_top`.
+#[allow(clippy::too_many_arguments)]
+pub fn verify_claims_ligerito_with_config_pd_preblinded_ro<Ch: Challenger>(
+    commitment: &Commitment,
+    claims: &[ZClaim],
+    packed_direct: &[pcs::PackedDirectClaimRef<'_>],
+    pcs_open: &pcs::BatchOpeningProofLigerito,
+    pcs_params: &crate::pcs::PcsParams,
+    lig_v_config: &crate::pcs::ligerito::VerifierConfig,
+    c: F128,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<(), pcs::VerifyError> {
+    verifier_pool().install(move || {
+        if commitment.params != *pcs_params {
+            return Err(pcs::VerifyError::Ligerito);
+        }
+        let z_skips: Vec<F128> = claims.iter().map(|claim| claim.point.z_skip).collect();
+        let values: Vec<F128> = claims.iter().map(|claim| claim.value).collect();
+        let x_fulls: Vec<Vec<F128>> = claims
+            .iter()
+            .map(|claim| {
+                let mut point = claim.point.x_inner_rest.clone();
+                point.extend_from_slice(&claim.point.x_outer);
+                point
+            })
+            .collect();
+        let x_refs: Vec<&[F128]> = x_fulls.iter().map(Vec::as_slice).collect();
+        pcs::verify_opening_batch_ligerito_mixed_preblinded_ro(
+            commitment,
+            &values,
+            &z_skips,
+            &x_refs,
+            packed_direct,
+            pcs_open,
+            lig_v_config,
+            c,
+            ro,
+            channel,
+            challenger,
+        )
+    })
+}
+
 fn verify_claims_ligerito_inner<Ch: Challenger>(
     commitment: &Commitment,
     claims: &[ZClaim],
