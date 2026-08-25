@@ -62,11 +62,8 @@ cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --smoke
 cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --json results.json
 ```
 
-The binary lands at `target/release/keccak_e2e` (`--profile bench` maps
-to the `release` output directory). Note `--profile bench` builds the
-dependency crates under the bench profile too, while `cargo bench`
-builds dependencies under `release`; rows measured before this layout
-change are close but not codegen-identical — re-baseline once.
+The binary lands at `target/release/keccak_e2e`. Profile mapping and
+the re-baseline caveat live in `benches/README.md`.
 
 ## criterion mode
 

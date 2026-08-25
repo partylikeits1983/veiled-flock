@@ -7,6 +7,15 @@
 use bench_harness::{SplitMix, amortized_rate, calibration_links_for};
 use flock_prover::r1cs_hashes::blake3_preimage::{DIGEST_BYTES, MESSAGE_BYTES};
 
+/// Fiat–Shamir domain for the BLAKE3 e2e suite. The bin and the
+/// criterion target share these three constants so their artifacts stay
+/// comparable.
+pub const DOMAIN: &[u8] = b"veiled-flock-bench-blake3-e2e-v0";
+/// Seed for the honest chain builder.
+pub const CHAIN_SEED: u64 = 0xC0FFEE_42;
+/// Seed for the zk masking Rng.
+pub const ZK_SEED: [u8; 32] = [0x42; 32];
+
 /// Build an honest BLAKE3 hash chain of `n` single-block messages.
 ///
 /// The head of `message_0` is 32 pseudo-random bytes derived from `seed`

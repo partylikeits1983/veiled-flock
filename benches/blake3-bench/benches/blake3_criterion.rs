@@ -19,18 +19,11 @@ use std::time::Duration;
 
 use criterion::{BatchSize, Criterion, SamplingMode, criterion_group, criterion_main};
 
-use blake3_bench::blake3_chain;
+use blake3_bench::{CHAIN_SEED, DOMAIN, ZK_SEED, blake3_chain};
 use flock_prover::challenger::FsChallenger;
 use flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 use flock_prover::veiled_preimage::VeiledBlake3Setup;
 use flock_prover::zk::ZkRng;
-
-// Mirrors of the e2e consts (src/blake3.rs). Each group proves and
-// verifies with its own copies, so the values only need to agree within
-// this target; they match the e2e ones to keep artifacts comparable.
-const DOMAIN: &[u8] = b"veiled-flock-bench-blake3-e2e-v0";
-const CHAIN_SEED: u64 = 0xC0FFEE_42;
-const ZK_SEED: [u8; 32] = [0x42; 32];
 
 /// Witness generation at the 256-slot succinct floor. µs-scale.
 fn witness(c: &mut Criterion) {

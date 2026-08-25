@@ -40,7 +40,14 @@ cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --json keccak-resu
 Both bins take the same flag shape with env vars as fallbacks
 (`--smoke`/`BENCH_SMOKE`, `--runs`, one sweep-bound flag, `--json`); a
 flag wins over its env var. The per-crate READMEs carry the full flag
-tables. Muscle-memory trap: `BENCH_SMOKE=1 cargo bench -p <crate>` no
+tables.
+
+The binaries land in `target/release/` — `--profile bench` maps to the
+`release` output directory. Note `--profile bench` builds the
+dependency crates under the bench profile too, while `cargo bench`
+builds dependencies under `release`; rows measured across a layout
+change of this suite are close but not codegen-identical — re-baseline
+once after such a change. Muscle-memory trap: `BENCH_SMOKE=1 cargo bench -p <crate>` no
 longer runs an e2e suite — `cargo bench` reaches the criterion targets,
 which ignore that env var.
 

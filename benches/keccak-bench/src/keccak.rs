@@ -29,12 +29,9 @@ use flock_prover::challenger::FsChallenger;
 use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup};
 use flock_prover::zk::ZkRng;
 use keccak_bench::{
-    chain_outputs, keccak_honest_chain, keccak_native_rate_with, verify_state_linkage,
+    CHAIN_SEED, DOMAIN, ZK_SEED, chain_outputs, keccak_honest_chain, keccak_native_rate_with,
+    verify_state_linkage,
 };
-
-const DOMAIN: &[u8] = b"veiled-flock-bench-keccak-e2e-v0";
-const CHAIN_SEED: u64 = 0xC0FFEE_43;
-const ZK_SEED: [u8; 32] = [0x43; 32];
 
 /// Hint shown when a sweep override is out of range. The flag and the env
 /// fallback share it.
@@ -61,12 +58,11 @@ static SPEC: BenchSpec = BenchSpec {
 
 fn main() {
     let mut bench = E2eBench::start(&SPEC, keccak_native_rate_with);
-    let (smoke, runs, max_log) = (bench.args().smoke, bench.args().runs, bench.args().max_log);
     let rate = bench.native_rate();
-    for n in sweep_for(smoke, max_log) {
-        bench.push(native_row(n, rate, runs));
-        bench.push(succinct_row(n, rate, runs));
-        bench.push(succinct_chain_row(n, rate, runs));
+    for n in sweep_for(bench.smoke(), bench.max_log()) {
+        bench.push(native_row(n, rate, bench.runs()));
+        bench.push(succinct_row(n, rate, bench.runs()));
+        bench.push(succinct_chain_row(n, rate, bench.runs()));
     }
     bench.finish();
 }

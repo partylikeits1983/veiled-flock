@@ -59,13 +59,15 @@ impl BenchArgs {
 
     /// Env-free core of [`BenchArgs::parse`]: `env_smoke` and
     /// `env_max_log` carry the already-resolved env fallbacks, so unit
-    /// tests need no env vars.
+    /// tests need no env vars. Generic over the item type so tests pass
+    /// `&str` arrays directly.
     pub fn from_parts(
-        mut args: impl Iterator<Item = String>,
+        args: impl IntoIterator<Item: Into<String>>,
         spec: &MaxLogFlag,
         env_smoke: bool,
         env_max_log: u32,
     ) -> Self {
+        let mut args = args.into_iter().map(Into::into);
         let mut smoke_flag = false;
         let mut runs_flag: Option<usize> = None;
         let mut max_log_flag: Option<u32> = None;

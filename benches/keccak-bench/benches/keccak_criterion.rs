@@ -22,14 +22,9 @@ use criterion::{BatchSize, Criterion, SamplingMode, criterion_group, criterion_m
 use flock_prover::challenger::FsChallenger;
 use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup};
 use flock_prover::zk::ZkRng;
-use keccak_bench::{chain_outputs, keccak_honest_chain, verify_state_linkage};
-
-// Mirrors of the e2e consts (src/keccak.rs). Each group proves and
-// verifies with its own copies, so the values only need to agree within
-// this target; they match the e2e ones to keep artifacts comparable.
-const DOMAIN: &[u8] = b"veiled-flock-bench-keccak-e2e-v0";
-const CHAIN_SEED: u64 = 0xC0FFEE_43;
-const ZK_SEED: [u8; 32] = [0x43; 32];
+use keccak_bench::{
+    CHAIN_SEED, DOMAIN, ZK_SEED, chain_outputs, keccak_honest_chain, verify_state_linkage,
+};
 
 /// Witness generation at the smoke shape.
 ///

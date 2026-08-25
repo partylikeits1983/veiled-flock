@@ -7,6 +7,15 @@
 use bench_harness::SplitMix;
 use flock_prover::r1cs_hashes::keccak::{STATE_BITS, State, keccak_f};
 
+/// Fiat–Shamir domain for the keccak e2e suite. The bin and the
+/// criterion target share these three constants so their artifacts stay
+/// comparable.
+pub const DOMAIN: &[u8] = b"veiled-flock-bench-keccak-e2e-v0";
+/// Seed for the honest chain builder.
+pub const CHAIN_SEED: u64 = 0xC0FFEE_43;
+/// Seed for the zk masking Rng.
+pub const ZK_SEED: [u8; 32] = [0x43; 32];
+
 /// Return one pseudo-random keccak state drawn from `rng`.
 pub fn random_state(rng: &mut SplitMix) -> State {
     let mut s = [false; STATE_BITS];

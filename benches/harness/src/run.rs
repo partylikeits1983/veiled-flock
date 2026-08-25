@@ -70,9 +70,19 @@ impl E2eBench {
         }
     }
 
-    /// The parsed invocation.
-    pub fn args(&self) -> &BenchArgs {
-        &self.args
+    /// Smoke mode, resolved from flag and env fallback.
+    pub fn smoke(&self) -> bool {
+        self.args.smoke
+    }
+
+    /// Timing runs per row (best-of-N).
+    pub fn runs(&self) -> usize {
+        self.args.runs
+    }
+
+    /// Upper log2 bound of the sweep.
+    pub fn max_log(&self) -> u32 {
+        self.args.max_log
     }
 
     /// The calibrated native rate, in executions per second.

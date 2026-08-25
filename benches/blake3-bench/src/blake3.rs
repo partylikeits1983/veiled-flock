@@ -19,15 +19,13 @@
 //! owns the sweeps and row functions.
 
 use bench_harness::{BenchRow, BenchSpec, E2eBench, MaxLogFlag, RowTimings, proof_size, time_best};
-use blake3_bench::{blake3_chain, blake3_native_rate_with, verify_chain_linkage};
+use blake3_bench::{
+    CHAIN_SEED, DOMAIN, ZK_SEED, blake3_chain, blake3_native_rate_with, verify_chain_linkage,
+};
 use flock_prover::challenger::FsChallenger;
 use flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 use flock_prover::veiled_preimage::VeiledBlake3Setup;
 use flock_prover::zk::ZkRng;
-
-const DOMAIN: &[u8] = b"veiled-flock-bench-blake3-e2e-v0";
-const CHAIN_SEED: u64 = 0xC0FFEE_42;
-const ZK_SEED: [u8; 32] = [0x42; 32];
 
 /// Hint shown when a framed sweep override is out of range. The flag and
 /// the env fallback share it.
@@ -53,13 +51,12 @@ static SPEC: BenchSpec = BenchSpec {
 
 fn main() {
     let mut bench = E2eBench::start(&SPEC, blake3_native_rate_with);
-    let (smoke, runs, max_log) = (bench.args().smoke, bench.args().runs, bench.args().max_log);
     let rate = bench.native_rate();
-    for n_blocks in framed_sweep_for(smoke, max_log) {
-        bench.push(framed_row(n_blocks, rate, runs));
+    for n_blocks in framed_sweep_for(bench.smoke(), bench.max_log()) {
+        bench.push(framed_row(n_blocks, rate, bench.runs()));
     }
-    for n_real in succinct_sweep_for(smoke) {
-        bench.push(succinct_row(n_real, rate, runs));
+    for n_real in succinct_sweep_for(bench.smoke()) {
+        bench.push(succinct_row(n_real, rate, bench.runs()));
     }
     bench.finish();
 }

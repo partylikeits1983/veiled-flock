@@ -17,14 +17,6 @@ use keccak_bench::{chain_outputs, keccak_honest_chain, verify_state_linkage};
 
 use super::{SPEC, sweep_for};
 
-/// Build an owned-String argument iterator for parser tests.
-fn flags(v: &[&str]) -> std::vec::IntoIter<String> {
-    v.iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>()
-        .into_iter()
-}
-
 // ---- Domain lib (public API) ----
 
 #[test]
@@ -85,14 +77,14 @@ fn spec_pins_the_documented_flag_and_env_fallback() {
         ),
         ("--max-log", "BENCH_KECCAK_MAX_LOG", 12, 6, 19),
     );
-    let args = BenchArgs::from_parts(flags(&["--max-log", "8"]), &SPEC.max_log, false, 12);
+    let args = BenchArgs::from_parts(["--max-log", "8"], &SPEC.max_log, false, 12);
     assert_eq!(args.max_log, 8);
 }
 
 #[test]
 #[should_panic(expected = "--max-log must be in 6..=19")]
 fn spec_rejects_out_of_range_max_log() {
-    BenchArgs::from_parts(flags(&["--max-log", "20"]), &SPEC.max_log, false, 12);
+    BenchArgs::from_parts(["--max-log", "20"], &SPEC.max_log, false, 12);
 }
 
 // ---- Sweep shape ----

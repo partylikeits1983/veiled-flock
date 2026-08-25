@@ -16,14 +16,6 @@ use flock_prover::r1cs_hashes::blake3_preimage::DIGEST_BYTES;
 
 use super::{SPEC, framed_sweep_for, succinct_sweep_for};
 
-/// Build an owned-String argument iterator for parser tests.
-fn flags(v: &[&str]) -> std::vec::IntoIter<String> {
-    v.iter()
-        .map(|s| s.to_string())
-        .collect::<Vec<_>>()
-        .into_iter()
-}
-
 // ---- Domain lib (public API) ----
 
 #[test]
@@ -64,14 +56,14 @@ fn spec_pins_the_documented_flag_and_env_fallback() {
         ),
         ("--framed-max-log", "BENCH_FRAMED_MAX_LOG", 6, 1, 14),
     );
-    let args = BenchArgs::from_parts(flags(&["--framed-max-log", "3"]), &SPEC.max_log, false, 6);
+    let args = BenchArgs::from_parts(["--framed-max-log", "3"], &SPEC.max_log, false, 6);
     assert_eq!(args.max_log, 3);
 }
 
 #[test]
 #[should_panic(expected = "--framed-max-log must be in 1..=14")]
 fn spec_rejects_out_of_range_framed_max_log() {
-    BenchArgs::from_parts(flags(&["--framed-max-log", "15"]), &SPEC.max_log, false, 6);
+    BenchArgs::from_parts(["--framed-max-log", "15"], &SPEC.max_log, false, 6);
 }
 
 // ---- Bin: sweep shapes ----
