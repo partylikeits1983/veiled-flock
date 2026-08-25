@@ -1,11 +1,22 @@
-//! Multiplicative Reed--Solomon code over disjoint additive domains.
+//! Reed--Solomon code over additive domains.
 //!
-//! The message is represented by evaluations on a linear subspace `V`. The
-//! codeword evaluates the interpolating polynomial on an affine coset disjoint
-//! from the larger output subspace. Random message padding therefore masks any
-//! bounded set of codeword coordinates by the usual RS interpolation argument.
-//! Pointwise codeword products are evaluations of the product polynomial, so a
-//! twice-degree square code supplies VEIL's Hadamard reduction.
+//! A message consists of evaluations of a polynomial on an additive subspace.
+//! Encoding evaluates the same polynomial on a disjoint affine coset.
+//! Pointwise products of codewords therefore encode the product polynomial;
+//! VEIL uses the resulting square code for its Hadamard checks.
+//!
+//! Uniform padding hides queried codeword symbols. Let `X` be the interpolation
+//! domain, `P` the padding positions in `X`, and `Y` a set of queried positions
+//! in the encoding domain. For `x` in `P` and `y` in `Y`, the padding-to-query
+//! matrix has entry
+//!
+//! `L_x(y) = Z_X(y) / (Z_X'(x) (y - x))`,
+//!
+//! where `L_x` is the Lagrange basis polynomial for `x`. Removing the non-zero
+//! row and column factors leaves a Cauchy matrix. Because the two domains are
+//! disjoint and contain distinct points, every square submatrix is invertible.
+//! Thus, when `|Y| <= |P|`, the padding-to-query map has full row rank and
+//! uniform padding makes the queried symbols uniform for any fixed message.
 
 use std::fmt;
 
@@ -202,6 +213,11 @@ impl AdditiveRsCode {
 mod tests {
     use super::*;
 
+    const SUCCINCT_MASK_VECTOR_LENGTH: usize = 248;
+    const SUCCINCT_PRODUCT_VECTOR_LENGTH: usize = 3;
+    const MAX_SQUARE_RATE: f64 = 0.25;
+    const MIN_PROXIMITY_BITS: f64 = 108.0;
+
     struct Rng(u64);
 
     impl Rng {
@@ -251,6 +267,43 @@ mod tests {
         pivot_row
     }
 
+    fn domain_point(log_size: usize, offset: F128, index: usize) -> F128 {
+        let mut point = offset;
+        for bit in 0..log_size {
+            if (index >> bit) & 1 == 1 {
+                point += if bit < 64 {
+                    F128::new(1u64 << bit, 0)
+                } else {
+                    F128::new(0, 1u64 << (bit - 64))
+                };
+            }
+        }
+        point
+    }
+
+    fn lagrange_evaluation(points: &[F128], values: &[F128], query: F128) -> F128 {
+        assert_eq!(points.len(), values.len());
+        points
+            .iter()
+            .enumerate()
+            .fold(F128::ZERO, |sum, (index, point)| {
+                let (numerator, denominator) = points
+                    .iter()
+                    .enumerate()
+                    .filter(|(other_index, _)| *other_index != index)
+                    .fold(
+                        (F128::ONE, F128::ONE),
+                        |(numerator, denominator), (_, other)| {
+                            (
+                                numerator * (query + *other),
+                                denominator * (*point + *other),
+                            )
+                        },
+                    );
+                sum + values[index] * numerator * denominator.inv()
+            })
+    }
+
     #[test]
     fn encode_decode_roundtrip() {
         for length in [1usize, 2, 3, 8, 13, 64] {
@@ -289,6 +342,38 @@ mod tests {
     }
 
     #[test]
+    fn encoding_matches_lagrange_interpolation() {
+        for message_length in [3usize, 5, 8] {
+            let padded = message_length.next_power_of_two();
+            let code_length = 4 * padded;
+            let code =
+                AdditiveRsCode::new(CodeParameters::new(message_length, code_length).unwrap());
+            let mut base_values = Rng(0x6e77 + message_length as u64).vector(message_length);
+            base_values.resize(padded, F128::ZERO);
+            let base_log = padded.trailing_zeros() as usize;
+            let base_points = (0..padded)
+                .map(|index| domain_point(base_log, F128::ZERO, index))
+                .collect::<Vec<_>>();
+            let output_log = code_length.trailing_zeros() as usize;
+            let output_offset = disjoint_coset_offset(output_log);
+            let expected = (0..code_length)
+                .map(|index| {
+                    lagrange_evaluation(
+                        &base_points,
+                        &base_values,
+                        domain_point(output_log, output_offset, index),
+                    )
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                code.encode(&base_values[..message_length]).unwrap(),
+                expected,
+                "message_length={message_length}"
+            );
+        }
+    }
+
+    #[test]
     fn every_two_queries_are_masked_by_two_padding_symbols_in_tiny_code() {
         // Four base-domain message evaluations: two data followed by two
         // uniform pads. Check all C(16, 2) query sets exactly.
@@ -307,6 +392,106 @@ mod tests {
                 ];
                 assert_eq!(rank(projection), 2, "queries [{first}, {second}]");
             }
+        }
+    }
+
+    fn unique_positions(code_length: usize, count: usize, seed: u64) -> Vec<usize> {
+        let mut state = seed;
+        let mut positions = std::collections::BTreeSet::new();
+        while positions.len() < count {
+            state = state.wrapping_add(0x9e37_79b9_7f4a_7c15);
+            let mut value = state;
+            value = (value ^ (value >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+            value = (value ^ (value >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+            value ^= value >> 31;
+            positions.insert(value as usize & (code_length - 1));
+        }
+        positions.into_iter().collect()
+    }
+
+    fn production_veil_geometries() -> [(usize, usize, usize); 2] {
+        let profile = crate::constraints::ConstraintParameters::succinct_flock_experimental();
+        [
+            (
+                SUCCINCT_MASK_VECTOR_LENGTH,
+                profile.linear_padding,
+                profile.inverse_rate,
+            ),
+            (
+                SUCCINCT_PRODUCT_VECTOR_LENGTH,
+                profile.hadamard_padding,
+                profile.inverse_rate,
+            ),
+        ]
+    }
+
+    fn assert_sampled_padding_projections_have_full_rank(
+        vector_length: usize,
+        padding_length: usize,
+        inverse_rate: usize,
+    ) {
+        let message_length = vector_length + padding_length;
+        let code_length = message_length.next_power_of_two() * inverse_rate;
+        let code = AdditiveRsCode::new(CodeParameters::new(message_length, code_length).unwrap());
+        let padding_columns = (0..padding_length)
+            .map(|padding_index| {
+                let mut basis = vec![F128::ZERO; message_length];
+                basis[vector_length + padding_index] = F128::ONE;
+                code.encode(&basis).unwrap()
+            })
+            .collect::<Vec<_>>();
+
+        let mut query_sets = vec![
+            (0..padding_length).collect::<Vec<_>>(),
+            (code_length - padding_length..code_length).collect::<Vec<_>>(),
+            (0..padding_length)
+                .map(|index| index * code_length / padding_length)
+                .collect::<Vec<_>>(),
+        ];
+        query_sets.push(unique_positions(code_length, padding_length, 0x51a7));
+        query_sets.push(unique_positions(code_length, padding_length, 0xc0de));
+
+        for positions in query_sets {
+            let projection = positions
+                .iter()
+                .map(|position| {
+                    padding_columns
+                        .iter()
+                        .map(|column| column[*position])
+                        .collect::<Vec<_>>()
+                })
+                .collect::<Vec<_>>();
+            assert_eq!(
+                rank(projection),
+                padding_length,
+                "padding projection lost rank for vector={vector_length}, padding={padding_length}, \
+                 inverse_rate={inverse_rate}, positions={positions:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sampled_production_queries_have_full_rank_padding_maps() {
+        for (vector_length, padding_length, inverse_rate) in production_veil_geometries() {
+            assert_sampled_padding_projections_have_full_rank(
+                vector_length,
+                padding_length,
+                inverse_rate,
+            );
+        }
+    }
+
+    #[test]
+    fn production_square_code_proximity_bound_exceeds_108_bits() {
+        for (vector_length, padding_length, inverse_rate) in production_veil_geometries() {
+            let message_length = vector_length + padding_length;
+            let padded = message_length.next_power_of_two();
+            let parameters = CodeParameters::new(message_length, inverse_rate * padded).unwrap();
+            let square_rate =
+                parameters.square_message_length() as f64 / parameters.code_length as f64;
+            let proximity_bits = -(padding_length as f64) * ((1.0 + square_rate) / 2.0).log2();
+            assert!(square_rate <= MAX_SQUARE_RATE);
+            assert!(proximity_bits > MIN_PROXIMITY_BITS);
         }
     }
 

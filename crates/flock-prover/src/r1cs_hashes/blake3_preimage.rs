@@ -1019,7 +1019,7 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_output_claims_move_with_fresh_randomizers() {
+    fn succinct_unmasked_pcs_values_move_with_fresh_randomizers() {
         let setup = Blake3PreimageZkSetup::new_succinct(2);
         let messages = msgs_of(0x5A17, 2);
         let digests = Blake3PreimageSetup::digests_of(&messages);
@@ -1035,6 +1035,22 @@ mod tests {
         let second = prove(0x32);
         assert_ne!(first.ab_value, second.ab_value);
         assert_ne!(first.c_value, second.c_value);
+        assert_eq!(first.pcs_open.ring_switches.len(), 2);
+        assert!(
+            first
+                .pcs_open
+                .ring_switches
+                .iter()
+                .all(|proof| proof.s_hat_v.len() == 128)
+        );
+        assert_ne!(
+            first.pcs_open.ring_switches[0].s_hat_v,
+            second.pcs_open.ring_switches[0].s_hat_v
+        );
+        assert_ne!(
+            first.pcs_open.ring_switches[1].s_hat_v,
+            second.pcs_open.ring_switches[1].s_hat_v
+        );
     }
 
     #[cfg(feature = "veil")]
