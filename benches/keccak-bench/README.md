@@ -24,17 +24,20 @@ benches/keccak-bench/
 │   └── keccak_criterion.rs   criterion stage-timing target
 └── src/
     ├── lib.rs                keccak witness builders + native-rate
-    │                         calibration (with inline tests); the
-    │                         generic harness comes from blake3-bench
-    │                         via a path dependency
-    ├── keccak.rs             the keccak_e2e bin: flags, sweep, row
-    │                         functions
-    └── tests.rs              the bin's unit tests (flag parsing, sweep
-                              shape), attached as a #[path] module
+    │                         calibration; the generic harness comes
+    │                         from the `bench-harness` crate
+    │                         (`benches/harness`)
+    ├── keccak.rs             the keccak_e2e bin: the SPEC (titles +
+    │                         sweep-bound flag), sweep, row functions
+    └── tests.rs              all unit tests (domain + sweep shape +
+                              the real-spec pin), attached to the bin
+                              as a #[path] module
 ```
 
-`cargo test -p keccak-bench` runs the lib's builder tests plus the
-bin-attached tests in `src/tests.rs`.
+`cargo test -p keccak-bench` runs every unit test through the bin
+target: `src/tests.rs` covers the domain lib (through the crate's
+public API), the sweep shape, and the real-spec pin; the harness's own
+tests live in `bench-harness`.
 
 ## e2e mode
 
@@ -119,6 +122,7 @@ relation definitions.
    `(n, native_rate, runs)`, time with `time_best`, build the row with
    `BenchRow::new` (backend, relation, and params are mandatory), and
    assert verify — a broken proof is a bench failure, not a data point.
-3. Wire it into `run`'s sweep loop with a per-row progress table.
+3. Wire it into `main`'s sweep loop with `bench.push(...)` — the driver
+   prints the per-row progress table.
 4. Fresh `FsChallenger`/`ZkRng` inside every timed closure — verify
    consumes the Fiat–Shamir transcript.

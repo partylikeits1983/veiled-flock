@@ -14,13 +14,12 @@
 //!
 //! Run: `cargo run --profile bench -p blake3-bench --bin blake3_e2e --`
 //! Smoke: append `--smoke` (the `BENCH_SMOKE=1` env var stays as a
-//! fallback; a flag wins over its env var).
+//! fallback; a flag wins over its env var). Flag parsing and the run
+//! prologue live in the `bench-harness` driver ([`E2eBench`]); this bin
+//! owns the sweeps and row functions.
 
-use blake3_bench::{
-    BenchRow, RowTimings, blake3_chain, blake3_native_rate_with, max_log_from_env, parse_max_log,
-    print_table, probe_json_path, proof_size, runs_for, smoke, time_best, verify_chain_linkage,
-    write_json,
-};
+use bench_harness::{BenchRow, BenchSpec, E2eBench, MaxLogFlag, RowTimings, proof_size, time_best};
+use blake3_bench::{blake3_chain, blake3_native_rate_with, verify_chain_linkage};
 use flock_prover::challenger::FsChallenger;
 use flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 use flock_prover::veiled_preimage::VeiledBlake3Setup;
@@ -34,134 +33,35 @@ const ZK_SEED: [u8; 32] = [0x42; 32];
 /// the env fallback share it.
 const FRAMED_MAX_LOG_HINT: &str = "m = 14 + log; see the memory model on framed_sweep_for";
 
+/// This crate's bench identity: titles, banner phrases, and the framed
+/// sweep-bound flag. The JSON title is the cross-commit tracking key.
+static SPEC: BenchSpec = BenchSpec {
+    table_title: "blake3 hashchain e2e",
+    json_title: "blake3_hashchain_e2e",
+    smoke_banner: "shrunken sweeps",
+    rate_label: "native blake3 chain rate",
+    rate_unit: "Mhash/s",
+    max_log: MaxLogFlag {
+        flag: "--framed-max-log",
+        env: "BENCH_FRAMED_MAX_LOG",
+        default: 6,
+        min: 1,
+        max: 14,
+        hint: FRAMED_MAX_LOG_HINT,
+    },
+};
+
 fn main() {
-    run(Args::parse());
-}
-
-/// Parsed invocation of the `blake3_e2e` bin.
-///
-/// Flags: `--smoke`, `--runs <1..=16>`, `--framed-max-log <1..=14>`,
-/// `--json <path>`. Each flag wins over its env-var fallback
-/// (`BENCH_SMOKE`, smoke-derived run count, `BENCH_FRAMED_MAX_LOG`).
-struct Args {
-    /// Shrink each sweep to one small row.
-    smoke: bool,
-    /// Timing runs per row (best-of-N).
-    runs: usize,
-    /// Upper log2 bound of the framed sweep.
-    framed_max_log: u32,
-    /// Optional `--json` output path.
-    json: Option<String>,
-}
-
-impl Args {
-    /// Parse the process arguments, fail-loud on anything unknown.
-    ///
-    /// Env vars serve as fallbacks only; a flag always wins. The
-    /// `BENCH_FRAMED_MAX_LOG` fallback is read and validated here even
-    /// when the sweep will not use it (smoke mode) — fail-fast on a bad
-    /// override is intended, and stricter than the pre-split bench,
-    /// which read the var only on the non-smoke path.
-    fn parse() -> Self {
-        Self::from_parts(
-            std::env::args().skip(1),
-            smoke(),
-            max_log_from_env("BENCH_FRAMED_MAX_LOG", 6, 1, 14, FRAMED_MAX_LOG_HINT),
-        )
+    let mut bench = E2eBench::start(&SPEC, blake3_native_rate_with);
+    let (smoke, runs, max_log) = (bench.args().smoke, bench.args().runs, bench.args().max_log);
+    let rate = bench.native_rate();
+    for n_blocks in framed_sweep_for(smoke, max_log) {
+        bench.push(framed_row(n_blocks, rate, runs));
     }
-
-    /// Env-free core of [`Args::parse`]: `env_smoke` and
-    /// `env_framed_max_log` carry the already-resolved env fallbacks, so
-    /// unit tests need no env vars.
-    fn from_parts(
-        mut args: impl Iterator<Item = String>,
-        env_smoke: bool,
-        env_framed_max_log: u32,
-    ) -> Self {
-        let mut smoke_flag = false;
-        let mut runs_flag: Option<usize> = None;
-        let mut max_log_flag: Option<u32> = None;
-        let mut json: Option<String> = None;
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--smoke" => smoke_flag = true,
-                "--runs" => {
-                    let value = args.next().expect("--runs needs a count");
-                    let n: usize = value
-                        .trim()
-                        .parse()
-                        .unwrap_or_else(|_| panic!("--runs must be an integer"));
-                    assert!((1..=16).contains(&n), "--runs must be in 1..=16");
-                    runs_flag = Some(n);
-                }
-                "--framed-max-log" => {
-                    let value = args.next().expect("--framed-max-log needs a value");
-                    max_log_flag = Some(parse_max_log(
-                        "--framed-max-log",
-                        &value,
-                        1,
-                        14,
-                        FRAMED_MAX_LOG_HINT,
-                    ));
-                }
-                "--json" => json = Some(args.next().expect("--json needs a file path")),
-                other => panic!(
-                    "unknown flag {other:?}; known flags: \
-                     --smoke --runs --framed-max-log --json"
-                ),
-            }
-        }
-        let smoke = smoke_flag || env_smoke;
-        let runs = runs_flag.unwrap_or_else(|| runs_for(smoke));
-        let framed_max_log = max_log_flag.unwrap_or(env_framed_max_log);
-        Args {
-            smoke,
-            runs,
-            framed_max_log,
-            json,
-        }
+    for n_real in succinct_sweep_for(smoke) {
+        bench.push(succinct_row(n_real, rate, runs));
     }
-}
-
-/// Run the full e2e sweep for the parsed arguments.
-///
-/// Steps: probe the `--json` path, build the rayon pool, print the smoke
-/// banner, calibrate the native rate once, run both sweeps with a
-/// progress table per row, then print the final table and write the JSON
-/// dump.
-fn run(args: Args) {
-    // Resolve and probe the --json path FIRST: a bad path found after the
-    // sweep would discard every measured row.
-    if let Some(path) = &args.json {
-        probe_json_path(path);
-    }
-    flock_prover::init_perf_thread_pool();
-    if args.smoke {
-        println!(
-            "smoke mode: shrunken sweeps, {} timing run(s) per row",
-            args.runs
-        );
-    }
-    let native_rate = blake3_native_rate_with(args.smoke);
-    println!("native blake3 chain rate: {:.2} Mhash/s", native_rate / 1e6);
-
-    let mut rows = Vec::new();
-    for n_blocks in framed_sweep_for(args.smoke, args.framed_max_log) {
-        rows.push(framed_row(n_blocks, native_rate, args.runs));
-        print_table("blake3 hashchain e2e (in progress)", &rows);
-    }
-    for n_real in succinct_sweep_for(args.smoke) {
-        rows.push(succinct_row(n_real, native_rate, args.runs));
-        print_table("blake3 hashchain e2e (in progress)", &rows);
-    }
-    print_table("blake3 hashchain e2e (final)", &rows);
-    if let Some(path) = args.json {
-        // The JSON title stays "blake3_hashchain_e2e": it is the
-        // cross-commit tracking key. The target rename is not a schema
-        // change.
-        write_json(&path, "blake3_hashchain_e2e", &rows).expect("write --json results");
-        println!("wrote {path}");
-    }
+    bench.finish();
 }
 
 // ---- Sweep shapes. Env-free: the caller resolves smoke mode and

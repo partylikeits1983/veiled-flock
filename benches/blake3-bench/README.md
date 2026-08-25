@@ -1,7 +1,8 @@
 # blake3-bench
 
-End-to-end BLAKE3 proving benchmark over both veil-f128 backends, plus
-the shared harness that `keccak-bench` reuses. The crate has two modes:
+End-to-end BLAKE3 proving benchmark over both veil-f128 backends. The
+generic harness (timer, CLI, rows, run driver) comes from the
+`bench-harness` crate (`benches/harness`). The crate has two modes:
 
 - **e2e bin** (`blake3_e2e`) — the full sweeps: prove AND verify every
   row, print the row table, dump `--json`. This is the primary suite.
@@ -22,18 +23,19 @@ benches/blake3-bench/
 ├── benches/
 │   └── blake3_criterion.rs   criterion stage-timing target
 └── src/
-    ├── lib.rs                shared harness (timer, rows, table, JSON,
-    │                         env parsing) — keccak-bench reuses it via
-    │                         a path dependency
-    ├── blake3.rs             the blake3_e2e bin: flags, sweeps, row
-    │                         functions
-    └── tests.rs              all unit tests (harness + bin), attached
-                              to the bin as a #[path] module
+    ├── lib.rs                BLAKE3 domain code: chain builder, public
+    │                         linkage check, native-rate calibration
+    ├── blake3.rs             the blake3_e2e bin: the SPEC (titles +
+    │                         sweep-bound flag), sweeps, row functions
+    └── tests.rs              unit tests (domain + sweep shapes + the
+                              real-spec pin), attached to the bin as a
+                              #[path] module
 ```
 
 `cargo test -p blake3-bench` runs every unit test through the bin
-target: `src/tests.rs` covers the harness (through the crate's public
-API) and the bin's flag parsing and sweep shapes.
+target: `src/tests.rs` covers the domain lib (through the crate's
+public API), the bin's sweep shapes, and a pin on the crate's real flag
+spec. The harness's own tests live in `bench-harness`.
 
 ## e2e mode
 
@@ -116,6 +118,7 @@ definitions.
    `(n, native_rate, runs)`, time with `time_best`, build the row with
    `BenchRow::new` (backend, relation, and params are mandatory), and
    assert verify — a broken proof is a bench failure, not a data point.
-3. Wire the sweep loop into `run` with a per-row progress table.
+3. Wire the sweep loop into `main` with `bench.push(...)` — the driver
+   prints the per-row progress table.
 4. Fresh `FsChallenger`/`ZkRng` inside every timed closure — verify
    consumes the Fiat–Shamir transcript.

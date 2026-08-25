@@ -20,12 +20,11 @@
 //!
 //! Run: `cargo run --profile bench -p keccak-bench --bin keccak_e2e --`
 //! Smoke: append `--smoke` (the `BENCH_SMOKE=1` env var stays as a
-//! fallback; a flag wins over its env var).
+//! fallback; a flag wins over its env var). Flag parsing and the run
+//! prologue live in the `bench-harness` driver ([`E2eBench`]); this bin
+//! owns the sweep and row functions.
 
-use blake3_bench::{
-    BenchRow, RowTimings, max_log_from_env, parse_max_log, print_table, probe_json_path,
-    proof_size, runs_for, smoke, time_best, write_json,
-};
+use bench_harness::{BenchRow, BenchSpec, E2eBench, MaxLogFlag, RowTimings, proof_size, time_best};
 use flock_prover::challenger::FsChallenger;
 use flock_prover::r1cs_hashes::keccak::{KeccakSetup, KeccakZkSetup};
 use flock_prover::zk::ZkRng;
@@ -42,131 +41,34 @@ const ZK_SEED: [u8; 32] = [0x43; 32];
 const MAX_LOG_HINT: &str = "m = 16 + log; configs stop at m = 35; the sweep steps by 2, so an odd \
      value tops out at the even log below it";
 
+/// This crate's bench identity: titles, banner phrases, and the sweep-
+/// bound flag. The JSON title is the cross-commit tracking key.
+static SPEC: BenchSpec = BenchSpec {
+    table_title: "keccak hashchain e2e",
+    json_title: "keccak_hashchain_e2e",
+    smoke_banner: "shrunken sweep",
+    rate_label: "native keccak-f chain rate",
+    rate_unit: "Mperm/s",
+    max_log: MaxLogFlag {
+        flag: "--max-log",
+        env: "BENCH_KECCAK_MAX_LOG",
+        default: 12,
+        min: 6,
+        max: 19,
+        hint: MAX_LOG_HINT,
+    },
+};
+
 fn main() {
-    run(Args::parse());
-}
-
-/// Parsed invocation of the `keccak_e2e` bin.
-///
-/// Flags: `--smoke`, `--runs <1..=16>`, `--max-log <6..=19>`,
-/// `--json <path>`. Each flag wins over its env-var fallback
-/// (`BENCH_SMOKE`, smoke-derived run count, `BENCH_KECCAK_MAX_LOG`).
-struct Args {
-    /// Shrink the sweep to one small point.
-    smoke: bool,
-    /// Timing runs per row (best-of-N).
-    runs: usize,
-    /// Upper log2 bound of the sweep.
-    max_log: u32,
-    /// Optional `--json` output path.
-    json: Option<String>,
-}
-
-impl Args {
-    /// Parse the process arguments, fail-loud on anything unknown.
-    ///
-    /// Env vars serve as fallbacks only; a flag always wins. The
-    /// `BENCH_KECCAK_MAX_LOG` fallback is read and validated here even
-    /// when the sweep will not use it (smoke mode) — fail-fast on a bad
-    /// override is intended, and stricter than the pre-split bench,
-    /// which read the var only on the non-smoke path.
-    fn parse() -> Self {
-        Self::from_parts(
-            std::env::args().skip(1),
-            smoke(),
-            max_log_from_env("BENCH_KECCAK_MAX_LOG", 12, 6, 19, MAX_LOG_HINT),
-        )
+    let mut bench = E2eBench::start(&SPEC, keccak_native_rate_with);
+    let (smoke, runs, max_log) = (bench.args().smoke, bench.args().runs, bench.args().max_log);
+    let rate = bench.native_rate();
+    for n in sweep_for(smoke, max_log) {
+        bench.push(native_row(n, rate, runs));
+        bench.push(succinct_row(n, rate, runs));
+        bench.push(succinct_chain_row(n, rate, runs));
     }
-
-    /// Env-free core of [`Args::parse`]: `env_smoke` and `env_max_log`
-    /// carry the already-resolved env fallbacks, so unit tests need no
-    /// env vars.
-    fn from_parts(
-        mut args: impl Iterator<Item = String>,
-        env_smoke: bool,
-        env_max_log: u32,
-    ) -> Self {
-        let mut smoke_flag = false;
-        let mut runs_flag: Option<usize> = None;
-        let mut max_log_flag: Option<u32> = None;
-        let mut json: Option<String> = None;
-        while let Some(arg) = args.next() {
-            match arg.as_str() {
-                "--smoke" => smoke_flag = true,
-                "--runs" => {
-                    let value = args.next().expect("--runs needs a count");
-                    let n: usize = value
-                        .trim()
-                        .parse()
-                        .unwrap_or_else(|_| panic!("--runs must be an integer"));
-                    assert!((1..=16).contains(&n), "--runs must be in 1..=16");
-                    runs_flag = Some(n);
-                }
-                "--max-log" => {
-                    let value = args.next().expect("--max-log needs a value");
-                    max_log_flag = Some(parse_max_log("--max-log", &value, 6, 19, MAX_LOG_HINT));
-                }
-                "--json" => json = Some(args.next().expect("--json needs a file path")),
-                other => panic!(
-                    "unknown flag {other:?}; known flags: \
-                     --smoke --runs --max-log --json"
-                ),
-            }
-        }
-        let smoke = smoke_flag || env_smoke;
-        let runs = runs_flag.unwrap_or_else(|| runs_for(smoke));
-        let max_log = max_log_flag.unwrap_or(env_max_log);
-        Args {
-            smoke,
-            runs,
-            max_log,
-            json,
-        }
-    }
-}
-
-/// Run the full e2e sweep for the parsed arguments.
-///
-/// Steps: probe the `--json` path, build the rayon pool, print the smoke
-/// banner, calibrate the native rate once, run the sweep — three rows per
-/// point with a progress table after each — then print the final table
-/// and write the JSON dump.
-fn run(args: Args) {
-    // Resolve and probe the --json path FIRST: a bad path found after the
-    // sweep would discard every measured row.
-    if let Some(path) = &args.json {
-        probe_json_path(path);
-    }
-    flock_prover::init_perf_thread_pool();
-    if args.smoke {
-        println!(
-            "smoke mode: shrunken sweep, {} timing run(s) per row",
-            args.runs
-        );
-    }
-    let native_rate = keccak_native_rate_with(args.smoke);
-    println!(
-        "native keccak-f chain rate: {:.2} Mperm/s",
-        native_rate / 1e6
-    );
-
-    let mut rows = Vec::new();
-    for n in sweep_for(args.smoke, args.max_log) {
-        rows.push(native_row(n, native_rate, args.runs));
-        print_table("keccak hashchain e2e (in progress)", &rows);
-        rows.push(succinct_row(n, native_rate, args.runs));
-        print_table("keccak hashchain e2e (in progress)", &rows);
-        rows.push(succinct_chain_row(n, native_rate, args.runs));
-        print_table("keccak hashchain e2e (in progress)", &rows);
-    }
-    print_table("keccak hashchain e2e (final)", &rows);
-    if let Some(path) = args.json {
-        // The JSON title stays "keccak_hashchain_e2e": it is the
-        // cross-commit tracking key. The target rename is not a schema
-        // change.
-        write_json(&path, "keccak_hashchain_e2e", &rows).expect("write --json results");
-        println!("wrote {path}");
-    }
+    bench.finish();
 }
 
 // ---- Sweep shape. Env-free: the caller resolves smoke mode and

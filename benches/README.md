@@ -1,10 +1,11 @@
 # End-to-end proving benchmarks
 
-This directory holds two bench crates. They measure full prove and verify
-cycles for hash chains.
+This directory holds two bench crates and their shared library. The bench
+crates measure full prove and verify cycles for hash chains.
 
-- `blake3-bench` — BLAKE3 chains over the two veil-f128 backends. Its lib
-  also holds the shared harness.
+- `harness` — the shared `bench-harness` lib (timer, CLI, rows, run
+  driver); both bench crates import it, it depends on neither.
+- `blake3-bench` — BLAKE3 chains over the two veil-f128 backends.
 - `keccak-bench` — keccak-f chains over the native chain prover and the
   succinct-VEIL backend.
 

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "benches/blake3-bench",
+    "benches/harness",
     "benches/keccak-bench",
     "crates/flock-core",
     "crates/flock-prover",

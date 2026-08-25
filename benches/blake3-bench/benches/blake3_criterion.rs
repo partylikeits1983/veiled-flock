@@ -65,8 +65,10 @@ fn verify_framed(c: &mut Criterion) {
     };
     let mut group = c.benchmark_group("verify-framed");
     // ~80 ms/iter measured: the default 5 s window cannot hold 100
-    // samples and criterion warns. 8 s fits (criterion's own suggestion).
-    group.measurement_time(Duration::from_secs(8));
+    // samples and criterion warns. 8 s fit when this landed, then a
+    // ~79-80 ms/iter run nudged criterion's own suggestion to 8.1 s —
+    // 9 s buys headroom against that drift.
+    group.measurement_time(Duration::from_secs(9));
     group.bench_function("n=2", |b| {
         b.iter_batched(
             || FsChallenger::new(DOMAIN),

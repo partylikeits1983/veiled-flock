@@ -7,11 +7,11 @@ authors.workspace = true
 description = "End-to-end keccak proving benchmark (Phase 2 of the e2e bench plan)."
 publish = false
 
+# The generic harness (timer, CLI, rows, run driver) comes from
+# `bench-harness`; this crate keeps only keccak domain code.
 [dependencies]
+bench-harness = { path = "../harness" }
 flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
-# The generic bench harness (Rng, timer, row/table reporter) lives in
-# blake3-bench's lib and is shared from there.
-blake3-bench = { path = "../blake3-bench" }
 
 # Criterion owns only the stage-timing target (benches/keccak_criterion.rs).
 # `default-features = false` keeps plotters and rayon out of `make test
@@ -30,7 +30,7 @@ bench = false
 # Bins default `bench = true`; without `bench = false` cargo bench's
 # `--save-baseline` would also hit this bin's libtest harness and fail
 # (same rationale as [lib] bench = false). The bin keeps `test` on: the
-# e2e logic (Args parsing, sweep shape) lives here with its unit tests.
+# e2e logic (sweep shape, rows) lives here with its unit tests.
 [[bin]]
 name = "keccak_e2e"
 path = "src/keccak.rs"
