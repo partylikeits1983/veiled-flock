@@ -1,4 +1,4 @@
-//! Succinct experimental VEIL compilation for FLOCK's algebraic transcript.
+//! Succinct VEIL proof for FLOCK's zerocheck and lincheck verifier.
 //!
 //! The witness stays in FLOCK's hiding Ligerito commitment. Only the
 //! zerocheck/lincheck messages are additively masked. A small VEIL circuit
@@ -28,6 +28,14 @@ use crate::prover::open_claims_with_precomputed_ligerito_pd_ro;
 
 const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root-v0";
 const CLAIMS_LABEL: &[u8] = b"veil-flock-output-claims-v0";
+// Digest of `build_block_r1cs_zk_pinned(8, RootHash64)`. Validation rejects
+// any circuit with a different digest.
+const SUPPORTED_BLAKE3_R1CS_DIGEST: [u8; 32] = [
+    0xe7, 0x1b, 0xde, 0x2b, 0x05, 0x3b, 0x1b, 0x69, 0x74, 0x12, 0xd2, 0xd3, 0x0c, 0x2e, 0x2e, 0x57,
+    0xf7, 0xb5, 0xf1, 0x82, 0x24, 0x84, 0xfc, 0xbc, 0xc1, 0x5c, 0x89, 0xea, 0x20, 0x28, 0x90, 0xd5,
+];
+// Number of zerocheck and lincheck field elements hidden by transcript masks.
+const SUPPORTED_MASK_COUNT: usize = 242;
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctVeilProof {
@@ -325,10 +333,21 @@ fn validate_succinct_parameters(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
 ) -> Result<MaskLayout, SuccinctVeilError> {
-    if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
+    if !pcs_params.zk
+        || r1cs.zk.is_none()
+        || pcs_params.m != r1cs.m
+        || r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST
+        || pcs_params.log_inv_rate != 1
+        || pcs_params.log_batch_size != 6
+        || pcs_params.profile != pcs::ligerito::LigeritoProfile::Fast
+    {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    MaskLayout::new(r1cs)
+    let layout = MaskLayout::new(r1cs)?;
+    if layout.observed_count() != SUPPORTED_MASK_COUNT {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    Ok(layout)
 }
 
 /// Challenger adapter used only while producing zerocheck and lincheck. It

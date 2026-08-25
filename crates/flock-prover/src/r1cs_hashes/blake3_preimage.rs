@@ -521,9 +521,8 @@ impl Blake3PreimageZkSetup {
         }
     }
 
-    /// Experimental succinct VEIL mode. Unlike the older A1 reference path,
-    /// this makes one hiding witness opening and proves only FLOCK's small
-    /// algebraic verifier transcript inside VEIL.
+    /// Proves FLOCK's zerocheck and lincheck verifier equations with succinct
+    /// VEIL and opens the committed witness through the hiding PCS.
     #[cfg(feature = "veil")]
     pub fn prove_succinct<Ch: Challenger + Clone + Send>(
         &self,
