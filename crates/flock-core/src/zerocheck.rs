@@ -57,9 +57,9 @@ pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128>
     let r_skip = challenger.sample_f128_vec(K_SKIP);
     let outer_len = m - K_SKIP - N_INNER;
     let r_outer = loop {
-        let candidate = challenger.sample_f128_vec(outer_len);
-        if candidate.iter().all(|value| *value != F128::ONE) {
-            break candidate;
+        let sampled_point = challenger.sample_f128_vec(outer_len);
+        if sampled_point.iter().all(|value| *value != F128::ONE) {
+            break sampled_point;
         }
     };
 

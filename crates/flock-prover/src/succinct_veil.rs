@@ -41,22 +41,67 @@ const TREE_NONCES_LABEL: &[u8] = b"veil-flock-tree-nonces";
 const RING_CLAIM_COUNT: usize = 2;
 const PUBLIC_DIRECT_CLAIM_COUNT: usize = 1;
 const RING_WIDTH: usize = 1 << pcs::LOG_PACKING;
-/// Digest of the only relation accepted by the full-ZK entry point:
-/// `build_block_r1cs_zk_pinned(8, RootHash64)`.
-const SUPPORTED_BLAKE3_R1CS_DIGEST: [u8; 32] = [
-    0x33, 0xcb, 0x2a, 0x40, 0x4f, 0x1b, 0x19, 0x77, 0x5e, 0x0c, 0x38, 0x11, 0x89, 0xd1, 0x4e, 0xc9,
-    0x0d, 0x00, 0xf9, 0xcd, 0x75, 0xa9, 0x68, 0x5d, 0x1f, 0xc0, 0x1c, 0x6b, 0x72, 0x58, 0x2d, 0x4f,
+/// Exact circuit digests, dimensions, and independent-mask counts accepted by
+/// the full-ZK entry point. These are the pinned 64-byte BLAKE3-preimage
+/// circuits for 256, 512, 1024, and 2048 slots respectively.
+const SUPPORTED_BLAKE3_R1CS_SHAPES: [([u8; 32], usize, usize); 4] = [
+    (
+        [
+            0x33, 0xcb, 0x2a, 0x40, 0x4f, 0x1b, 0x19, 0x77, 0x5e, 0x0c, 0x38, 0x11, 0x89, 0xd1,
+            0x4e, 0xc9, 0x0d, 0x00, 0xf9, 0xcd, 0x75, 0xa9, 0x68, 0x5d, 0x1f, 0xc0, 0x1c, 0x6b,
+            0x72, 0x58, 0x2d, 0x4f,
+        ],
+        22,
+        754,
+    ),
+    (
+        [
+            0xd0, 0xa0, 0x54, 0x97, 0x0d, 0xce, 0xc1, 0x72, 0x7d, 0xdb, 0x8c, 0x49, 0x61, 0x53,
+            0x95, 0x92, 0xd2, 0x84, 0xf0, 0x75, 0xfa, 0xb5, 0xd3, 0x9b, 0xc3, 0x1b, 0xcd, 0x35,
+            0x01, 0x89, 0x0a, 0x4b,
+        ],
+        23,
+        756,
+    ),
+    (
+        [
+            0xc2, 0x65, 0x34, 0xe7, 0x42, 0x6c, 0xd4, 0x2b, 0x19, 0x13, 0xf4, 0x21, 0x70, 0xf2,
+            0x39, 0xd1, 0x55, 0x30, 0x94, 0xef, 0x3e, 0x98, 0xc3, 0x8b, 0x5a, 0xed, 0x9d, 0x31,
+            0x6b, 0xb3, 0xa2, 0x23,
+        ],
+        24,
+        758,
+    ),
+    (
+        [
+            0x51, 0x6b, 0x46, 0xd4, 0x88, 0x0e, 0x7f, 0xa8, 0x42, 0xe1, 0x4a, 0x39, 0x61, 0xeb,
+            0xbc, 0x15, 0x2d, 0xef, 0x5f, 0x6a, 0x6f, 0x75, 0x47, 0xcc, 0xa8, 0xff, 0x50, 0x5a,
+            0x3d, 0x22, 0xc6, 0x7c,
+        ],
+        25,
+        760,
+    ),
 ];
-const SUPPORTED_MASK_COUNT: usize = 754;
-/// The active Secure profile has a two-bit outer blinding grind. Refusing a
-/// nonce outside the first 1024 trials charges the exact tail `(3/4)^1024`
-/// (more than 425 bits) and gives the pROM proof a deterministic query bound.
-pub const MAX_BLIND_GRIND_TRIALS: u64 = 1024;
-/// Every Ligerito query/fold grind is bounded for the same reason. The pinned
-/// profile has one live one-bit fold grind; the bound ledger conservatively
-/// reserves room for up to sixteen positive-bit sites.
-pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 1024;
+/// ZK doubles the committed message dimension, so the largest supported outer
+/// blinding grind is five bits. A 4096-trial fail-closed cap charges at most
+/// `(31/32)^4096 < 2^-187`.
+pub const MAX_BLIND_GRINDING_BITS: u32 = 5;
+pub const MAX_BLIND_GRIND_TRIALS: u64 = 4096;
+/// Every Ligerito query/fold grind is bounded for the same reason. Across the
+/// supported ZK shapes the largest live fold grind is four bits, whose
+/// 4096-trial tail is below `2^-381`.
+pub const MAX_LIGERITO_GRINDING_BITS: usize = 4;
+pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 4096;
 pub const MAX_LIGERITO_GRIND_SITES: u64 = 16;
+
+fn supported_mask_count(r1cs: &BlockR1cs) -> Option<usize> {
+    let digest = r1cs.statement_digest();
+    SUPPORTED_BLAKE3_R1CS_SHAPES
+        .iter()
+        .find_map(|(registered_digest, m, masks)| {
+            (*registered_digest == digest && *m == r1cs.m).then_some(*masks)
+        })
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctVeilProof {
@@ -640,7 +685,7 @@ pub fn certify_flock_piop_soundness(
     r1cs: &BlockR1cs,
     lincheck_circuit: &dyn LincheckCircuit,
 ) -> Result<FlockPiopSoundnessBound, SuccinctVeilError> {
-    if r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST {
+    if supported_mask_count(r1cs).is_none() {
         return Err(SuccinctVeilError::InvalidParameters);
     }
     let layout = MaskLayout::new(r1cs)?;
@@ -697,7 +742,7 @@ pub fn certify_flock_piop_soundness(
 pub fn certify_shifted_veil_soundness(
     r1cs: &BlockR1cs,
 ) -> Result<ConstraintSoundnessBound, SuccinctVeilError> {
-    if r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST {
+    if supported_mask_count(r1cs).is_none() {
         return Err(SuccinctVeilError::InvalidParameters);
     }
     let layout = MaskLayout::new(r1cs)?;
@@ -743,7 +788,7 @@ impl BatchOpeningCertificate {
             && self.public_direct_claims == PUBLIC_DIRECT_CLAIM_COUNT
             && self.distinct_l0_positions > 0
             && self.distinct_l0_positions <= self.padding_symbols_per_lane
-            && self.blind_grinding_bits == 2
+            && (1..=MAX_BLIND_GRINDING_BITS).contains(&self.blind_grinding_bits)
             && self.max_blind_grind_trials == MAX_BLIND_GRIND_TRIALS
     }
 }
@@ -875,7 +920,7 @@ fn validate_succinct_parameters(
     if !pcs_params.zk
         || r1cs.zk.is_none()
         || pcs_params.m != r1cs.m
-        || r1cs.statement_digest() != SUPPORTED_BLAKE3_R1CS_DIGEST
+        || supported_mask_count(r1cs).is_none()
         || pcs_params.log_inv_rate != 1
         || pcs_params.log_batch_size != 6
         || pcs_params.profile != pcs::ligerito::LigeritoProfile::Secure
@@ -883,7 +928,7 @@ fn validate_succinct_parameters(
         return Err(SuccinctVeilError::InvalidParameters);
     }
     let layout = MaskLayout::new(r1cs)?;
-    if layout.observed_count() != SUPPORTED_MASK_COUNT
+    if layout.observed_count() != supported_mask_count(r1cs).expect("checked supported shape")
         || !layout.global_mask_certificate().is_full_identity_cover()
     {
         return Err(SuccinctVeilError::InvalidShape(
@@ -898,12 +943,12 @@ fn validate_l0_hiding_budget(
     queries: &[usize],
 ) -> Result<(), SuccinctVeilError> {
     let Some(&opened_positions) = queries.first() else {
-        return Err(SuccinctVeilError::InvalidParameters);
+        return Err(SuccinctVeilError::InvalidShape("missing L0 query budget"));
     };
     let mask_symbols_per_lane =
         (1usize << pcs_params.witness_log_msg_len()) / pcs_params.num_ntts();
     if opened_positions > mask_symbols_per_lane {
-        return Err(SuccinctVeilError::InvalidParameters);
+        return Err(SuccinctVeilError::InvalidShape("L0 hiding query budget"));
     }
     Ok(())
 }
@@ -917,10 +962,12 @@ fn certify_batch_opening(
     validate_l0_hiding_budget(pcs_params, queries)?;
     let positive_fold_sites = fold_grinding_bits.iter().filter(|bits| **bits > 0).count();
     if grinding_bits.iter().any(|bits| *bits != 0)
-        || fold_grinding_bits.iter().any(|bits| *bits > 1)
+        || fold_grinding_bits
+            .iter()
+            .any(|bits| *bits > MAX_LIGERITO_GRINDING_BITS)
         || positive_fold_sites > MAX_LIGERITO_GRIND_SITES as usize
     {
-        return Err(SuccinctVeilError::InvalidParameters);
+        return Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"));
     }
     let blind_grinding_bits = fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
     let certificate = BatchOpeningCertificate {
@@ -935,7 +982,7 @@ fn certify_batch_opening(
         max_blind_grind_trials: MAX_BLIND_GRIND_TRIALS,
     };
     if !certificate.is_valid() {
-        return Err(SuccinctVeilError::InvalidParameters);
+        return Err(SuccinctVeilError::InvalidShape("batch opening certificate"));
     }
     Ok(certificate)
 }
@@ -1566,8 +1613,8 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         .collect::<Vec<_>>();
     observe_direct_blinds(challenger, &public_direct_blind_values);
     let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
-    if blind_bits != 2 {
-        return Err(SuccinctVeilError::InvalidParameters);
+    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
+        return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
     }
     let blind_grind_nonce = challenger.grind_pow(blind_bits);
     if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
@@ -1734,7 +1781,7 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     }
     observe_direct_blinds(challenger, &proof.public_direct_blind_values);
     let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
-    if blind_bits != 2
+    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits)
         || proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
         || !challenger.verify_pow(proof.blind_grind_nonce, blind_bits)
     {

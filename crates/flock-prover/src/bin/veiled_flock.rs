@@ -4,10 +4,10 @@ use std::{env, fs, io::Read, process::ExitCode, time::Instant};
 
 use flock_prover::{
     proof_io::{MAX_VEIL_FLOCK_BUNDLE_BYTES, VeilFlockProofBundle},
-    r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MESSAGE_BYTES},
+    r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE_BLOCKS, MESSAGE_BYTES},
 };
 
-const MAX_MESSAGES: usize = 256;
+const MAX_MESSAGES: usize = MAX_ZK_PREIMAGE_BLOCKS;
 // Bound file reads and decoder allocation for untrusted proof bundles.
 const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
 type Bundle = VeilFlockProofBundle;
@@ -20,7 +20,7 @@ Usage:
   veiled_flock verify --in FILE
   veiled_flock demo
 
-The message file must contain 1..=256 concatenated 64-byte messages. The
+The message file must contain 1..=2048 concatenated 64-byte messages. The
 proof bundle contains their public BLAKE3 digests and the VEIL proof, but never
 the messages.
 ";

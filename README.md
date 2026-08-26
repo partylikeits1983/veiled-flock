@@ -35,13 +35,15 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
 ```
 
 `messages.bin` must contain one or more concatenated 64-byte messages. The
-proof bundle includes the ordered public digests.
+proof bundle includes the ordered public digests. Full-ZK batches support up
+to 2048 messages and use registered 256/512/1024/2048-slot circuit shapes.
 
 ## Benchmarks
 
 ```sh
 cargo bench -p flock-prover --bench blake3_native_chain
 cargo bench -p flock-prover --bench keccak_native_chain
+cargo run --release -p flock-prover --features veil --example preimage_scaling -- 5
 ```
 
 ## Documentation

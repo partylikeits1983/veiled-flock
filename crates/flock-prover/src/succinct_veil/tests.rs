@@ -23,10 +23,7 @@ fn succinct_shape_rejects_nonidentity_c() {
 #[test]
 fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
     let setup = Blake3PreimageZkSetup::new(2);
-    assert_eq!(
-        setup.r1cs.statement_digest(),
-        super::SUPPORTED_BLAKE3_R1CS_DIGEST
-    );
+    assert!(super::supported_mask_count(&setup.r1cs).is_some());
     validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
     let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
         .expect("production PIOP soundness certificate");
@@ -50,6 +47,34 @@ fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
         validate_succinct_parameters(&setup.r1cs, &wrong_profile),
         Err(SuccinctVeilError::InvalidParameters)
     );
+}
+
+#[test]
+fn every_registered_batch_shape_has_exact_mask_and_soundness_certificates() {
+    for (blocks, m, masks) in [
+        (256, 22, 754),
+        (512, 23, 756),
+        (1024, 24, 758),
+        (2048, 25, 760),
+    ] {
+        let setup = Blake3PreimageZkSetup::new(blocks);
+        assert_eq!(setup.r1cs.m, m);
+        assert_eq!(super::supported_mask_count(&setup.r1cs), Some(masks));
+        validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
+        assert_eq!(
+            certify_global_masking(&setup.r1cs)
+                .unwrap()
+                .visible_private_f128,
+            masks
+        );
+        assert!(
+            certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
+                .unwrap()
+                .bits()
+                > 110.0
+        );
+        assert!(certify_shifted_veil_soundness(&setup.r1cs).unwrap().bits() > 100.0);
+    }
 }
 
 #[test]
@@ -124,18 +149,23 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
     assert_eq!(certificate.ring_claims, 2);
     assert_eq!(certificate.public_direct_claims, 1);
     assert_eq!(certificate.blind_grinding_bits, 2);
-    assert_eq!(certificate.max_blind_grind_trials, 1024);
+    assert_eq!(certificate.max_blind_grind_trials, 4096);
     assert!(matches!(
         validate_l0_hiding_budget(&params, &[513]),
-        Err(SuccinctVeilError::InvalidParameters)
+        Err(SuccinctVeilError::InvalidShape("L0 hiding query budget"))
     ));
     assert!(matches!(
         certify_batch_opening(&params, &[512], &[1], &[1]),
-        Err(SuccinctVeilError::InvalidParameters)
+        Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
     assert!(matches!(
-        certify_batch_opening(&params, &[512], &[0], &[2]),
-        Err(SuccinctVeilError::InvalidParameters)
+        certify_batch_opening(
+            &params,
+            &[512],
+            &[0],
+            &[super::MAX_LIGERITO_GRINDING_BITS + 1]
+        ),
+        Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
 }
 

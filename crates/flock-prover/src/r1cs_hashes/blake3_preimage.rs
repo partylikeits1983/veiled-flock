@@ -69,6 +69,10 @@ use flock_core::zk::MaskSampler;
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
 pub const DIGEST_BYTES: usize = 32;
+/// Largest batch covered by the registered full-ZK circuit and PCS
+/// certificates. Smaller batches are padded to the next power-of-two shape,
+/// with a 256-slot production floor.
+pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 2048;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -506,7 +510,10 @@ impl Blake3PreimageZkSetup {
     /// digest.
     #[cfg(feature = "veil")]
     pub fn new(n_blocks: usize) -> Self {
-        assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
+        assert!(
+            (1..=MAX_ZK_PREIMAGE_BLOCKS).contains(&n_blocks),
+            "n_blocks must be in 1..={MAX_ZK_PREIMAGE_BLOCKS}"
+        );
         Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
     }
 
@@ -1034,12 +1041,12 @@ mod tests {
             .verify(&commitment, &proof, &digests)
             .expect("verify succinct VEIL");
 
-        let rejects = |candidate: &crate::succinct_veil::SuccinctVeilProof,
-                       candidate_commitment: &Commitment,
-                       candidate_digests: &[[u8; DIGEST_BYTES]]| {
+        let rejects = |proof_under_test: &crate::succinct_veil::SuccinctVeilProof,
+                       commitment_under_test: &Commitment,
+                       digests_under_test: &[[u8; DIGEST_BYTES]]| {
             assert!(
                 setup
-                    .verify(candidate_commitment, candidate, candidate_digests)
+                    .verify(commitment_under_test, proof_under_test, digests_under_test)
                     .is_err()
             );
         };

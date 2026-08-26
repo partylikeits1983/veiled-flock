@@ -47,11 +47,16 @@ impl ClassicalPromZkBound {
         4.0 * proofs * (proofs - 1.0) * 0.5 * 2f64.powi(-256)
     }
 
-    /// The active two-bit grind is capped at 1024 trials and fails closed.
+    /// Worst-case fail-closed grinding tails across every registered shape.
     pub fn grinding_abort_probability(self) -> f64 {
+        let blind_failure =
+            1.0 - 2f64.powi(-(crate::succinct_veil::MAX_BLIND_GRINDING_BITS as i32));
+        let ligerito_failure =
+            1.0 - 2f64.powi(-(crate::succinct_veil::MAX_LIGERITO_GRINDING_BITS as i32));
         self.proofs as f64
-            * (0.75f64.powi(1024)
-                + crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as f64 * 0.5f64.powi(1024))
+            * (blind_failure.powf(crate::succinct_veil::MAX_BLIND_GRIND_TRIALS as f64)
+                + crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as f64
+                    * ligerito_failure.powf(crate::succinct_veil::MAX_LIGERITO_GRIND_TRIALS as f64))
     }
 
     pub fn distinguishing_probability(self) -> f64 {

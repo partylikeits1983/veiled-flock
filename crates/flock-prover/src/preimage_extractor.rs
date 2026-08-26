@@ -51,7 +51,7 @@ use crate::r1cs_hashes::blake3_preimage::{DIGEST_BYTES, MESSAGE_BYTES};
 pub enum ExtractError {
     /// The committed vector is the wrong shape for this statement.
     BadShape { expected: usize, got: usize },
-    /// A recovered candidate does not hash to the public digest. This is the
+    /// A recovered message does not hash to the public digest. This is the
     /// check that makes the extractor meaningful: it fails for a prover that
     /// knew no preimage, however well-formed its proof looked.
     NotAPreimage { index: usize },
@@ -70,7 +70,7 @@ impl std::fmt::Display for ExtractError {
             }
             Self::NotAPreimage { index } => write!(
                 f,
-                "recovered candidate {index} does not hash to the public digest — \
+                "recovered message {index} does not hash to the public digest — \
                  the prover did not know a preimage"
             ),
             Self::BadLeafQueries => write!(
@@ -183,11 +183,11 @@ pub fn extract_preimages(
     }
     let mut out = Vec::with_capacity(digests.len());
     for (i, d) in digests.iter().enumerate() {
-        let candidate = message_bytes_at(z_packed, i);
-        if ::blake3::hash(&candidate).as_bytes() != d {
+        let recovered_message = message_bytes_at(z_packed, i);
+        if ::blake3::hash(&recovered_message).as_bytes() != d {
             return Err(ExtractError::NotAPreimage { index: i });
         }
-        out.push(candidate);
+        out.push(recovered_message);
     }
     Ok(out)
 }

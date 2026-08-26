@@ -9,7 +9,7 @@ unaudited and should not yet protect production secrets.
 
 | Property | Scope |
 |---|---|
-| Relation | Ordered batch of 64-byte BLAKE3 preimages, padded to 256 slots |
+| Relation | Ordered batch of 1–2048 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048-slot shape |
 | Completeness | Honest proofs verify |
 | Zero knowledge | Multi-theorem, adaptive classical pROM |
 | Algebraic privacy | Perfect, conditioned on the public statement and accepted challenge history |
@@ -37,7 +37,7 @@ P*J*Q_H/2^256
 + P*Q_P*Q_H/2^256
 + (Q_H + P*Q_P)^2/2^257
 + 4*P*(P-1)/2^257
-+ P*((3/4)^1024 + 16*(1/2)^1024).
++ P*((31/32)^4096 + 16*(15/16)^4096).
 ```
 
 The terms respectively cover challenge prequeries, hidden initial-Merkle
@@ -64,9 +64,11 @@ The production code enforces the following gates before proving or verifying:
 3. The nonzero VEIL fold coefficient makes the folded Ligerito input uniform.
    The implementation certificate jointly covers the fold, all initial opened
    columns, ring slices, and public direct functionals.
-4. The 242 FLOCK transcript coordinates and 512 ring coordinates use 754
-   independent field one-time pads. The generated global mask matrix is
-   surjective on every verifier-visible affine witness direction.
+4. At the 256-slot floor, the 242 FLOCK transcript coordinates and 512 ring
+   coordinates use 754 independent field one-time pads. Each circuit-size
+   doubling adds two sumcheck coordinates and two independent pads, reaching
+   760 pads at 2048 slots. The generated global mask matrix is surjective on
+   every verifier-visible affine witness direction.
 5. The exact F2-linear ring-switch matrix is checked against production field
    multiplication on all 128 basis vectors.
 6. The live nonlinear multiplication is proved by VEIL Hadamard. Operand and

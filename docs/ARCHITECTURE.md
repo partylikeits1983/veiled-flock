@@ -17,8 +17,9 @@ proof flavor or legacy masking API.
 The public statement is an ordered list of BLAKE3 digests. The private witness
 contains one 64-byte message per digest. The circuit pins the BLAKE3 IV,
 counter zero, block length 64, and `CHUNK_START|CHUNK_END|ROOT` flags. A
-short list is padded deterministically to the 256-slot production floor. The
-verifier pins the exact circuit digest and Secure PCS parameters.
+short list is padded deterministically to the next registered power-of-two
+shape, with a 256-slot production floor and a 2048-slot ceiling. The verifier
+pins each exact circuit digest and its Secure PCS parameters.
 
 ## Outer shielded commitment
 
@@ -44,10 +45,13 @@ inputs are already witness-independent.
 
 ## Masked FLOCK verifier
 
-The PIOP exposes 242 field coordinates and its two ring-switch claims expose
-512 more. Each of the 754 coordinates receives a distinct uniform field mask.
-The mask layout is fixed by a generated manifest; proving and verification
-fail if the transcript consumes a different number or order.
+At the 256-slot floor, the PIOP exposes 242 field coordinates and its two
+ring-switch claims expose 512 more. Each of the 754 coordinates receives a
+distinct uniform field mask. Every circuit-size doubling adds two sumcheck
+coordinates, so the registered 512/1024/2048-slot shapes use 756/758/760
+masks. The mask layout is derived from the exact circuit and checked against
+the registered count; proving and verification fail if the transcript consumes
+a different number or order.
 
 At fixed challenge history the visible affine transcript has the form
 
