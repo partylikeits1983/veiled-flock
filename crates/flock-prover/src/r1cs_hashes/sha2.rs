@@ -2088,9 +2088,9 @@ mod tests {
             .map(|_| (std::array::from_fn(|_| rng.next_u32()), rng.next_block()))
             .collect();
 
-        let mut ch_p = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-batch-major");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-batch-major");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("batch-major verifier rejected: {e:?}"));
@@ -2098,7 +2098,7 @@ mod tests {
 
         let mut bad = proof.clone();
         bad.zerocheck.final_a_eval.lo ^= 1;
-        let mut ch = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch = FsChallenger::new(b"flock-lig-batch-major");
         assert!(
             setup.verify(&commitment, &bad, &mut ch).is_err(),
             "tampered batch-major proof accepted"
@@ -2234,9 +2234,9 @@ mod tests {
         let compressions: Vec<([u32; 8], [u32; 16])> =
             (0..n).map(|_| (SHA256_IV, rng.next_block())).collect();
         let setup = Sha256HybridSetup::new(n);
-        let mut ch_p = FsChallenger::new(b"flock-sha2-lig-v0");
+        let mut ch_p = FsChallenger::new(b"flock-sha2-lig");
         let (proof, commitment, claim_p) = setup.prove_fast(&compressions, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-sha2-lig-v0");
+        let mut ch_v = FsChallenger::new(b"flock-sha2-lig");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("ligerito verify rejected: {e:?}"));

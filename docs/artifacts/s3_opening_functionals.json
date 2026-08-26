@@ -1,5 +1,5 @@
 {
-  "protocol": "flock-zk-fv-v3",
+  "protocol": "flock-zk-fv",
   "translator": "delta_g_top=c^-1*d; solve E_mu(delta_mu)|S=E_z(d)|S; delta_g_lo=c^-1*delta_mu",
   "bad_events": [
     "c=0",

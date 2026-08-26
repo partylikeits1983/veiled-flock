@@ -345,7 +345,7 @@ impl BlockR1cs {
     pub fn statement_digest(&self) -> [u8; 32] {
         *self.digest_cache.get_or_init(|| {
             let mut h = blake3::Hasher::new();
-            h.update(b"flock-r1cs-stmt-v1");
+            h.update(b"flock-r1cs-stmt");
             h.update(&(self.m as u64).to_le_bytes());
             h.update(&(self.k_log as u64).to_le_bytes());
             h.update(&(self.k_skip as u64).to_le_bytes());

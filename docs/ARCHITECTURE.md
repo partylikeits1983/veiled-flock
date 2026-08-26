@@ -96,7 +96,7 @@ The VEIL compiler is split into two phases:
    and proves it against the same commitment.
 
 The outer transcript absorbs the commitment root under
-`veil-flock-mask-root-v0` before zerocheck starts. This removes the circular
+`veil-flock-mask-root` before zerocheck starts. This removes the circular
 dependency without allowing the prover to choose masks after seeing the
 challenges.
 
@@ -174,7 +174,7 @@ D  = public digest evaluation claim
 ```
 
 The transcript absorbs `value_ab` and `value_c` under
-`veil-flock-output-claims-v0`. The public digest batching challenges are then
+`veil-flock-output-claims`. The public digest batching challenges are then
 sampled.
 
 The prover creates one hiding Ligerito opening for `AB`, `C`, and `D`. The
@@ -192,7 +192,7 @@ for this two-value map remains required.
 The Ligerito prover and verifier agree on acceptance but do not guarantee an
 identical challenger state after the terminal opening. The implementation
 therefore clones the transcript before PCS and labels the clone
-`veil-flock-inner-fork-v0`.
+`veil-flock-inner-fork`.
 
 The original branch verifies Ligerito. The fork verifies VEIL. The fork occurs
 only after the statement, commitment roots, masked PIOP, AB/C values, and

@@ -192,7 +192,7 @@ pub fn prove_dot_product<C: Challenger>(
         return Err(DotProductError::WrongDotVectorLength);
     }
 
-    challenger.observe_label(b"veil-f128-dot-product-v1");
+    challenger.observe_label(b"veil-f128-dot-product");
     let claimed_dot_products: Vec<F128> = vectors
         .iter()
         .map(|vector| dot_product(vector, dot_vector))
@@ -275,7 +275,7 @@ pub fn verify_dot_product<C: Challenger>(
         return Err(DotProductError::WrongProofShape);
     }
 
-    challenger.observe_label(b"veil-f128-dot-product-v1");
+    challenger.observe_label(b"veil-f128-dot-product");
     challenger.observe_f128_slice(dot_vector);
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);

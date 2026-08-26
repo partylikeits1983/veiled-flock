@@ -846,9 +846,9 @@ mod tests {
         let mut rng = Rng::new(0x21111_2170);
         let inputs: Vec<State> = (0..n_keccaks).map(|_| random_state(&mut rng)).collect();
         let setup = KeccakSetup::new(n_keccaks);
-        let mut ch_p = FsChallenger::new(b"k3-lig-v0");
+        let mut ch_p = FsChallenger::new(b"k3-lig");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"k3-lig-v0");
+        let mut ch_v = FsChallenger::new(b"k3-lig");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("ligerito verify rejected: {e:?}"));
@@ -865,9 +865,9 @@ mod tests {
         let mut rng = Rng::new(0x21111_2171);
         let inputs: Vec<State> = (0..n_keccaks).map(|_| random_state(&mut rng)).collect();
         let setup = KeccakSetup::new(n_keccaks);
-        let mut ch_p = FsChallenger::new(b"k3-lig-v0");
+        let mut ch_p = FsChallenger::new(b"k3-lig");
         let (proof, commitment, claim_p, t) = setup.prove_fast_timed(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"k3-lig-v0");
+        let mut ch_v = FsChallenger::new(b"k3-lig");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("timed ligerito verify rejected: {e:?}"));
@@ -885,10 +885,10 @@ mod tests {
         let inputs: Vec<State> = (0..n_keccaks).map(|_| random_state(&mut rng)).collect();
 
         let setup = KeccakSetup::new(n_keccaks);
-        let mut ch_p = FsChallenger::new(b"keccak3-test-v0");
+        let mut ch_p = FsChallenger::new(b"keccak3-test");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
 
-        let mut ch_v = FsChallenger::new(b"keccak3-test-v0");
+        let mut ch_v = FsChallenger::new(b"keccak3-test");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("prove_fast: verifier rejected: {e:?}"));

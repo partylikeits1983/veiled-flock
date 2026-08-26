@@ -47,7 +47,7 @@ struct CoverageArtifact {
 
 fn challenge(m: usize, seed: u64, domain: u8, index: usize) -> F128 {
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"flock-s2-mask-coverage-v0");
+    hasher.update(b"flock-s2-mask-coverage");
     hasher.update(&(m as u64).to_le_bytes());
     hasher.update(&seed.to_le_bytes());
     hasher.update(&[domain]);
@@ -127,7 +127,7 @@ fn profile(m: usize, seed: u64) -> CoverageProfile {
 
 fn generate_artifact() -> CoverageArtifact {
     CoverageArtifact {
-        protocol: "flock-zk-fv-v3".to_owned(),
+        protocol: "flock-zk-fv".to_owned(),
         theorem: "rank([R;L])=2n and rank(L)=2 imply dim R(ker L)=2n-2 off the emitted determinant zero set".to_owned(),
         profiles: [13, 15, 22]
             .into_iter()

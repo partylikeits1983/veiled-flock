@@ -39,9 +39,6 @@ use crate::prover::R1csProofZkA1;
 use FlatValue::*;
 use LeakageClass::*;
 
-/// Version of the schema itself; bump on any reclassification or reshape.
-pub const A1_SCHEMA_VERSION: u32 = 5;
-
 /// Security classification of a transcript field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LeakageClass {
@@ -1116,13 +1113,12 @@ pub fn manifest_of(flat: &[FlatField]) -> Vec<(&'static str, LeakageClass, bool)
     out
 }
 
-/// Hash of the full schema: version + per-field `(path, group, class, fs,
-/// unit, len)` in order. Pinned per supported shape; a reshape or
+/// Hash of every per-field `(path, group, class, fs, unit, len)` tuple in
+/// order. Pinned per supported shape; a reshape or
 /// reclassification without an intentional pin bump fails the tests.
 pub fn schema_hash(flat: &[FlatField]) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     h.update(b"flock-a1-transcript-schema");
-    h.update(&A1_SCHEMA_VERSION.to_le_bytes());
     for f in flat {
         h.update(f.path.as_bytes());
         h.update(&[0u8]);

@@ -1,5 +1,5 @@
 {
-  "protocol": "flock-zk-fv-v3",
+  "protocol": "flock-zk-fv",
   "game_hops": [
     {"hop":"G0","change":"honest prover","term":"0"},
     {"hop":"G1","change":"PIOP mask translation","term":"epsilon_s2_rank <= 720/2^128"},
@@ -17,25 +17,25 @@
   "recursive_siblings": "identical because delta_F=0 globally",
   "random_oracle_ledger": {
     "adversary_query_bound": "2^64",
-    "prover_total_calls": 43830,
+    "prover_total_calls": 50149,
     "prover_non_pow_calls": 29419,
     "prover_merkle_leaves": 13440,
     "prover_merkle_nodes": 13425,
-    "prover_observed_pow_candidates": 14411,
+    "prover_observed_pow_candidates": 20730,
     "prover_transcript_and_state": 2554,
-    "verifier_total_calls": 10529,
+    "verifier_total_calls": 10507,
     "verifier_merkle_leaves": 1975,
-    "verifier_merkle_nodes": 5915,
+    "verifier_merkle_nodes": 5893,
     "verifier_pow_candidates": 60,
     "verifier_transcript_and_state": 2579,
     "nonzero_grinding_sites": 60,
     "grinding_candidate_bound": 957910,
     "grinding_tail_probability": "at most 2^-128",
-    "protocol_query_bound": 997858,
-    "total_query_bound": "2^64 + 997858",
-    "collision_term": "binom(2^64 + 997858, 2) / 2^256",
+    "protocol_query_bound": 997836,
+    "total_query_bound": "2^64 + 997836",
+    "collision_term": "binom(2^64 + 997836, 2) / 2^256",
     "programming_prequery_term": "18 * 2^64 / 2^256",
-    "sibling_term": "(2^64 + 997858) / 2^16384"
+    "sibling_term": "(2^64 + 997836) / 2^16384"
   },
   "final_zk_bits_at_q64": 118.49915812044307,
   "status": "complete classical-ROM ledger for the registered profile"

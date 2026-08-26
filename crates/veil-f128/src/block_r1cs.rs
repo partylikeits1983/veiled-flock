@@ -171,7 +171,7 @@ pub fn prove_block_r1cs<C: Challenger, R: MaskSampler + ?Sized>(
         RoChannel::MaskP,
     )?;
 
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs");
     challenger.observe_bytes(&witness_data.root());
     challenger.observe_bytes(&hadamard_data.root());
     let multiplication_rlc = sample_not_zero_or_one(challenger);
@@ -215,7 +215,7 @@ pub fn verify_block_r1cs<C: Challenger>(
     {
         return Err(BlockR1csError::WrongProofShape);
     }
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs");
     challenger.observe_bytes(&proof.witness.commitment);
     challenger.observe_bytes(&proof.hadamard.commitment);
     let multiplication_rlc = sample_not_zero_or_one(challenger);

@@ -18,7 +18,7 @@ flock-prover::--lib::sim_oracle::tests::oracle_pow_state_digest_is_an_oracle_que
 flock-prover::--lib::sim_game::tests::game_hops_are_complete_and_ordered ok 0s
 flock-prover::--lib::sim_game::tests::production_ledger_exposes_recursive_sibling_gate_at_q64 ok 0s
 flock-prover::--lib::preimage_extractor::tests::recorded_leaf_queries_reconstruct_committed_message ok 0s
-flock-prover::--lib::sim_ext::tests::prefix_diverges_on_statement_nonce_and_version_tuple ok 0s
+flock-prover::--lib::sim_ext::tests::prefix_diverges_on_statement_nonce_and_protocol_tuple ok 0s
 flock-prover::--lib::sim_ext::tests::simulated_prefix_is_rejected_and_fresh_prefix_reaches_extractor ok 0s
 flock-prover::preimage_zk_certificate::field_mask_spans_conditioned_round_block_for_fixed_digest ok 1s
 flock-prover::preimage_zk_certificate::undersized_mask_does_not_span_the_round_block ok 0s

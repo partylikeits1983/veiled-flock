@@ -46,6 +46,8 @@ use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
 use flock_core::ro::RoContext;
+#[cfg(feature = "zk")]
+use flock_core::zk::MaskSampler;
 
 use crate::digest_bind::{
     DigestChallenges, DigestLayout, DigestStatement, PaddingDigest, digest_claim,
@@ -58,9 +60,6 @@ use crate::r1cs_hashes::blake3::{
     build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
     generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
-#[cfg(feature = "veil")]
-use flock_core::zk::MaskSampler;
-
 /// Bytes of message covered by one instance of this relation.
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
@@ -889,7 +888,7 @@ impl Blake3PreimageZkSetup {
 /// digest list, in this order, with this padding rule. Without it a proof
 /// could be replayed against a permuted or truncated list.
 pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &DigestStatement) {
-    challenger.observe_label(b"flock-blake3-preimage-v1");
+    challenger.observe_label(b"flock-blake3-preimage");
     challenger.observe_bytes(&stmt.public_digest());
 }
 

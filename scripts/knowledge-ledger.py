@@ -24,7 +24,7 @@ def ledger(q_log2: int) -> dict:
     interactive_bits_f256 = bits_of_ratio(fold_numerator, 256)
     fs_bits_f256 = interactive_bits_f256 - math.log2(2**q_log2 + 1)
     return {
-        "protocol": "flock-zk-fv-v3",
+        "protocol": "flock-zk-fv",
         "adversary_random_oracle_queries_log2": q_log2,
         "dominant_interactive_term": "257/2^field_bits (L0 fold access structure)",
         "profiles": [

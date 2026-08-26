@@ -35,7 +35,7 @@ pub trait Challenger: Send {
         RoContext::native(nonce)
     }
 
-    /// Absorb a domain-separation label (e.g. `b"flock-zerocheck-v0"`). Each
+    /// Absorb a domain-separation label (e.g. `b"flock-zerocheck"`). Each
     /// protocol entry should call this once on entry so a transcript from
     /// one protocol cannot be replayed as another.
     fn observe_label(&mut self, _label: &[u8]) {
@@ -198,7 +198,7 @@ pub struct FsChallenger {
 
 impl FsChallenger {
     /// New challenger seeded with a domain-separation tag (e.g.
-    /// `b"flock-r1cs-v0"`). The domain is length-prefixed before being
+    /// `b"flock-r1cs"`). The domain is length-prefixed before being
     /// absorbed so two domains where one is a prefix of the other cannot
     /// produce the same initial state.
     pub fn new(domain: &[u8]) -> Self {

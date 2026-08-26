@@ -300,7 +300,7 @@ pub fn prove<C: Challenger>(
     assert_eq!(q.len(), len, "q must have 2^m entries");
     assert_eq!(z_row.len(), params.n);
     assert_eq!(z_col.len(), params.k);
-    challenger.observe_label(b"flock-jagged-v0");
+    challenger.observe_label(b"flock-jagged");
 
     // Second sumcheck multilinear B[i] = eq(row_t(i), z_row)·eq(col_t(i), z_col)
     // over the boolean cube (= f̂_t(z_row, z_col, ·) on {0,1}^m), and the claim
@@ -360,7 +360,7 @@ pub fn verify<C: Challenger>(
     if proof.rounds.len() != m {
         return None;
     }
-    challenger.observe_label(b"flock-jagged-v0");
+    challenger.observe_label(b"flock-jagged");
 
     let mut claim = claim_v;
     let mut point = Vec::with_capacity(m);
@@ -761,7 +761,7 @@ mod tests {
             let mut a = q.clone();
             let mut bb = b.clone();
             let mut ch = FsChallenger::new(b"flock-jagged-bench");
-            ch.observe_label(b"flock-jagged-v0");
+            ch.observe_label(b"flock-jagged");
             let t = Instant::now();
             if fused {
                 let (mut g1, mut gi) = round_msg(&a, &bb);
@@ -796,7 +796,7 @@ mod tests {
             let mut sb = vec![F128::ZERO; len / 2];
             let mut cur = len;
             let mut ch = FsChallenger::new(b"flock-jagged-bench");
-            ch.observe_label(b"flock-jagged-v0");
+            ch.observe_label(b"flock-jagged");
             let t = Instant::now();
             let (mut g1, mut gi) = if fused {
                 round_msg_par(&a[..cur], &bb[..cur])

@@ -602,7 +602,7 @@ pub struct LigeritoSecurityConfig {
     /// Identifier of the proximity-gap analysis used. Self-documents which
     /// theorem the per-level parameters were derived from. Example:
     /// `"ben_sasson_2025_thm_4_6"`.
-    pub analysis_version: String,
+    pub analysis: String,
     /// Field of the protocol. Example: `"f128"`.
     pub field: String,
     /// Hash function used by Merkle + FS challenger. Example: `"sha256"`.
@@ -1019,7 +1019,7 @@ impl LigeritoSecurityConfig {
                     lv.expected_eps_pg_bits,
                     pg_pred,
                     PAPER_COMPAT_TOL_BITS,
-                    analysis = self.analysis_version,
+                    analysis = self.analysis,
                 ));
             }
             if (lv.expected_eps_query_bits - q_pred).abs() > PAPER_COMPAT_TOL_BITS {
@@ -1029,7 +1029,7 @@ impl LigeritoSecurityConfig {
                     lv.expected_eps_query_bits,
                     q_pred,
                     PAPER_COMPAT_TOL_BITS,
-                    analysis = self.analysis_version,
+                    analysis = self.analysis,
                 ));
             }
 
@@ -1183,7 +1183,7 @@ impl LigeritoSecurityConfig {
             log_n,
             initial_k,
             target_security_bits,
-            analysis_version: "no_row_union_over_ben_sasson_2025_cor_1_4".into(),
+            analysis: "no_row_union_over_ben_sasson_2025_cor_1_4".into(),
             field: "f128".into(),
             hash: "sha256".into(),
             grinding_step: GrindingStep::PostCommitPreQueries,
@@ -1338,7 +1338,7 @@ impl LigeritoSecurityConfig {
             });
         }
 
-        let analysis_version = match profile {
+        let analysis = match profile {
             LigeritoProfile::Secure => "no_row_union_over_ben_sasson_2025_cor_1_4",
             LigeritoProfile::Fast | LigeritoProfile::Slim => {
                 "johnson_ood_row_union_over_bchks25_thm_4_6"
@@ -1349,7 +1349,7 @@ impl LigeritoSecurityConfig {
             log_n,
             initial_k,
             target_security_bits: target_bits,
-            analysis_version: analysis_version.into(),
+            analysis: analysis.into(),
             field: "f128".into(),
             hash: "sha256".into(),
             grinding_step: GrindingStep::PostCommitPreQueries,
@@ -2859,7 +2859,7 @@ pub fn recursive_prover<Ch: Challenger>(
     );
     assert!(r >= 1, "recursive_steps must be ≥ 1");
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -2942,7 +2942,7 @@ pub fn recursive_prover_with_l0<Ch: Challenger>(
         "external L0 tree wrong size"
     );
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -3205,7 +3205,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 
     let t_total = std::time::Instant::now();
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
 
     // L0 codeword + tree are borrowed (reused from upstream `pcs::commit`).
@@ -3702,7 +3702,7 @@ where
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
     challenger.observe_bytes(&proof.initial_root);
 
@@ -4276,7 +4276,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
     challenger.observe_bytes(&proof.initial_root);
 
@@ -5030,7 +5030,7 @@ pub fn recursive_verifier<Ch: Challenger>(
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 

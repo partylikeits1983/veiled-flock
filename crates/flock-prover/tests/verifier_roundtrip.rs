@@ -78,11 +78,11 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
         profile: Default::default(),
         zk: false,
     };
-    let mut ch_p = FsChallenger::new(b"flock-lig-r1cs-v0");
+    let mut ch_p = FsChallenger::new(b"flock-lig-r1cs");
     let z_packed = pcs::pack_witness(&z, r1cs.m);
     let (proof, commitment, claim_p) = prove_ligerito(&r1cs, z_packed, &pcs_params, &mut ch_p);
 
-    let mut ch_v = FsChallenger::new(b"flock-lig-r1cs-v0");
+    let mut ch_v = FsChallenger::new(b"flock-lig-r1cs");
     let lc_circuit = r1cs.sparse_lincheck_circuit();
     let claim_v = verifier::verify_ligerito(
         &r1cs,
@@ -99,7 +99,7 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
     {
         let mut bad = proof.clone();
         bad.lincheck.z_partial[0].lo ^= 1;
-        let mut ch = FsChallenger::new(b"flock-lig-r1cs-v0");
+        let mut ch = FsChallenger::new(b"flock-lig-r1cs");
         let res =
             verifier::verify_ligerito(&r1cs, &commitment, &bad, &lc_circuit, &pcs_params, &mut ch);
         assert!(matches!(res, Err(VerifyError::Lincheck(_))));
@@ -109,7 +109,7 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
     {
         let mut bad = proof.clone();
         bad.pcs_open.ring_switches[0].s_hat_v[0].lo ^= 1;
-        let mut ch = FsChallenger::new(b"flock-lig-r1cs-v0");
+        let mut ch = FsChallenger::new(b"flock-lig-r1cs");
         let res =
             verifier::verify_ligerito(&r1cs, &commitment, &bad, &lc_circuit, &pcs_params, &mut ch);
         assert!(matches!(res, Err(VerifyError::PcsAb(_))));
@@ -140,7 +140,7 @@ fn r1cs_prove_verify_roundtrip_ligerito_zk() {
     };
     let prove_seeded = |seed: [u8; 32]| {
         let mut zk_rng = flock_prover::zk::ZkRng::from_seed(seed);
-        let mut ch_p = FsChallenger::new(b"flock-lig-r1cs-zk-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-r1cs-zk");
         let z_packed = pcs::pack_witness(&z, r1cs.m);
         prove_ligerito_zk(&r1cs, z_packed, &pcs_params, &mut zk_rng, &mut ch_p)
     };
@@ -148,7 +148,7 @@ fn r1cs_prove_verify_roundtrip_ligerito_zk() {
 
     let lc_circuit = r1cs.sparse_lincheck_circuit();
     let verify = |commitment: &pcs::Commitment, proof: &_| {
-        let mut ch_v = FsChallenger::new(b"flock-lig-r1cs-zk-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-r1cs-zk");
         verifier::verify_ligerito(
             &r1cs,
             commitment,

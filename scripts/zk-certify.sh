@@ -69,7 +69,7 @@ run flock-prover --lib sim_oracle::tests::oracle_pow_state_digest_is_an_oracle_q
 run flock-prover --lib sim_game::tests::game_hops_are_complete_and_ordered
 run flock-prover --lib sim_game::tests::production_ledger_exposes_recursive_sibling_gate_at_q64
 run flock-prover --lib preimage_extractor::tests::recorded_leaf_queries_reconstruct_committed_message
-run flock-prover --lib sim_ext::tests::prefix_diverges_on_statement_nonce_and_version_tuple
+run flock-prover --lib sim_ext::tests::prefix_diverges_on_statement_nonce_and_protocol_tuple
 run flock-prover --lib sim_ext::tests::simulated_prefix_is_rejected_and_fresh_prefix_reaches_extractor
 
 # Fixed-digest production relation: non-vacuous rank, public binding,
@@ -85,7 +85,7 @@ run flock-prover --lib r1cs_hashes::blake3_preimage::tests::production_random_or
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::honest_prover_on_the_patched_vector_is_rejected
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::zk_preimage_roundtrip
 
-# Registered batch profile remains live under the same protocol version.
+# Registered batch profile remains live under the same protocol identifier.
 run flock-prover --lib r1cs_hashes::blake3::tests::prove_verify_r1cs_zk_a1_roundtrip
 
 # Machine-checked bound adapters and the dual-column knowledge ledger.

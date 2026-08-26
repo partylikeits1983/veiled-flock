@@ -112,10 +112,7 @@ fn field_mask_spans_conditioned_round_block_for_fixed_digest() {
 fn undersized_mask_does_not_span_the_round_block() {
     let setup = Blake3PreimageZkSetup::new(N);
     let m = setup.r1cs.m;
-    let spec = flock_core::zerocheck::SmallMaskSpec {
-        d_log: 1,
-        ..flock_core::zerocheck::SmallMaskSpec::default()
-    };
+    let spec = flock_core::zerocheck::SmallMaskSpec { d_log: 1 };
     match check_mask_coverage_fv(spec, m, 0xA11CE) {
         Ok(r) => panic!(
             "an undersized support spanned the whole block ({}/{}) — the coverage check \

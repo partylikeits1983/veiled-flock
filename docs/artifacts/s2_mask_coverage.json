@@ -1,5 +1,5 @@
 {
-  "protocol": "flock-zk-fv-v3",
+  "protocol": "flock-zk-fv",
   "theorem": "rank([R;L])=2n and rank(L)=2 imply dim R(ker L)=2n-2 off the emitted determinant zero set",
   "profiles": [
     {

@@ -45,10 +45,7 @@ fn production_mask_channel_covers_round_block() {
     );
     assert!(ok.covered());
 
-    let undersized = flock_core::zerocheck::SmallMaskSpec {
-        d_log: 1,
-        ..flock_core::zerocheck::SmallMaskSpec::default()
-    };
+    let undersized = flock_core::zerocheck::SmallMaskSpec { d_log: 1 };
     let bad = check_mask_coverage_fv(undersized, m, 0xBEEF)
         .expect_err("an undersized support must not cover production rounds");
     println!(

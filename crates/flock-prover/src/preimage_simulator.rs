@@ -268,7 +268,7 @@ impl crate::prover::ZerocheckSource<OracleChallenger> for SimZerocheckSource {
         // match depend only on the fold point `(z, ρ)` — so leaving them
         // honest costs nothing and keeps the programmed set as small as
         // possible.
-        challenger.observe_label(b"flock-zerocheck-zk-v1");
+        challenger.observe_label(b"flock-zerocheck-zk");
         let r_skip = challenger.sample_f128_vec(K_SKIP);
         let r_outer = challenger.sample_f128_vec(m - K_SKIP - N_INNER);
 
