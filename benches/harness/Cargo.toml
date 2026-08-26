@@ -1,0 +1,26 @@
+[package]
+name = "bench-harness"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Shared harness for the e2e proving bench crates (timer, CLI, rows, reporting)."
+publish = false
+
+# No features on flock-prover: the harness needs only the ungated
+# `proof_io::fixint_options` (the canonical proof-size encoder) and
+# `init_perf_thread_pool` (re-exported from flock-core). The bench crates
+# bring their own `veil`-featured dependency for the provers.
+[dependencies]
+flock-prover = { path = "../../crates/flock-prover" }
+bincode = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+# Keep libtest's default bench harness off the lib so `cargo bench` in the
+# workspace never routes through this crate.
+[lib]
+bench = false
+
+[lints]
+workspace = true

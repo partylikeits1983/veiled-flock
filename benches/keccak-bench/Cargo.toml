@@ -1,0 +1,45 @@
+[package]
+name = "keccak-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "End-to-end keccak proving benchmark (Phase 2 of the e2e bench plan)."
+publish = false
+
+# The generic harness (timer, CLI, rows, run driver) comes from
+# `bench-harness`; this crate keeps only keccak domain code.
+[dependencies]
+bench-harness = { path = "../harness" }
+flock-prover = { path = "../../crates/flock-prover", features = ["veil"] }
+
+# Criterion owns only the stage-timing target (benches/keccak_criterion.rs).
+# `default-features = false` keeps plotters and rayon out of `make test
+# --all-features`; `cargo_bench_support` must stay ON — without it a
+# criterion target cannot run under `cargo bench` at all. Same pinned line
+# as blake3-bench (pin checked 2026-08-25: criterion 0.8.2, default
+# features = ["rayon", "plotters", "cargo_bench_support"]).
+[dev-dependencies]
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support"] }
+
+# Keep libtest's default bench harness off the lib so `cargo bench -- <args>`
+# reaches only the criterion target.
+[lib]
+bench = false
+
+# Bins default `bench = true`; without `bench = false` cargo bench's
+# `--save-baseline` would also hit this bin's libtest harness and fail
+# (same rationale as [lib] bench = false). The bin keeps `test` on: the
+# e2e logic (sweep shape, rows) lives here with its unit tests.
+[[bin]]
+name = "keccak_e2e"
+path = "src/keccak.rs"
+bench = false
+
+[[bench]]
+name = "keccak_criterion"
+path = "benches/keccak_criterion.rs"
+harness = false
+
+[lints]
+workspace = true
