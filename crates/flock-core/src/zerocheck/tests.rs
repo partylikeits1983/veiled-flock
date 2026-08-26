@@ -7,7 +7,7 @@ use crate::{
 
 mod helpers;
 
-use helpers::{Rng, ScriptedEqChallenger};
+use helpers::{Rng, RngMask, ScriptedEqChallenger};
 
 const TEST_DOMAIN: &[u8] = b"flock-zerocheck-test-v0";
 const ZK_TEST_DOMAIN: &[u8] = b"flock-zerocheck-zk-test-v0";

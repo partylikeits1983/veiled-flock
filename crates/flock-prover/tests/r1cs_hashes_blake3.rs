@@ -14,22 +14,7 @@ use flock_prover::r1cs_hashes::blake3::*;
 #[cfg(feature = "zk")]
 use flock_prover::zk_certificate::{CERTIFIED, StatementFamily, require_certified};
 
-/// SplitMix64.
-struct Rng(u64);
-
-impl Rng {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
-    fn next_u32(&mut self) -> u32 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        (z ^ (z >> 31)) as u32
-    }
-}
-
+use flock_test_util::Rng;
 /// BLAKE3 chunk flags (subset).
 const CHUNK_START: u32 = 1 << 0;
 
@@ -768,32 +753,18 @@ fn pinning_changes_the_statement_digest() {
     assert_ne!(free.statement_digest(), pinned.statement_digest());
 }
 
-struct R(u64);
+/// Chaining-value and message helpers over the shared [`Rng`].
+trait RngChain {
+    fn cv(&mut self) -> [u32; 8];
+    fn msg(&mut self) -> [u32; 16];
+}
 
-impl R {
-    fn nx(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-    fn w(&mut self) -> u32 {
-        self.nx() as u32
-    }
+impl RngChain for Rng {
     fn cv(&mut self) -> [u32; 8] {
-        let mut c = [0u32; 8];
-        for x in c.iter_mut() {
-            *x = self.w();
-        }
-        c
+        std::array::from_fn(|_| self.next_u32())
     }
     fn msg(&mut self) -> [u32; 16] {
-        let mut m = [0u32; 16];
-        for x in m.iter_mut() {
-            *x = self.w();
-        }
-        m
+        std::array::from_fn(|_| self.next_u32())
     }
 }
 
@@ -810,12 +781,12 @@ fn out_cv(block: &Compression) -> [u32; 8] {
 /// output cv. Messages/counter/flags are arbitrary per instance. Returns the
 /// blocks plus public endpoints (cv_0, cv_last).
 fn honest_chain(n: usize, seed: u64) -> (Vec<Compression>, [u32; 8], [u32; 8]) {
-    let mut rng = R(seed);
+    let mut rng = Rng(seed);
     let cv0 = rng.cv();
     let mut blocks = Vec::with_capacity(n);
     let mut cur = cv0;
     for _ in 0..n {
-        let block: Compression = (cur, rng.msg(), rng.nx(), rng.w(), rng.w());
+        let block: Compression = (cur, rng.msg(), rng.next_u64(), rng.next_u32(), rng.next_u32());
         cur = out_cv(&block); // next input cv = this output cv
         blocks.push(block);
     }
@@ -866,7 +837,7 @@ fn chain_broken_link_rejects() {
     let (mut blocks, cv0, cv_last) = honest_chain(n, 0xB3_55);
 
     // Break the chain: instance 2's input cv no longer equals out_cv(block 1).
-    let mut rng = R(0xB3_999);
+    let mut rng = Rng(0xB3_999);
     blocks[2].0 = rng.cv();
 
     let mut chp = FsChallenger::new(b"b3-chain");

@@ -39,22 +39,7 @@ use flock_prover::transcript_schema::{LeakageClass, SchemaIndex, algebraic_vecto
 use flock_prover::zk_audit_support::FixtureA1M15;
 use flock_prover::zk_audit_support::tiny_zk_configs_for;
 
-struct Rng(u64);
-impl Rng {
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-    fn u32(&mut self) -> u32 {
-        self.next_u64() as u32
-    }
-    fn words(&mut self, n: usize) -> Vec<u64> {
-        (0..n).map(|_| self.next_u64()).collect()
-    }
-}
+use flock_test_util::Rng;
 
 /// Replays a fixed stream then zeros.
 struct VecSampler {
@@ -134,8 +119,8 @@ fn blocks_from(seed: u64, n: usize) -> Vec<Compression> {
     let mut rng = Rng(seed);
     (0..n)
         .map(|_| {
-            let cv: [u32; 8] = std::array::from_fn(|_| rng.u32());
-            let m: [u32; 16] = std::array::from_fn(|_| rng.u32());
+            let cv: [u32; 8] = std::array::from_fn(|_| rng.next_u32());
+            let m: [u32; 16] = std::array::from_fn(|_| rng.next_u32());
             (cv, m, 0u64, 64u32, 11u32)
         })
         .collect()

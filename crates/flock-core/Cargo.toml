@@ -41,6 +41,9 @@ getrandom = { version = "0.2", optional = true }
 [dev-dependencies]
 # Used by `LigeritoSecurityConfig` serde round-trip tests.
 serde_json = { workspace = true }
+# Shared deterministic RNG for tests. Dev-only, so the cycle back to this
+# crate stays out of the build graph.
+flock-test-util = { path = "../flock-test-util" }
 
 [lints]
 workspace = true

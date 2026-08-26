@@ -12,20 +12,17 @@ use flock_core::r1cs::SparseBinaryMatrix;
 use flock_core::zerocheck::multilinear::lagrange_weights_naive;
 use flock_core::zk::{ZkBlockLayout, ZkConfig};
 
-/// SplitMix64 PRNG, deterministic.
-struct Rng(u64);
+use flock_test_util::Rng;
 
-impl Rng {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
+/// Field-element helpers over the shared [`Rng`]. They live here because a
+/// foreign trait cannot be implemented for a foreign type, and `flock-test-util`
+/// depends on nothing (see that crate's docs).
+trait RngF128 {
+    fn f128(&mut self) -> F128;
+    fn f128_vec(&mut self, n: usize) -> Vec<F128>;
+}
+
+impl RngF128 for Rng {
     fn f128(&mut self) -> F128 {
         F128 {
             lo: self.next_u64(),
@@ -35,11 +32,7 @@ impl Rng {
     fn f128_vec(&mut self, n: usize) -> Vec<F128> {
         (0..n).map(|_| self.f128()).collect()
     }
-    fn bits(&mut self, n: usize) -> Vec<bool> {
-        (0..n).map(|_| self.next_u64() & 1 == 1).collect()
-    }
 }
-
 /// Naive MLE evaluation: `f̂(point) = Σ_i eq(point, i) · f[i]` where i ∈
 /// {0,1}^d and f[i] is given as a bool slice.
 fn mle_eval_bool(f: &[bool], point: &[F128]) -> F128 {

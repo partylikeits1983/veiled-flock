@@ -1,5 +1,10 @@
 [workspace]
-members = ["crates/flock-core", "crates/flock-prover", "crates/veil-f128"]
+members = [
+    "crates/flock-core",
+    "crates/flock-prover",
+    "crates/flock-test-util",
+    "crates/veil-f128",
+]
 resolver = "2"
 
 [workspace.package]

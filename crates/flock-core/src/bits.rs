@@ -41,6 +41,7 @@ pub fn transpose_8_u64s_to_64_bytes(lanes: &[u64; 8], out: &mut [u8]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flock_test_util::Rng;
 
     /// Scalar reference for [`transpose_8_u64s_to_64_bytes`] — test oracle only.
     #[allow(clippy::erasing_op, clippy::identity_op)]
@@ -66,16 +67,9 @@ mod tests {
     /// bit-for-bit on varied inputs.
     #[test]
     fn transpose_8_u64s_matches_scalar() {
-        let mut state = 0x1234_5678_9ABC_DEF0u64;
-        let mut next = || {
-            state = state.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = state;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        };
+        let mut rng = Rng::new(0x1234_5678_9ABC_DEF0);
         for _ in 0..100 {
-            let lanes: [u64; 8] = std::array::from_fn(|_| next());
+            let lanes: [u64; 8] = std::array::from_fn(|_| rng.next_u64());
             let mut fast = [0u8; 64];
             let mut oracle = [0u8; 64];
             transpose_8_u64s_to_64_bytes(&lanes, &mut fast);

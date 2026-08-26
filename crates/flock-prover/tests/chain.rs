@@ -19,20 +19,17 @@ fn dot(eq: &[F128], vals: &[F128]) -> F128 {
     acc
 }
 
-/// SplitMix64-ish RNG for test data.
-struct Rng(u64);
+use flock_test_util::Rng;
 
-impl Rng {
-    fn new(seed: u64) -> Self {
-        Self(seed)
-    }
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
+/// Field-element helpers over the shared [`Rng`]. They live here because a
+/// foreign trait cannot be implemented for a foreign type, and `flock-test-util`
+/// depends on nothing (see that crate's docs).
+trait RngF128 {
+    fn f128(&mut self) -> F128;
+    fn f128_vec(&mut self, n: usize) -> Vec<F128>;
+}
+
+impl RngF128 for Rng {
     fn f128(&mut self) -> F128 {
         F128 {
             lo: self.next_u64(),
@@ -43,7 +40,6 @@ impl Rng {
         (0..n).map(|_| self.f128()).collect()
     }
 }
-
 /// Build an LSB-first boolean point as F128 (0/1) of length `n` from index.
 fn bool_point(idx: usize, n: usize) -> Vec<F128> {
     (0..n)
