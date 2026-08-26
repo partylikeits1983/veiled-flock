@@ -817,18 +817,16 @@ pub fn zk_config() -> flock_core::zk::ZkConfig {
     }
 }
 
-/// zk block layout for this encoder (chain-mask pair aligned to the 256-bit
-/// I/O slot geometry, `region_log = 8`).
+/// zk block layout for this encoder. The chain-mask pair takes its alignment
+/// from the chain fold's I/O slot geometry (`CHAIN_LAYOUT.region_log`).
 pub fn zk_layout() -> flock_core::zk::ZkBlockLayout {
-    flock_core::zk::ZkBlockLayout::new(K_LOG, USEFUL_BITS, Some(8), &zk_config())
+    flock_core::zk::ZkBlockLayout::new(
+        K_LOG,
+        USEFUL_BITS,
+        Some(CHAIN_LAYOUT.region_log),
+        &zk_config(),
+    )
 }
-
-// The literal `Some(8)` above is independent of this encoder's chain geometry; pin
-// them together. Keccak derives its region_log from its own CHAIN_LAYOUT.
-const _: () = assert!(
-    CHAIN_LAYOUT.region_log == 8,
-    "blake3 zk_layout hardcodes region_log 8; CHAIN_LAYOUT drifted"
-);
 
 /// zk variant of [`build_block_r1cs`]: randomizer rows in the matrices, the
 /// zk layout bound into the statement, and `useful_bits` extended to cover
