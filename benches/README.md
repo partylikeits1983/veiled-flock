@@ -1,107 +1,65 @@
 # End-to-end proving benchmarks
 
-This directory holds two bench crates and their shared library. The bench
-crates measure full prove and verify cycles for hash chains.
-
-- `harness` — the shared `bench-harness` lib (timer, CLI, rows, run
-  driver); both bench crates import it, it depends on neither.
-- `blake3-bench` — BLAKE3 chains over the two veil-f128 backends.
-- `keccak-bench` — keccak-f chains over the native chain prover and the
-  succinct-VEIL backend.
-
-The micro-benches in `crates/flock-prover/benches/` are different. They
-measure raw hash throughput only. These crates are the e2e proving suite.
+Two bench crates measure full prove and verify cycles for hash chains, and
+`harness` holds the code that they share. `blake3-bench` proves BLAKE3 chains on
+the two veil-f128 backends. `keccak-bench` proves keccak-f chains on the native
+chain prover and the succinct-VEIL backend. The micro-benches in
+`crates/flock-prover/benches/` are different, because they measure raw hash
+throughput only.
 
 ## How to run
 
-Both crates are dual mode. The e2e suite is a bin (run under the tuned
-`bench` profile — never bare `--release`, which changes codegen); the
-`cargo bench` target is a criterion stage-timing complement:
+Use the tuned `bench` profile. A bare `--release` changes the codegen, because
+the workspace tunes `[profile.bench]` only.
 
 ```sh
-cargo run --profile bench -p blake3-bench --bin blake3_e2e
-cargo run --profile bench -p keccak-bench --bin keccak_e2e
+cargo run --profile bench -p blake3-bench --bin blake3_e2e             # full sweep
+cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --smoke  # one point
+cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --json out.json
 ```
 
-Smoke mode shrinks each sweep to one small point with one timing run:
+Both bins take `--smoke`, `--runs`, one sweep-bound flag, and `--json`. An
+environment variable is a fallback only, and a flag always wins. The README of
+each crate holds the full flag table.
 
-```sh
-cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --smoke
-cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --smoke
-```
-
-Write the rows as JSON for tracking across commits:
-
-```sh
-cargo run --profile bench -p blake3-bench --bin blake3_e2e -- --json blake3-results.json
-cargo run --profile bench -p keccak-bench --bin keccak_e2e -- --json keccak-results.json
-```
-
-Both bins take the same flag shape with env vars as fallbacks
-(`--smoke`/`BENCH_SMOKE`, `--runs`, one sweep-bound flag, `--json`); a
-flag wins over its env var. The per-crate READMEs carry the full flag
-tables.
-
-The binaries land in `target/release/` — `--profile bench` maps to the
-`release` output directory. Note `--profile bench` builds the
-dependency crates under the bench profile too, while `cargo bench`
-builds dependencies under `release`; rows measured across a layout
-change of this suite are close but not codegen-identical — re-baseline
-once after such a change. Muscle-memory trap: `BENCH_SMOKE=1 cargo bench -p <crate>` no
-longer runs an e2e suite — `cargo bench` reaches the criterion targets,
-which ignore that env var.
-
-Sweep overrides (validated, and loud on bad values):
-
-- `--framed-max-log` / `BENCH_FRAMED_MAX_LOG` — framed BLAKE3 rows above
-  n = 64. Read "Framed memory model" in `blake3-bench/README.md` first.
-- `--max-log` / `BENCH_KECCAK_MAX_LOG` — keccak rows above n = 4096
-  (m = 28). Ligerito configs stop at m = 35.
+`cargo bench -p <crate>` reaches the criterion targets, which ignore
+`BENCH_SMOKE`. The bins land in `target/release/`. The `bench` profile also
+applies to the dependencies, but `cargo bench` builds them as `release`, so make
+a new baseline one time after a change to the layout of this suite.
 
 ## Backends
 
 | Backend | What it is |
 |---|---|
-| `veil-framed` | The direct VEIL argument (BLAKE3 only): `VeiledBlake3Setup` over `veil_f128::prove_block_r1cs`. The witness is proven inside the VEIL code itself, with materialized sparse matrices. Largest proofs, no Ligerito layer. |
-| `veil-succinct` | The succinct VEIL argument (BLAKE3 and keccak): `Blake3PreimageZkSetup` / `KeccakZkSetup` over `succinct_veil`. The witness stays in FLOCK's hiding Ligerito commitment; a small VEIL circuit proves the additively-masked transcript. Keccak has two relations on this backend: per-block with public states (`public-chain`) and, via `prove_succinct_chain`, in-circuit linkage with endpoints-only publics (`chain-in-circuit`). This is the path the `veiled_flock` CLI ships. Experimental — see the setup rustdoc. |
-| `native-ligerito` | FLOCK's native chain prover (keccak only): `KeccakSetup::prove_chain`. No VEIL layer, no zk masking. It enforces chain linkage in-circuit and serves as the in-circuit reference row. |
+| `veil-framed` | The direct VEIL argument, BLAKE3 only. `VeiledBlake3Setup` over `veil_f128::prove_block_r1cs`, with materialized sparse matrices. The largest proofs, and no Ligerito layer. |
+| `veil-succinct` | The succinct VEIL argument, BLAKE3 and keccak. The witness stays in the hiding Ligerito commitment, and a small VEIL circuit proves the masked transcript. The `veiled_flock` CLI ships this path. Experimental. |
+| `native-ligerito` | The native chain prover, keccak only. `KeccakSetup::prove_chain`, with no VEIL layer and no zk mask. It is the in-circuit reference row. |
 
 ## Columns
 
 | Column | Meaning |
 |---|---|
-| `backend` | Prover label. See the Backends table above. |
-| `relation` | What the circuit enforces. See the caveat below. |
-| `n_real` / `n_slots` / `util` | Real chain links, padded witness slots, and their ratio. |
-| `setup`, `witness`, `prove`, `verify` | Wall time per section. Prove and verify are best-of-N. |
-| `bytes` | Proof size. One fixint bincode encoder serves every row. |
-| `hash/s` | Proven links per second: `n_real / prove`. |
-| `slowdown` | `prove` divided by the native chain time at the same `n_real`. The native rate comes from one warmed, amortized calibration. |
-| `params` | The parameter set that produced the row. Rows without equal `params` are not comparable. |
+| `backend`, `relation` | The prover, and what the circuit enforces. |
+| `n_real`, `n_slots`, `util` | Real links, padded slots, and their ratio. |
+| `setup`, `witness`, `prove`, `verify` | Wall time per section. Prove and verify are the best of N. |
+| `bytes` | Proof size from one fixint bincode encoder. |
+| `hash/s` | `n_real / prove`. |
+| `slowdown` | `prove` divided by the native time at the same `n_real`, from one warmed calibration. |
+| `params` | Two rows are comparable only if their `params` are equal. |
 
-## Relation caveat
+## The relation caveat
 
-The `relation` column separates two different statements:
+`chain-in-circuit` means that the committed witness enforces the link
+`state_24[i] == state_0[i + 1]`, and only the two endpoints are public.
+`public-chain` means that each block proves one relation with public input and
+output values, and the verify closure checks the links outside the circuit.
 
-- `chain-in-circuit` (native keccak `prove_chain`): the committed witness
-  enforces `state_24[i] == state_0[i + 1]`. Only the two endpoints are
-  public.
-- `public-chain` (all VEIL rows, BLAKE3 and keccak): each block proves one
-  relation with public input/output values. The benched verify closure
-  checks linkage over the public values, not the circuit.
+A `public-chain` row has no secret witness, because every digest or state is
+public. Such a row measures the batch throughput of independent per-block
+relations. It does not measure the proof of a chain statement.
 
-The `public-chain` rows have no secret witness at all: with every digest
-or state public, each block's input is publicly derivable. Those rows
-measure batch throughput of independent per-block relations. They do not
-measure chain-statement proving.
+The keccak bench also runs `veil-succinct` at `chain-in-circuit`. That row and
+the native row prove the same relation, so a comparison of the two gives the
+cost of the zk mask layer. The BLAKE3 rows stay `public-chain` only.
 
-The keccak bench also runs `veil-succinct` at `chain-in-circuit`
-(`prove_succinct_chain`, Part 7): the succinct backend proving the SAME
-relation as the native row. Compare those two rows for the cost of the
-zk masking layer at equal relation. The BLAKE3 backends stay
-`public-chain` only.
-
-## Verification behavior
-
-Each bench asserts that `verify` returns Ok. A failed verify aborts the
-run — e2e means a broken proof is a bench failure, not a data point.
+Each bench asserts that verify returns `Ok`. A failed verify stops the run.
