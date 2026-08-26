@@ -2,8 +2,8 @@
 //! shape (`Blake3Setup::with_zk(256)`, m = 22).
 //!
 //! These production-shape regressions exercise facts now established by the
-//! symbolic S2 coverage artifact and S3 translator through the shipped m=22
-//! fold kernels.
+//! symbolic zerocheck mask-coverage artifact and PCS opening translator
+//! through the shipped m=22 fold kernels.
 //!
 //! 1. the field-mask channel reaches the conditioned round block;
 //! 2. an undersized translated support fails, so the check is non-vacuous;
