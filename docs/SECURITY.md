@@ -1,11 +1,15 @@
-# Security theorem and scope
+# Security target and scope
 
-VEIL-FLOCK implements a zero-knowledge succinct argument for the pinned
-64-byte BLAKE3-preimage relation. The zero-knowledge theorem is in the
-classical programmable random-oracle model (pROM). The implementation is
-unaudited and should not yet protect production secrets.
+VEIL-FLOCK targets a zero-knowledge succinct argument for the pinned 64-byte
+BLAKE3-preimage relation in the classical programmable random-oracle model
+(pROM). The repository contains an executable witness-free simulator, generic
+Lean masking lemmas, algebraic translation tests, and concrete security
+ledgers. It does not yet contain a machine-checked end-to-end theorem connecting
+those lemmas to the Rust implementation. Treat the protocol as a candidate
+construction, not as a proved or audited zero-knowledge system, and do not use
+it to protect production secrets.
 
-## Claimed properties
+## Target properties
 
 | Property | Scope |
 |---|---|
@@ -20,11 +24,12 @@ unaudited and should not yet protect production secrets.
 | QROM/post-quantum ZK | Not claimed |
 | Concrete SHA-256 theorem | Not claimed; SHA-256 instantiates the modeled oracle |
 
-## Zero-knowledge theorem
+## Target zero-knowledge theorem
 
-For every valid public statement `x`, every witness `w` satisfying the pinned
-relation, every adaptive classical adversary making at most `Q_H` oracle
-queries, and every sequence of fresh proofs, the real verifier view is
+The formalization must establish that, for every valid public statement `x`,
+every witness `w` satisfying the pinned relation, every adaptive classical
+adversary making at most `Q_H` oracle queries, and every sequence of fresh
+proofs, the real verifier view is
 indistinguishable from `Blake3PreimageZkSetup::simulate(x)`, which receives no
 preimage. One shared lazy oracle table is used across all proofs. The simulator
 programs only undefined points and aborts if a point was queried first.
@@ -52,23 +57,27 @@ reuse is not an exposed operation. The public prover and simulator draw every
 coin directly from the OS random source; caller-selected deterministic seeds
 are not accepted by the public full-ZK API.
 
-## Algebraic privacy argument
+## Algebraic privacy obligations
 
-The production code enforces the following gates before proving or verifying:
+The production code enforces the following runtime checks. The follow-up
+formalization must prove that they discharge the corresponding privacy
+obligations:
 
 1. The outer blinded additive-RS encoder is linear, restricts to ordinary
    FLOCK when its padding is zero, and has a query budget no larger than its
    random-padding dimension.
-2. Every opened initial coordinate projection has full padding rank. Repeated
+2. The structural RS argument says every opened initial coordinate projection
+   has full padding rank. Repeated
    query positions are canonicalized and count once.
-3. The nonzero VEIL fold coefficient makes the folded Ligerito input uniform.
-   The implementation certificate jointly covers the fold, all initial opened
-   columns, ring slices, and public direct functionals.
+3. The nonzero VEIL fold coefficient is intended to make the folded Ligerito
+   input uniform. Algebraic translation tests jointly cover the fold, initial
+   opened columns, and public direct functionals.
 4. At the 256-slot floor, the 242 FLOCK transcript coordinates and 512 ring
-   coordinates use 754 independent field one-time pads. Each circuit-size
+   coordinates consume 754 independent field one-time pads. Each circuit-size
    doubling adds two sumcheck coordinates and two independent pads, reaching
-   760 pads at 2048 slots. The generated global mask matrix is surjective on
-   every verifier-visible affine witness direction.
+   760 pads at 2048 slots. Proving and verification check the exact mask cursor
+   and circuit inventory; the generic Lean one-time-pad lemma remains to be
+   connected to this layout.
 5. The exact F2-linear ring-switch matrix is checked against production field
    multiplication on all 128 basis vectors.
 6. The live nonlinear multiplication is proved by VEIL Hadamard. Operand and
@@ -84,7 +93,7 @@ The production code enforces the following gates before proving or verifying:
 The simulator samples honest-distribution challenges first, constructs the
 masked FLOCK transcript algebraically, and programs the exact SHA-256 squeeze
 blocks. It uses an arbitrary public-fiber representative only to evaluate
-post-processing whose distribution has already been proved independent of the
+post-processing whose distribution is intended to be independent of the
 original witness. It never invokes an honest nonlinear prover on an
 unsatisfied assignment.
 
@@ -100,8 +109,8 @@ Ligerito trees are generated after the uniform-fold boundary.
 Fiat--Shamir sampling matches production block semantics: two `F128` values
 share one 256-bit output where applicable, unused halves remain uniform, and
 nonzero or not-zero-or-one challenges use exact rejection sampling. Grinding
-uses the canonical first-success nonce and is capped at 1024 attempts.
-Every Ligerito query/fold grind nonce is also capped at 1024; the ledger
+uses the canonical first-success nonce and accepts only the first 4096 attempts.
+Every Ligerito query/fold grind nonce is also limited to 4096; the ledger
 conservatively reserves sixteen one-bit sites although the pinned profile has
 only one live site.
 The public prove and verify methods instantiate the pinned SHA-256 transcript
@@ -147,7 +156,8 @@ Blake3PreimageZkSetup::simulate
 
 ## Operational caveats
 
-The proof hides the messages and witness-dependent transcript, not batch
-size, circuit shape, parameter suite, proof length, runtime, memory access,
+The construction is designed to hide the messages and witness-dependent
+transcript, but not batch size, circuit shape, parameter suite, proof length,
+runtime, memory access,
 allocator behavior, or host side channels. Independent cryptographic and
 side-channel review remains required before production use.

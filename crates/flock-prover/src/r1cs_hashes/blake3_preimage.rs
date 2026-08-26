@@ -820,6 +820,10 @@ impl Blake3PreimageZkSetup {
             }
             .into());
         }
+        let oracle_checkpoint = oracle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .checkpoint();
         let statement = self.statement(digests);
         statement.validate();
         let mut message_rng = rng.fork(b"veil-flock-simulator-public-fiber-messages");
@@ -914,10 +918,13 @@ impl Blake3PreimageZkSetup {
         )?;
         let expected_programmed = 1 + self.r1cs.m - flock_core::zerocheck::K_SKIP;
         let oracle_guard = oracle.lock().unwrap_or_else(|error| error.into_inner());
-        let programming_audit =
-            oracle_guard.audit_programming(&proof.proof_nonce, expected_programmed);
-        let protocol_oracle_queries = oracle_guard.total_answer_count();
-        let pow_oracle_queries = oracle_guard.pow_answer_count();
+        let programming_audit = oracle_guard.audit_programming(
+            &proof.proof_nonce,
+            expected_programmed,
+            &oracle_checkpoint,
+        );
+        let (protocol_oracle_queries, pow_oracle_queries) =
+            oracle_guard.answer_counts_since(&oracle_checkpoint);
         drop(oracle_guard);
         if !programming_audit.is_valid()
             || protocol_oracle_queries > crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF
@@ -1229,6 +1236,95 @@ mod tests {
                 &mut verifier,
             )
             .expect("the generic verifier accepts the simulated proof");
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_simulator_composes_on_one_shared_oracle() {
+        let setup = Blake3PreimageZkSetup::new(2);
+        let oracle = crate::sim_oracle::shared_oracle();
+        let statements = [
+            vec![[0x11; DIGEST_BYTES], [0x22; DIGEST_BYTES]],
+            vec![[0x11; DIGEST_BYTES], [0x33; DIGEST_BYTES]],
+        ];
+        let mut simulations = Vec::new();
+
+        for digests in &statements {
+            let simulated = setup
+                .simulate(digests, oracle.clone())
+                .expect("sequential simulation on the shared oracle");
+            assert!(simulated.programming_audit.is_valid());
+            assert_eq!(
+                simulated.programmed_points,
+                1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
+            );
+            assert!(
+                simulated.protocol_oracle_queries
+                    <= crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF
+            );
+            simulations.push(simulated);
+        }
+
+        assert_ne!(
+            simulations[0].proof.proof_nonce,
+            simulations[1].proof.proof_nonce
+        );
+        for (simulated, digests) in simulations.iter().zip(&statements) {
+            let mut verifier =
+                crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+            setup
+                .verify_with_challenger(
+                    &simulated.commitment,
+                    &simulated.proof,
+                    digests,
+                    &mut verifier,
+                )
+                .expect("the generic verifier accepts each shared-oracle proof");
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_simulator_query_cap_covers_every_registered_shape() {
+        let oracle = crate::sim_oracle::shared_oracle();
+        // These are the smallest public batches selecting the four registered
+        // 256/512/1024/2048-slot circuits.
+        for n_blocks in [1usize, 257, 513, 1025] {
+            let setup = Blake3PreimageZkSetup::new(n_blocks);
+            let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
+            let before = oracle
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .total_answer_count();
+            let simulated = setup
+                .simulate(&digests, oracle.clone())
+                .expect("simulate every registered shape");
+            assert!(simulated.programming_audit.is_valid());
+            assert_eq!(
+                simulated.programmed_points,
+                1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
+            );
+
+            let mut verifier =
+                crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+            setup
+                .verify_with_challenger(
+                    &simulated.commitment,
+                    &simulated.proof,
+                    &digests,
+                    &mut verifier,
+                )
+                .expect("verify every registered simulated shape");
+            let after = oracle
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .total_answer_count();
+            assert!(
+                after - before <= crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF,
+                "registered shape m={} exceeded the per-proof oracle cap",
+                setup.r1cs.m
+            );
+        }
     }
 
     #[cfg(feature = "veil")]

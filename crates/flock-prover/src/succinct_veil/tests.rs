@@ -1,8 +1,7 @@
 use super::{
-    MaskLayout, RING_WIDTH, SUCCINCT_PROOF_FIELD_MANIFEST, SuccinctVeilError,
-    certify_batch_opening, certify_flock_piop_soundness, certify_global_masking,
+    MaskLayout, RING_WIDTH, SuccinctVeilError, certify_flock_piop_soundness,
     certify_shifted_veil_soundness, scale_ring_expressions, solve_sumcheck_messages,
-    validate_l0_hiding_budget, validate_succinct_parameters,
+    validate_batch_opening, validate_l0_hiding_budget, validate_succinct_parameters,
 };
 use crate::r1cs_hashes::blake3::build_block_r1cs_zk;
 use crate::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
@@ -50,7 +49,7 @@ fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
 }
 
 #[test]
-fn every_registered_batch_shape_has_exact_mask_and_soundness_certificates() {
+fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
     for (blocks, m, masks) in [
         (256, 22, 754),
         (512, 23, 756),
@@ -62,9 +61,7 @@ fn every_registered_batch_shape_has_exact_mask_and_soundness_certificates() {
         assert_eq!(super::supported_mask_count(&setup.r1cs), Some(masks));
         validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
         assert_eq!(
-            certify_global_masking(&setup.r1cs)
-                .unwrap()
-                .visible_private_f128,
+            MaskLayout::new(&setup.r1cs).unwrap().observed_count(),
             masks
         );
         assert!(
@@ -78,21 +75,12 @@ fn every_registered_batch_shape_has_exact_mask_and_soundness_certificates() {
 }
 
 #[test]
-fn production_mask_layout_covers_every_visible_private_degree_of_freedom() {
+fn production_mask_layout_matches_every_visible_private_coordinate() {
     let r1cs = build_block_r1cs_zk(8);
     let layout = MaskLayout::new(&r1cs).unwrap();
     assert_eq!(layout.piop_count(), 242);
     assert_eq!(2 * super::RING_CLAIM_COUNT * RING_WIDTH, 512);
     assert_eq!(layout.observed_count(), 754);
-    assert_eq!(SUCCINCT_PROOF_FIELD_MANIFEST.len(), 9);
-
-    let certificate = certify_global_masking(&r1cs).unwrap();
-    assert!(certificate.is_full_identity_cover());
-    assert_eq!(certificate.visible_private_f128, 754);
-    assert_eq!(certificate.independent_mask_f128, 754);
-    assert_eq!(certificate.mask_matrix_rank_f128, 754);
-    assert_eq!(certificate.mask_matrix_rank_f2, 754 * 128);
-    assert_eq!(certificate.sections.len(), 10);
 
     let shifted = layout.shifted_circuit_certificate(true);
     assert_eq!(shifted.private_inputs, 754);
@@ -101,35 +89,6 @@ fn production_mask_layout_covers_every_visible_private_degree_of_freedom() {
     assert_eq!(shifted.ring_scale_linear_constraints, 2 * RING_WIDTH);
     assert_eq!(shifted.ring_claim_linear_constraints, 2);
     assert_eq!(shifted.linear_constraints(), 259);
-}
-
-#[test]
-fn global_mask_translation_couples_every_affine_visible_coordinate() {
-    let r1cs = build_block_r1cs_zk(8);
-    let certificate = certify_global_masking(&r1cs).unwrap();
-    let n = certificate.visible_private_f128;
-    let private = (0..n)
-        .map(|i| F128::new(i as u64, (i as u64).rotate_left(19)))
-        .collect::<Vec<_>>();
-    let witness_delta = (0..n)
-        .map(|i| F128::new((3 * i + 1) as u64, (5 * i + 7) as u64))
-        .collect::<Vec<_>>();
-    let masks = (0..n)
-        .map(|i| F128::new((11 * i + 9) as u64, (13 * i + 17) as u64))
-        .collect::<Vec<_>>();
-
-    let original = private
-        .iter()
-        .zip(&masks)
-        .map(|(value, mask)| *value + *mask)
-        .collect::<Vec<_>>();
-    let translated = private
-        .iter()
-        .zip(&witness_delta)
-        .zip(masks.iter().zip(&witness_delta))
-        .map(|((value, delta), (mask, mask_delta))| (*value + *delta) + (*mask + *mask_delta))
-        .collect::<Vec<_>>();
-    assert_eq!(original, translated);
 }
 
 #[test]
@@ -142,24 +101,17 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
         zk: true,
     };
     assert!(validate_l0_hiding_budget(&params, &[512]).is_ok());
-    let certificate = certify_batch_opening(&params, &[512], &[0], &[1]).unwrap();
-    assert!(certificate.is_valid());
-    assert_eq!(certificate.witness_commitments, 1);
-    assert_eq!(certificate.batched_openings, 1);
-    assert_eq!(certificate.ring_claims, 2);
-    assert_eq!(certificate.public_direct_claims, 1);
-    assert_eq!(certificate.blind_grinding_bits, 2);
-    assert_eq!(certificate.max_blind_grind_trials, 4096);
+    validate_batch_opening(&params, &[512], &[0], &[1]).unwrap();
     assert!(matches!(
         validate_l0_hiding_budget(&params, &[513]),
         Err(SuccinctVeilError::InvalidShape("L0 hiding query budget"))
     ));
     assert!(matches!(
-        certify_batch_opening(&params, &[512], &[1], &[1]),
+        validate_batch_opening(&params, &[512], &[1], &[1]),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
     assert!(matches!(
-        certify_batch_opening(
+        validate_batch_opening(
             &params,
             &[512],
             &[0],

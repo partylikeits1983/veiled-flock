@@ -1,9 +1,6 @@
-# Offline exact ZK certificates: the expensive image-coverage / conditional
-# joint-coverage jobs (tens of thousands of real prover runs) plus the m=22
-# end-to-end A1' runs. Too heavy for the per-PR Test workflow; runs weekly
-# and on demand. scripts/zk-certify.sh is the single source of truth for
-# what counts as certificate evidence — its manifest must list exactly the
-# tests named in the ZkCertificate registry's `evidence` field.
+# Full executable ZK certificate suite. It runs every Rust test plus the Lean
+# build and axiom audit weekly and on demand; the per-PR workflow separately
+# keeps the ordinary Rust and Lean checks mandatory.
 
 name: ZK certificates
 
@@ -68,6 +65,14 @@ jobs:
           rustup toolchain install stable
           rustup default stable
           rustc --version
+
+      - name: Install Lean
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: lean
+          auto-config: false
+          build: false
+          use-mathlib-cache: true
 
       - name: Run certificates
         run: scripts/zk-certify.sh

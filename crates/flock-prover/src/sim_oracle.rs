@@ -81,6 +81,15 @@ pub struct ProgrammingAudit {
     pub every_point_is_transcript_framed: bool,
 }
 
+/// Private snapshot used to attribute programming and oracle work to one
+/// proof while several adaptive proofs share the same oracle table.
+#[derive(Clone, Debug)]
+pub(crate) struct OracleCheckpoint {
+    programmed_points: Vec<Vec<u8>>,
+    total_answers: u64,
+    pow_answers: u64,
+}
+
 impl ProgrammingAudit {
     pub fn is_valid(self) -> bool {
         self.programmed_points == self.expected_points
@@ -169,6 +178,14 @@ impl ProgrammableOracle {
         points
     }
 
+    pub(crate) fn checkpoint(&self) -> OracleCheckpoint {
+        OracleCheckpoint {
+            programmed_points: self.programmed_points(),
+            total_answers: self.total_answers,
+            pow_answers: self.pow_answers,
+        }
+    }
+
     pub fn query_count(&self) -> usize {
         self.queries.len()
     }
@@ -182,18 +199,29 @@ impl ProgrammableOracle {
         self.pow_answers
     }
 
-    /// Verify that every programmed transcript point contains the injectively
-    /// framed fresh proof nonce absorbed before any simulated challenge.
-    pub fn audit_programming(
+    /// Verify that every point programmed since `checkpoint` contains the
+    /// injectively framed fresh proof nonce absorbed before any simulated
+    /// challenge.
+    pub(crate) fn audit_programming(
         &self,
         proof_nonce: &[u8; 32],
         expected_points: usize,
+        checkpoint: &OracleCheckpoint,
     ) -> ProgrammingAudit {
         let mut framed_nonce = Vec::with_capacity(1 + 8 + proof_nonce.len());
         framed_nonce.push(OP_BYTES);
         framed_nonce.extend_from_slice(&(proof_nonce.len() as u64).to_le_bytes());
         framed_nonce.extend_from_slice(proof_nonce);
-        let points = self.programmed_points();
+        let previous = checkpoint
+            .programmed_points
+            .iter()
+            .map(Vec::as_slice)
+            .collect::<HashSet<_>>();
+        let points = self
+            .programmed_points()
+            .into_iter()
+            .filter(|point| !previous.contains(point.as_slice()))
+            .collect::<Vec<_>>();
         ProgrammingAudit {
             programmed_points: points.len(),
             expected_points,
@@ -206,6 +234,13 @@ impl ProgrammableOracle {
                 .iter()
                 .all(|point| point.first().copied() == Some(OP_DOMAIN)),
         }
+    }
+
+    pub(crate) fn answer_counts_since(&self, checkpoint: &OracleCheckpoint) -> (u64, u64) {
+        (
+            self.total_answers.saturating_sub(checkpoint.total_answers),
+            self.pow_answers.saturating_sub(checkpoint.pow_answers),
+        )
     }
 
     /// Number of framed Merkle queries made for one protocol channel.

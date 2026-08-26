@@ -1,3 +1,5 @@
 core ok
 veil ok
 prover ok
+lean-build ok
+lean-axioms ok

@@ -128,13 +128,14 @@ one 256-bit output MUST be sampled/programmed jointly; unused bytes MUST remain
 uniform.
 
 The active outer grind is the canonical first nonce satisfying a two-bit
-predicate, capped at 1024 trials. Proving and simulation MUST fail closed if
+predicate, limited to 4096 trials. Proving and simulation MUST fail closed if
 no nonce succeeds.
 
 ## 9. Simulator
 
-`Blake3PreimageZkSetup::simulate` receives only public digests, a simulator
-seed, a shared programmable oracle, and a transcript domain. It MUST sample
+`Blake3PreimageZkSetup::simulate` receives only public digests and a shared
+programmable oracle; its randomness comes from the OS and its transcript
+domain is pinned internally. It MUST sample
 challenges from their honest distributions before programming them and MUST
 abort if any programmed point was already defined inconsistently.
 
@@ -168,15 +169,16 @@ Fiat--Shamir domain internally. Generic or test-only challengers MUST NOT be
 selectable through the public full-ZK API.
 
 Every outer and recursive grinding site MUST use the canonical first-success
-nonce and MUST reject a nonce outside the first 1024 trials. The pROM ledger
+nonce and MUST reject a nonce outside the first 4096 trials. The pROM ledger
 MUST include the geometric failure tail for every live site.
 
 ## 11. Security claim
 
-Subject to the certified RS proximity assumptions and the classical
-programmable-random-oracle model, the protocol is multi-theorem zero knowledge.
-Its algebraic transcript is perfectly witness-independent; the remaining ZK
-error is the pROM abort/collision bound in `docs/SECURITY.md`.
+A conforming implementation is intended to satisfy multi-theorem zero
+knowledge subject to the RS proximity assumptions and the classical
+programmable-random-oracle model. Establishing that claim for this Rust
+implementation requires the end-to-end formal correspondence described in
+`docs/SECURITY.md`; executable checks alone are not a proof.
 
 Completeness and interactive soundness are composed additively. The pinned
 interactive soundness is approximately 107 bits. Noninteractive soundness is

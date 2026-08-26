@@ -21,6 +21,8 @@ run() {
 run core cargo test --release -p flock-core --features zk,symbolic --tests
 run veil cargo test --release -p veil-f128 --lib
 run prover cargo test --release -p flock-prover --features veil --lib --bins --tests
+run lean-build sh -c 'cd lean && lake build'
+run lean-axioms scripts/lean-axioms.sh
 
 # Every production SHA-256 invocation must pass through the reviewed random-
 # oracle implementations. Circuit modules and comments are excluded.

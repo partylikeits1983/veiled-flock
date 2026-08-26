@@ -162,84 +162,6 @@ impl PublicPackedDirectClaimValue {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct SuccinctProofFieldClassification {
-    pub proof_path: &'static str,
-    pub privacy_argument: &'static str,
-}
-
-pub const SUCCINCT_PROOF_FIELD_MANIFEST: &[SuccinctProofFieldClassification] = &[
-    SuccinctProofFieldClassification {
-        proof_path: "proof_nonce",
-        privacy_argument: "fresh_public_randomness_and_ro_domain",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "tree_nonces",
-        privacy_argument: "independent_initial_tree_ro_domains",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "masked_zerocheck",
-        privacy_argument: "independent_field_one_time_pads",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "masked_lincheck",
-        privacy_argument: "independent_field_one_time_pads",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "masked_ring_claims",
-        privacy_argument: "independent_f2_linear_slice_pads",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "public_direct_blind_values",
-        privacy_argument: "joint_pcs_coupling_public_functional_kernel",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "blind_grind_nonce",
-        privacy_argument: "grinding_on_witness_independent_prefix",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "pcs_open",
-        privacy_argument: "joint_l0_q_coupling_then_postprocessing",
-    },
-    SuccinctProofFieldClassification {
-        proof_path: "veil",
-        privacy_argument: "veil_hadamard_and_dot_product_simulators",
-    },
-];
-
-/// Exhaustive destructuring makes a proof-schema addition fail compilation
-/// until its privacy argument is added to [`SUCCINCT_PROOF_FIELD_MANIFEST`].
-pub fn assert_succinct_proof_fields_classified(proof: &SuccinctVeilProof) {
-    let SuccinctVeilProof {
-        proof_nonce: _,
-        tree_nonces: _,
-        masked_zerocheck,
-        masked_lincheck,
-        masked_ring_claims,
-        public_direct_blind_values: _,
-        blind_grind_nonce: _,
-        pcs_open: _,
-        veil: _,
-    } = proof;
-    let MaskedZerocheckProof {
-        round1_ab: _,
-        round1_c: _,
-        multilinear_rounds: _,
-        final_a_eval: _,
-        final_b_eval: _,
-    } = masked_zerocheck;
-    let LincheckProof {
-        rounds: _,
-        z_partial: _,
-    } = masked_lincheck;
-    for claim in masked_ring_claims {
-        let MaskedRingClaim {
-            witness: _,
-            blind: _,
-        } = claim;
-    }
-}
-
 fn sample_nonce(rng: &mut impl MaskSampler) -> [u8; 32] {
     let mut words = [0u64; 4];
     rng.fill_u64s(&mut words);
@@ -571,53 +493,6 @@ struct MaskLayout {
     z_partial: usize,
 }
 
-/// One contiguous block in the independent-mask vector. The active compiler
-/// consumes these blocks in this exact order. Every block is an identity
-/// channel: visible value `i` is `private_value_i + mask_i`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct MaskSection {
-    pub name: &'static str,
-    pub start: usize,
-    pub length: usize,
-}
-
-/// Executable certificate for the global affine masking theorem.
-///
-/// Since every visible private `F128` coordinate has a distinct uniform pad,
-/// the random-coordinate matrix is the identity over `F128`, and therefore
-/// also has full rank after flattening to `F2`. This is stronger than merely
-/// checking `im(A_c) ⊆ im(B_c)`: `B_c` is surjective for every challenge
-/// history, with no challenge-dependent exceptional set.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct GlobalMaskCertificate {
-    pub sections: Vec<MaskSection>,
-    pub visible_private_f128: usize,
-    pub independent_mask_f128: usize,
-    pub mask_matrix_rank_f128: usize,
-    pub mask_matrix_rank_f2: usize,
-}
-
-impl GlobalMaskCertificate {
-    pub fn is_full_identity_cover(&self) -> bool {
-        self.visible_private_f128 == self.independent_mask_f128
-            && self.mask_matrix_rank_f128 == self.visible_private_f128
-            && self.mask_matrix_rank_f2 == 128 * self.visible_private_f128
-            && self
-                .sections
-                .iter()
-                .scan(0usize, |cursor, section| {
-                    let contiguous = section.start == *cursor && section.length > 0;
-                    *cursor += section.length;
-                    Some(contiguous)
-                })
-                .all(|contiguous| contiguous)
-            && self
-                .sections
-                .last()
-                .is_some_and(|section| section.start + section.length == self.visible_private_f128)
-    }
-}
-
 /// Exact constraint inventory for the shifted FLOCK verifier circuit before
 /// VEIL adds its two standard Hadamard-masking products.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -627,19 +502,6 @@ pub struct ShiftedCircuitCertificate {
     pub lincheck_linear_constraints: usize,
     pub ring_scale_linear_constraints: usize,
     pub ring_claim_linear_constraints: usize,
-}
-
-/// Exact one-commitment/one-opening inventory for the active relation.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct BatchOpeningCertificate {
-    pub witness_commitments: usize,
-    pub batched_openings: usize,
-    pub ring_claims: usize,
-    pub public_direct_claims: usize,
-    pub distinct_l0_positions: usize,
-    pub padding_symbols_per_lane: usize,
-    pub blind_grinding_bits: u32,
-    pub max_blind_grind_trials: u64,
 }
 
 /// Additive algebraic soundness ledger for the FLOCK PIOP and its batched
@@ -780,19 +642,6 @@ fn binary_rank(rows: &mut [u128]) -> usize {
     rank
 }
 
-impl BatchOpeningCertificate {
-    pub fn is_valid(self) -> bool {
-        self.witness_commitments == 1
-            && self.batched_openings == 1
-            && self.ring_claims == RING_CLAIM_COUNT
-            && self.public_direct_claims == PUBLIC_DIRECT_CLAIM_COUNT
-            && self.distinct_l0_positions > 0
-            && self.distinct_l0_positions <= self.padding_symbols_per_lane
-            && (1..=MAX_BLIND_GRINDING_BITS).contains(&self.blind_grinding_bits)
-            && self.max_blind_grind_trials == MAX_BLIND_GRIND_TRIALS
-    }
-}
-
 impl ShiftedCircuitCertificate {
     pub fn linear_constraints(self) -> usize {
         self.lincheck_linear_constraints
@@ -844,43 +693,6 @@ impl MaskLayout {
         self.piop_count() + 2 * RING_CLAIM_COUNT * RING_WIDTH
     }
 
-    fn global_mask_certificate(self) -> GlobalMaskCertificate {
-        let lengths = [
-            ("zerocheck.round1_ab", self.ell),
-            ("zerocheck.round1_c", self.ell),
-            ("zerocheck.multilinear_rounds", 2 * self.zc_rounds),
-            ("zerocheck.terminal_ab", 2),
-            ("lincheck.rounds", 2 * self.lc_rounds),
-            ("lincheck.z_partial", self.z_partial),
-            ("ring.ab.witness", RING_WIDTH),
-            ("ring.ab.blind", RING_WIDTH),
-            ("ring.c.witness", RING_WIDTH),
-            ("ring.c.blind", RING_WIDTH),
-        ];
-        let mut cursor = 0usize;
-        let sections = lengths
-            .into_iter()
-            .map(|(name, length)| {
-                let section = MaskSection {
-                    name,
-                    start: cursor,
-                    length,
-                };
-                cursor += length;
-                section
-            })
-            .collect::<Vec<_>>();
-        let certificate = GlobalMaskCertificate {
-            sections,
-            visible_private_f128: self.observed_count(),
-            independent_mask_f128: cursor,
-            mask_matrix_rank_f128: cursor,
-            mask_matrix_rank_f2: 128 * cursor,
-        };
-        debug_assert!(certificate.is_full_identity_cover());
-        certificate
-    }
-
     fn shifted_circuit_certificate(self, with_ring_link: bool) -> ShiftedCircuitCertificate {
         ShiftedCircuitCertificate {
             private_inputs: if with_ring_link {
@@ -900,19 +712,6 @@ impl MaskLayout {
     }
 }
 
-/// Certify the exact independent-mask bijection for a supported FLOCK R1CS.
-pub fn certify_global_masking(
-    r1cs: &BlockR1cs,
-) -> Result<GlobalMaskCertificate, SuccinctVeilError> {
-    let certificate = MaskLayout::new(r1cs)?.global_mask_certificate();
-    if !certificate.is_full_identity_cover() {
-        return Err(SuccinctVeilError::InvalidShape(
-            "global mask identity cover",
-        ));
-    }
-    Ok(certificate)
-}
-
 fn validate_succinct_parameters(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
@@ -928,9 +727,7 @@ fn validate_succinct_parameters(
         return Err(SuccinctVeilError::InvalidParameters);
     }
     let layout = MaskLayout::new(r1cs)?;
-    if layout.observed_count() != supported_mask_count(r1cs).expect("checked supported shape")
-        || !layout.global_mask_certificate().is_full_identity_cover()
-    {
+    if layout.observed_count() != supported_mask_count(r1cs).expect("checked supported shape") {
         return Err(SuccinctVeilError::InvalidShape(
             "global mask identity cover",
         ));
@@ -953,12 +750,12 @@ fn validate_l0_hiding_budget(
     Ok(())
 }
 
-fn certify_batch_opening(
+fn validate_batch_opening(
     pcs_params: &PcsParams,
     queries: &[usize],
     grinding_bits: &[usize],
     fold_grinding_bits: &[usize],
-) -> Result<BatchOpeningCertificate, SuccinctVeilError> {
+) -> Result<(), SuccinctVeilError> {
     validate_l0_hiding_budget(pcs_params, queries)?;
     let positive_fold_sites = fold_grinding_bits.iter().filter(|bits| **bits > 0).count();
     if grinding_bits.iter().any(|bits| *bits != 0)
@@ -970,21 +767,10 @@ fn certify_batch_opening(
         return Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"));
     }
     let blind_grinding_bits = fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
-    let certificate = BatchOpeningCertificate {
-        witness_commitments: 1,
-        batched_openings: 1,
-        ring_claims: RING_CLAIM_COUNT,
-        public_direct_claims: PUBLIC_DIRECT_CLAIM_COUNT,
-        distinct_l0_positions: queries[0],
-        padding_symbols_per_lane: (1usize << pcs_params.witness_log_msg_len())
-            / pcs_params.num_ntts(),
-        blind_grinding_bits,
-        max_blind_grind_trials: MAX_BLIND_GRIND_TRIALS,
-    };
-    if !certificate.is_valid() {
+    if queries[0] == 0 || !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_grinding_bits) {
         return Err(SuccinctVeilError::InvalidShape("batch opening certificate"));
     }
-    Ok(certificate)
+    Ok(())
 }
 
 fn ligerito_grinding_is_bounded(proof: &pcs::ligerito::LigeritoProof) -> bool {
@@ -1430,7 +1216,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
 ) -> Result<(SuccinctVeilProof, Commitment), SuccinctVeilError> {
     let layout = validate_succinct_parameters(r1cs, pcs_params)?;
     certify_flock_piop_soundness(r1cs, lincheck_circuit)?;
-    certify_batch_opening(
+    validate_batch_opening(
         pcs_params,
         &lig_config.queries,
         &lig_config.grinding_bits,
@@ -1737,7 +1523,7 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
 ) -> Result<(), SuccinctVeilError> {
     validate_succinct_parameters(r1cs, pcs_params)?;
     certify_flock_piop_soundness(r1cs, lincheck_circuit)?;
-    certify_batch_opening(
+    validate_batch_opening(
         pcs_params,
         &lig_config.queries,
         &lig_config.grinding_bits,

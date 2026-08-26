@@ -31,11 +31,12 @@ low block on any union of at most `k` distinct positions is a full-row-rank
 Vandermonde map, so those opened rows are uniform for fixed `z`.
 
 One additional full random row enters the nonzero shielded linear combination.
-The implementation certificate couples this uniform fold jointly with every
-opened initial column and ring slice. Subtracting the padding contribution
-leaves the virtual full message `[mu || z] + c*g`, which is uniform. Its claim
-basis is `[0 || b]`, so it proves exactly the original claims about `z`.
-Recursive Ligerito therefore runs unchanged after this boundary.
+The algebraic translation tests couple this uniform fold jointly with every
+opened initial column and public direct functional. Subtracting the padding
+contribution leaves the virtual full message `[mu || z] + c*g`, which is
+uniform. Its claim basis is `[0 || b]`, so it proves exactly the original
+claims about `z`. Recursive Ligerito therefore runs unchanged after this
+boundary.
 
 The outer witness, VEIL-linear, and VEIL-Hadamard initial trees each have an
 independently sampled 256-bit tree nonce and a fresh 256-bit salt per leaf.
@@ -59,14 +60,15 @@ At fixed challenge history the visible affine transcript has the form
 Y = A*w + B*r + d(public).
 ```
 
-The production certificate constructs the translation witness for
-`image(A) <= image(B)`. The active layout makes the mask block surjective.
-Adaptive composition follows by conditioning on each already-independent
-prefix before sampling the next verifier challenge.
+Each visible coordinate is encoded as `private + fresh_mask`, and the prover
+and verifier check the exact mask cursor. The generic Lean masking theorem
+shows why that coordinate map is surjective; a follow-up conformance proof must
+connect the theorem to this Rust layout. Adaptive composition then conditions
+on each already-independent prefix before sampling the next verifier challenge.
 
-Ring switching is certified over `GF(2)`: the 128 by 128 matrix for a field
+Ring switching is tested over `GF(2)`: the 128 by 128 matrix for a field
 challenge is built from the production basis decomposition and multiplication
-routine, then checked on all basis vectors. The masked witness, blinder, and
+routine, then compared on all basis vectors. The masked witness, blinder, and
 folded slices obey the same committed `q = z + c*g` relation.
 
 ## VEIL nonlinear linkage
@@ -78,7 +80,7 @@ zerocheck and lincheck recurrence, the terminal multiplication, AB/C linkage,
 ring-switch linkage, and public-functional linkage.
 
 VEIL uses additive-domain Reed--Solomon codes over `GF(2^128)`. Operand and
-product codes have separately certified ZK projection, distance, and query
+product codes have separately checked ZK projection, distance, and query
 budgets. Pointwise products lie in `RS[N,2K-1]`. The exact reduction function
 is checked on every pair of basis vectors, which suffices by bilinearity.
 
@@ -97,8 +99,8 @@ against the code-padding budget.
 
 The public digest functional is derived only from the public statement. Its
 raw evaluation is safe because equal public statements induce witness
-differences in the functional's kernel; the joint PCS certificate checks this
-condition.
+differences in the functional's kernel; the joint PCS translation test checks
+this condition on the production construction.
 
 ## Simulator boundary
 
