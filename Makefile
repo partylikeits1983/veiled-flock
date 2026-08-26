@@ -30,5 +30,5 @@ clippy-x86:
 		$(CARGO) clippy $(WORKSPACE_FLAGS) --target $(X86_64_TARGET) -- -D warnings
 
 smoke-test:
-	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_preimage_roundtrip_and_mutations -- --exact
-	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_public_only_simulator_is_accepted -- --exact
+	$(CARGO) test --locked --release -p flock-prover --features veil --test r1cs_hashes_blake3_preimage succinct_veil_preimage_roundtrip_and_mutations -- --exact
+	$(CARGO) test --locked --release -p flock-prover --features veil --test r1cs_hashes_blake3_preimage succinct_veil_public_only_simulator_is_accepted -- --exact
