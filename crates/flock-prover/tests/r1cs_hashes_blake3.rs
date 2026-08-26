@@ -786,7 +786,13 @@ fn honest_chain(n: usize, seed: u64) -> (Vec<Compression>, [u32; 8], [u32; 8]) {
     let mut blocks = Vec::with_capacity(n);
     let mut cur = cv0;
     for _ in 0..n {
-        let block: Compression = (cur, rng.msg(), rng.next_u64(), rng.next_u32(), rng.next_u32());
+        let block: Compression = (
+            cur,
+            rng.msg(),
+            rng.next_u64(),
+            rng.next_u32(),
+            rng.next_u32(),
+        );
         cur = out_cv(&block); // next input cv = this output cv
         blocks.push(block);
     }
