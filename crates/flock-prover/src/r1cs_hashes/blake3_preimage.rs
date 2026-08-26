@@ -47,6 +47,8 @@ use flock_core::challenger::FsChallenger;
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
+#[cfg(feature = "veil")]
+use flock_core::zk::MaskSampler;
 
 use crate::digest_bind::{
     DigestChallenges, DigestLayout, DigestStatement, PaddingDigest, digest_claim,
@@ -55,16 +57,14 @@ use crate::digest_bind::{
 
 /// Pinned SHA-256 Fiat--Shamir domain for the sole public full-ZK protocol.
 pub const VEIL_FLOCK_FS_DOMAIN: &[u8] = b"veil-flock-blake3-preimage";
-#[cfg(feature = "zk")]
+#[cfg(feature = "veil")]
+use crate::r1cs_hashes::blake3::build_block_r1cs_zk_pinned;
+#[cfg(feature = "veil")]
 use crate::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
 use crate::r1cs_hashes::blake3::{
     BLAKE3_IV, Compression, FLAGS_ROOT_HASH, K_LOG, ParamPinning, ROOT_HASH_BLOCK_LEN,
-    build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
-    generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
+    build_block_r1cs_pinned, generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
-#[cfg(feature = "veil")]
-use flock_core::zk::MaskSampler;
-
 /// Bytes of message covered by one instance of this relation.
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
@@ -517,6 +517,7 @@ impl Blake3PreimageZkSetup {
         Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
     }
 
+    #[cfg(feature = "veil")]
     fn with_outer_log(n_blocks: usize, n_log: usize) -> Self {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
@@ -644,14 +645,6 @@ impl Blake3PreimageZkSetup {
         }
     }
 
-    #[cfg(feature = "veil")]
-    fn absorb_protocol<Ch: Challenger>(&self, challenger: &mut Ch) {
-        challenger.observe_label(b"veil-flock-protocol");
-        challenger.observe_bytes(&crate::proof_io::VEIL_FLOCK_PROTOCOL_ID);
-        challenger.observe_bytes(&crate::proof_io::VEIL_FLOCK_RELATION_ID);
-        challenger.observe_bytes(&crate::proof_io::VEIL_FLOCK_PARAMETER_SUITE_ID);
-    }
-
     /// Prove the fixed-digest relation with the succinct VEIL composition and
     /// the pinned production SHA-256 Fiat--Shamir challenger.
     #[cfg(feature = "veil")]
@@ -707,7 +700,6 @@ impl Blake3PreimageZkSetup {
             ParamPinning::RootHash64,
         );
         let lig_config = self.ligerito_prover_config();
-        self.absorb_protocol(challenger);
         absorb_statement(challenger, &statement);
         let statement_for_claim = statement.clone();
         Ok(crate::succinct_veil::prove_succinct_veil_r1cs(
@@ -763,7 +755,6 @@ impl Blake3PreimageZkSetup {
         let statement = self.statement(digests);
         statement.validate();
         let lig_config = self.ligerito_verifier_config();
-        self.absorb_protocol(challenger);
         absorb_statement(challenger, &statement);
         let layout = self.r1cs.layout;
         crate::succinct_veil::verify_succinct_veil_r1cs(
@@ -896,7 +887,6 @@ impl Blake3PreimageZkSetup {
         let lig_config = self.ligerito_prover_config();
         let mut challenger =
             crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
-        self.absorb_protocol(&mut challenger);
         absorb_statement(&mut challenger, &statement);
         let source_rng = rng.fork(b"succinct-veil-zc-simulator");
         let mut source = crate::succinct_veil::RomZerocheckSimulator::new(self.r1cs.m, source_rng);
@@ -1033,9 +1023,6 @@ mod tests {
         let mut trailing = encoded.clone();
         trailing.push(0);
         assert!(crate::proof_io::VeilFlockProofBundle::from_bytes(&trailing).is_err());
-        let mut wrong_id = bundle.clone();
-        wrong_id.protocol_id[0] ^= 1;
-        assert!(wrong_id.to_bytes().is_err());
 
         setup
             .verify(&commitment, &proof, &digests)

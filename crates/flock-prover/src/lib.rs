@@ -22,7 +22,7 @@ pub mod preimage_extractor;
 pub mod proof_io;
 pub mod prover;
 pub mod r1cs_hashes;
-#[cfg(feature = "zk")]
+#[cfg(feature = "veil")]
 pub mod sim_game;
 pub mod sim_oracle;
 #[cfg(feature = "veil")]

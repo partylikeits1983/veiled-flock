@@ -82,12 +82,6 @@ const KNOWN_FLAVORS: [u8; 3] = [
 ];
 
 #[cfg(feature = "veil")]
-pub const VEIL_FLOCK_PROTOCOL_ID: [u8; 16] = *b"veil-flock______";
-#[cfg(feature = "veil")]
-pub const VEIL_FLOCK_RELATION_ID: [u8; 16] = *b"blake3-preimage_";
-#[cfg(feature = "veil")]
-pub const VEIL_FLOCK_PARAMETER_SUITE_ID: [u8; 16] = *b"secure-udr______";
-#[cfg(feature = "veil")]
 pub const MAX_VEIL_FLOCK_BUNDLE_BYTES: u64 = 1024 * 1024;
 
 /// Header size = 5-byte magic + 1-byte flavor.
@@ -107,9 +101,6 @@ pub enum DeserializeError {
     FlavorMismatch { expected: u8, found: u8 },
     /// The bincode-deserialization step failed (corrupted payload, etc.).
     Bincode(bincode::Error),
-    /// A VEIL bundle names a protocol, relation, or parameter suite that this
-    /// verifier does not implement.
-    ProtocolMismatch(&'static str),
 }
 
 impl std::fmt::Display for DeserializeError {
@@ -122,9 +113,6 @@ impl std::fmt::Display for DeserializeError {
                 write!(f, "flavor mismatch: expected {expected}, found {found}")
             }
             Self::Bincode(e) => write!(f, "bincode error: {e}"),
-            Self::ProtocolMismatch(field) => {
-                write!(f, "unsupported VEIL-FLOCK {field} identifier")
-            }
         }
     }
 }
@@ -161,15 +149,11 @@ pub struct ChainProofBundleLigerito {
     pub cv_last_phys: Vec<bool>,
 }
 
-/// Canonical, fail-closed wire bundle for the full-view VEIL-FLOCK BLAKE3
-/// preimage instantiation. Protocol, relation, and parameter identifiers are
-/// carried inside the payload as well as the outer format/flavor header.
+/// Canonical wire bundle for the full-view VEIL-FLOCK BLAKE3 preimage
+/// instantiation. The outer flavor byte fixes this payload shape.
 #[cfg(feature = "veil")]
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VeilFlockProofBundle {
-    pub protocol_id: [u8; 16],
-    pub relation_id: [u8; 16],
-    pub parameter_suite_id: [u8; 16],
     pub digests: Vec<[u8; 32]>,
     pub commitment: Commitment,
     pub proof: crate::succinct_veil::SuccinctVeilProof,
@@ -183,26 +167,10 @@ impl VeilFlockProofBundle {
         proof: crate::succinct_veil::SuccinctVeilProof,
     ) -> Self {
         Self {
-            protocol_id: VEIL_FLOCK_PROTOCOL_ID,
-            relation_id: VEIL_FLOCK_RELATION_ID,
-            parameter_suite_id: VEIL_FLOCK_PARAMETER_SUITE_ID,
             digests,
             commitment,
             proof,
         }
-    }
-
-    pub fn validate_ids(&self) -> Result<(), DeserializeError> {
-        if self.protocol_id != VEIL_FLOCK_PROTOCOL_ID {
-            return Err(DeserializeError::ProtocolMismatch("protocol"));
-        }
-        if self.relation_id != VEIL_FLOCK_RELATION_ID {
-            return Err(DeserializeError::ProtocolMismatch("relation"));
-        }
-        if self.parameter_suite_id != VEIL_FLOCK_PARAMETER_SUITE_ID {
-            return Err(DeserializeError::ProtocolMismatch("parameter-suite"));
-        }
-        Ok(())
     }
 
     fn options() -> impl Options {
@@ -213,8 +181,6 @@ impl VeilFlockProofBundle {
     }
 
     pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
-        self.validate_ids()
-            .map_err(|error| Box::new(bincode::ErrorKind::Custom(error.to_string())))?;
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
         write_header(&mut out, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE);
         Self::options().serialize_into(&mut out, self)?;
@@ -228,9 +194,7 @@ impl VeilFlockProofBundle {
             )));
         }
         let payload = parse_header(bytes, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE)?;
-        let bundle: Self = Self::options().deserialize(payload)?;
-        bundle.validate_ids()?;
-        Ok(bundle)
+        Ok(Self::options().deserialize(payload)?)
     }
 }
 

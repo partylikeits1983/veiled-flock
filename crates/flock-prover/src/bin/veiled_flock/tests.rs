@@ -17,10 +17,6 @@ fn decoder_rejects_bare_legacy_bincode() {
 fn decoder_rejects_an_unbounded_digest_vector() {
     let mut bytes = Vec::from(MAGIC);
     bytes.push(5); // VEIL-FLOCK BLAKE3-preimage flavor.
-    // Three fixed-size protocol identifiers precede the digest vector.
-    bytes.extend_from_slice(b"veil-flock______");
-    bytes.extend_from_slice(b"blake3-preimage_");
-    bytes.extend_from_slice(b"secure-udr______");
     bytes.extend_from_slice(&u64::MAX.to_le_bytes());
     assert!(decode_bundle(&bytes).is_err());
 }

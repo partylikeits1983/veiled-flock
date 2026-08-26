@@ -150,14 +150,14 @@ reuse is not.
 
 ## 10. Proof format and verification
 
-The canonical bundle contains protocol, relation, and parameter-suite IDs,
-public digests, one witness commitment, proof nonce, three initial-tree nonces,
-masked FLOCK transcript, masked ring claims, one batched Ligerito opening, and
-one VEIL constraint proof. It MUST NOT contain messages, raw witness data,
-private masks, code padding, or unmasked PIOP messages.
+The canonical bundle contains public digests, one witness commitment, proof
+nonce, three initial-tree nonces, masked FLOCK transcript, masked ring claims,
+one batched Ligerito opening, and one VEIL constraint proof. It MUST NOT
+contain messages, raw witness data, private masks, code padding, or unmasked
+PIOP messages.
 
-Decoding MUST enforce a 1 MiB limit, canonical fixed-width encoding, exact IDs,
-exact parameter shapes, no trailing bytes, and bounded vector lengths.
+Decoding MUST enforce a 1 MiB limit, canonical fixed-width encoding, exact
+parameter shapes, no trailing bytes, and bounded vector lengths.
 
 The verifier MUST reconstruct the pinned statement and shifted circuit, derive
 all claims itself, verify the one PCS opening and the VEIL proof, and reject any

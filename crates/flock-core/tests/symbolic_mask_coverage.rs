@@ -8,7 +8,7 @@ use flock_core::zerocheck::{SmallMaskSpec, mask_functional_matrix_fv};
 
 fn challenge(m: usize, seed: u64, domain: u8, index: usize) -> F128 {
     let mut hasher = blake3::Hasher::new();
-    hasher.update(b"flock-s2-mask-coverage");
+    hasher.update(b"flock-zerocheck-mask-coverage");
     hasher.update(&(m as u64).to_le_bytes());
     hasher.update(&seed.to_le_bytes());
     hasher.update(&[domain]);
@@ -20,7 +20,7 @@ fn challenge(m: usize, seed: u64, domain: u8, index: usize) -> F128 {
     )
 }
 
-fn certify_profile(m: usize, seed: u64) {
+fn assert_mask_coverage(m: usize, seed: u64, expected_total_degree: u64) {
     let spec = SmallMaskSpec::default();
     let n = m - flock_core::zerocheck::K_SKIP;
     let r_rest = (0..n)
@@ -65,17 +65,19 @@ fn certify_profile(m: usize, seed: u64) {
         }
     }
     let total_degree: u64 = determinant_degrees.iter().sum();
+    assert_ne!(
+        minor.det,
+        F128::ZERO,
+        "selected determinant must be nonzero"
+    );
+    assert_eq!(
+        total_degree, expected_total_degree,
+        "mask determinant degree changed for m={m}"
+    );
     assert!(
         total_degree < 1 << 28,
         "Schwartz-Zippel loss must remain below 2^-100"
     );
-
-    assert_ne!(
-        minor.det,
-        F128::ZERO,
-        "selected full-rank minor must be nonzero"
-    );
-    assert_eq!(spec.d_log_for(m), SmallMaskSpec::default().d_log_for(m));
 }
 
 #[test]
@@ -94,7 +96,7 @@ fn symbolic_mask_matrix_matches_native_and_has_100_bit_margin() {
             mask_functional_matrix_fv(spec, m, &r_rest, &rhos)
         );
     }
-    for m in [13, 15, 22] {
-        certify_profile(m, 0x5a32_0017_900d_cafe);
+    for (m, expected_total_degree) in [(13, 126), (15, 216), (22, 720)] {
+        assert_mask_coverage(m, 0x5a32_0017_900d_cafe, expected_total_degree);
     }
 }

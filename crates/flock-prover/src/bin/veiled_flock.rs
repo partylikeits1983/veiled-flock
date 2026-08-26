@@ -110,9 +110,6 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
 }
 
 fn verify(bundle: &Bundle) -> Result<(), String> {
-    bundle
-        .validate_ids()
-        .map_err(|error| format!("invalid proof bundle: {error}"))?;
     if bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
         return Err("invalid bundle statement shape".to_string());
     }

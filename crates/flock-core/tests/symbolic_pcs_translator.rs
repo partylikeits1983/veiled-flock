@@ -5,8 +5,8 @@ use flock_core::linalg::F128Mat;
 use flock_core::pcs::commit::PcsParams;
 use flock_core::pcs::ligerito::{LigeritoProfile, ProverConfig, prover_config_for};
 use flock_core::pcs::symbolic_opening::{
-    OPENING_FUNCTIONAL_MANIFEST, certify_l0_query_rank, encode_zk_linear, l0_entropy_bound,
-    translate_joint_view_for_queries, translate_mask_for_queries,
+    certify_l0_query_rank, encode_zk_linear, l0_entropy_bound, translate_joint_view_for_queries,
+    translate_mask_for_queries,
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
@@ -194,14 +194,6 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
         .expect("every registered distinct query set must satisfy the structural rank criterion");
     assert_eq!(rank_certificate.opened_positions, 294);
     assert_eq!(rank_certificate.mask_symbols_per_lane, 512);
-
-    assert_eq!(OPENING_FUNCTIONAL_MANIFEST.len(), 13);
-    assert!(OPENING_FUNCTIONAL_MANIFEST.iter().any(|entry| {
-        entry.proof_path == "ligerito.initial_proof.leaf_salts"
-            && entry.category == "fresh_public_randomness"
-            && entry.disposition == "independent_256_bit_salt_per_opened_leaf"
-    }));
-    assert!(OPENING_FUNCTIONAL_MANIFEST.iter().all(|entry| {
-        !entry.proof_path.is_empty() && !entry.category.is_empty() && !entry.disposition.is_empty()
-    }));
+    assert_eq!(bound.opened_positions, 294);
+    assert_eq!(bound.conditional_bits_per_fresh_leaf, 16_384);
 }

@@ -3,8 +3,8 @@
 All labels below are stable, unversioned protocol domains. Every operation is
 typed and length-framed.
 
-1. Absorb the VEIL-FLOCK protocol, pinned BLAKE3-preimage relation, Secure-UDR
-   parameter suite, and ordered public statement.
+1. Absorb the ordered public statement under the fixed VEIL-FLOCK
+   BLAKE3-preimage Fiat-Shamir domain.
 2. Sample a fresh 256-bit proof nonce and independent 256-bit nonces for the
    outer witness, VEIL-linear, and VEIL-Hadamard initial trees. Commit to the
    randomized FLOCK witness and to the VEIL mask inputs using their respective
