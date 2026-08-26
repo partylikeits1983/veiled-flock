@@ -80,13 +80,13 @@ run flock-prover preimage_zk_certificate the_digest_claim_is_a_public_function_o
 run flock-prover preimage_zk_certificate fixed_digest_circuit_is_not_the_batch_circuit
 run flock-prover preimage_zk_certificate extractor_recovers_the_preimages_from_an_honest_commitment
 run flock-prover preimage_zk_certificate extraction_fails_on_the_simulators_commitment
-run flock-prover --lib r1cs_hashes::blake3_preimage::tests::simulator_produces_an_accepting_proof_without_any_preimage
-run flock-prover --lib r1cs_hashes::blake3_preimage::tests::production_random_oracle_ledger_matches_artifact
+run flock-prover r1cs_hashes_blake3_preimage simulator_produces_an_accepting_proof_without_any_preimage
+run flock-prover r1cs_hashes_blake3_preimage production_random_oracle_ledger_matches_artifact
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::honest_prover_on_the_patched_vector_is_rejected
-run flock-prover --lib r1cs_hashes::blake3_preimage::tests::zk_preimage_roundtrip
+run flock-prover r1cs_hashes_blake3_preimage zk_preimage_roundtrip
 
 # Registered batch profile remains live under the same protocol version.
-run flock-prover --lib r1cs_hashes::blake3::tests::prove_verify_r1cs_zk_a1_roundtrip
+run flock-prover r1cs_hashes_blake3 prove_verify_r1cs_zk_a1_roundtrip
 
 # Machine-checked bound adapters and the dual-column knowledge ledger.
 (cd lean && lake build)

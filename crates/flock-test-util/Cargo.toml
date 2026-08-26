@@ -1,0 +1,13 @@
+[package]
+name = "flock-test-util"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Deterministic pseudo-random helpers shared by the workspace test targets."
+publish = false
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -225,21 +225,7 @@ mod tests {
     #[cfg(target_arch = "aarch64")]
     use core::mem::transmute;
 
-    /// Deterministic splitmix64 PRNG for test reproducibility.
-    struct Rng(u64);
-    impl Rng {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-    }
-
+    use flock_test_util::Rng;
     #[test]
     fn add_is_xor() {
         assert_eq!(F8(0x53) + F8(0xCA), F8(0x53 ^ 0xCA));

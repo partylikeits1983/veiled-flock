@@ -18,7 +18,6 @@ use crate::field::F128;
 use crate::merkle::{self, Hash};
 use crate::ntt::AdditiveNttF128;
 use crate::pcs::pack::LOG_PACKING;
-#[cfg(feature = "zk")]
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -507,23 +506,7 @@ mod tests {
     #[cfg(feature = "zk")]
     use crate::zk::{MaskSampler, ZkRng};
 
-    struct Rng(u64);
-    impl Rng {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-        fn bits(&mut self, n: usize) -> Vec<bool> {
-            (0..n).map(|_| self.next_u64() & 1 == 1).collect()
-        }
-    }
-
+    use flock_test_util::Rng;
     fn default_params(m: usize) -> PcsParams {
         PcsParams {
             m,

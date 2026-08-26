@@ -93,23 +93,16 @@ fn unprogrammed_external_backend_reproduces_native_proof_bytes() {
     assert_eq!(run(false), run(true));
 }
 
-/// Deterministic PRNG so the test is reproducible; in production the
-/// simulator draws its self-generated witness and masks from OS entropy.
-struct Rng(u64);
-impl Rng {
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-    fn next_u32(&mut self) -> u32 {
-        (self.next_u64() & 0xFFFF_FFFF) as u32
-    }
-    fn bits(&mut self, n: usize) -> Vec<bool> {
-        (0..n).map(|_| self.next_u64() & 1 == 1).collect()
-    }
+use flock_test_util::Rng;
+
+/// Field-element helpers over the shared [`Rng`]. They live here because a
+/// foreign trait cannot be implemented for a foreign type, and `flock-test-util`
+/// depends on nothing (see that crate's docs).
+trait RngF128 {
+    fn f128(&mut self) -> F128;
+}
+
+impl RngF128 for Rng {
     fn f128(&mut self) -> F128 {
         F128 {
             lo: self.next_u64(),
@@ -117,7 +110,6 @@ impl Rng {
         }
     }
 }
-
 /// **The simulator.** Given ONLY the public statement (batch size `n`),
 /// produce an accepting proof without any witness: pick arbitrary
 /// compressions, build the corresponding witness, and run the honest

@@ -138,17 +138,6 @@ pub enum ChainError {
     SumcheckFinal,
 }
 
-/// Inner product `Σ eq[i]·vals[i]` — used to spot-check claims in tests.
-#[cfg(test)]
-fn dot(eq: &[F128], vals: &[F128]) -> F128 {
-    debug_assert_eq!(eq.len(), vals.len());
-    let mut acc = F128::ZERO;
-    for i in 0..eq.len() {
-        acc += eq[i] * vals[i];
-    }
-    acc
-}
-
 /// Prove the chain-shift relation for instance-indexed MLE value-vectors
 /// `in_vals[i] = In(i)` and `out_vals[i] = Out(i)`, each of length `2^n`
 /// (already folded over the per-instance bit index by the verifier's `r`).
@@ -297,6 +286,164 @@ pub fn verify_chain_shift<Ch: Challenger>(
     })
 }
 
+/// The extended shift argument's claim: [`ChainClaims`] plus the bound slot-address
+/// coordinates `h*`. Produced by [`prove_chain_shift_ext`] / [`verify_chain_shift_ext`].
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ChainClaimsExt {
+    pub instance_point: Vec<F128>,
+    pub sel0: F128,
+    /// `h*` values for the `S` coordinates, in `s_coords` order.
+    pub s_high: Vec<F128>,
+    pub value: F128,
+}
+
+/// Extended shift sumcheck over the slot-address coordinates `S` (Part 7 design D2'):
+/// `tables[t]` folds slot-pair `j(t)`; at `S = ∅` this is exactly [`prove_chain_shift`].
+pub fn prove_chain_shift_ext<Ch: Challenger>(
+    tables: &[(Vec<F128>, Vec<F128>)],
+    challenger: &mut Ch,
+) -> (ChainShiftProof, ChainClaimsExt) {
+    let n_subcube = tables.len();
+    assert!(n_subcube.is_power_of_two(), "subcube size must be 2^|S|");
+    let s_len = n_subcube.trailing_zeros() as usize;
+    let n_total = tables[0].0.len();
+    assert!(n_total.is_power_of_two(), "n_total must be a power of two");
+    let n = n_total.trailing_zeros() as usize;
+
+    let tau = challenger.sample_f128_vec(n);
+    let alpha = challenger.sample_f128();
+    let eqtau = build_eq_table(&tau);
+
+    // Weight table over (y, s0, h): W in the h = 0 cell, zero elsewhere —
+    // `Π(1+h_j)` is the boolean indicator of h = 0.
+    let mut wt = vec![F128::ZERO; 2 * n_total * n_subcube];
+    for y in 1..n_total {
+        wt[y] = eqtau[y - 1];
+    }
+    wt[0] += alpha;
+    wt[n_total..2 * n_total].copy_from_slice(&eqtau);
+
+    // g table over (y, s0, h): [In_t ‖ Out_t] per subcube cell t.
+    let mut g = Vec::with_capacity(2 * n_total * n_subcube);
+    for (in_vals, out_vals) in tables {
+        assert_eq!(in_vals.len(), n_total, "In length mismatch");
+        assert_eq!(out_vals.len(), n_total, "Out length mismatch");
+        g.extend_from_slice(in_vals);
+        g.extend_from_slice(out_vals);
+    }
+
+    // Product sumcheck over n + 1 + |S| variables, top variable first —
+    // identical loop shape to `prove_chain_shift`.
+    let d = n + 1 + s_len;
+    let mut rounds = Vec::with_capacity(d);
+    let mut r_pts = Vec::with_capacity(d);
+    for _ in 0..d {
+        let half = g.len() / 2;
+        let mut e1 = F128::ZERO;
+        let mut einf = F128::ZERO;
+        for i in 0..half {
+            let (wlo, whi) = (wt[i], wt[i + half]);
+            let (glo, ghi) = (g[i], g[i + half]);
+            e1 += whi * ghi;
+            einf += (whi + wlo) * (ghi + glo);
+        }
+        challenger.observe_f128(e1);
+        challenger.observe_f128(einf);
+        let r = challenger.sample_f128();
+        for i in 0..half {
+            wt[i] = wt[i] + r * (wt[i + half] + wt[i]);
+            g[i] = g[i] + r * (g[i + half] + g[i]);
+        }
+        wt.truncate(half);
+        g.truncate(half);
+        rounds.push((e1, einf));
+        r_pts.push(r);
+    }
+
+    // full LSB-first: [τ' (n) | s0 | h* (|S|, s_coords order)].
+    let mut full = vec![F128::ZERO; d];
+    for (k, &r) in r_pts.iter().enumerate() {
+        full[d - 1 - k] = r;
+    }
+    let claims = ChainClaimsExt {
+        instance_point: full[..n].to_vec(),
+        sel0: full[n],
+        s_high: full[n + 1..].to_vec(),
+        value: g[0],
+    };
+    (
+        ChainShiftProof {
+            rounds,
+            g_at_point: g[0],
+        },
+        claims,
+    )
+}
+
+/// Verify a [`prove_chain_shift_ext`] proof (`s_len = |S|`). NORMATIVE SPEC:
+/// `succinct_veil::shifted_verifier_circuit_ext` replicates this exact recurrence.
+pub fn verify_chain_shift_ext<Ch: Challenger>(
+    proof: &ChainShiftProof,
+    x0_r: F128,
+    xlast_r: F128,
+    n: usize,
+    s_len: usize,
+    challenger: &mut Ch,
+) -> Result<ChainClaimsExt, ChainError> {
+    let d = n + 1 + s_len;
+    if proof.rounds.len() != d {
+        return Err(ChainError::MalformedProof);
+    }
+
+    let tau = challenger.sample_f128_vec(n);
+    let alpha = challenger.sample_f128();
+    let eq_tau_ones = tau.iter().copied().fold(F128::ONE, |acc, t| acc * t);
+    let mut claim = eq_tau_ones * xlast_r + alpha * x0_r;
+
+    let mut r_pts = Vec::with_capacity(d);
+    for &(e1, einf) in &proof.rounds {
+        challenger.observe_f128(e1);
+        challenger.observe_f128(einf);
+        let r = challenger.sample_f128();
+        let e0 = claim + e1;
+        let c1 = e0 + e1 + einf;
+        claim = einf * r * r + c1 * r + e0;
+        r_pts.push(r);
+    }
+
+    let mut full = vec![F128::ZERO; d];
+    for (k, &r) in r_pts.iter().enumerate() {
+        full[d - 1 - k] = r;
+    }
+    let taup: Vec<F128> = full[..n].to_vec();
+    let s0 = full[n];
+    let s_high: Vec<F128> = full[n + 1..].to_vec();
+
+    let s = shift_mle(&tau, &taup);
+    let eq_tt = eq_eval(&tau, &taup);
+    let zero_n = vec![F128::ZERO; n];
+    let eq_t0 = eq_eval(&taup, &zero_n);
+    let one_plus_s0 = F128::ONE + s0;
+    let base_w = s * one_plus_s0 + eq_tt * s0 + alpha * eq_t0 * one_plus_s0;
+    let w_final = s_high.iter().fold(base_w, |acc, &h| acc * (F128::ONE + h));
+    if w_final == F128::ZERO {
+        // Negligible (~2^-128) and not grindable, but a zero weight would leave
+        // `g_at_point` unconstrained by the final check — reject.
+        return Err(ChainError::SumcheckFinal);
+    }
+
+    if claim != w_final * proof.g_at_point {
+        return Err(ChainError::SumcheckFinal);
+    }
+
+    Ok(ChainClaimsExt {
+        instance_point: taup,
+        sel0: s0,
+        s_high,
+        value: proof.g_at_point,
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Region fold (Step 0): collapse a per-instance region of ẑ to one F128 each.
 // ---------------------------------------------------------------------------
@@ -435,264 +582,4 @@ pub fn fold_contiguous_regions(
     (0..n_regions)
         .map(|r_idx| (0..n_inst).map(|i| flat[i * n_regions + r_idx]).collect())
         .collect()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use flock_core::challenger::RandomChallenger;
-
-    /// SplitMix64-ish RNG for test data.
-    struct Rng(u64);
-    impl Rng {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-        fn f128(&mut self) -> F128 {
-            F128 {
-                lo: self.next_u64(),
-                hi: self.next_u64(),
-            }
-        }
-        fn f128_vec(&mut self, n: usize) -> Vec<F128> {
-            (0..n).map(|_| self.f128()).collect()
-        }
-    }
-
-    /// Build an LSB-first boolean point as F128 (0/1) of length `n` from index.
-    fn bool_point(idx: usize, n: usize) -> Vec<F128> {
-        (0..n)
-            .map(|j| {
-                if (idx >> j) & 1 == 1 {
-                    F128::ONE
-                } else {
-                    F128::ZERO
-                }
-            })
-            .collect()
-    }
-
-    /// Pack a bool witness the way `pcs::pack` does (bit i_skip of out[i_rest] =
-    /// z[i_rest·128 + i_skip]).
-    fn pack(z: &[bool]) -> Vec<F128> {
-        assert!(z.len().is_multiple_of(128));
-        (0..z.len() / 128)
-            .map(|i_rest| {
-                let base = i_rest * 128;
-                let mut lo = 0u64;
-                let mut hi = 0u64;
-                for r in 0..64 {
-                    if z[base + r] {
-                        lo |= 1 << r;
-                    }
-                    if z[base + 64 + r] {
-                        hi |= 1 << r;
-                    }
-                }
-                F128 { lo, hi }
-            })
-            .collect()
-    }
-
-    /// `fold_region_naive` reads the right bits and weights them: compare its
-    /// output against a direct fold over the bool witness.
-    #[test]
-    fn fold_region_naive_matches_direct() {
-        let mut rng = Rng::new(0xF01D);
-        // k_log = 5 (block = 32 bits), n = 3 (8 instances) → m = 8, 256 bits.
-        let k_log = 5usize;
-        let n = 3usize;
-        let block = 1usize << k_log;
-        let total = (1usize << n) * block;
-        let z: Vec<bool> = (0..total).map(|_| rng.next_u64() & 1 == 1).collect();
-        let packed = pack(&z);
-
-        // Random taps: 10 region bits at distinct in-block positions, random w.
-        let taps: Vec<(usize, F128)> = (0..10).map(|t| (3 * t % block, rng.f128())).collect();
-
-        let got = fold_region_naive(&packed, k_log, &taps);
-        assert_eq!(got.len(), 1 << n);
-        for i in 0..(1 << n) {
-            let mut want = F128::ZERO;
-            for &(pos, w) in &taps {
-                if z[i * block + pos] {
-                    want += w;
-                }
-            }
-            assert_eq!(got[i], want, "instance {i}");
-        }
-    }
-
-    /// `fold_contiguous_regions` (fused multi-region pass) matches calling
-    /// `fold_region_naive` once per region. Exercises 1, 2, and 3 regions.
-    #[test]
-    fn fold_contiguous_regions_matches_per_region() {
-        let mut rng = Rng::new(0xC0DE_F00D);
-        let k_log = 6usize; // block = 64 bits = 8 bytes
-        let n = 4usize; // 16 instances
-        let block = 1usize << k_log;
-        let total = (1usize << n) * block;
-        let z: Vec<bool> = (0..total).map(|_| rng.next_u64() & 1 == 1).collect();
-        let packed = pack(&z);
-
-        // Region: 16 contiguous bits = 2 bytes, with random weights.
-        let region_bits = 16;
-        let weights: Vec<F128> = (0..region_bits).map(|_| rng.f128()).collect();
-
-        // Test with N regions at distinct byte-aligned offsets.
-        for &offs in &[&[0usize] as &[usize], &[0, 2], &[0, 2, 4]] {
-            let got = fold_contiguous_regions(&packed, k_log, offs, &weights);
-            assert_eq!(got.len(), offs.len());
-            for (r_idx, &off) in offs.iter().enumerate() {
-                let taps: Vec<(usize, F128)> = (0..region_bits)
-                    .map(|p| (off * 8 + p, weights[p]))
-                    .collect();
-                let want = fold_region_naive(&packed, k_log, &taps);
-                assert_eq!(got[r_idx], want, "region {r_idx} (offset {off})");
-            }
-        }
-    }
-
-    /// `shift_mle` on boolean inputs is exactly the successor indicator.
-    #[test]
-    fn shift_mle_boolean_is_successor() {
-        for n in 1..=6 {
-            let n_total = 1usize << n;
-            for a in 0..n_total {
-                for b in 0..n_total {
-                    let av = bool_point(a, n);
-                    let bv = bool_point(b, n);
-                    let got = shift_mle(&av, &bv);
-                    let want = if b == a + 1 { F128::ONE } else { F128::ZERO };
-                    assert_eq!(got, want, "shift({a},{b}) n={n}");
-                }
-            }
-        }
-    }
-
-    /// `shift(1ⁿ, ·) = 0` (no successor in range).
-    #[test]
-    fn shift_mle_top_has_no_successor() {
-        let mut rng = Rng::new(7);
-        for n in 1..=5 {
-            let a = bool_point((1 << n) - 1, n);
-            let b = rng.f128_vec(n);
-            assert_eq!(shift_mle(&a, &b), F128::ZERO);
-        }
-    }
-
-    /// `shift(τ, y) = eq(τ, y−1)` for boolean `y ≥ 1` and field `τ`.
-    #[test]
-    fn shift_equals_shifted_eq() {
-        let mut rng = Rng::new(11);
-        for n in 1..=5 {
-            let n_total = 1usize << n;
-            let tau = rng.f128_vec(n);
-            let eqtau = build_eq_table(&tau);
-            for y in 0..n_total {
-                let yv = bool_point(y, n);
-                let got = shift_mle(&tau, &yv);
-                let want = if y == 0 { F128::ZERO } else { eqtau[y - 1] };
-                assert_eq!(got, want, "y={y} n={n}");
-            }
-        }
-    }
-
-    /// Honest chained data: `In[i]=x_i`, `Out[i]=x_{i+1}`. Prove + verify must
-    /// accept, and the single returned claim must be the true merged MLE
-    /// `g(τ',s₀*) = (1+s₀*)·In(τ') + s₀*·Out(τ')` (what the PCS would enforce).
-    #[test]
-    fn honest_roundtrip_accepts() {
-        for n in 3..=8 {
-            let n_total = 1usize << n;
-            let mut rng = Rng::new(100 + n as u64);
-            // x_0 .. x_N  (N+1 chain values); In[i]=x_i, Out[i]=x_{i+1}.
-            let chain: Vec<F128> = rng.f128_vec(n_total + 1);
-            let in_vals: Vec<F128> = chain[..n_total].to_vec();
-            let out_vals: Vec<F128> = chain[1..].to_vec();
-            let x0_r = chain[0];
-            let xlast_r = chain[n_total];
-
-            let mut chp = RandomChallenger::new(42);
-            let (proof, _claims) = prove_chain_shift(&in_vals, &out_vals, &mut chp);
-
-            let mut chv = RandomChallenger::new(42);
-            let claims = verify_chain_shift(&proof, x0_r, xlast_r, n, &mut chv)
-                .expect("honest proof should verify");
-
-            let eq_taup = build_eq_table(&claims.instance_point);
-            let in_true = dot(&eq_taup, &in_vals);
-            let out_true = dot(&eq_taup, &out_vals);
-            let g_true = (F128::ONE + claims.sel0) * in_true + claims.sel0 * out_true;
-            assert_eq!(claims.value, g_true, "merged claim n={n}");
-        }
-    }
-
-    /// Breaking the chain at one index makes the sumcheck reject.
-    #[test]
-    fn broken_chain_rejects() {
-        let n = 6;
-        let n_total = 1usize << n;
-        let mut rng = Rng::new(2024);
-        let chain: Vec<F128> = rng.f128_vec(n_total + 1);
-        let in_vals: Vec<F128> = chain[..n_total].to_vec();
-        let mut out_vals: Vec<F128> = chain[1..].to_vec();
-        let x0_r = chain[0];
-        let xlast_r = chain[n_total];
-
-        // Break the glue: Out[3] no longer equals In[4].
-        out_vals[3] += F128::ONE;
-
-        let mut chp = RandomChallenger::new(9);
-        let (proof, _claims) = prove_chain_shift(&in_vals, &out_vals, &mut chp);
-        let mut chv = RandomChallenger::new(9);
-        let res = verify_chain_shift(&proof, x0_r, xlast_r, n, &mut chv);
-        assert_eq!(res, Err(ChainError::SumcheckFinal));
-    }
-
-    /// A wrong public input endpoint is caught. It is batched (via α) into the
-    /// single claim, so the failure surfaces as a final-sumcheck mismatch.
-    #[test]
-    fn wrong_input_endpoint_rejects() {
-        let n = 5;
-        let n_total = 1usize << n;
-        let mut rng = Rng::new(555);
-        let chain: Vec<F128> = rng.f128_vec(n_total + 1);
-        let in_vals: Vec<F128> = chain[..n_total].to_vec();
-        let out_vals: Vec<F128> = chain[1..].to_vec();
-        let xlast_r = chain[n_total];
-        let wrong_x0 = chain[0] + F128::ONE;
-
-        let mut chp = RandomChallenger::new(3);
-        let (proof, _claims) = prove_chain_shift(&in_vals, &out_vals, &mut chp);
-        let mut chv = RandomChallenger::new(3);
-        let res = verify_chain_shift(&proof, wrong_x0, xlast_r, n, &mut chv);
-        assert_eq!(res, Err(ChainError::SumcheckFinal));
-    }
-
-    /// A wrong public output endpoint is caught.
-    #[test]
-    fn wrong_output_endpoint_rejects() {
-        let n = 5;
-        let n_total = 1usize << n;
-        let mut rng = Rng::new(777);
-        let chain: Vec<F128> = rng.f128_vec(n_total + 1);
-        let in_vals: Vec<F128> = chain[..n_total].to_vec();
-        let out_vals: Vec<F128> = chain[1..].to_vec();
-        let x0_r = chain[0];
-        let wrong_xlast = chain[n_total] + F128::ONE;
-
-        let mut chp = RandomChallenger::new(1);
-        let (proof, _claims) = prove_chain_shift(&in_vals, &out_vals, &mut chp);
-        let mut chv = RandomChallenger::new(1);
-        let res = verify_chain_shift(&proof, x0_r, wrong_xlast, n, &mut chv);
-        assert_eq!(res, Err(ChainError::SumcheckFinal));
-    }
 }

@@ -28,6 +28,8 @@ veil-f128 = { path = "../veil-f128", optional = true }
 # flock-core behind its `unsound-challenger` feature. Enabling it dev-only makes
 # it available to test/bench/example builds without leaking into normal builds.
 flock-core = { path = "../flock-core", features = ["unsound-challenger"] }
+# Shared deterministic RNG for tests, benches, and examples.
+flock-test-util = { path = "../flock-test-util" }
 # Software Keccak-256 for the native chain benchmark.
 sha3 = { workspace = true }
 serde_json = { workspace = true }

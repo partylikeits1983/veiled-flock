@@ -2028,19 +2028,14 @@ mod tests {
     use flock_core::challenger::FsChallenger;
     use flock_core::lincheck::{LincheckCircuit, SparseMatrixCircuit};
 
-    /// SplitMix64 PRNG, deterministic.
-    struct Rng(u64);
-    impl Rng {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-        fn next_u32(&mut self) -> u32 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            (z ^ (z >> 31)) as u32
-        }
+    use flock_test_util::Rng;
+
+    /// Message-block helper over the shared [`Rng`].
+    trait RngBlock {
+        fn next_block(&mut self) -> [u32; 16];
+    }
+
+    impl RngBlock for Rng {
         fn next_block(&mut self) -> [u32; 16] {
             std::array::from_fn(|_| self.next_u32())
         }

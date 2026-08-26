@@ -101,6 +101,12 @@ impl VeiledBlake3Setup {
         self.n_blocks
     }
 
+    /// Number of witness slots after padding (the batch is padded to a
+    /// power of two). Callers must not re-derive the padding rule.
+    pub fn n_block_slots(&self) -> usize {
+        self.r1cs.n_outer()
+    }
+
     pub fn parameters(&self) -> BlockR1csParameters {
         self.parameters
     }

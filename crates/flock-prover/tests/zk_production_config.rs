@@ -18,17 +18,7 @@ use flock_core::field::F128;
 use flock_prover::r1cs_hashes::blake3::Blake3Setup;
 use flock_prover::zk_rank_check::check_mask_coverage_fv;
 
-struct Rng(u64);
-impl Rng {
-    fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-}
-
+use flock_test_util::Rng;
 /// (1)+(2)+(3): the mask channel covers the conditioned round block at m = 22,
 /// an undersized support does not, and the optional self-check passes there.
 #[test]

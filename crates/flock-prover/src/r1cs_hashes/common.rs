@@ -320,6 +320,12 @@ pub(crate) fn drive_witness_packed_and_lincheck_zk<S: Sync, F>(
 where
     F: Fn(&S, &mut [u64], &mut [u64], &mut [u64]) + Sync,
 {
+    // A zk slot with no block would carry A-type randomizer rows whose B side selects
+    // a constant wire no computation set to 1 — every zk caller must supply padding.
+    assert!(
+        zk.is_none() || padding.is_some(),
+        "zk randomizer rows need a padding block in every empty slot"
+    );
     let k = 1usize << k_log;
     let f128_per_block = k / 128;
     let u64_per_block = k / 64;

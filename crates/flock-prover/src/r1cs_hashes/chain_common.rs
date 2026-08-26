@@ -17,13 +17,14 @@
 //! above. The two slots must be consecutive (slot 0 = input, slot 1 = output)
 //! so the chain claim's selector is a single bit-flip in the multilinear cube.
 
+use crate::chain::ChainClaimsExt;
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;
 use flock_core::pcs::{
     Commitment, DirectEqInd, LOG_PACKING, PackedDirectClaim, PackedDirectClaimRef, PcsParams,
 };
-use flock_core::r1cs::BlockR1cs;
+use flock_core::r1cs::{BlockR1cs, WitnessLayout};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
@@ -131,7 +132,7 @@ impl ChainFold {
 /// mul-adds (16 for keccak, 2 for blake3/sha2).
 pub fn fold_in_out(
     layout: &ChainLayout,
-    wl: flock_core::r1cs::WitnessLayout,
+    wl: WitnessLayout,
     packed: &[F128],
     fold: &ChainFold,
 ) -> (Vec<F128>, Vec<F128>) {
@@ -155,8 +156,8 @@ pub fn fold_in_out(
     // contiguous (`(w << n_log) + i`).
     let word_addr = move |i: usize, w: usize| -> usize {
         match wl {
-            flock_core::r1cs::WitnessLayout::RowMajor => i * block_packed + w,
-            flock_core::r1cs::WitnessLayout::BatchMajor => (w << n_log) + i,
+            WitnessLayout::RowMajor => i * block_packed + w,
+            WitnessLayout::BatchMajor => (w << n_log) + i,
         }
     };
 
@@ -180,6 +181,99 @@ pub fn fold_in_out(
     (in_vals, out_vals)
 }
 
+/// Extended region fold over the `S`-subcube (Part 7 design D2'): one `(In, Out)` pair
+/// per cell `t`, folding slot-pair `j(t)`. Cell 0 is the state pair ([`fold_in_out`]).
+pub fn fold_in_out_subcube(
+    layout: &ChainLayout,
+    wl: WitnessLayout,
+    packed: &[F128],
+    fold: &ChainFold,
+    s_coords: &[usize],
+) -> Vec<(Vec<F128>, Vec<F128>)> {
+    assert_eq!(
+        layout.input_byte_off, 0,
+        "subcube fold needs the input slot at pair-0 offset 0"
+    );
+    // Bit-exact: a truncating word-level comparison would accept an output
+    // slot misaligned by up to 15 bytes and fold the wrong words.
+    assert_eq!(
+        layout.output_byte_off * 8,
+        1usize << layout.region_log,
+        "subcube fold needs the output slot as pair 0's second half"
+    );
+    assert!(
+        layout.region_log >= 3,
+        "pair stride must be a whole number of bytes"
+    );
+    for &c in s_coords {
+        assert!(c < layout.high_zeros(), "S coordinate outside slot space");
+    }
+
+    (0..1usize << s_coords.len())
+        .map(|t| {
+            let pair: usize = s_coords
+                .iter()
+                .enumerate()
+                .map(|(b, &c)| ((t >> b) & 1) << c)
+                .sum();
+            let pair_layout = ChainLayout {
+                input_byte_off: layout.input_byte_off + pair * ((2 << layout.region_log) / 8),
+                output_byte_off: layout.output_byte_off + pair * ((2 << layout.region_log) / 8),
+                ..*layout
+            };
+            fold_in_out(&pair_layout, wl, packed, fold)
+        })
+        .collect()
+}
+
+/// Extended-claim variant of [`assemble_chain_claim`]: the `h*` values replace the
+/// zeros at the `s_coords` positions. `eq_ind` stays sparse outside `S`.
+pub fn assemble_chain_claim_ext(
+    layout: &ChainLayout,
+    wl: WitnessLayout,
+    fold: &ChainFold,
+    claims: &ChainClaimsExt,
+    s_coords: &[usize],
+) -> PackedDirectClaim {
+    let point = build_chain_claim_point_ext(layout, wl, fold, claims, s_coords);
+    let sparse_eq = flock_core::pcs::ring_switch::build_eq_sparse(&point);
+    PackedDirectClaim {
+        point,
+        value: claims.value,
+        eq_ind: DirectEqInd::Sparse(sparse_eq),
+    }
+}
+
+/// Point builder for [`assemble_chain_claim_ext`] — public so the verifier
+/// side can rebuild the point without the sparse tensor.
+pub fn build_chain_claim_point_ext(
+    layout: &ChainLayout,
+    wl: WitnessLayout,
+    fold: &ChainFold,
+    claims: &ChainClaimsExt,
+    s_coords: &[usize],
+) -> Vec<F128> {
+    assert_eq!(claims.s_high.len(), s_coords.len(), "S arity mismatch");
+    let high = layout.high_zeros();
+    let mut high_coords = vec![F128::ZERO; high];
+    for (b, &c) in s_coords.iter().enumerate() {
+        high_coords[c] = claims.s_high[b];
+    }
+    let point_len = fold.tau_pos.len() + 1 + high + claims.instance_point.len();
+    let mut point = Vec::with_capacity(point_len);
+    if wl == WitnessLayout::BatchMajor {
+        point.extend_from_slice(&claims.instance_point);
+    }
+    point.extend_from_slice(&fold.tau_pos);
+    point.push(claims.sel0);
+    point.extend_from_slice(&high_coords);
+    if wl == WitnessLayout::RowMajor {
+        point.extend_from_slice(&claims.instance_point);
+    }
+    debug_assert_eq!(point.len(), point_len);
+    point
+}
+
 /// Assemble the packed-direct chain claim from the fold and the shift
 /// sumcheck output. The point layout (LSB-first over `L = m − LOG_PACKING`
 /// coords):
@@ -194,7 +288,7 @@ pub fn fold_in_out(
 /// `build_eq_sparse` to skip the zero-coord halvings.
 pub fn assemble_chain_claim(
     layout: &ChainLayout,
-    wl: flock_core::r1cs::WitnessLayout,
+    wl: WitnessLayout,
     fold: &ChainFold,
     claims: &crate::chain::ChainClaims,
 ) -> PackedDirectClaim {
@@ -218,20 +312,20 @@ pub fn assemble_chain_claim(
 /// verifier evaluates `eq_eval(point, residual_challenges)` directly).
 fn build_chain_claim_point(
     layout: &ChainLayout,
-    wl: flock_core::r1cs::WitnessLayout,
+    wl: WitnessLayout,
     fold: &ChainFold,
     claims: &crate::chain::ChainClaims,
 ) -> Vec<F128> {
     let high = layout.high_zeros();
     let point_len = fold.tau_pos.len() + 1 + high + claims.instance_point.len();
     let mut point = Vec::with_capacity(point_len);
-    if wl == flock_core::r1cs::WitnessLayout::BatchMajor {
+    if wl == WitnessLayout::BatchMajor {
         point.extend_from_slice(&claims.instance_point);
     }
     point.extend_from_slice(&fold.tau_pos);
     point.push(claims.sel0);
     point.extend(std::iter::repeat_n(F128::ZERO, high));
-    if wl == flock_core::r1cs::WitnessLayout::RowMajor {
+    if wl == WitnessLayout::RowMajor {
         point.extend_from_slice(&claims.instance_point);
     }
     debug_assert_eq!(point.len(), point_len);

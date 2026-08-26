@@ -166,6 +166,15 @@ pub struct ChainProofBundleLigerito {
     pub cv_last_phys: Vec<bool>,
 }
 
+/// The canonical fixint bincode options for proof bundles: one definition serves the
+/// CLI (which layers `.with_limit(..)`) and the benchmarks, so sizes cannot drift.
+pub fn fixint_options() -> impl bincode::Options + Copy {
+    use bincode::Options;
+    bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .reject_trailing_bytes()
+}
+
 impl R1csProofBundleLigerito {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
@@ -475,6 +484,7 @@ mod tests {
         assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(_))));
     }
 
+    #[cfg(feature = "zk")]
     #[test]
     fn old_version_proofs_fail_closed() {
         for old in [4, 5] {

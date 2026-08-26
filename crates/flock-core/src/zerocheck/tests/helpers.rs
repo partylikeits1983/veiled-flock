@@ -22,27 +22,17 @@ impl Challenger for ScriptedEqChallenger {
     }
 }
 
-/// SplitMix64 PRNG, deterministic.
-pub(super) struct Rng(u64);
+pub(super) use flock_test_util::Rng;
 
-impl Rng {
-    pub(super) fn new(seed: u64) -> Self {
-        Self(seed)
-    }
+/// Mask helper over the shared [`Rng`]. It lives here because a foreign trait
+/// cannot be implemented for a foreign type, and `flock-test-util` depends on
+/// nothing (see that crate's docs).
+pub(super) trait RngMask {
+    fn field_mask(&mut self, m: usize) -> Vec<F128>;
+}
 
-    pub(super) fn next_u64(&mut self) -> u64 {
-        self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-        z ^ (z >> 31)
-    }
-
-    pub(super) fn bits(&mut self, n: usize) -> Vec<bool> {
-        (0..n).map(|_| self.next_u64() & 1 == 1).collect()
-    }
-
-    pub(super) fn field_mask(&mut self, m: usize) -> Vec<F128> {
+impl RngMask for Rng {
+    fn field_mask(&mut self, m: usize) -> Vec<F128> {
         (0..SmallMaskSpec::default().d(m))
             .map(|_| F128::new(self.next_u64(), self.next_u64()))
             .collect()

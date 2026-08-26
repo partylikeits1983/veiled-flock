@@ -181,6 +181,8 @@ impl ZkConfig {
             + 2                             // final_a_eval, final_b_eval
             + 2 * (k_log - 6)               // lincheck rounds
             + 64                            // lincheck z_partial
+            // Chain shift-sumcheck messages. The extended chain (Part 7) observes
+            // 2·|S| more — covered by the slack below; its pad budget is MaskLayout's.
             + if has_chain { 2 * (n_log + 1) + 2 } else { 0 }
             + 256                           // two s_hat_v vectors
             + 64; // slack
