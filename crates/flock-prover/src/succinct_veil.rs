@@ -56,31 +56,23 @@ pub struct MaskedZerocheckProof {
     pub final_b_eval: F128,
 }
 
-/// Masked chain-shift wire format (succinct-chain composition, Part 7).
-/// Exactly the `n + 1 + |S|` round message pairs (`2 · (n + 1 + |S|)`
-/// field elements) the extended shift sumcheck observes, each one-time
-/// padded. The opened evaluation value is NOT here: like `final_c_eval`,
-/// it is not maskable — the PCS checks it verbatim — so it travels as the
-/// public `chain_value` field.
+/// Masked chain-shift wire format (Part 7): the `n + 1 + |S|` one-time-padded round
+/// message pairs. The opened value is not maskable — it travels as public `chain_value`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct MaskedChainShiftProof {
     pub rounds: Vec<(F128, F128)>,
 }
 
-/// Succinct-VEIL proof of a hash chain with in-circuit linkage: the base
-/// succinct proof (whose mask commitment, circuit, and opening already
-/// carry the chain section) plus the masked chain wire and the public
-/// opened value.
+/// Succinct-VEIL proof of a hash chain with in-circuit linkage: the base succinct
+/// proof (already chain-aware) plus the masked chain wire and the public opened value.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctChainVeilProof {
-    /// NOT a valid standalone succinct proof: its transcript, mask
-    /// commitment, and circuit all carry the chain section. Feeding it to
-    /// `verify_succinct_veil_r1cs` fails (safely).
+    /// NOT a valid standalone succinct proof: its transcript, commitment, and circuit
+    /// carry the chain section. `verify_succinct_veil_r1cs` fails on it (safely).
     pub base: SuccinctVeilProof,
     pub masked_chain: MaskedChainShiftProof,
-    /// The extended shift sumcheck's opened evaluation `V` — a public
-    /// proof field mirroring `ab_value`/`c_value`, made witness-independent
-    /// by the chain-mask slot pair inside the opened combination.
+    /// The opened evaluation `V` — public like `ab_value`/`c_value`, made
+    /// witness-independent by the chain-mask slot pair in the opened combination.
     pub chain_value: F128,
 }
 
@@ -314,17 +306,8 @@ impl From<pcs::VerifyError> for SuccinctVeilError {
     }
 }
 
-/// Geometry of the chain-mask slot pair, for the succinct chain
-/// composition (Part 7 of the e2e bench plan).
-///
-/// Derive this at RUNTIME from the zk layout — never hardcode `p` or
-/// `|S|`: keccak's layout routes through `ZkConfig::sized_for`, so the
-/// pair index is batch-dependent in principle. This shape is an EXPLICIT
-/// parameter of the chain entry points; it is never derived from
-/// `r1cs.zk` inside the shared code paths, because both shipping
-/// encoders already allocate the pair (`chain_mask: true`) and deriving
-/// it there would silently flip the existing public-chain entry points
-/// into chain mode.
+/// Geometry of the chain-mask slot pair (Part 7). Derive it at RUNTIME from the zk
+/// layout and pass it explicitly — never derive it from `r1cs.zk` in shared paths.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ChainMaskShape {
     /// The mask pair's slot-pair index `p`.
@@ -335,11 +318,8 @@ pub struct ChainMaskShape {
 }
 
 impl ChainMaskShape {
-    /// Derive the shape from a zk block layout. `k_log` is the block's
-    /// witness log (the layout does not store it).
-    ///
-    /// Panics when the layout has no chain-mask pair, or when the pair
-    /// index does not fit the slot-address coordinate space.
+    /// Derive the shape from a zk block layout; `k_log` is the block's witness log.
+    /// Panics when the layout has no chain-mask pair or the pair index does not fit.
     pub fn from_layout(layout: &flock_core::zk::ZkBlockLayout, k_log: usize) -> Self {
         assert!(
             k_log > layout.mask_region_log,
@@ -375,9 +355,8 @@ struct MaskLayout {
     zc_rounds: usize,
     lc_rounds: usize,
     z_partial: usize,
-    /// Shift-sumcheck rounds of the chain section, `n_log + 1 + |S|`;
-    /// zero for the (unchanged) chainless entry points. Each round
-    /// observes two values.
+    /// Shift-sumcheck rounds of the chain section, `n_log + 1 + |S|`; zero for the
+    /// chainless entry points. Each round observes two values.
     chain_rounds: usize,
 }
 
@@ -386,9 +365,8 @@ impl MaskLayout {
         Self::with_chain(r1cs, None)
     }
 
-    /// Chain-aware constructor. `observed_count` grows by `2 ·
-    /// (n_log + 1 + |S|)` ONLY when `chain` is present, so the chainless
-    /// entry points' mask commitments and circuits stay byte-identical.
+    /// Chain-aware constructor. `observed_count` grows ONLY when `chain` is present,
+    /// so the chainless mask commitments and circuits stay byte-identical.
     fn with_chain(
         r1cs: &BlockR1cs,
         chain: Option<&ChainMaskShape>,
@@ -567,9 +545,8 @@ fn dot(expressions: &[LinearCombination], coefficients: &[F128]) -> LinearCombin
     )
 }
 
-/// Observe the explicit PCS claim values. The chain value is CONDITIONAL:
-/// observed only on the chain-aware path, so the shipping chainless entry
-/// points' transcripts stay byte-identical.
+/// Observe the explicit PCS claim values. The chain value is observed only on the
+/// chain-aware path, so the chainless transcripts stay byte-identical.
 fn observe_claims_ext<C: Challenger>(challenger: &mut C, ab: F128, c: F128, chain: Option<F128>) {
     challenger.observe_label(CLAIMS_LABEL);
     challenger.observe_f128(ab);
@@ -583,12 +560,8 @@ fn observe_claims<C: Challenger>(challenger: &mut C, ab: F128, c: F128) {
     observe_claims_ext(challenger, ab, c, None);
 }
 
-/// Absorb the chain endpoints into the transcript, length-framed, BEFORE
-/// any challenge. The entry points call this themselves: endpoint binding
-/// is part of the construction, never a caller obligation — without it a
-/// prover can solve for a passing `x_last` after seeing the challenges
-/// (the running claim is affine in the verifier-formed initial claim, and
-/// `fold_public_phys` is F2-linear and surjective in the endpoint bits).
+/// Absorb the chain endpoints, length-framed, BEFORE any challenge. The entry points
+/// call this themselves — without it a prover can solve for `x_last` after the challenges.
 fn absorb_chain_endpoints<Ch: Challenger>(
     challenger: &mut Ch,
     x0_phys: &[bool],
@@ -610,11 +583,8 @@ fn absorb_chain_endpoints<Ch: Challenger>(
     challenger.observe_bytes(&pack(xlast_phys));
 }
 
-/// Validate that the caller's `(chain_layout, shape, endpoints)` triple is
-/// internally consistent with the R1CS's own zk layout. A mismatched shape
-/// silently removes the mask pair from the opened combination — the proof
-/// still verifies while `chain_value` degrades to a raw witness
-/// evaluation — so this is an error path, not a caller convention.
+/// Validate the `(chain_layout, shape, endpoints)` triple against the R1CS's zk layout.
+/// A mismatched shape silently degrades `chain_value` to a raw witness evaluation.
 fn validate_chain_shape(
     r1cs: &BlockR1cs,
     chain_layout: &crate::r1cs_hashes::chain_common::ChainLayout,
@@ -681,14 +651,8 @@ fn shifted_verifier_circuit<C: Challenger>(
     Ok((circuit, ab, c))
 }
 
-/// Chain-aware replay: when `chain` is present, the circuit also replays
-/// the extended shift sumcheck — running claim from the verifier-formed
-/// public `C`, degree-2 round evaluation over the unmasked messages, and
-/// ONE linear final constraint tying the claim to `W'_final · V` — and
-/// returns the chain packed-direct claim `(point, value)` rebuilt from the
-/// replayed challenges. The chain section sits after the FULL lincheck
-/// (including its `r_inner_skip` sample) and before the claim
-/// observations, matching the prover's transcript order.
+/// Chain-aware replay: with `chain` present the circuit also replays the extended shift
+/// sumcheck (after the FULL lincheck) and returns the rebuilt chain packed-direct claim.
 #[allow(clippy::too_many_arguments)]
 fn shifted_verifier_circuit_ext<C: Challenger>(
     r1cs: &BlockR1cs,
@@ -857,9 +821,8 @@ fn shifted_verifier_circuit_ext<C: Challenger>(
             .iter()
             .fold(base_w, |acc, &h| acc * (F128::ONE + h));
         if w_final == F128::ZERO {
-            // Negligible (~2^-128) and not grindable, but a zero weight
-            // would leave `chain_value` unconstrained — reject, matching
-            // the zerocheck degenerate-challenge convention.
+            // Negligible (~2^-128) and not grindable, but a zero weight would leave
+            // `chain_value` unconstrained — reject, matching the zerocheck convention.
             return Err(SuccinctVeilError::InvalidShape(
                 "degenerate chain final weight",
             ));
@@ -897,10 +860,8 @@ fn shifted_verifier_circuit_ext<C: Challenger>(
     Ok((builder.finish(), ab, c, chain_out))
 }
 
-// MIRROR: `prove_succinct_chain_veil_r1cs` duplicates this body (through
-// the pre-`circuit_start` transcript prefix and the zerocheck/lincheck
-// sections) to keep this shipping path byte-identical. Replicate any
-// change here in the chain variant, and vice versa.
+// MIRROR: `prove_succinct_chain_veil_r1cs` duplicates this body to keep this shipping
+// path byte-identical. Replicate any change here in the chain variant, and vice versa.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
@@ -1180,25 +1141,10 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     Ok(())
 }
 
-/// Succinct-VEIL prover for a hash chain with in-circuit linkage (Part 7
-/// design D5'). Public statement: the endpoints only (`x0_phys` /
-/// `xlast_phys`, physical within-slot bit order); the committed witness
-/// enforces every interior link through the extended shift sumcheck.
-///
-/// A separate entry point rather than a `packed_direct` closure because
-/// the chain glue needs three things that seam cannot give: the VEIL
-/// circuit gains chain constraints, the mask budget gains the chain tail,
-/// and the fold reads `z_packed` before the opening consumes it.
-///
-/// EXPERIMENTAL, uncertified (like the whole succinct path), and it
-/// forgoes the `SuccinctZerocheckSource` simulation seam: this entry point
-/// claims masking-by-construction, not simulatability.
-// MIRROR: this body duplicates `prove_succinct_veil_r1cs` (transcript
-// prefix, zerocheck, lincheck) deliberately — the shipping path must stay
-// byte-identical, so a shared parameterized core was rejected. Replicate
-// any change to either body in the other. The veil challenger fork below
-// happens after all linkage data is bound but before the terminal opening,
-// for the same reason as in the base prover.
+/// Succinct-VEIL prover for a hash chain with in-circuit linkage (Part 7 design D5'):
+/// endpoints-only public statement. EXPERIMENTAL, uncertified, no simulation seam.
+// MIRROR: this body duplicates `prove_succinct_veil_r1cs` deliberately — the shipping
+// path must stay byte-identical. Replicate any change to either body in the other.
 #[allow(clippy::too_many_arguments)]
 pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
@@ -1220,9 +1166,8 @@ pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
         return Err(SuccinctVeilError::InvalidParameters);
     }
     validate_chain_shape(r1cs, chain_layout, shape, x0_phys, xlast_phys)?;
-    // Endpoint binding is part of the construction (see
-    // `absorb_chain_endpoints`) — before the nonce, the commitments, and
-    // every challenge.
+    // Endpoint binding is part of the construction (see `absorb_chain_endpoints`) —
+    // before the nonce, the commitments, and every challenge.
     absorb_chain_endpoints(challenger, x0_phys, xlast_phys);
     let layout = MaskLayout::with_chain(r1cs, Some(shape))?;
     let mut masks = vec![F128::ZERO; layout.observed_count()];
@@ -1264,10 +1209,8 @@ pub fn prove_succinct_chain_veil_r1cs<Ch: Challenger + Clone + Send>(
 
     let padding = r1cs.padding_spec();
     let (honest_zc, zc_claim, s_hat_v_c) = {
-        // SAFETY (all three blocks): reinterpreting a live `&[F128]` as
-        // `&[u8]` of the same byte length; F128 is a plain-old-data pair
-        // of u64s with no padding, the source outlives the borrow, and
-        // the zerocheck kernel only reads. Mirrors the base prover.
+        // SAFETY (all three blocks): a live `&[F128]` viewed as `&[u8]` of the same
+        // byte length; F128 is POD with no padding, and the kernel only reads.
         let a_bytes = unsafe {
             std::slice::from_raw_parts(
                 a_packed.as_ptr() as *const u8,

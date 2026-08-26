@@ -1377,31 +1377,17 @@ pub fn generate_witness_batch_major(
     (z, a, b, stripe)
 }
 
-// ---------------------------------------------------------------------------
-// zk layout + succinct-VEIL setup (Phase 2 of the e2e bench plan).
-//
-// Keccak's constraints live in [`KeccakLincheckCircuit`], not in matrices,
-// so the zk path keeps the empty matrix stubs and claims the randomizer
-// rows through [`flock_core::lincheck::ZkLincheckCircuit`]. Only the block
-// layout and the witness generator change. The layout/witness builders are
-// deliberately NOT `veil`-gated: sha2/keccak3 reuse is intended, and only
-// the succinct prove/verify entry points need the veil-f128 dependency.
-// ---------------------------------------------------------------------------
+// zk layout + succinct-VEIL setup (Phase 2): the zk path keeps the empty matrix stubs
+// and claims the randomizer rows via `ZkLincheckCircuit`. Builders are not `veil`-gated.
 
-/// zk randomizer sizing for one keccak batch of `2^(m - K_LOG)` blocks
-/// (`m = K_LOG + n_keccaks_log` — the total witness log, not the outer log).
-///
-/// Sized per batch with [`flock_core::zk::ZkConfig::sized_for`]: keccak's
-/// block floor is far smaller than BLAKE3's, so a fixed chunk count cannot
-/// amortize the `128·V_free` entropy budget the way `blake3::zk_config`
-/// does.
+/// zk randomizer sizing for one keccak batch (`m = K_LOG + n_keccaks_log`), sized per
+/// batch with [`flock_core::zk::ZkConfig::sized_for`] — a fixed chunk count cannot amortize.
 pub fn zk_config(m: usize) -> flock_core::zk::ZkConfig {
     flock_core::zk::ZkConfig::sized_for(m, K_LOG, true)
 }
 
-/// zk block layout for this encoder at batch size `2^(m - K_LOG)`. The
-/// chain-mask pair uses keccak's own I/O slot geometry
-/// (`CHAIN_LAYOUT.region_log`).
+/// zk block layout at batch size `2^(m - K_LOG)`. The chain-mask pair uses keccak's
+/// own I/O slot geometry (`CHAIN_LAYOUT.region_log`).
 pub fn zk_layout(m: usize) -> flock_core::zk::ZkBlockLayout {
     flock_core::zk::ZkBlockLayout::new(
         K_LOG,
@@ -1411,14 +1397,8 @@ pub fn zk_layout(m: usize) -> flock_core::zk::ZkBlockLayout {
     )
 }
 
-/// zk variant of [`build_block_r1cs`]: the matrices stay empty stubs, the
-/// zk layout is bound into the statement digest, and `useful_bits` extends
-/// over the randomizer sections (they are real witness rows).
-///
-/// Provers MUST pair this R1CS with a
-/// [`flock_core::lincheck::ZkLincheckCircuit`] wrapper around
-/// [`KeccakLincheckCircuit`] — the bare walker does not claim the
-/// randomizer rows and the lincheck fails.
+/// zk variant of [`build_block_r1cs`]: empty matrix stubs, zk layout bound into the
+/// digest. Provers MUST wrap the walker in [`flock_core::lincheck::ZkLincheckCircuit`].
 pub fn build_block_r1cs_zk(n_keccaks_log: usize) -> BlockR1cs {
     let layout = zk_layout(K_LOG + n_keccaks_log);
     let mut r1cs = super::common::build_block_r1cs_empty_stub(
@@ -1431,13 +1411,8 @@ pub fn build_block_r1cs_zk(n_keccaks_log: usize) -> BlockR1cs {
     r1cs
 }
 
-/// zk variant of [`generate_witness_with_ab_packed_and_lincheck`]: every
-/// block slot — real or padding — gets its randomizer sections filled from
-/// `rand_words` (see [`super::common::zk_rand_words_per_block`]). Padding
-/// slots keep the honest `keccak_f(0)` computation for the const-wire pin.
-///
-/// `layout` MUST be the layout bound into the target R1CS (`r1cs.zk`) —
-/// a foreign layout writes randomizer rows the statement does not cover.
+/// zk variant of [`generate_witness_with_ab_packed_and_lincheck`]: every slot gets its
+/// randomizer sections from `rand_words`. `layout` MUST be the layout bound in `r1cs.zk`.
 pub fn generate_witness_with_ab_packed_and_lincheck_zk(
     initial_states: &[State],
     n_keccaks_log: usize,
@@ -1502,21 +1477,8 @@ impl From<crate::succinct_veil::SuccinctVeilError> for KeccakZkError {
     }
 }
 
-/// Succinct-VEIL setup for a batch of public keccak-f permutation claims.
-///
-/// EXPERIMENTAL, like the sibling `Blake3PreimageZkSetup` succinct path:
-/// this entry point is NOT gated by [`crate::zk_certificate`] — statements
-/// that bind public I/O are outside the certified zk scope by design, and
-/// no mask-coverage certificate exists for this shape. Do not use for
-/// production secrets.
-///
-/// The statement binds BOTH endpoints of every block: `keccak_f` is a
-/// permutation, so an output-only statement is satisfied by anyone via the
-/// inverse permutation. Two [`crate::digest_bind::DigestStatement`]s (input
-/// slot, output slot) ride the one batched Ligerito opening as
-/// packed-direct claims. Relation label for benches: `public-chain` —
-/// linkage between blocks is a verifier-side equality over public states,
-/// not a circuit constraint.
+/// Succinct-VEIL setup for a batch of public keccak-f permutation claims. EXPERIMENTAL
+/// and uncertified; binds BOTH endpoints of every block. Bench label: `public-chain`.
 pub struct KeccakZkSetup {
     pub n_keccaks: usize,
     pub r1cs: BlockR1cs,
@@ -1524,15 +1486,13 @@ pub struct KeccakZkSetup {
 }
 
 impl KeccakZkSetup {
-    /// Build a setup for `n_keccaks` permutations. Clamps the batch so
-    /// `m = K_LOG + n_log ≥ 22`: every row stays on an audited Ligerito
-    /// config (m ∈ [22, 35]) with no deprecated fallback.
+    /// Build a setup for `n_keccaks` permutations. Clamps the batch so `m ≥ 22`:
+    /// every row stays on an audited Ligerito config (m ∈ [22, 35]).
     pub fn new(n_keccaks: usize) -> Self {
         assert!(n_keccaks >= 1, "n_keccaks must be >= 1");
         let n_log = min_n_keccaks_log(n_keccaks).max(22 - K_LOG);
-        // Upper bound BEFORE any allocation: Ligerito configs stop at
-        // m = 35, and `prewarm_prover(36)` would fault in ~24 GB of
-        // scratch before the config lookup could report the honest error.
+        // Upper bound BEFORE any allocation: configs stop at m = 35, and
+        // `prewarm_prover(36)` would fault in ~24 GB before the lookup errors.
         assert!(
             n_log <= 35 - K_LOG,
             "n_keccaks = {n_keccaks} needs m = {} but Ligerito configs stop at m = 35 \
@@ -1565,9 +1525,8 @@ impl KeccakZkSetup {
         1usize << self.n_keccaks_log()
     }
 
-    /// The two public statements (input side, output side) for a batch.
-    /// Padding slots carry the honest padding trace: all-zero input state,
-    /// `keccak_f(0)` output state.
+    /// The two public statements (input side, output side) for a batch. Padding
+    /// slots carry the honest trace: all-zero input, `keccak_f(0)` output.
     pub fn statements(
         &self,
         inputs: &[State],
@@ -1596,9 +1555,8 @@ impl KeccakZkSetup {
         (input_stmt, output_stmt)
     }
 
-    /// Absorb both public statements before any challenge is drawn. The
-    /// fixed input-then-output order MUST match between prover and
-    /// verifier.
+    /// Absorb both public statements before any challenge. The fixed
+    /// input-then-output order MUST match between prover and verifier.
     fn absorb_statements<Ch: Challenger>(
         challenger: &mut Ch,
         input_stmt: &crate::digest_bind::DigestStatement,
@@ -1643,9 +1601,8 @@ impl KeccakZkSetup {
         .expect("keccak succinct setup clamps m to the audited Ligerito range")
     }
 
-    /// Prove `keccak_f(inputs[i]) == outputs[i]` for the whole batch, with
-    /// both state lists public. Witness stays in the hiding Ligerito
-    /// commitment; only the masked transcript enters the VEIL circuit.
+    /// Prove `keccak_f(inputs[i]) == outputs[i]` for the whole batch, both state
+    /// lists public. Only the masked transcript enters the VEIL circuit.
     pub fn prove_succinct<Ch: Challenger + Clone + Send>(
         &self,
         inputs: &[State],
@@ -1758,9 +1715,8 @@ impl KeccakZkSetup {
         out
     }
 
-    /// Absorb the chain statement — label, batch size, chain geometry, and
-    /// both public endpoints — BEFORE any challenge is drawn. Prover and
-    /// verifier call this identically.
+    /// Absorb the chain statement — label, batch size, geometry, both endpoints —
+    /// BEFORE any challenge. Prover and verifier call this identically.
     fn absorb_chain_statement<Ch: Challenger>(
         challenger: &mut Ch,
         n_log: usize,
@@ -1780,13 +1736,8 @@ impl KeccakZkSetup {
         challenger.observe_bytes(&Self::phys_bits_to_bytes(xlast_phys));
     }
 
-    /// Prove the chain `inputs[i + 1] = keccak_f(inputs[i])` with
-    /// IN-CIRCUIT linkage: only the endpoints `x_0 = inputs[0]` and
-    /// `x_last = keccak_f(inputs[n - 1])` are public. Relation label for
-    /// benches: `chain-in-circuit`.
-    ///
-    /// The chain forbids padding: `inputs.len()` must equal the slot count
-    /// exactly (power of two, ≥ 64).
+    /// Prove the chain with IN-CIRCUIT linkage: only the endpoints are public. Bench
+    /// label: `chain-in-circuit`. No padding: `inputs.len()` equals the slot count.
     pub fn prove_succinct_chain<Ch: Challenger + Clone + Send>(
         &self,
         inputs: &[State],
@@ -2422,9 +2373,8 @@ mod tests {
         );
     }
 
-    /// Elementwise Hadamard check over the packed buffers: `a ⊙ b == z`
-    /// bitwise, randomizer rows included. `BlockR1cs::satisfies_packed`
-    /// cannot check this encoding — keccak's matrices are empty stubs.
+    /// Elementwise Hadamard check `a ⊙ b == z`, randomizer rows included.
+    /// `BlockR1cs::satisfies_packed` cannot check this — the matrices are empty stubs.
     #[test]
     fn zk_witness_satisfies_hadamard_elementwise() {
         let n_log = 3;
@@ -2460,9 +2410,8 @@ mod tests {
             .verify_succinct(&commitment, &proof, &inputs, &outputs, &mut chv)
             .expect("honest verify");
 
-        // Wrong INPUT state: keccak_f is a permutation, so an output-only
-        // statement would accept this. Both endpoints are bound, so it
-        // must reject.
+        // Wrong INPUT state: an output-only statement would accept this (keccak_f
+        // is a permutation). Both endpoints are bound, so it must reject.
         let mut bad_inputs = inputs.clone();
         bad_inputs[0][0] ^= true;
         let mut ch = FsChallenger::new(b"keccak-zk-test-v0");
@@ -2507,11 +2456,8 @@ mod tests {
         );
     }
 
-    /// Non-full batch: exercises the `PaddingDigest::Constant` statement
-    /// entries together with the padding witness slots — a phys-bit
-    /// disagreement between `keccak_f(0)`'s statement bits and the padding
-    /// trace would fail every non-full batch and no full-batch test would
-    /// catch it.
+    /// Non-full batch: exercises `PaddingDigest::Constant` entries with the padding
+    /// witness slots — a phys-bit disagreement would fail every non-full batch.
     #[cfg(feature = "veil")]
     #[test]
     fn keccak_zk_succinct_roundtrip_with_padding_slots() {
@@ -2601,10 +2547,8 @@ mod tests {
         );
     }
 
-    /// In-circuit linkage enforcement: a broken-link witness pushed through
-    /// the RAW succinct-chain prover (bypassing the setup's precheck)
-    /// produces a proof the verifier rejects — the sumcheck's public claim
-    /// no longer matches the committed witness.
+    /// In-circuit linkage: a broken-link witness pushed through the RAW prover
+    /// (bypassing the precheck) produces a proof the verifier rejects.
     #[cfg(feature = "veil")]
     #[test]
     fn keccak_zk_succinct_chain_rejects_broken_link_in_circuit() {
@@ -2634,11 +2578,8 @@ mod tests {
         let x0_phys = state_to_phys_bits(&x0);
         let xlast_phys = state_to_phys_bits(&x_last);
 
-        // The honest prover cannot even PRODUCE a proof for a broken
-        // chain: the shift sumcheck's true sum disagrees with the public
-        // initial claim, so the replayed verifier circuit is unsatisfied
-        // and the VEIL constraint prover refuses. That is the in-circuit
-        // linkage doing its job one layer earlier than verification.
+        // The honest prover cannot even PRODUCE a proof for a broken chain: the
+        // replayed verifier circuit is unsatisfied and the VEIL prover refuses.
         let mut chp = FsChallenger::new(b"keccak-chain-broken-v0");
         let result = crate::succinct_veil::prove_succinct_chain_veil_r1cs(
             &setup.r1cs,

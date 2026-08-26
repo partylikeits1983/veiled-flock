@@ -823,9 +823,8 @@ pub fn zk_layout() -> flock_core::zk::ZkBlockLayout {
     flock_core::zk::ZkBlockLayout::new(K_LOG, USEFUL_BITS, Some(8), &zk_config())
 }
 
-// The literal `Some(8)` above is declared independently of this encoder's
-// chain geometry; pin them together. Keccak needs no such pin — it derives
-// its region_log from its own CHAIN_LAYOUT.
+// The literal `Some(8)` above is independent of this encoder's chain geometry; pin
+// them together. Keccak derives its region_log from its own CHAIN_LAYOUT.
 const _: () = assert!(
     CHAIN_LAYOUT.region_log == 8,
     "blake3 zk_layout hardcodes region_log 8; CHAIN_LAYOUT drifted"

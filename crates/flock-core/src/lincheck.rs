@@ -232,25 +232,8 @@ impl<'a> LincheckCircuit for SparseMatrixCircuit<'a> {
     }
 }
 
-/// Randomizer-row decorator for hand-written circuit walkers (zk mode).
-///
-/// Encoders with materialized matrices (BLAKE3, SHA-2) write their zk
-/// randomizer rows into `A_0`/`B_0`, so a matrix-derived circuit claims
-/// them for free. Encoders with a hand-written [`LincheckCircuit`] walker
-/// (Keccak) do not: the walker knows nothing about the randomizer rows,
-/// while `write_zk_randomizers` fills the committed witness at exactly
-/// those rows. This wrapper closes that gap. It adds the randomizer rows'
-/// matrix contributions on top of the inner walker's fold, in the same row
-/// convention the matrix encoders use:
-///
-/// - A-type row `s` (`u · 1 = u`): `A[s, s] = 1`, `B[s, pin] = 1`.
-/// - B-type row `s` (`1 · u′ = u′`): `A[s, pin] = 1`, `B[s, s] = 1`.
-///
-/// [`crate::zk::ZkBlockLayout::a_bits`] already chains the chain-mask slot
-/// pair, so one loop per side covers every randomizer section.
-///
-/// Pass the wrapper — never the bare walker — to BOTH the succinct prover
-/// and verifier when `r1cs.zk` is set.
+/// Randomizer-row decorator for hand-written walkers (zk mode): adds the randomizer
+/// rows' matrix contributions to the inner fold. Pass it to BOTH prover and verifier.
 pub struct ZkLincheckCircuit<'a> {
     inner: &'a dyn LincheckCircuit,
     layout: &'a crate::zk::ZkBlockLayout,
@@ -260,12 +243,8 @@ pub struct ZkLincheckCircuit<'a> {
 }
 
 impl<'a> ZkLincheckCircuit<'a> {
-    /// Wrap `inner` so the fold also claims `layout`'s randomizer rows.
-    ///
-    /// Panics when the inner circuit has no constant-one wire (the A-type
-    /// row convention needs one for its B side), or when `layout` does not
-    /// fit inside the inner circuit's column space — a mismatched pair
-    /// would index out of bounds inside the prover AND the verifier fold.
+    /// Wrap `inner` so the fold also claims `layout`'s randomizer rows. Panics when
+    /// `inner` has no constant-one wire or `layout` exceeds its column space.
     pub fn new(inner: &'a dyn LincheckCircuit, layout: &'a crate::zk::ZkBlockLayout) -> Self {
         let pin = inner
             .const_pin_col()
@@ -286,9 +265,8 @@ impl LincheckCircuit for ZkLincheckCircuit<'_> {
         self.inner.n_cols()
     }
 
-    /// Forward the inner pin. The trait default is `None`; dropping the
-    /// override here would silently lose the lincheck's β pin term and
-    /// reopen the all-zero-witness soundness gap.
+    /// Forward the inner pin. The trait default is `None`; dropping this override
+    /// loses the lincheck's β pin term and reopens the all-zero-witness soundness gap.
     fn const_pin_col(&self) -> Option<usize> {
         self.inner.const_pin_col()
     }
@@ -296,9 +274,8 @@ impl LincheckCircuit for ZkLincheckCircuit<'_> {
     fn fold_alpha_batched(&self, alpha: F128, eq_inner: &[F128]) -> Vec<F128> {
         debug_assert_eq!(eq_inner.len(), self.n_cols());
         let mut comb = self.inner.fold_alpha_batched(alpha, eq_inner);
-        // Accumulate the pin column's contributions locally: one
-        // read-modify-write and one alpha multiply per side, instead of
-        // one of each per randomizer row.
+        // Accumulate the pin column's contributions locally: one read-modify-write
+        // and one alpha multiply per side, not one of each per randomizer row.
         let mut pin_plain = F128::ZERO;
         let mut pin_alpha = F128::ZERO;
         for s in self.layout.a_bits() {
@@ -2691,9 +2668,8 @@ mod tests {
 
     #[test]
     fn zk_decorator_matches_sparse_matrix_convention() {
-        // k_log = 10, useful_bits = 512: A rows [512, 640), B rows
-        // [640, 768), chain-mask pair [768, 1024). Full K x K matrices —
-        // SparseMatrixCircuit folds over every row.
+        // k_log = 10, useful_bits = 512: A rows [512, 640), B rows [640, 768),
+        // chain-mask pair [768, 1024). SparseMatrixCircuit folds over every row.
         let cfg = crate::zk::ZkConfig {
             rand_chunks_a: 1,
             rand_chunks_b: 1,

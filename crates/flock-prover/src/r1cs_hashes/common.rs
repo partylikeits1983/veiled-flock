@@ -320,10 +320,8 @@ pub(crate) fn drive_witness_packed_and_lincheck_zk<S: Sync, F>(
 where
     F: Fn(&S, &mut [u64], &mut [u64], &mut [u64]) + Sync,
 {
-    // A zk slot with no block would carry A-type randomizer rows whose B
-    // side selects a constant wire that no computation set to 1 — lincheck
-    // would then reject an honest proof. Every zk caller must supply a
-    // padding block.
+    // A zk slot with no block would carry A-type randomizer rows whose B side selects
+    // a constant wire no computation set to 1 — every zk caller must supply padding.
     assert!(
         zk.is_none() || padding.is_some(),
         "zk randomizer rows need a padding block in every empty slot"

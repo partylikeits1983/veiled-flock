@@ -160,9 +160,8 @@ fn bench(n_keccaks: usize, n_runs: usize) {
 
 fn main() {
     println!("Keccak hash-chain proof — prove_fast (base) vs prove_chain (full)");
-    // K chosen to step m up toward 30 (m = 16 + n_log). The floor is k = 64:
-    // Ligerito configs exist only for m in [22, 35], and smaller k panics in
-    // `prover_config_for`.
+    // K steps m toward 30 (m = 16 + n_log). Floor k = 64: Ligerito configs exist
+    // only for m in [22, 35], and smaller k panics in `prover_config_for`.
     for &(k, runs) in &[(64usize, 5), (512, 3), (4096, 3), (16384, 3)] {
         bench(k, runs);
     }

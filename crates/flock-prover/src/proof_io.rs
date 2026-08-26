@@ -166,12 +166,8 @@ pub struct ChainProofBundleLigerito {
     pub cv_last_phys: Vec<bool>,
 }
 
-/// The canonical fixint bincode options for proof bundles.
-///
-/// One definition serves every call site: the `veiled_flock` CLI layers
-/// `.with_limit(..)` on top for untrusted reads, and the benchmarks use it
-/// unlimited to measure proof sizes. Keep the encoding choices here in one
-/// place so size columns and bundle bytes cannot drift apart.
+/// The canonical fixint bincode options for proof bundles: one definition serves the
+/// CLI (which layers `.with_limit(..)`) and the benchmarks, so sizes cannot drift.
 pub fn fixint_options() -> impl bincode::Options + Copy {
     use bincode::Options;
     bincode::DefaultOptions::new()

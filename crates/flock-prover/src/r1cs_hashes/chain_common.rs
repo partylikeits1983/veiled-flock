@@ -180,16 +180,8 @@ pub fn fold_in_out(
     (in_vals, out_vals)
 }
 
-/// Extended region fold over the `S`-subcube (succinct-chain composition,
-/// Part 7 design D2').
-///
-/// Returns one `(In, Out)` pair per subcube cell `t ∈ [0, 2^|S|)`: cell `t`
-/// folds slot-pair `j(t)`, the pair whose bit at slot-address coordinate
-/// `s_coords[b]` equals bit `b` of `t` (zeros elsewhere). Cell 0 is the
-/// state pair — identical to [`fold_in_out`]'s output. Requires the
-/// layout's in/out slots to be the two halves of pair 0 (both encoders
-/// satisfy this: `input_byte_off = 0`, `output_byte_off = 2^region_log`
-/// bits).
+/// Extended region fold over the `S`-subcube (Part 7 design D2'): one `(In, Out)` pair
+/// per cell `t`, folding slot-pair `j(t)`. Cell 0 is the state pair ([`fold_in_out`]).
 pub fn fold_in_out_subcube(
     layout: &ChainLayout,
     wl: flock_core::r1cs::WitnessLayout,
@@ -233,10 +225,8 @@ pub fn fold_in_out_subcube(
         .collect()
 }
 
-/// Extended-claim variant of [`assemble_chain_claim`]: the `h*` values from
-/// the extended sumcheck replace the zeros at the `s_coords` positions of
-/// the high slot-address coords. `eq_ind` stays sparse over the coords
-/// outside `S`.
+/// Extended-claim variant of [`assemble_chain_claim`]: the `h*` values replace the
+/// zeros at the `s_coords` positions. `eq_ind` stays sparse outside `S`.
 pub fn assemble_chain_claim_ext(
     layout: &ChainLayout,
     wl: flock_core::r1cs::WitnessLayout,

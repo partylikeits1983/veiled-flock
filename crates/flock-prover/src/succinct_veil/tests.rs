@@ -49,9 +49,8 @@ fn chain_mask_shape_rejects_layout_without_pair() {
     let _ = super::ChainMaskShape::from_layout(&layout, 14);
 }
 
-/// The chain section is CONDITIONAL: absent, the layout is byte-identical
-/// to the chainless one; present, observed_count grows by exactly
-/// 2 * (n_log + 1 + |S|).
+/// The chain section is CONDITIONAL: absent, the layout is byte-identical to the
+/// chainless one; present, observed_count grows by exactly 2 * (n_log + 1 + |S|).
 #[test]
 fn mask_layout_chain_section_is_conditional() {
     let r1cs = crate::r1cs_hashes::keccak::build_block_r1cs_zk(6);
@@ -71,9 +70,8 @@ fn mask_layout_chain_section_is_conditional() {
 
 // -- Succinct chain composition (Part 7c) -----------------------------------
 
-/// Full succinct-chain round-trip on keccak at the m = 22 floor: honest
-/// chain witness, endpoints-only public statement, in-circuit linkage.
-/// Tampered endpoints and a tampered public chain value must reject.
+/// Full succinct-chain round-trip on keccak at the m = 22 floor: endpoints-only
+/// statement, in-circuit linkage. Tampered endpoints and chain value must reject.
 #[test]
 fn succinct_chain_roundtrip_and_tamper() {
     use crate::r1cs_hashes::keccak;
@@ -267,14 +265,8 @@ fn succinct_chain_roundtrip_and_tamper() {
     );
 }
 
-/// Chain-value mask coverage (Part 7e, scoped audit): the chain claim's eq
-/// weight on the mask-pair words is nonzero, so the pair's committed
-/// uniform bits one-time-pad the opened value. One nonzero F128
-/// coefficient `c` suffices: `{c * basis_b}` over the 128 field basis
-/// elements spans F128 over F2, so a single mask WORD with nonzero weight
-/// makes `chain_value` uniform. The JOINT uniformity of
-/// (ab_value, c_value, chain_value) over the shared pool remains a
-/// certification-scope audit — the path is EXPERIMENTAL and uncertified.
+/// Chain-value mask coverage (Part 7e): one mask-pair word with nonzero eq weight
+/// one-time-pads `chain_value`. Joint uniformity remains a certification-scope audit.
 #[test]
 fn chain_value_has_nonzero_mask_pair_weight() {
     use flock_core::zerocheck::multilinear::eq_eval;
