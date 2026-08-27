@@ -123,8 +123,16 @@ pub enum DotProductError {
     RlcDotProductMismatch,
     InvalidMerkleOpening,
     RevealedCodewordMismatch(usize),
+    ChallengeSamplingLimitExceeded,
     Code(CodeError),
 }
+
+/// Fail-closed cap for rejection-sampled field challenges.  This turns the
+/// ideal almost-surely-terminating sampler into a finite protocol game.
+pub const MAX_CHALLENGE_SAMPLING_TRIALS: usize = 4096;
+/// Fail-closed cap for collecting the 160 distinct additive-code query
+/// positions used by the active constraint profile.
+pub const MAX_UNIQUE_POSITION_SAMPLING_TRIALS: usize = 4096;
 
 impl From<CodeError> for DotProductError {
     fn from(value: CodeError) -> Self {
@@ -208,7 +216,7 @@ pub fn prove_dot_product<C: Challenger>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger).ok_or(DotProductError::ChallengeSamplingLimitExceeded)?;
 
     let rlc_vector = (0..parameters.vector_length)
         .map(|index| {
@@ -235,7 +243,8 @@ pub fn prove_dot_product<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )
+    .ok_or(DotProductError::ChallengeSamplingLimitExceeded)?;
     let opening = commitment.open(&positions);
 
     Ok(DotProductProof {
@@ -284,7 +293,7 @@ pub fn verify_dot_product<C: Challenger>(
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);
     challenger.observe_bytes(&proof.commitment);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger).ok_or(DotProductError::ChallengeSamplingLimitExceeded)?;
 
     let expected_dot = proof
         .claimed_dot_products
@@ -302,7 +311,8 @@ pub fn verify_dot_product<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )
+    .ok_or(DotProductError::ChallengeSamplingLimitExceeded)?;
     if positions != proof.opening.positions {
         return Err(DotProductError::WrongProofShape);
     }
@@ -339,38 +349,43 @@ pub(crate) fn sample_unique_positions<C: Challenger>(
     challenger: &mut C,
     code_length: usize,
     count: usize,
-) -> Vec<usize> {
+) -> Option<Vec<usize>> {
     assert!(code_length.is_power_of_two());
     assert!(count <= code_length);
     let mask = code_length - 1;
     let mut positions = BTreeSet::new();
-    while positions.len() < count {
+    for _ in 0..MAX_UNIQUE_POSITION_SAMPLING_TRIALS {
+        if positions.len() == count {
+            break;
+        }
         positions.insert((challenger.sample_f128().lo as usize) & mask);
     }
-    positions.into_iter().collect()
+    (positions.len() == count).then(|| positions.into_iter().collect())
 }
 
 /// Sample uniformly from `F128 \ {0}`. The last proximity-generator
 /// coefficient must be non-zero: at zero the additive masking vector drops
 /// out and the revealed linear combination is the witness itself.
-pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
+pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Option<F128> {
+    for _ in 0..MAX_CHALLENGE_SAMPLING_TRIALS {
         let value = challenger.sample_f128();
         if !value.is_zero() {
-            return value;
+            return Some(value);
         }
     }
+    None
 }
 
 /// Sample uniformly from `F128 \ {0, 1}`. VEIL's six-value multiplication
 /// padding is invertible only away from these two exceptional challenges.
-pub(crate) fn sample_not_zero_or_one<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
+pub(crate) fn sample_not_zero_or_one<C: Challenger>(challenger: &mut C) -> Option<F128> {
+    for _ in 0..MAX_CHALLENGE_SAMPLING_TRIALS {
         let value = challenger.sample_f128();
         if !value.is_zero() && value != F128::ONE {
-            return value;
+            return Some(value);
         }
     }
+    None
 }
 
 pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
@@ -382,7 +397,10 @@ pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
 
 #[cfg(test)]
 mod tests {
-    use flock_core::{challenger::FsChallenger, zk::ZkRng};
+    use flock_core::{
+        challenger::{Challenger, FsChallenger},
+        zk::ZkRng,
+    };
 
     use super::*;
 
@@ -390,6 +408,58 @@ mod tests {
         (0..length)
             .map(|index| F128::new(offset + index as u64, (index as u64).rotate_left(9)))
             .collect()
+    }
+
+    struct ConstantChallenger {
+        value: F128,
+        samples: usize,
+    }
+
+    impl Challenger for ConstantChallenger {
+        fn observe_f128(&mut self, _value: F128) {}
+
+        fn sample_f128(&mut self) -> F128 {
+            self.samples += 1;
+            self.value
+        }
+    }
+
+    #[test]
+    fn exceptional_challenge_sampling_is_fail_closed() {
+        let mut zero = ConstantChallenger {
+            value: F128::ZERO,
+            samples: 0,
+        };
+        assert_eq!(sample_nonzero(&mut zero), None);
+        assert_eq!(zero.samples, MAX_CHALLENGE_SAMPLING_TRIALS);
+
+        let mut one = ConstantChallenger {
+            value: F128::ONE,
+            samples: 0,
+        };
+        assert_eq!(sample_not_zero_or_one(&mut one), None);
+        assert_eq!(one.samples, MAX_CHALLENGE_SAMPLING_TRIALS);
+
+        let accepted = F128::new(2, 0);
+        let mut good = ConstantChallenger {
+            value: accepted,
+            samples: 0,
+        };
+        assert_eq!(sample_not_zero_or_one(&mut good), Some(accepted));
+        assert_eq!(good.samples, 1);
+
+        let mut repeated_position = ConstantChallenger {
+            value: F128::ZERO,
+            samples: 0,
+        };
+        assert_eq!(
+            sample_unique_positions(&mut repeated_position, 256, 2),
+            None
+        );
+        assert_eq!(
+            repeated_position.samples,
+            MAX_UNIQUE_POSITION_SAMPLING_TRIALS
+        );
     }
 
     #[test]

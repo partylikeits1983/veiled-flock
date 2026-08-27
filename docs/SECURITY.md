@@ -42,13 +42,23 @@ P*J*Q_H/2^256
 + P*Q_P*Q_H/2^256
 + (Q_H + P*Q_P)^2/2^257
 + 4*P*(P-1)/2^257
-+ P*((31/32)^4096 + 16*(15/16)^4096).
++ P*((31/32)^4096 + 16*(15/16)^4096)
++ P*(4*(2^-128)^4096 + (2^-127)^4096)
++ P*(12/2^128)^4096
++ P*(C(2048,159)*(159/2048)^4096
+    + C(8192,159)*(159/8192)^4096).
 ```
 
 The terms respectively cover challenge prequeries, hidden initial-Merkle
 inputs, oracle collisions, collisions in any of the four nonce domains (one
 Fiat--Shamir proof nonce plus three initial-tree nonces), and failure of the
 bounded outer or Ligerito grinds. `ClassicalPromZkBound` computes this sum.
+The next term covers the fail-closed 4096-draw caps for the four nonzero field
+challenges and VEIL's one challenge that excludes both zero and one. The
+following term bounds exhaustion of the whole-vector equality-point sampler;
+12 is the largest suffix among the registered shapes. The final term is the
+finite coupon-collector union bound for collecting 160
+distinct Hadamard and linear codeword coordinates within 4096 draws.
 
 The theorem requires fresh independent proof nonces, witness-code padding,
 masking rows, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts

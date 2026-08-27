@@ -93,6 +93,19 @@ pub const MAX_BLIND_GRIND_TRIALS: u64 = 4096;
 pub const MAX_LIGERITO_GRINDING_BITS: usize = 4;
 pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 4096;
 pub const MAX_LIGERITO_GRIND_SITES: u64 = 16;
+/// One outer PCS blinding challenge, two Hadamard challenges, and one linear
+/// dot-product challenge exclude zero.
+pub const MAX_NONZERO_CHALLENGE_SITES: u64 = 4;
+/// VEIL's multiplication-padding challenge excludes zero and one.
+pub const MAX_NOT_ZERO_OR_ONE_CHALLENGE_SITES: u64 = 1;
+/// Maximum number of rejection-sampled equality-point suffix coordinates in
+/// a registered shape: `25 - K_SKIP(6) - N_INNER(7)`.
+pub const MAX_EQ_POINT_OUTER_COORDINATES: u64 = 12;
+/// The Hadamard and linear commitments each collect 160 distinct codeword
+/// positions with a fail-closed 4096-draw cap.
+pub const UNIQUE_POSITION_QUERY_COUNT: u64 = 160;
+pub const HADAMARD_POSITION_DOMAIN: u64 = 2048;
+pub const LINEAR_POSITION_DOMAIN: u64 = 8192;
 
 fn supported_mask_count(r1cs: &BlockR1cs) -> Option<usize> {
     let digest = r1cs.statement_digest();
@@ -103,8 +116,15 @@ fn supported_mask_count(r1cs: &BlockR1cs) -> Option<usize> {
         })
 }
 
+/// Complete production proof for the joint VEIL + FLOCK protocol.
+///
+/// This is the proof object consumed by the production verifier. It contains
+/// the masked FLOCK transcript, all three nonce-separated Merkle commitments,
+/// the blinded PCS opening, bounded-grinding nonce, and the VEIL constraint
+/// proof. The outer statement and commitment live beside it in
+/// [`crate::proof_io::VeilFlockProofBundle`].
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SuccinctVeilProof {
+pub struct VeilFlockProof {
     pub proof_nonce: [u8; 32],
     pub tree_nonces: InitialTreeNonces,
     /// Exactly the zerocheck values observed by Fiat--Shamir, each one-time
@@ -121,6 +141,9 @@ pub struct SuccinctVeilProof {
     pub pcs_open: pcs::BatchOpeningProofLigerito,
     pub veil: ConstraintProof,
 }
+
+/// Backwards-compatible name retained for downstream callers.
+pub type SuccinctVeilProof = VeilFlockProof;
 
 /// Independent public freshness domains for every initial
 /// witness-dependent Merkle tree in the full-ZK protocol.
@@ -200,6 +223,7 @@ pub enum SuccinctVeilError {
     DegenerateSimulation,
     ProgrammingCollision,
     GrindingLimitExceeded,
+    ChallengeSamplingLimitExceeded,
 }
 
 pub struct SuccinctZerocheckInputs<'a> {
@@ -299,7 +323,8 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
         }
 
         challenger.observe_label(b"flock-zerocheck");
-        let r = zerocheck::sample_eq_point(inputs.m, challenger);
+        let r = zerocheck::sample_eq_point_bounded(inputs.m, challenger)
+            .ok_or(SuccinctVeilError::ChallengeSamplingLimitExceeded)?;
 
         // Reuse the shipped terminal evaluator with zero mask channels; only
         // its a/b/c outputs are relevant to the standard zerocheck.
@@ -551,6 +576,9 @@ pub fn certify_flock_piop_soundness(
         return Err(SuccinctVeilError::InvalidParameters);
     }
     let layout = MaskLayout::new(r1cs)?;
+    if r1cs.m - zerocheck::K_SKIP - zerocheck::N_INNER > MAX_EQ_POINT_OUTER_COORDINATES as usize {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
     let friendly = zerocheck::univariate_skip_optimized::small_challenges_ghash()
         .into_iter()
         .chain(zerocheck::univariate_skip_optimized::medium_challenges_ghash());
@@ -845,6 +873,82 @@ impl<C: Challenger> Challenger for MaskingChallenger<'_, C> {
         self.inner.grind_pow(bits)
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        self.inner.grind_pow_bounded(bits, max_attempts)
+    }
+
+    fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
+        self.inner.verify_pow(nonce, bits)
+    }
+}
+
+/// Adapter used only by the full-ZK PCS branch. Ligerito's generic prover
+/// API returns a proof rather than a `Result`, so an exhausted grind is
+/// represented by a sentinel nonce and recorded here; the enclosing
+/// full-ZK function discards the proof and returns an error immediately after
+/// the parallel branches join.
+struct BoundedGrindingChallenger<'a, C> {
+    inner: &'a mut C,
+    max_attempts: u64,
+    exhausted: bool,
+}
+
+impl<'a, C> BoundedGrindingChallenger<'a, C> {
+    fn new(inner: &'a mut C, max_attempts: u64) -> Self {
+        Self {
+            inner,
+            max_attempts,
+            exhausted: false,
+        }
+    }
+}
+
+impl<C: Challenger> Challenger for BoundedGrindingChallenger<'_, C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        self.inner.ro_context(nonce)
+    }
+
+    fn observe_label(&mut self, label: &[u8]) {
+        self.inner.observe_label(label);
+    }
+
+    fn observe_f128(&mut self, value: F128) {
+        self.inner.observe_f128(value);
+    }
+
+    fn observe_f128_slice(&mut self, values: &[F128]) {
+        self.inner.observe_f128_slice(values);
+    }
+
+    fn observe_bytes(&mut self, bytes: &[u8]) {
+        self.inner.observe_bytes(bytes);
+    }
+
+    fn sample_f128(&mut self) -> F128 {
+        self.inner.sample_f128()
+    }
+
+    fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+        self.inner.sample_f128_vec(n)
+    }
+
+    fn grind_pow(&mut self, bits: u32) -> u64 {
+        match self.inner.grind_pow_bounded(bits, self.max_attempts) {
+            Some(nonce) => nonce,
+            None => {
+                self.exhausted = true;
+                self.max_attempts
+            }
+        }
+    }
+
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        let bound = max_attempts.min(self.max_attempts);
+        let result = self.inner.grind_pow_bounded(bits, bound);
+        self.exhausted |= result.is_none();
+        result
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         self.inner.verify_pow(nonce, bits)
     }
@@ -967,13 +1071,14 @@ fn observe_blinded_ring_claims<C: Challenger>(challenger: &mut C, slices: &[Vec<
     }
 }
 
-fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
+fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Option<F128> {
+    for _ in 0..veil_f128::dot_product::MAX_CHALLENGE_SAMPLING_TRIALS {
         let value = challenger.sample_f128();
         if !value.is_zero() {
-            return value;
+            return Some(value);
         }
     }
+    None
 }
 
 fn scale_ring_expressions(
@@ -1040,7 +1145,8 @@ fn shifted_verifier_circuit<C: Challenger>(
     let mut expressions = ExpressionCursor::new(mask_count);
 
     challenger.observe_label(b"flock-zerocheck");
-    let r = zerocheck::sample_eq_point(r1cs.m, challenger);
+    let r = zerocheck::sample_eq_point_bounded(r1cs.m, challenger)
+        .ok_or(SuccinctVeilError::ChallengeSamplingLimitExceeded)?;
 
     let round1_ab = zc
         .round1_ab
@@ -1213,7 +1319,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     public_packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<PublicPackedDirectClaim>,
     zerocheck_source: Option<&mut dyn SuccinctZerocheckSource<Ch>>,
     challenger: &mut Ch,
-) -> Result<(SuccinctVeilProof, Commitment), SuccinctVeilError> {
+) -> Result<(VeilFlockProof, Commitment), SuccinctVeilError> {
     let layout = validate_succinct_parameters(r1cs, pcs_params)?;
     certify_flock_piop_soundness(r1cs, lincheck_circuit)?;
     validate_batch_opening(
@@ -1296,14 +1402,16 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             )?,
             None => {
                 let mut masking = MaskingChallenger::new(challenger, &masks);
-                let (proof, claim, s_hat_v_c) = zerocheck::prove_packed_padded_capture_s_hat_v_c(
-                    a_bytes,
-                    b_bytes,
-                    z_bytes,
-                    r1cs.m,
-                    &padding,
-                    &mut masking,
-                );
+                let (proof, claim, s_hat_v_c) =
+                    zerocheck::prove_packed_padded_capture_s_hat_v_c_bounded(
+                        a_bytes,
+                        b_bytes,
+                        z_bytes,
+                        r1cs.m,
+                        &padding,
+                        &mut masking,
+                    )
+                    .ok_or(SuccinctVeilError::ChallengeSamplingLimitExceeded)?;
                 if masking.cursor != 2 * layout.ell + 2 * layout.zc_rounds + 2 {
                     return Err(SuccinctVeilError::InvalidShape(
                         "zerocheck mask observation count",
@@ -1402,11 +1510,11 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
         return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
     }
-    let blind_grind_nonce = challenger.grind_pow(blind_bits);
-    if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
-        return Err(SuccinctVeilError::GrindingLimitExceeded);
-    }
-    let blind_challenge = sample_nonzero(challenger);
+    let blind_grind_nonce = challenger
+        .grind_pow_bounded(blind_bits, MAX_BLIND_GRIND_TRIALS)
+        .ok_or(SuccinctVeilError::GrindingLimitExceeded)?;
+    let blind_challenge =
+        sample_nonzero(challenger).ok_or(SuccinctVeilError::ChallengeSamplingLimitExceeded)?;
 
     let q_slices = witness_slices
         .iter()
@@ -1454,6 +1562,8 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     // transcript branches after their shared linkage data is bound.
     let mut pcs_challenger = challenger.clone();
     pcs_challenger.observe_label(PCS_FORK_LABEL);
+    let mut bounded_pcs_challenger =
+        BoundedGrindingChallenger::new(&mut pcs_challenger, MAX_LIGERITO_GRIND_TRIALS);
     let mut veil_challenger = challenger.clone();
     veil_challenger.observe_label(VEIL_FORK_LABEL);
     let x_refs = x_fulls.iter().map(Vec::as_slice).collect::<Vec<_>>();
@@ -1477,7 +1587,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
                     ro: &outer_ro,
                     channel: RoChannel::Witness,
                 },
-                &mut pcs_challenger,
+                &mut bounded_pcs_challenger,
             )
         },
         || {
@@ -1490,12 +1600,12 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             )
         },
     );
-    if !ligerito_grinding_is_bounded(&pcs_open.ligerito) {
+    if bounded_pcs_challenger.exhausted || !ligerito_grinding_is_bounded(&pcs_open.ligerito) {
         return Err(SuccinctVeilError::GrindingLimitExceeded);
     }
     let veil = veil?;
     Ok((
-        SuccinctVeilProof {
+        VeilFlockProof {
             proof_nonce,
             tree_nonces,
             masked_zerocheck,
@@ -1514,7 +1624,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
 pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
-    proof: &SuccinctVeilProof,
+    proof: &VeilFlockProof,
     commitment: &Commitment,
     lincheck_circuit: &dyn LincheckCircuit,
     lig_config: &pcs::ligerito::VerifierConfig,
@@ -1573,7 +1683,8 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    let blind_challenge = sample_nonzero(challenger);
+    let blind_challenge =
+        sample_nonzero(challenger).ok_or(SuccinctVeilError::ChallengeSamplingLimitExceeded)?;
 
     let q_slices = proof
         .pcs_open

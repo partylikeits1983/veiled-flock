@@ -79,6 +79,15 @@ pub trait Challenger: Send {
         0
     }
 
+    /// Bounded prover-side PoW. Concrete production challengers override
+    /// this method so the caller can charge exactly `max_attempts` oracle
+    /// trials and fail closed without first running an unbounded search.
+    /// The default preserves compatibility for test challengers.
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        let nonce = self.grind_pow(bits);
+        (nonce < max_attempts).then_some(nonce)
+    }
+
     /// Verifier-side mirror of [`Self::grind_pow`]: check that `nonce`
     /// satisfies the `bits`-leading-zeros PoW against the current transcript
     /// state, then absorb the nonce so the running state stays in lockstep
@@ -361,6 +370,21 @@ impl Challenger for FsChallenger {
         nonce
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        if max_attempts == 0 {
+            return None;
+        }
+        let state_digest = fs_pow_state_digest(&self.hasher);
+        let nonce = if bits == 0 {
+            Some(0)
+        } else {
+            (0..max_attempts)
+                .find(|&candidate| sha256_has_leading_zero_bits(&state_digest, candidate, bits))
+        }?;
+        self.observe_bytes(&nonce.to_le_bytes());
+        Some(nonce)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         let state_digest = fs_pow_state_digest(&self.hasher);
         let ok = if bits == 0 {
@@ -443,6 +467,27 @@ mod tests {
                 assert_eq!(prover.sample_f128(), verifier.sample_f128());
             }
         }
+    }
+
+    #[test]
+    fn bounded_pow_fails_without_mutating_the_transcript() {
+        let mut bounded = FsChallenger::new(b"bounded-pow");
+        bounded.observe_bytes(b"prefix");
+        let mut untouched = bounded.clone();
+        assert_eq!(bounded.grind_pow_bounded(1, 0), None);
+        assert_eq!(bounded.sample_f128(), untouched.sample_f128());
+    }
+
+    #[test]
+    fn bounded_pow_absorbs_the_found_nonce() {
+        let mut prover = FsChallenger::new(b"bounded-pow-success");
+        prover.observe_bytes(b"prefix");
+        assert_eq!(prover.grind_pow_bounded(0, 1), Some(0));
+
+        let mut verifier = FsChallenger::new(b"bounded-pow-success");
+        verifier.observe_bytes(b"prefix");
+        assert!(verifier.verify_pow(0, 0));
+        assert_eq!(prover.sample_f128(), verifier.sample_f128());
     }
 
     /// `verify_pow` rejects a wrong nonce when grinding bits > 0.

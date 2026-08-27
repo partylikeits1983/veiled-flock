@@ -57,6 +57,7 @@ pub enum HadamardError {
     InvalidMerkleOpening,
     ProductCodewordMismatch(usize),
     DotCodewordMismatch(usize),
+    ChallengeSamplingLimitExceeded,
     Code(CodeError),
 }
 
@@ -162,7 +163,8 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
         &product_mask_reduced[..parameters.vector_length],
     );
     challenger.observe_f128(gamma);
-    let product_mask_coefficient = sample_nonzero(challenger);
+    let product_mask_coefficient =
+        sample_nonzero(challenger).ok_or(HadamardError::ChallengeSamplingLimitExceeded)?;
 
     let product_word = (0..parameters.code_length)
         .map(|index| {
@@ -184,7 +186,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger).ok_or(HadamardError::ChallengeSamplingLimitExceeded)?;
 
     let rlc_vector = (0..parameters.vector_length)
         .map(|index| a[index] + rho * (b[index] + rho * (c[index] + rho * additive_mask[index])))
@@ -202,7 +204,8 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )
+    .ok_or(HadamardError::ChallengeSamplingLimitExceeded)?;
     let opening = commitment.open(&positions);
 
     Ok(HadamardProof {
@@ -240,7 +243,8 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
     challenger.observe_bytes(&proof.commitment);
     let evaluation_point = challenger.sample_f128();
     challenger.observe_f128(proof.gamma);
-    let product_mask_coefficient = sample_nonzero(challenger);
+    let product_mask_coefficient =
+        sample_nonzero(challenger).ok_or(HadamardError::ChallengeSamplingLimitExceeded)?;
     challenger.observe_f128_slice(&proof.phi);
 
     let phi_reduced = code.square_to_base(&proof.phi)?;
@@ -256,7 +260,7 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);
     challenger.observe_bytes(&proof.commitment);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger).ok_or(HadamardError::ChallengeSamplingLimitExceeded)?;
     let expected_dot = proof
         .claimed_dot_products
         .iter()
@@ -273,7 +277,8 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )
+    .ok_or(HadamardError::ChallengeSamplingLimitExceeded)?;
     if positions != proof.opening.positions {
         return Err(HadamardError::WrongProofShape);
     }

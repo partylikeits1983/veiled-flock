@@ -45,6 +45,23 @@ pub const K_SKIP: usize = 6;
 /// zerocheck after the univariate skip.
 pub const N_INNER: usize = 7;
 
+/// Fail-closed cap used by the full-ZK entry point when rejection-sampling the
+/// equality-point suffix away from the exceptional value one.
+pub const MAX_EQ_POINT_SAMPLING_TRIALS: usize = 4096;
+
+fn assemble_eq_point(m: usize, r_skip: &[F128], r_outer: &[F128]) -> Vec<F128> {
+    let small = small_challenges_ghash();
+    let medium = medium_challenges_ghash();
+    debug_assert!(small.iter().chain(&medium).all(|value| *value != F128::ONE));
+
+    let mut r = vec![F128::ZERO; m];
+    r[..K_SKIP].copy_from_slice(r_skip);
+    r[K_SKIP..K_SKIP + 3].copy_from_slice(&small);
+    r[K_SKIP + 3..K_SKIP + N_INNER].copy_from_slice(&medium);
+    r[K_SKIP + N_INNER..].copy_from_slice(r_outer);
+    r
+}
+
 /// Derive the equality point shared by every zerocheck prover, verifier, and
 /// simulator. The multilinear recurrence reconstructs `G(0)` by dividing by
 /// `1 + r_i`, so sampled rest coordinates must exclude `1`.
@@ -63,16 +80,27 @@ pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128>
         }
     };
 
-    let small = small_challenges_ghash();
-    let medium = medium_challenges_ghash();
-    debug_assert!(small.iter().chain(&medium).all(|value| *value != F128::ONE));
+    assemble_eq_point(m, &r_skip, &r_outer)
+}
 
-    let mut r = vec![F128::ZERO; m];
-    r[..K_SKIP].copy_from_slice(&r_skip);
-    r[K_SKIP..K_SKIP + 3].copy_from_slice(&small);
-    r[K_SKIP + 3..K_SKIP + N_INNER].copy_from_slice(&medium);
-    r[K_SKIP + N_INNER..].copy_from_slice(&r_outer);
-    r
+/// Bounded counterpart used by VEIL--FLOCK. It preserves the exact
+/// whole-vector rejection law of [`sample_eq_point`] and returns `None`
+/// instead of looping forever when all 4096 candidate suffixes contain one.
+pub fn sample_eq_point_bounded<C: Challenger>(m: usize, challenger: &mut C) -> Option<Vec<F128>> {
+    assert!(
+        m >= K_SKIP + N_INNER,
+        "zerocheck equality point is too short"
+    );
+
+    let r_skip = challenger.sample_f128_vec(K_SKIP);
+    let outer_len = m - K_SKIP - N_INNER;
+    for _ in 0..MAX_EQ_POINT_SAMPLING_TRIALS {
+        let sampled_point = challenger.sample_f128_vec(outer_len);
+        if sampled_point.iter().all(|value| *value != F128::ONE) {
+            return Some(assemble_eq_point(m, &r_skip, &sampled_point));
+        }
+    }
+    None
 }
 
 /// Linear weights taking `(running, G(1), G(∞))` to `G(rho)` for one
@@ -434,8 +462,10 @@ pub fn prove_packed_padded<C: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim) {
-    let (proof, claim, _) =
-        prove_packed_padded_inner(a_packed, b_packed, c_packed, m, padding, false, challenger);
+    let (proof, claim, _) = prove_packed_padded_inner(
+        a_packed, b_packed, c_packed, m, padding, false, false, challenger,
+    )
+    .expect("unbounded equality-point sampler cannot return None");
     (proof, claim)
 }
 
@@ -454,13 +484,35 @@ pub fn prove_packed_padded_capture_s_hat_v_c<C: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim, Vec<F128>) {
-    let (proof, claim, captured) =
-        prove_packed_padded_inner(a_packed, b_packed, c_packed, m, padding, true, challenger);
+    let (proof, claim, captured) = prove_packed_padded_inner(
+        a_packed, b_packed, c_packed, m, padding, true, false, challenger,
+    )
+    .expect("unbounded equality-point sampler cannot return None");
     (
         proof,
         claim,
         captured.expect("capture=true must produce s_hat_v_c"),
     )
+}
+
+/// Fail-closed full-ZK variant of
+/// [`prove_packed_padded_capture_s_hat_v_c`].
+pub fn prove_packed_padded_capture_s_hat_v_c_bounded<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    m: usize,
+    padding: &PaddingSpec,
+    challenger: &mut C,
+) -> Option<(ZerocheckProof, ZerocheckClaim, Vec<F128>)> {
+    let (proof, claim, captured) = prove_packed_padded_inner(
+        a_packed, b_packed, c_packed, m, padding, true, true, challenger,
+    )?;
+    Some((
+        proof,
+        claim,
+        captured.expect("capture=true must produce s_hat_v_c"),
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -471,8 +523,9 @@ fn prove_packed_padded_inner<C: Challenger>(
     m: usize,
     padding: &PaddingSpec,
     capture_s_hat_v_c: bool,
+    bounded_eq_point: bool,
     challenger: &mut C,
-) -> (ZerocheckProof, ZerocheckClaim, Option<Vec<F128>>) {
+) -> Option<(ZerocheckProof, ZerocheckClaim, Option<Vec<F128>>)> {
     let k_skip = K_SKIP;
     assert!(
         m >= k_skip + N_INNER,
@@ -496,7 +549,11 @@ fn prove_packed_padded_inner<C: Challenger>(
     //   r[k_skip+3..k_skip+7]       — protocol medium-eq constants β_i
     //   r[k_skip+7..m]              — sampled (the "outer" eq weights for
     //                                  the URM and multilinear rounds)
-    let r = sample_eq_point(m, challenger);
+    let r = if bounded_eq_point {
+        sample_eq_point_bounded(m, challenger)?
+    } else {
+        sample_eq_point(m, challenger)
+    };
 
     // ---- 3. Round 1: URM (extract_c, parallel) ----
     //
@@ -705,7 +762,7 @@ fn prove_packed_padded_inner<C: Challenger>(
         b_eval: final_b_eval,
         c_eval: final_c_eval,
     };
-    (proof, claim, s_hat_v_c)
+    Some((proof, claim, s_hat_v_c))
 }
 
 /// Verify a zerocheck proof for an instance over `{0,1}^log_n`.

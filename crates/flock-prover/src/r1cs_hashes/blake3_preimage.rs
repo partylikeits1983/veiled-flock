@@ -153,7 +153,7 @@ pub enum SuccinctPreimageError {
 
 #[cfg(feature = "veil")]
 pub struct SimulatedSuccinctPreimage {
-    pub proof: crate::succinct_veil::SuccinctVeilProof,
+    pub proof: crate::succinct_veil::VeilFlockProof,
     pub commitment: Commitment,
     pub programmed_points: usize,
     pub programming_audit: crate::sim_oracle::ProgrammingAudit,
@@ -652,7 +652,7 @@ impl Blake3PreimageZkSetup {
         &self,
         msgs: &[[u8; MESSAGE_BYTES]],
         digests: &[[u8; DIGEST_BYTES]],
-    ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
+    ) -> Result<(crate::succinct_veil::VeilFlockProof, Commitment), SuccinctPreimageError> {
         let mut rng = flock_core::zk::ZkRng::from_entropy();
         let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
         self.prove_with_challenger(msgs, digests, &mut rng, &mut challenger)
@@ -665,7 +665,7 @@ impl Blake3PreimageZkSetup {
         digests: &[[u8; DIGEST_BYTES]],
         rng: &mut flock_core::zk::ZkRng,
         challenger: &mut Ch,
-    ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
+    ) -> Result<(crate::succinct_veil::VeilFlockProof, Commitment), SuccinctPreimageError> {
         if digests.len() != self.n_blocks || msgs.len() != self.n_blocks {
             return Err(PreimageError::BatchSizeMismatch {
                 expected: self.n_blocks,
@@ -730,7 +730,7 @@ impl Blake3PreimageZkSetup {
     pub fn verify(
         &self,
         commitment: &Commitment,
-        proof: &crate::succinct_veil::SuccinctVeilProof,
+        proof: &crate::succinct_veil::VeilFlockProof,
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(), SuccinctPreimageError> {
         let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
@@ -741,7 +741,7 @@ impl Blake3PreimageZkSetup {
     fn verify_with_challenger<Ch: Challenger + Clone>(
         &self,
         commitment: &Commitment,
-        proof: &crate::succinct_veil::SuccinctVeilProof,
+        proof: &crate::succinct_veil::VeilFlockProof,
         digests: &[[u8; DIGEST_BYTES]],
         challenger: &mut Ch,
     ) -> Result<(), SuccinctPreimageError> {
@@ -892,6 +892,7 @@ impl Blake3PreimageZkSetup {
         let mut challenger =
             crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
         absorb_statement(&mut challenger, &statement);
+        let public_prefix_len = challenger.absorbed_len();
         let source_rng = rng.fork(b"succinct-veil-zc-simulator");
         let mut source = crate::succinct_veil::RomZerocheckSimulator::new(self.r1cs.m, source_rng);
         let statement_for_claim = statement.clone();
@@ -919,6 +920,7 @@ impl Blake3PreimageZkSetup {
         let expected_programmed = 1 + self.r1cs.m - flock_core::zerocheck::K_SKIP;
         let oracle_guard = oracle.lock().unwrap_or_else(|error| error.into_inner());
         let programming_audit = oracle_guard.audit_programming(
+            public_prefix_len,
             &proof.proof_nonce,
             expected_programmed,
             &oracle_checkpoint,
@@ -978,7 +980,7 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_veil_preimage_roundtrip_and_mutations() {
+    fn veil_flock_proof_roundtrip_is_accepted_and_mutations_are_rejected() {
         // The hiding Ligerito layer's registered production geometry starts
         // at m=22, i.e. 256 BLAKE3 blocks.
         let n = N_TEST;
@@ -1035,7 +1037,7 @@ mod tests {
             .verify(&commitment, &proof, &digests)
             .expect("verify succinct VEIL");
 
-        let rejects = |proof_under_test: &crate::succinct_veil::SuccinctVeilProof,
+        let rejects = |proof_under_test: &crate::succinct_veil::VeilFlockProof,
                        commitment_under_test: &Commitment,
                        digests_under_test: &[[u8; DIGEST_BYTES]]| {
             assert!(
@@ -1193,7 +1195,7 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_veil_public_only_simulator_is_accepted() {
+    fn veil_flock_witness_free_simulator_proof_is_accepted() {
         let setup = Blake3PreimageZkSetup::new(2);
         // Arbitrary public targets; the simulator API receives no messages
         // and makes no attempt to invert them.

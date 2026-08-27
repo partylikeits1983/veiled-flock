@@ -355,6 +355,7 @@ pub enum ConstraintError {
     UnsatisfiedCircuit,
     WrongProofShape,
     LinearClaimMismatch,
+    ChallengeSamplingLimitExceeded,
     InsufficientSoundness,
     Dot(DotProductError),
     Hadamard(HadamardError),
@@ -681,7 +682,8 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
             RoChannel::VeilHadamard,
         )?;
         challenger.observe_bytes(&hadamard_data.root());
-        let multiplication_rlc = sample_not_zero_or_one(challenger);
+        let multiplication_rlc = sample_not_zero_or_one(challenger)
+            .ok_or(ConstraintError::ChallengeSamplingLimitExceeded)?;
         let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
         let proof = prove_hadamard_and_dots(&dot_vector, hadamard_data, challenger)?;
         append_multiplication_link_constraints(&padded, &dot_vector, &proof, &mut constraints);
@@ -744,7 +746,8 @@ pub fn verify_constraints<C: Challenger>(
     challenger.observe_label(b"veil-f128-constraint-system");
     challenger.observe_bytes(&proof.linear.commitment);
     challenger.observe_bytes(&proof.hadamard.commitment);
-    let multiplication_rlc = sample_not_zero_or_one(challenger);
+    let multiplication_rlc = sample_not_zero_or_one(challenger)
+        .ok_or(ConstraintError::ChallengeSamplingLimitExceeded)?;
     let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
     verify_hadamard_and_dots(
         &dot_vector,

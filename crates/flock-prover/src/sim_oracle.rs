@@ -55,6 +55,18 @@ const OP_SQUEEZE: u8 = 0x04;
 const OP_BYTES: u8 = 0x05;
 const KIND_SCALAR: u8 = 0x01;
 const KIND_SLICE: u8 = 0x02;
+const TRANSCRIPT_LENGTH_BYTES: usize = std::mem::size_of::<u64>();
+const R1CS_BINDING_LABEL: &[u8] = b"flock-r1cs";
+const STATEMENT_DIGEST_BYTES: usize = 32;
+
+/// Offset of the proof-nonce frame after the relation-specific public
+/// statement prefix. `bind_statement` then absorbs the R1CS label and its
+/// fixed-size statement digest before it absorbs the nonce.
+const fn proof_nonce_frame_offset(public_prefix_len: usize) -> usize {
+    public_prefix_len
+        + (1 + TRANSCRIPT_LENGTH_BYTES + R1CS_BINDING_LABEL.len())
+        + (1 + TRANSCRIPT_LENGTH_BYTES + STATEMENT_DIGEST_BYTES)
+}
 
 /// A random oracle with a programmed table. Points not in the table are
 /// answered by SHA-256, so an empty table is the honest oracle.
@@ -77,7 +89,7 @@ pub struct ProgrammableOracle {
 pub struct ProgrammingAudit {
     pub programmed_points: usize,
     pub expected_points: usize,
-    pub every_point_contains_framed_nonce: bool,
+    pub every_point_has_framed_nonce_at_fixed_offset: bool,
     pub every_point_is_transcript_framed: bool,
 }
 
@@ -93,7 +105,7 @@ pub(crate) struct OracleCheckpoint {
 impl ProgrammingAudit {
     pub fn is_valid(self) -> bool {
         self.programmed_points == self.expected_points
-            && self.every_point_contains_framed_nonce
+            && self.every_point_has_framed_nonce_at_fixed_offset
             && self.every_point_is_transcript_framed
     }
 }
@@ -204,6 +216,7 @@ impl ProgrammableOracle {
     /// challenge.
     pub(crate) fn audit_programming(
         &self,
+        public_prefix_len: usize,
         proof_nonce: &[u8; 32],
         expected_points: usize,
         checkpoint: &OracleCheckpoint,
@@ -212,6 +225,7 @@ impl ProgrammableOracle {
         framed_nonce.push(OP_BYTES);
         framed_nonce.extend_from_slice(&(proof_nonce.len() as u64).to_le_bytes());
         framed_nonce.extend_from_slice(proof_nonce);
+        let nonce_offset = proof_nonce_frame_offset(public_prefix_len);
         let previous = checkpoint
             .programmed_points
             .iter()
@@ -225,10 +239,9 @@ impl ProgrammableOracle {
         ProgrammingAudit {
             programmed_points: points.len(),
             expected_points,
-            every_point_contains_framed_nonce: points.iter().all(|point| {
-                point
-                    .windows(framed_nonce.len())
-                    .any(|window| window == framed_nonce)
+            every_point_has_framed_nonce_at_fixed_offset: points.iter().all(|point| {
+                point.get(nonce_offset..nonce_offset + framed_nonce.len())
+                    == Some(framed_nonce.as_slice())
             }),
             every_point_is_transcript_framed: points
                 .iter()
@@ -369,6 +382,13 @@ impl OracleChallenger {
 
     pub fn oracle(&self) -> &SharedOracle {
         &self.oracle
+    }
+
+    /// Length of the exact absorbed prefix before the joint VEIL--FLOCK R1CS
+    /// binding. The programming audit uses this to locate the nonce frame
+    /// without assuming that no relation-specific statement was absorbed.
+    pub(crate) fn absorbed_len(&self) -> usize {
+        self.absorbed.len()
     }
 
     #[inline]
@@ -573,6 +593,21 @@ impl Challenger for OracleChallenger {
         nonce
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        if max_attempts == 0 {
+            return None;
+        }
+        let state = self.pow_state_digest();
+        let nonce = if bits == 0 {
+            Some(0)
+        } else {
+            (0..max_attempts)
+                .find(|&candidate| leading_zero_bits(&self.pow_answer(&state, candidate)) >= bits)
+        }?;
+        self.observe_bytes(&nonce.to_le_bytes());
+        Some(nonce)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         let state = self.pow_state_digest();
         let ok = if bits == 0 {
@@ -719,6 +754,58 @@ mod tests {
         );
     }
 
+    #[test]
+    fn programming_audit_requires_the_nonce_at_the_protocol_offset() {
+        let nonce = [0xA5; 32];
+        let domain = b"d";
+
+        let framed_nonce = [&[OP_BYTES][..], &(nonce.len() as u64).to_le_bytes(), &nonce].concat();
+        let prefix = [
+            &[OP_DOMAIN][..],
+            &(domain.len() as u64).to_le_bytes(),
+            domain,
+            &[OP_LABEL][..],
+            &(R1CS_BINDING_LABEL.len() as u64).to_le_bytes(),
+            R1CS_BINDING_LABEL,
+            &[OP_BYTES][..],
+            &(STATEMENT_DIGEST_BYTES as u64).to_le_bytes(),
+            &[0x11; STATEMENT_DIGEST_BYTES],
+        ]
+        .concat();
+        let public_prefix_len = prefix.len()
+            - (1 + TRANSCRIPT_LENGTH_BYTES + R1CS_BINDING_LABEL.len())
+            - (1 + TRANSCRIPT_LENGTH_BYTES + STATEMENT_DIGEST_BYTES);
+        assert_eq!(proof_nonce_frame_offset(public_prefix_len), prefix.len());
+
+        let mut oracle = ProgrammableOracle::new();
+        let checkpoint = oracle.checkpoint();
+        let correct_point = [prefix.as_slice(), framed_nonce.as_slice(), &[0u8; 8]].concat();
+        oracle.program(correct_point, [0u8; 32]);
+        assert!(
+            oracle
+                .audit_programming(public_prefix_len, &nonce, 1, &checkpoint)
+                .is_valid(),
+            "the exact bind_statement offset must be accepted"
+        );
+
+        let mut misplaced = ProgrammableOracle::new();
+        let checkpoint = misplaced.checkpoint();
+        let wrong_point = [
+            prefix.as_slice(),
+            &[0xFF],
+            framed_nonce.as_slice(),
+            &[0u8; 8],
+        ]
+        .concat();
+        misplaced.program(wrong_point, [0u8; 32]);
+        assert!(
+            !misplaced
+                .audit_programming(public_prefix_len, &nonce, 1, &checkpoint)
+                .is_valid(),
+            "a nonce occurring only at another substring is not an injectivity certificate"
+        );
+    }
+
     /// Programming a point nothing reaches changes no challenge.
     #[test]
     fn unreached_programming_is_inert() {
@@ -755,6 +842,16 @@ mod tests {
         let mut v = OracleChallenger::new(b"pow", oracle);
         v.observe_bytes(b"state");
         assert!(v.verify_pow(nonce, 8), "honest grind must verify");
+    }
+
+    #[test]
+    fn oracle_bounded_pow_fails_without_mutating_the_transcript() {
+        let oracle = shared_oracle();
+        let mut bounded = OracleChallenger::new(b"bounded-pow", oracle);
+        bounded.observe_bytes(b"prefix");
+        let mut untouched = bounded.clone();
+        assert_eq!(bounded.grind_pow_bounded(1, 0), None);
+        assert_eq!(bounded.sample_f128(), untouched.sample_f128());
     }
 
     /// Regression for the former direct-SHA bypass: the bare transcript

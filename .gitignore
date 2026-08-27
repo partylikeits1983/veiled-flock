@@ -57,3 +57,6 @@ autoresearch/
 
 # Local working notes (review docs, scratch write-ups) — not part of the project
 docs/local/
+
+# Local staging workspace used while developing the Lean security model.
+.proof-work/

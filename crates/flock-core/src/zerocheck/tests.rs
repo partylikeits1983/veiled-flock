@@ -23,6 +23,33 @@ fn equality_point_rejects_noninvertible_outer_coordinates() {
 }
 
 #[test]
+fn bounded_equality_point_sampling_fails_closed() {
+    struct AlwaysOne {
+        vector_calls: usize,
+    }
+
+    impl crate::challenger::Challenger for AlwaysOne {
+        fn observe_f128(&mut self, _value: F128) {}
+
+        fn sample_f128(&mut self) -> F128 {
+            panic!("sample_eq_point_bounded uses framed vector sampling")
+        }
+
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.vector_calls += 1;
+            vec![F128::ONE; n]
+        }
+    }
+
+    let mut challenger = AlwaysOne { vector_calls: 0 };
+    assert_eq!(
+        sample_eq_point_bounded(K_SKIP + N_INNER + 1, &mut challenger),
+        None
+    );
+    assert_eq!(challenger.vector_calls, 1 + MAX_EQ_POINT_SAMPLING_TRIALS);
+}
+
+#[test]
 fn shared_round_weights_match_quadratic_reconstruction() {
     let running = F128::new(3, 5);
     let msg_1 = F128::new(7, 11);

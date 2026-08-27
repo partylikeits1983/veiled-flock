@@ -156,7 +156,7 @@ pub struct ChainProofBundleLigerito {
 pub struct VeilFlockProofBundle {
     pub digests: Vec<[u8; 32]>,
     pub commitment: Commitment,
-    pub proof: crate::succinct_veil::SuccinctVeilProof,
+    pub proof: crate::succinct_veil::VeilFlockProof,
 }
 
 #[cfg(feature = "veil")]
@@ -164,7 +164,7 @@ impl VeilFlockProofBundle {
     pub fn new(
         digests: Vec<[u8; 32]>,
         commitment: Commitment,
-        proof: crate::succinct_veil::SuccinctVeilProof,
+        proof: crate::succinct_veil::VeilFlockProof,
     ) -> Self {
         Self {
             digests,
