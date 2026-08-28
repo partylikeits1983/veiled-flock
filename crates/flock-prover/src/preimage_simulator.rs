@@ -57,12 +57,8 @@
 //! run against the *unmodified* verifier through a programmable oracle — that
 //! the construction is complete rather than merely plausible.
 //!
-//! It does **not** by itself establish indistinguishability. That is a
-//! statement about distributions and needs the coverage results (restated in
-//! claim-kernel form for this relation) plus the obligations listed in
-//! `docs/memos/interactive-simulator-design.md`. A simulator whose output
-//! verifies but is distributed differently is a real possibility and this
-//! module cannot rule it out on its own.
+//! Acceptance does not establish indistinguishability; real and simulated
+//! proofs may have different distributions.
 
 use crate::sim_oracle::OracleChallenger;
 use crate::sim_seal::{SealedStatement, SimCoins};
@@ -73,6 +69,11 @@ use flock_core::zerocheck::{self, K_SKIP, ZkZerocheckProof};
 
 use crate::digest_bind::{DigestChallenges, digest_claim};
 use crate::prover::R1csProofZkA1;
+use crate::r1cs_hashes::blake3::{
+    ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
+};
+use crate::r1cs_hashes::blake3_preimage::{MESSAGE_BYTES, message_compression};
+use flock_core::zk::MaskSampler;
 
 /// Number of inner coordinates the zerocheck pins to protocol constants.
 const N_INNER: usize = 7;
@@ -267,7 +268,7 @@ impl crate::prover::ZerocheckSource<OracleChallenger> for SimZerocheckSource {
         // match depend only on the fold point `(z, ρ)` — so leaving them
         // honest costs nothing and keeps the programmed set as small as
         // possible.
-        challenger.observe_label(b"flock-zerocheck-zk-v1");
+        challenger.observe_label(b"flock-zerocheck-zk");
         let r_skip = challenger.sample_f128_vec(K_SKIP);
         let r_outer = challenger.sample_f128_vec(m - K_SKIP - N_INNER);
 
@@ -457,12 +458,6 @@ pub fn simulate(
     oracle: &crate::sim_oracle::SharedOracle,
     domain: &[u8],
 ) -> Result<SimulatedProof, SimError> {
-    use crate::r1cs_hashes::blake3::{
-        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-    };
-    use crate::r1cs_hashes::blake3_preimage::{MESSAGE_BYTES, message_compression};
-    use flock_core::zk::MaskSampler;
-
     let setup = sealed.setup();
     let r1cs = &setup.r1cs;
     let pcs_params = &setup.pcs_params;
@@ -564,7 +559,10 @@ pub fn simulate(
     if let Some(e) = source.failure {
         return Err(e);
     }
-    let programmed = oracle.lock().expect("oracle poisoned").programmed_len();
+    let programmed = oracle
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .programmed_len();
     Ok(SimulatedProof {
         proof,
         commitment,

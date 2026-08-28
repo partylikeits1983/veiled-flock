@@ -41,26 +41,75 @@ use univariate_skip_optimized::{
 /// vectors of F128.
 pub const K_SKIP: usize = 6;
 
-/// Versioned public polynomial used as the fixed second factor in the
-/// field-valued zerocheck mask channel.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum QStarKind {
-    AffineLinearV1,
+/// Number of protocol-fixed equality coordinates used by the optimized
+/// zerocheck after the univariate skip.
+pub const N_INNER: usize = 7;
+
+/// Derive the equality point shared by every zerocheck prover, verifier, and
+/// simulator. The multilinear recurrence reconstructs `G(0)` by dividing by
+/// `1 + r_i`, so sampled rest coordinates must exclude `1`.
+pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128> {
+    assert!(
+        m >= K_SKIP + N_INNER,
+        "zerocheck equality point is too short"
+    );
+
+    let r_skip = challenger.sample_f128_vec(K_SKIP);
+    let outer_len = m - K_SKIP - N_INNER;
+    let r_outer = loop {
+        let sampled_point = challenger.sample_f128_vec(outer_len);
+        if sampled_point.iter().all(|value| *value != F128::ONE) {
+            break sampled_point;
+        }
+    };
+
+    let small = small_challenges_ghash();
+    let medium = medium_challenges_ghash();
+    debug_assert!(small.iter().chain(&medium).all(|value| *value != F128::ONE));
+
+    let mut r = vec![F128::ZERO; m];
+    r[..K_SKIP].copy_from_slice(&r_skip);
+    r[K_SKIP..K_SKIP + 3].copy_from_slice(&small);
+    r[K_SKIP + 3..K_SKIP + N_INNER].copy_from_slice(&medium);
+    r[K_SKIP + N_INNER..].copy_from_slice(&r_outer);
+    r
+}
+
+/// Linear weights taking `(running, G(1), G(∞))` to `G(rho)` for one
+/// compressed quadratic sumcheck round. Returning `None` keeps every verifier
+/// fail-closed if a custom challenge source supplies the excluded `r_eq = 1`.
+pub fn sumcheck_round_weights(r_eq: F128, rho: F128) -> Option<[F128; 3]> {
+    let denominator = F128::ONE + r_eq;
+    if denominator.is_zero() {
+        return None;
+    }
+    let one_plus_rho = F128::ONE + rho;
+    let running_weight = one_plus_rho * denominator.inv();
+    let one_weight = r_eq * running_weight + rho;
+    let infinity_weight = rho * one_plus_rho;
+    Some([running_weight, one_weight, infinity_weight])
+}
+
+fn fold_sumcheck_round(
+    running: F128,
+    msg_1: F128,
+    msg_inf: F128,
+    r_eq: F128,
+    rho: F128,
+) -> Option<F128> {
+    let [running_weight, one_weight, infinity_weight] = sumcheck_round_weights(r_eq, rho)?;
+    Some(running * running_weight + msg_1 * one_weight + msg_inf * infinity_weight)
 }
 
 /// Protocol description of the small-domain field-valued mask channel.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SmallMaskSpec {
     pub d_log: usize,
-    pub q_star: QStarKind,
 }
 
 impl Default for SmallMaskSpec {
     fn default() -> Self {
-        Self {
-            d_log: 12,
-            q_star: QStarKind::AffineLinearV1,
-        }
+        Self { d_log: 12 }
     }
 }
 
@@ -127,18 +176,12 @@ impl SmallMaskSpec {
     pub fn alphas(self, m: usize) -> Vec<F128> {
         let n = m - K_SKIP;
         (0..n)
-            .map(|j| match self.q_star {
-                QStarKind::AffineLinearV1 => {
-                    Self::hash_coefficient(b"flock-qstar-affine-lin-v1", j as u64 + 1)
-                }
-            })
+            .map(|j| Self::hash_coefficient(b"flock-qstar-affine-lin", j as u64 + 1))
             .collect()
     }
 
     pub fn q_star_constant(self) -> F128 {
-        match self.q_star {
-            QStarKind::AffineLinearV1 => Self::hash_coefficient(b"flock-qstar-affine-lin-v1", 0),
-        }
+        Self::hash_coefficient(b"flock-qstar-affine-lin", 0)
     }
 
     pub fn q_star_at(self, rho: &[F128]) -> F128 {
@@ -431,7 +474,6 @@ fn prove_packed_padded_inner<C: Challenger>(
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim, Option<Vec<F128>>) {
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7; // 3 small + 4 medium fixed-constant eq dims
     assert!(
         m >= k_skip + N_INNER,
         "prove requires m >= k_skip + N_INNER (= {})",
@@ -443,7 +485,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     assert_eq!(c_packed.len(), expected_bytes);
     let n_mlv = m - k_skip;
 
-    challenger.observe_label(b"flock-zerocheck-v0");
+    challenger.observe_label(b"flock-zerocheck");
 
     // ---- 1. Sample r (with protocol-fixed constants in the inner 7 dims) ----
     //
@@ -454,17 +496,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     //   r[k_skip+3..k_skip+7]       — protocol medium-eq constants β_i
     //   r[k_skip+7..m]              — sampled (the "outer" eq weights for
     //                                  the URM and multilinear rounds)
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     // ---- 3. Round 1: URM (extract_c, parallel) ----
     //
@@ -691,7 +723,6 @@ pub fn verify<C: Challenger>(
 ) -> Result<ZerocheckClaim, VerifyError> {
     let m = log_n;
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
 
     if m < k_skip + N_INNER {
         return Err(VerifyError::LogNTooSmall { log_n: m, k_skip });
@@ -719,20 +750,10 @@ pub fn verify<C: Challenger>(
         });
     }
 
-    challenger.observe_label(b"flock-zerocheck-v0");
+    challenger.observe_label(b"flock-zerocheck");
 
     // ---- Re-derive r (in lockstep with prove_packed) ----
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     // ---- Observe round-1 messages, sample z ----
     challenger.observe_f128_slice(&proof.round1_ab);
@@ -792,20 +813,16 @@ pub fn verify<C: Challenger>(
     let mut mlv_rhos: Vec<F128> = Vec::with_capacity(n_mlv);
     for (i, &(msg_1, msg_inf)) in proof.multilinear_rounds.iter().enumerate() {
         let r_eq = r[k_skip + i];
-        let one_plus_r_eq = F128::ONE + r_eq;
-
         let g1 = msg_1;
         let g_inf = msg_inf;
-        let g0 = (c_running + r_eq * g1) * one_plus_r_eq.inv();
 
         challenger.observe_f128(msg_1);
         challenger.observe_f128(msg_inf);
         let rho = challenger.sample_f128();
         mlv_rhos.push(rho);
 
-        let one_plus_rho = F128::ONE + rho;
-        // G(ρ) = G(0)·(1+ρ) + G(1)·ρ + G(∞)·ρ·(1+ρ).
-        c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
+        c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
+            .ok_or(VerifyError::SumcheckFinalFailed)?;
     }
 
     // ---- AB sumcheck final consistency ----
@@ -841,7 +858,7 @@ pub fn verify<C: Challenger>(
 }
 
 // ===========================================================================
-// Field-mask amendment: P times the public affine Q-star (reference path)
+// Field mask: P times the public affine Q-star (reference path)
 // ===========================================================================
 //
 // The zerocheck's revealed round messages `(G_j(1), G_j(∞))` are degree-2 in
@@ -859,7 +876,7 @@ pub fn verify<C: Challenger>(
 // against this one. `P(ρ)` is returned for the caller to authenticate against
 // the P commitment through a hiding general-linear PCS opening.
 
-/// Zerocheck proof under the A1′ amendment. `round1_ab`/`round1_c` are the
+/// Zerocheck proof with a combined field mask. `round1_ab`/`round1_c` are the
 /// unmasked round-1 messages (already randomizer-covered); `mask_init` is the
 /// `P·Q★` sumcheck's post-skip initial claim `σ_z` (witness-free);
 /// `multilinear_rounds` are the COMBINED pairs `G_j + γ·M_j`.
@@ -875,21 +892,21 @@ pub struct ZkZerocheckProof {
     pub final_p_eval: F128,
 }
 
-/// Prove the zerocheck under the A1′ amendment. `p_small` is a field-valued
+/// Prove the zerocheck with a combined field mask. `p_small` is a field-valued
 /// vector on [`SmallMaskSpec`]'s diagonal support. It MUST already be committed
 /// and its commitment bound into the transcript before this call (so `γ`
 /// cannot depend on a later mask choice).
-/// Amendment A3 — the round-1 mask channel.
+/// Round-1 mask channel.
 ///
 /// Round 1 is the one PIOP class the degree-2 `γ·P·Q★` channel cannot touch:
 /// the verifier reconstructs the AB running claim from the **zerocheck
 /// assumption** `P^AB + P^C = 0` on `S`, and a mask that does not vanish
 /// there destroys that reconstruction. `P·Q★` does not vanish on `S`, which is
-/// why A1′ starts at round 2.
+/// why the product-mask channel starts at round 2.
 ///
-/// A3 masks it with a *pair* whose sum does vanish on `S`. With `M_c` the
-/// C-side mask and `M_ab = M_c + V_S·h` the AB-side one, the combined
-/// polynomial gains `M_ab + M_c = V_S·h`, which is zero on `S` — so the
+/// The round-1 channel masks it with a *pair* whose sum vanishes on `S`.
+/// With `M_c` the C-side mask and `M_ab = M_c + V_S·h` the AB-side one, the
+/// combined polynomial gains `M_ab + M_c = V_S·h`, which is zero on `S` — so the
 /// reconstruction is untouched — while the two sides move independently.
 /// That independence is the point: the measured escaping direction is
 /// supported on `round1_c` and *not* on `round1_ab`, so a diagonal mask
@@ -904,7 +921,7 @@ pub struct Round1Mask<'a> {
     pub s_h_packed: &'a [u8],
 }
 
-/// The two scalars the verifier needs to undo an A3 mask. Both are
+/// The two scalars the verifier needs to undo a round-1 mask. Both are
 /// witness-free and both must be opened against their commitments — the
 /// verifier consumes them to recover the C-claim and the AB running claim, so
 /// an unbound value would leave both unconstrained.
@@ -932,7 +949,7 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     (proof, claim)
 }
 
-/// [`prove_packed_padded_zk`] with the amendment-A3 round-1 mask channel.
+/// [`prove_packed_padded_zk`] with the optional round-1 mask channel.
 ///
 /// The returned [`ZerocheckClaim`] carries the **un-shifted** `c_eval`, so
 /// downstream claim handling is unchanged; the proof's `final_c_eval` carries
@@ -953,7 +970,6 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     Option<Round1MaskTranscript>,
 ) {
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
     assert!(
         m >= k_skip + N_INNER,
         "prove_zk requires m >= {}",
@@ -966,20 +982,10 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     assert_eq!(p_small.len(), mask_spec.d(m));
     let dense = PaddingSpec::dense(m);
 
-    challenger.observe_label(b"flock-zerocheck-zk-v1");
+    challenger.observe_label(b"flock-zerocheck-zk");
 
     // ---- r (identical layout to prove_packed_padded_inner) ----
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    let r = sample_eq_point(m, challenger);
 
     // ---- round 1 (â·b̂ only; unmasked) ----
     let ntt_s = AdditiveNttGf8::new(k_skip, F8::ZERO);
@@ -992,7 +998,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     let mut round1_ab: Vec<F128> = round1_ab_opt.iter().map(|x| c_s * *x).collect();
     let mut round1_c: Vec<F128> = round1_c_opt.iter().map(|x| c_s * *x).collect();
 
-    // ---- A3: the round-1 mask pair ----
+    // ---- round-1 mask pair ----
     //
     // `M_c` masks the C side; the AB side gets `M_c + V_S·h`, so the combined
     // polynomial gains `V_S·h`, which vanishes on S — leaving the verifier's
@@ -1244,7 +1250,7 @@ pub fn evaluate_zk_terminals_packed_padded(
 
 /// The degree-2 mask channel's contribution to the round messages, in
 /// isolation: the round pairs `(M_j(1), M_j(∞))` of the `P·Q★` product
-/// sumcheck, at the same challenge schedule the amended prover uses.
+/// sumcheck, at the same challenge schedule the masked prover uses.
 ///
 /// This is the map whose F₂ image the prover's per-proof coverage
 /// self-check measures (`flock_prover::zk_rank_check`). It runs the SAME
@@ -1260,24 +1266,13 @@ pub fn mask_round_pairs<C: Challenger>(
     challenger: &mut C,
 ) -> Vec<(F128, F128)> {
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
     assert!(m >= k_skip + N_INNER);
     let n_mlv = m - k_skip;
     let mask_spec = SmallMaskSpec::default();
     assert_eq!(p_small.len(), mask_spec.d(m));
 
-    challenger.observe_label(b"flock-zerocheck-zk-v1");
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    challenger.observe_label(b"flock-zerocheck-zk");
+    let r = sample_eq_point(m, challenger);
     let _z = challenger.sample_f128();
 
     let mut mlv_arg = vec![F128::ONE; n_mlv];
@@ -1301,7 +1296,7 @@ pub fn mask_round_pairs<C: Challenger>(
     out
 }
 
-/// Verify an A1′ zerocheck proof. Checks the combined sumcheck equation
+/// Verify a combined masked zerocheck proof. Checks the sumcheck equation
 /// `running == â(ρ)·b̂(ρ) + γ·P(ρ)·Q★(ρ)`. The caller MUST additionally
 /// authenticate `proof.final_p_eval == P(ρ)` against the P commitment
 /// (through the PCS). Returns the standard
@@ -1314,7 +1309,7 @@ pub fn verify_zk<C: Challenger>(
     verify_zk_masked(log_n, proof, None, challenger)
 }
 
-/// [`verify_zk`] with the amendment-A3 round-1 mask engaged.
+/// [`verify_zk`] with the optional round-1 mask engaged.
 ///
 /// `mask` is `(M_c(z), h(z))` taken from the proof. **Both are unchecked
 /// here**: this function only uses them to un-shift the AB running claim and
@@ -1329,7 +1324,6 @@ pub fn verify_zk_masked<C: Challenger>(
 ) -> Result<ZerocheckClaim, VerifyError> {
     let m = log_n;
     let k_skip = K_SKIP;
-    const N_INNER: usize = 7;
     if m < k_skip + N_INNER {
         return Err(VerifyError::LogNTooSmall { log_n: m, k_skip });
     }
@@ -1348,18 +1342,8 @@ pub fn verify_zk_masked<C: Challenger>(
         });
     }
 
-    challenger.observe_label(b"flock-zerocheck-zk-v1");
-    let r_skip = challenger.sample_f128_vec(k_skip);
-    let r_outer = challenger.sample_f128_vec(m - k_skip - N_INNER);
-    let mut r = vec![F128::ZERO; m];
-    r[..k_skip].copy_from_slice(&r_skip);
-    for (i, val) in small_challenges_ghash().iter().enumerate() {
-        r[k_skip + i] = *val;
-    }
-    for (i, val) in medium_challenges_ghash().iter().enumerate() {
-        r[k_skip + 3 + i] = *val;
-    }
-    r[k_skip + N_INNER..].copy_from_slice(&r_outer);
+    challenger.observe_label(b"flock-zerocheck-zk");
+    let r = sample_eq_point(m, challenger);
 
     challenger.observe_f128_slice(&proof.round1_ab);
     challenger.observe_f128_slice(&proof.round1_c);
@@ -1379,7 +1363,7 @@ pub fn verify_zk_masked<C: Challenger>(
         .collect();
     let combined_at_z = interpolate_at_z_combined(&combined_at_lambda, k_skip, z);
     let p_c_at_z = interpolate_at_z_on_lambda(&proof.round1_c, k_skip, z);
-    // A3: the masked C side carries `P^C + M_c`, and the masked combined
+    // The masked C side carries `P^C + M_c`, and the masked combined
     // polynomial carries `combined + V_S·h` — the latter still zero on S, so
     // the reconstruction above is valid. What comes out is therefore
     // `P^AB(z) + M_ab(z)`; un-shift by `M_ab(z) = M_c(z) + V_S(z)·h(z)`.
@@ -1400,16 +1384,14 @@ pub fn verify_zk_masked<C: Challenger>(
     let mut mlv_rhos: Vec<F128> = Vec::with_capacity(n_mlv);
     for (i, &(msg_1, msg_inf)) in proof.multilinear_rounds.iter().enumerate() {
         let r_eq = r[k_skip + i];
-        let one_plus_r_eq = F128::ONE + r_eq;
         let g1 = msg_1;
         let g_inf = msg_inf;
-        let g0 = (c_running + r_eq * g1) * one_plus_r_eq.inv();
         challenger.observe_f128(msg_1);
         challenger.observe_f128(msg_inf);
         let rho = challenger.sample_f128();
         mlv_rhos.push(rho);
-        let one_plus_rho = F128::ONE + rho;
-        c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
+        c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
+            .ok_or(VerifyError::SumcheckFinalFailed)?;
     }
 
     // Combined final check: â(ρ)·b̂(ρ) + γ·P(ρ)·Q★(ρ).
@@ -1429,7 +1411,7 @@ pub fn verify_zk_masked<C: Challenger>(
         r_rest: r[k_skip..].to_vec(),
         a_eval: proof.final_a_eval,
         b_eval: proof.final_b_eval,
-        // A3: the PCS binds ẑ, so hand on the UN-shifted claim.
+        // The PCS binds ẑ, so hand on the unshifted claim.
         c_eval: match mask {
             Some((mc_at_z, _)) => proof.final_c_eval + mc_at_z,
             None => proof.final_c_eval,
@@ -1438,836 +1420,4 @@ pub fn verify_zk_masked<C: Challenger>(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::challenger::FsChallenger;
-
-    /// SplitMix64 PRNG, deterministic.
-    struct Rng(u64);
-    impl Rng {
-        fn new(seed: u64) -> Self {
-            Self(seed)
-        }
-        fn next_u64(&mut self) -> u64 {
-            self.0 = self.0.wrapping_add(0x9E3779B97F4A7C15);
-            let mut z = self.0;
-            z = (z ^ (z >> 30)).wrapping_mul(0xBF58476D1CE4E5B9);
-            z = (z ^ (z >> 27)).wrapping_mul(0x94D049BB133111EB);
-            z ^ (z >> 31)
-        }
-        fn bits(&mut self, n: usize) -> Vec<bool> {
-            (0..n).map(|_| self.next_u64() & 1 == 1).collect()
-        }
-        fn field_mask(&mut self, m: usize) -> Vec<F128> {
-            (0..SmallMaskSpec::default().d(m))
-                .map(|_| F128::new(self.next_u64(), self.next_u64()))
-                .collect()
-        }
-    }
-
-    /// Pack three Boolean vectors into the (a_packed, b_packed, c_packed)
-    /// shape that `prove_packed` consumes.
-    fn pack_abc(a: &[bool], b: &[bool], c: &[bool]) -> (Vec<u8>, Vec<u8>, Vec<u8>) {
-        use univariate_skip::pack_bits;
-        (pack_bits(a), pack_bits(b), pack_bits(c))
-    }
-
-    /// `prove` runs end-to-end at the smallest valid m (= k_skip + N_INNER = 13)
-    /// without panicking, and produces output of the right shape.
-    ///
-    /// We can't yet check the proof is *accepted* (verify is a stub), but the
-    /// structural sanity here catches:
-    ///   - mismatched challenger observe/sample sequence
-    ///   - wrong slice lengths in r / mlv_arg / r_next at any round
-    ///   - any unreachable assert in the underlying functions
-    #[test]
-    fn prove_runs_end_to_end() {
-        for &m in &[13usize, 14, 15, 16] {
-            let mut rng = Rng::new(m as u64);
-            let a = rng.bits(1 << m);
-            let b = rng.bits(1 << m);
-            // Honest witness: c = a AND b, so a·b ⊕ c = 0 on the hypercube.
-            let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-
-            let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-            let mut challenger = FsChallenger::new(b"flock-test-v0");
-            let (proof, claim) = prove_packed(&a_p, &b_p, &c_p, m, &mut challenger);
-
-            // Shape checks.
-            assert_eq!(proof.round1_ab.len(), 1usize << K_SKIP, "m={m}");
-            assert_eq!(proof.round1_c.len(), 1usize << K_SKIP, "m={m}");
-            assert_eq!(proof.multilinear_rounds.len(), m - K_SKIP, "m={m}");
-            assert_eq!(claim.mlv_challenges.len(), m - K_SKIP, "m={m}");
-
-            // Claim's eval fields agree with the proof's final evals.
-            assert_eq!(claim.a_eval, proof.final_a_eval, "m={m}");
-            assert_eq!(claim.b_eval, proof.final_b_eval, "m={m}");
-            assert_eq!(claim.c_eval, proof.final_c_eval, "m={m}");
-        }
-    }
-
-    /// **Prove→verify roundtrip**: an honest proof verifies cleanly, and the
-    /// claim returned by `verify` is byte-for-byte equal to the claim returned
-    /// by `prove`.
-    #[test]
-    fn prove_verify_roundtrip_honest() {
-        for &m in &[13usize, 14, 15, 16] {
-            let mut rng = Rng::new(1000 + m as u64);
-            let a = rng.bits(1 << m);
-            let b = rng.bits(1 << m);
-            let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-
-            let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-            let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-            let (proof, claim_p) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-            let mut ch_verify = FsChallenger::new(b"flock-test-v0");
-            let result = verify(m, &proof, &mut ch_verify);
-            let claim_v = result.unwrap_or_else(|e| panic!("verify rejected at m={m}: {e:?}"));
-
-            assert_eq!(claim_p, claim_v, "claim mismatch at m={m}");
-        }
-    }
-
-    /// **A1′ combined masked zerocheck: prove→verify roundtrip.** With honest
-    /// (a,b,c=a*b), fresh field-valued P, and public Q-star, the combined proof
-    /// verifies under `verify_zk` (which checks the terminal masked equation).
-    /// The mask never breaks completeness — the round messages
-    /// carry `γ·M_j`, the initial claim carries `γ·σ_z`, and they telescope
-    /// consistently.
-    #[test]
-    fn prove_verify_zk_roundtrip_honest() {
-        for &m in &[13usize, 14, 15, 16] {
-            let mut rng = Rng::new(2000 + m as u64);
-            let a = rng.bits(1 << m);
-            let b = rng.bits(1 << m);
-            let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-            let p_small = rng.field_mask(m);
-            let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-
-            let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
-            let (proof, claim_p) = prove_packed_padded_zk(
-                &a_p,
-                &b_p,
-                &c_p,
-                &p_small,
-                m,
-                &PaddingSpec::dense(m),
-                &mut ch_prove,
-            );
-
-            let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
-            let claim_v = verify_zk(m, &proof, &mut ch_verify)
-                .unwrap_or_else(|e| panic!("verify_zk rejected honest proof at m={m}: {e:?}"));
-            assert_eq!(claim_p, claim_v, "zk claim mismatch at m={m}");
-        }
-    }
-
-    /// **A3 round-1 mask: prove→verify roundtrip, staged.** Three mask
-    /// configurations, so a completeness break localizes itself:
-    /// zero cubes (must reduce exactly to the unmasked protocol), diagonal
-    /// only (`S_h = 0`, so the combined polynomial is untouched), and the
-    /// full off-diagonal pair.
-    #[test]
-    fn prove_verify_zk_round1_mask_roundtrip() {
-        for &m in &[13usize, 14] {
-            for stage in ["zero", "diagonal", "full"] {
-                let mut rng = Rng::new(3000 + m as u64);
-                let a = rng.bits(1 << m);
-                let b = rng.bits(1 << m);
-                let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-                let p_small = rng.field_mask(m);
-                let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-
-                let zeros = vec![false; 1 << m];
-                let sc_bits = if stage == "zero" {
-                    zeros.clone()
-                } else {
-                    rng.bits(1 << m)
-                };
-                let sh_bits = if stage == "full" {
-                    rng.bits(1 << m)
-                } else {
-                    zeros.clone()
-                };
-                let (sc_p, sh_p, _) = pack_abc(&sc_bits, &sh_bits, &zeros);
-
-                let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
-                let (proof, claim_p, mt) = prove_packed_padded_zk_masked(
-                    &a_p,
-                    &b_p,
-                    &c_p,
-                    &p_small,
-                    m,
-                    &PaddingSpec::dense(m),
-                    Some(Round1Mask {
-                        s_c_packed: &sc_p,
-                        s_h_packed: &sh_p,
-                    }),
-                    &mut ch_prove,
-                );
-                let mt = mt.expect("mask transcript");
-
-                let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
-                let claim_v =
-                    verify_zk_masked(m, &proof, Some((mt.mc_at_z, mt.h_at_z)), &mut ch_verify)
-                        .unwrap_or_else(|e| {
-                            panic!("A3 [{stage}] verify rejected honest proof at m={m}: {e:?}")
-                        });
-                assert_eq!(claim_p, claim_v, "A3 [{stage}] claim mismatch at m={m}");
-
-                // The un-shifted c-claim must be the true ĉ(z, r_rest), i.e.
-                // exactly what the unmasked protocol would have claimed.
-                let mut ch_ref = FsChallenger::new(b"flock-zk-test-v0");
-                let (_, claim_ref) = prove_packed_padded_zk(
-                    &a_p,
-                    &b_p,
-                    &c_p,
-                    &p_small,
-                    m,
-                    &PaddingSpec::dense(m),
-                    &mut ch_ref,
-                );
-                if stage == "zero" {
-                    assert_eq!(
-                        claim_ref, claim_v,
-                        "zero masks must reproduce the unmasked protocol at m={m}"
-                    );
-                }
-            }
-        }
-    }
-
-    /// Does the round-1 C-side output depend on `a`,`b`? A3 computes a mask's
-    /// C-side message by calling the round-1 routine with zero `a`,`b`, which
-    /// is only valid if the C output is a function of `c_packed` alone.
-    #[test]
-    fn round1_c_output_is_independent_of_ab() {
-        use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
-        let m = 13usize;
-        let k_skip = K_SKIP;
-        let mut rng = Rng::new(24601);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let cc = rng.bits(1 << m);
-        let zeros = vec![false; 1 << m];
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &cc);
-        let (z_p, _, _) = pack_abc(&zeros, &zeros, &zeros);
-        let r: Vec<F128> = (0..m)
-            .map(|_| F128::new(rng.next_u64(), rng.next_u64()))
-            .collect();
-        let ntt_s = AdditiveNttGf8::new(k_skip, F8::ZERO);
-        let ntt_l = AdditiveNttGf8::new(k_skip, F8(1u8 << k_skip));
-        let inv_table = InvNttTableByteSingleGf8::new(&ntt_s, &ntt_l);
-        let pad = PaddingSpec::dense(m);
-        let (_, c_with_ab) = round1_shift_reduce_extract_c_packed_padded(
-            &a_p, &b_p, &c_p, m, k_skip, &r, &inv_table, &pad,
-        );
-        let (_, c_without_ab) = round1_shift_reduce_extract_c_packed_padded(
-            &z_p, &z_p, &c_p, m, k_skip, &r, &inv_table, &pad,
-        );
-        assert_eq!(
-            c_with_ab, c_without_ab,
-            "the round-1 C output DEPENDS on a,b — A3 cannot derive a mask's \
-             C-side message by zeroing them"
-        );
-    }
-
-    /// **A1′ soundness spot-checks.** Tampering the mask sum `σ_z`, either
-    /// mask evaluation `P(ρ)`/`Q(ρ)`, or a combined round message must be
-    /// rejected by `verify_zk`.
-    #[test]
-    fn verify_zk_rejects_mutations() {
-        let m = 14;
-        let mut rng = Rng::new(7070);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let p_small = rng.field_mask(m);
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
-        let (proof, _) = prove_packed_padded_zk(
-            &a_p,
-            &b_p,
-            &c_p,
-            &p_small,
-            m,
-            &PaddingSpec::dense(m),
-            &mut ch_prove,
-        );
-
-        let bump = F128 { lo: 0xABCD, hi: 0 };
-        let mutate = |f: &dyn Fn(&mut ZkZerocheckProof)| {
-            let mut bad = proof.clone();
-            f(&mut bad);
-            let mut ch = FsChallenger::new(b"flock-zk-test-v0");
-            assert!(verify_zk(m, &bad, &mut ch).is_err());
-        };
-        mutate(&|pr| pr.mask_init += bump);
-        mutate(&|pr| pr.final_p_eval += bump);
-        mutate(&|pr| pr.multilinear_rounds[3].1 += bump);
-        mutate(&|pr| pr.final_a_eval += bump);
-        // Complete the matrix: every round pair, both components; round-1
-        // entries on both vectors; the remaining finals; truncations.
-        for i in 0..proof.multilinear_rounds.len() {
-            mutate(&|pr| pr.multilinear_rounds[i].0 += bump);
-            mutate(&|pr| pr.multilinear_rounds[i].1 += bump);
-        }
-        for k in [0usize, 1, 31, 63] {
-            mutate(&|pr| pr.round1_ab[k] += bump);
-            mutate(&|pr| pr.round1_c[k] += bump);
-        }
-        mutate(&|pr| pr.final_b_eval += bump);
-        mutate(&|pr| pr.final_c_eval += bump);
-        mutate(&|pr| {
-            pr.multilinear_rounds.pop();
-        });
-        mutate(&|pr| {
-            pr.round1_ab.pop();
-        });
-        mutate(&|pr| {
-            pr.round1_c.truncate(1);
-        });
-    }
-
-    /// **S1 — invalid witness rejected on the amended path.** The zk twin of
-    /// `audit_false_statement_rejected`: one flipped `c` bit (so
-    /// `a·b ⊕ c ≠ 0` somewhere) with an otherwise HONEST prover run and
-    /// honest fresh masks must be rejected by `verify_zk`. The masked
-    /// channel must not create an acceptance path for a false statement.
-    #[test]
-    fn zk_invalid_witness_rejected() {
-        for &m in &[13usize, 14, 15] {
-            let mut rng = Rng::new(0xA1_5000 + m as u64);
-            let a = rng.bits(1 << m);
-            let b = rng.bits(1 << m);
-            let mut c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-            c[3] = !c[3];
-            let p_small = rng.field_mask(m);
-            let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-
-            let mut ch_prove = FsChallenger::new(b"flock-zk-test-v0");
-            let (proof, _) = prove_packed_padded_zk(
-                &a_p,
-                &b_p,
-                &c_p,
-                &p_small,
-                m,
-                &PaddingSpec::dense(m),
-                &mut ch_prove,
-            );
-            let mut ch_verify = FsChallenger::new(b"flock-zk-test-v0");
-            let res = verify_zk(m, &proof, &mut ch_verify);
-            assert!(
-                res.is_err(),
-                "verify_zk ACCEPTED a false statement at m={m}: {res:?}"
-            );
-        }
-    }
-
-    /// Replay `verify_zk`'s final-check residual for a given proof under
-    /// `RandomChallenger(seed)`, with `mask_init` overridden. Uses the SAME
-    /// in-crate primitives as `verify_zk` (interpolation + the fixed inner
-    /// challenge schedule) — measurement instrumentation, not a parallel
-    /// verifier. Returns `c_running + expected` (zero ⇔ final check passes).
-    #[cfg(test)]
-    fn zk_final_residual(m: usize, proof: &ZkZerocheckProof, seed: u64, mask_init: F128) -> F128 {
-        use crate::challenger::RandomChallenger;
-        let k_skip = K_SKIP;
-        const N_INNER: usize = 7;
-        let mut ch = RandomChallenger::new(seed);
-        let _r_skip = ch.sample_f128_vec(k_skip);
-        let r_outer = ch.sample_f128_vec(m - k_skip - N_INNER);
-        let mut r = vec![F128::ZERO; m];
-        for (i, val) in small_challenges_ghash().iter().enumerate() {
-            r[k_skip + i] = *val;
-        }
-        for (i, val) in medium_challenges_ghash().iter().enumerate() {
-            r[k_skip + 3 + i] = *val;
-        }
-        r[k_skip + N_INNER..].copy_from_slice(&r_outer);
-        let z = ch.sample_f128();
-
-        let combined_at_lambda: Vec<F128> = proof
-            .round1_ab
-            .iter()
-            .zip(&proof.round1_c)
-            .map(|(x, y)| *x + *y)
-            .collect();
-        let combined_at_z = interpolate_at_z_combined(&combined_at_lambda, k_skip, z);
-        let p_c_at_z = interpolate_at_z_on_lambda(&proof.round1_c, k_skip, z);
-        let ab_init = combined_at_z + p_c_at_z;
-        let gamma = ch.sample_f128();
-        let mut c_running = ab_init + gamma * mask_init;
-        let mut mlv_rhos = Vec::with_capacity(proof.multilinear_rounds.len());
-        for (i, &(g1, g_inf)) in proof.multilinear_rounds.iter().enumerate() {
-            let r_eq = r[k_skip + i];
-            let one_plus_r_eq = F128::ONE + r_eq;
-            let g0 = (c_running + r_eq * g1) * one_plus_r_eq.inv();
-            let rho = ch.sample_f128();
-            mlv_rhos.push(rho);
-            let one_plus_rho = F128::ONE + rho;
-            c_running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
-        }
-        let expected = proof.final_a_eval * proof.final_b_eval
-            + gamma * proof.final_p_eval * SmallMaskSpec::default().q_star_at(&mlv_rhos);
-        c_running + expected
-    }
-
-    /// **S2 + S3 — γ-batching soundness, constructively, on the real code.**
-    ///
-    /// Lemma L6's content: for FIXED prover messages with zerocheck defect
-    /// δ and mask-channel defect δ′, the verifier's final residual is an
-    /// AFFINE function of `σ_z` with slope γ·Π(1+ρᵢ)/(1+r_eq,ᵢ) ≠ 0 —
-    /// so for a prover who already knows γ there is EXACTLY ONE σ_z that
-    /// cancels an invalid witness, and for a prover bound to send σ_z
-    /// before γ (Fiat–Shamir) the cancellation succeeds with probability
-    /// 2⁻¹²⁸. Demonstrated:
-    ///  (a) an invalid-witness proof is rejected at its honest σ_z;
-    ///  (b) the residual is affine in σ_z with nonzero slope — the solved
-    ///      σ* is its unique root;
-    ///  (c) under `RandomChallenger` (γ known in advance — the ordering
-    ///      attack) the σ*-patched proof is ACCEPTED: choosing σ_z after γ
-    ///      breaks soundness, so the transcript ordering is load-bearing;
-    ///  (d) the SAME patched proof under `FsChallenger` is REJECTED — γ
-    ///      re-derives from σ*, denying the prover the γ it solved against;
-    ///  (e) at 100 fresh challenge tuples the patched proof is rejected
-    ///      (the accepting tuple set is thin, as the 2⁻¹²⁸ bound predicts).
-    #[test]
-    fn zk_gamma_cancellation_unique_and_fs_ordering() {
-        use crate::challenger::RandomChallenger;
-        let m = 14;
-        let seed = 0x6A77A_5EED;
-        let mut rng = Rng::new(0xBAD_C0DE);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let mut c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        c[7] = !c[7]; // invalid witness: nonzero zerocheck defect δ
-        let p_small = rng.field_mask(m);
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-
-        // Prove under the fixed (observation-independent) challenge tuple.
-        let mut ch_prove = RandomChallenger::new(seed);
-        let (proof, _) = prove_packed_padded_zk(
-            &a_p,
-            &b_p,
-            &c_p,
-            &p_small,
-            m,
-            &PaddingSpec::dense(m),
-            &mut ch_prove,
-        );
-
-        // (a) Rejected as-is.
-        let mut ch = RandomChallenger::new(seed);
-        assert!(
-            verify_zk(m, &proof, &mut ch).is_err(),
-            "invalid witness must be rejected at the honest σ_z"
-        );
-
-        // (b) Residual is affine in σ_z; solve for the unique root σ*.
-        let r0 = zk_final_residual(m, &proof, seed, proof.mask_init);
-        let r1 = zk_final_residual(m, &proof, seed, proof.mask_init + F128::ONE);
-        let slope = r0 + r1; // affine over char 2: R(x+1) + R(x) = slope
-        assert_ne!(r0, F128::ZERO, "defect must be visible in the residual");
-        assert_ne!(
-            slope,
-            F128::ZERO,
-            "σ_z slope γ·Π(1+ρ)/(1+r_eq) must be nonzero"
-        );
-        let sigma_star = proof.mask_init + r0 * slope.inv();
-        assert_eq!(
-            zk_final_residual(m, &proof, seed, sigma_star),
-            F128::ZERO,
-            "σ* must be the root"
-        );
-        // Uniqueness: affine with nonzero slope ⇒ any other σ has nonzero
-        // residual; spot-check a few.
-        for k in 1..8u64 {
-            let other = sigma_star
-                + F128 {
-                    lo: k,
-                    hi: k.wrapping_mul(0x9E37),
-                };
-            assert_ne!(zk_final_residual(m, &proof, seed, other), F128::ZERO);
-        }
-
-        // (c) The ordering attack: with γ known in advance, the patched
-        // proof is ACCEPTED by the real verifier.
-        let mut cheat = proof.clone();
-        cheat.mask_init = sigma_star;
-        let mut ch = RandomChallenger::new(seed);
-        assert!(
-            verify_zk(m, &cheat, &mut ch).is_ok(),
-            "σ_z chosen AFTER γ must cancel the invalid witness under a \
-             fixed-challenge (ordering-violating) verifier — this is the \
-             attack Fiat–Shamir ordering exists to prevent"
-        );
-
-        // (d) Under Fiat–Shamir the same proof is rejected: γ is derived
-        // after σ_z is absorbed, so the solved-for γ never occurs.
-        let mut ch_fs = FsChallenger::new(b"flock-zk-order-v0");
-        assert!(
-            verify_zk(m, &cheat, &mut ch_fs).is_err(),
-            "FS-derived γ must deny the σ_z-after-γ cancellation"
-        );
-
-        // (e) Thin accepting set: 100 fresh challenge tuples all reject.
-        for s in 0..100u64 {
-            let mut ch = RandomChallenger::new(0x51DE_0000 + s);
-            assert!(
-                verify_zk(m, &cheat, &mut ch).is_err(),
-                "patched proof accepted at unrelated challenge tuple {s}"
-            );
-        }
-    }
-
-    /// **Verify rejects byte-mutated proofs.** Walk each component of the
-    /// proof and flip one F128 entry; the verifier must return an `Err`
-    /// (rather than panicking or silently accepting).
-    #[test]
-    fn verify_rejects_mutations() {
-        let m = 14;
-        let mut rng = Rng::new(5050);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let _seed: u64 = 0xDEAD_BEEF;
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-        let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-        // Each closure returns a mutated copy; verify must reject all of them.
-        let mutations: Vec<(&str, Box<dyn Fn(&ZerocheckProof) -> ZerocheckProof>)> = vec![
-            (
-                "round1_ab[0] bit-flip",
-                Box::new(|p| {
-                    let mut q = p.clone();
-                    q.round1_ab[0].lo ^= 1;
-                    q
-                }),
-            ),
-            (
-                "round1_c[5] bit-flip",
-                Box::new(|p| {
-                    let mut q = p.clone();
-                    q.round1_c[5].lo ^= 1;
-                    q
-                }),
-            ),
-            (
-                "multilinear_rounds[0].0 bit-flip",
-                Box::new(|p| {
-                    let mut q = p.clone();
-                    q.multilinear_rounds[0].0.lo ^= 1;
-                    q
-                }),
-            ),
-            (
-                "multilinear_rounds[2].1 bit-flip",
-                Box::new(|p| {
-                    let mut q = p.clone();
-                    let last = q.multilinear_rounds.len() / 2;
-                    q.multilinear_rounds[last].1.hi ^= 1;
-                    q
-                }),
-            ),
-            (
-                "final_a_eval bit-flip",
-                Box::new(|p| {
-                    let mut q = p.clone();
-                    q.final_a_eval.lo ^= 1;
-                    q
-                }),
-            ),
-            (
-                "final_c_eval bit-flip",
-                Box::new(|p| {
-                    let mut q = p.clone();
-                    q.final_c_eval.hi ^= 1;
-                    q
-                }),
-            ),
-        ];
-
-        for (label, mutate) in mutations {
-            let bad = mutate(&proof);
-            let mut ch = FsChallenger::new(b"flock-test-v0");
-            let result = verify(m, &bad, &mut ch);
-            assert!(
-                result.is_err(),
-                "verify accepted mutated proof ({label}) — should have rejected"
-            );
-        }
-    }
-
-    /// Shape rejections: too-short round1, wrong number of multilinear rounds.
-    #[test]
-    fn verify_rejects_shape_errors() {
-        let m = 14;
-        let mut rng = Rng::new(606);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-        let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-        // Truncate round1_ab.
-        let mut bad = proof.clone();
-        bad.round1_ab.pop();
-        let mut ch = FsChallenger::new(b"flock-test-v0");
-        assert!(matches!(
-            verify(m, &bad, &mut ch),
-            Err(VerifyError::BadRound1Length { .. })
-        ));
-
-        // Truncate multilinear rounds.
-        let mut bad = proof.clone();
-        bad.multilinear_rounds.pop();
-        let mut ch = FsChallenger::new(b"flock-test-v0");
-        assert!(matches!(
-            verify(m, &bad, &mut ch),
-            Err(VerifyError::BadMultilinearRoundsLength { .. })
-        ));
-
-        // log_n too small.
-        let mut ch = FsChallenger::new(b"flock-test-v0");
-        assert!(matches!(
-            verify(K_SKIP + 6, &proof, &mut ch),
-            Err(VerifyError::LogNTooSmall { .. })
-        ));
-    }
-
-    /// AUDIT: a FALSE statement (c ≠ a·b at some hypercube point) must be
-    /// rejected, even though the prover follows the honest algorithm on its
-    /// (dishonest) witness.
-    #[test]
-    fn audit_false_statement_rejected() {
-        for &m in &[13usize, 14, 15] {
-            let mut rng = Rng::new(7777 + m as u64);
-            let a = rng.bits(1 << m);
-            let b = rng.bits(1 << m);
-            // Correct c, then corrupt ONE bit so a·b ⊕ c ≠ 0 somewhere.
-            let mut c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-            c[3] = !c[3];
-
-            let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-            let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-            let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-            let mut ch_verify = FsChallenger::new(b"flock-test-v0");
-            let res = verify(m, &proof, &mut ch_verify);
-            assert!(
-                res.is_err(),
-                "verify ACCEPTED a false statement at m={m}: {res:?}"
-            );
-        }
-    }
-
-    /// AUDIT: flipping any round's `msg_inf` (the degree-2 / ∞ coefficient)
-    /// must be rejected. `msg_inf` is observed into the transcript, so the
-    /// tamper both reshuffles subsequent ρ challenges and breaks the
-    /// running-claim chain — either way the final check fails.
-    #[test]
-    fn audit_round_msg_inf_tamper_rejected() {
-        let m = 14;
-        let mut rng = Rng::new(424242);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-        let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-        // For each round, flip msg_inf to a different value. Because msg_inf
-        // is observed into the transcript, this reshuffles subsequent rho's;
-        // a sound verifier should reject (overwhelming probability).
-        for idx in 0..proof.multilinear_rounds.len() {
-            let mut bad = proof.clone();
-            bad.multilinear_rounds[idx].1 += F128::ONE;
-            let mut ch = FsChallenger::new(b"flock-test-v0");
-            let res = verify(m, &bad, &mut ch);
-            assert!(res.is_err(), "msg_inf tamper at round {idx} ACCEPTED");
-        }
-    }
-
-    /// AUDIT: the LAST round's `msg_inf` must be constrained — a common
-    /// off-by-one is to leave the final round's leading coefficient unchecked.
-    /// Kept separate from the all-rounds loop above so a regression here points
-    /// straight at the final-round binding.
-    #[test]
-    fn audit_last_round_inf_constrained() {
-        let m = 13;
-        let mut rng = Rng::new(98765);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-        let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-        let last = proof.multilinear_rounds.len() - 1;
-        let mut bad = proof.clone();
-        bad.multilinear_rounds[last].1 += F128::ONE;
-        let mut ch = FsChallenger::new(b"flock-test-v0");
-        assert!(
-            verify(m, &bad, &mut ch).is_err(),
-            "last-round msg_inf unconstrained"
-        );
-    }
-
-    /// AUDIT (Fiat–Shamir binding of the final â, b̂ claims). Regression test
-    /// for the gap where `final_a_eval`/`final_b_eval` were not observed into
-    /// the transcript.
-    ///
-    /// Downstream, lincheck reduces these two claims via a *single* random-
-    /// linear-combination check (`target = α·v_a + v_b`). That batching is only
-    /// sound if α is sampled *after* the claims are bound to the transcript —
-    /// otherwise a prover that already knows α can pick (v_a, v_b) to satisfy
-    /// the one batched equation while violating the individual ties.
-    ///
-    /// A *product-preserving* tamper `(â, b̂) → (â·t, b̂·t⁻¹)` leaves the
-    /// zerocheck's own final check `c_running == â·b̂` satisfied, so `verify`
-    /// still returns `Ok` — the zerocheck alone is blind to it. The defense is
-    /// that both claims are now observed last in the transcript, so the next
-    /// challenge (the slot lincheck draws α from) must diverge from the honest
-    /// run. This assertion FAILS before the observe was added (identical
-    /// post-state) and passes now.
-    #[test]
-    fn audit_final_ab_claims_bound_to_transcript() {
-        let m = 14;
-        let mut rng = Rng::new(0xF1A7_5A11);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-        let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-
-        // Honest verify, then capture the next challenge the transcript feeds
-        // downstream — this is exactly the slot lincheck samples α from.
-        let mut ch_honest = FsChallenger::new(b"flock-test-v0");
-        assert!(
-            verify(m, &proof, &mut ch_honest).is_ok(),
-            "honest verify rejected"
-        );
-        let alpha_honest = ch_honest.sample_f128();
-
-        // Product-preserving tamper: â' = â·t, b̂' = b̂·t⁻¹ ⇒ â'·b̂' = â·b̂, so the
-        // zerocheck's `c_running == â·b̂` check still holds for the tampered pair.
-        let t = F128 {
-            lo: 0x0123_4567_89ab_cdef,
-            hi: 0xfedc_ba98_7654_3210,
-        };
-        assert!(t != F128::ZERO && t != F128::ONE, "t must be nontrivial");
-        let mut bad = proof.clone();
-        bad.final_a_eval *= t;
-        bad.final_b_eval *= t.inv();
-        assert_ne!(bad.final_a_eval, proof.final_a_eval, "tamper must change â");
-        assert_ne!(bad.final_b_eval, proof.final_b_eval, "tamper must change b̂");
-        assert_eq!(
-            bad.final_a_eval * bad.final_b_eval,
-            proof.final_a_eval * proof.final_b_eval,
-            "tamper must preserve the product",
-        );
-
-        // The zerocheck's own checks are blind to a product-preserving tamper:
-        // verify still ACCEPTS. This is precisely the gap the FS binding closes —
-        // the tamper is caught only because the claims now move the transcript.
-        let mut ch_tampered = FsChallenger::new(b"flock-test-v0");
-        assert!(
-            verify(m, &bad, &mut ch_tampered).is_ok(),
-            "product-preserving tamper rejected by zerocheck's own checks (unexpected)",
-        );
-        let alpha_tampered = ch_tampered.sample_f128();
-
-        // The fix: observing â, b̂ makes the downstream challenge depend on them,
-        // so lincheck's α (and everything after) diverges and rejects the
-        // tampered pair. Before the fix these challenges were equal.
-        assert_ne!(
-            alpha_honest, alpha_tampered,
-            "final â/b̂ claims are NOT bound into the transcript: a product-preserving \
-             tamper leaves the downstream challenge unchanged, breaking lincheck's \
-             α-batched reduction of (v_a, v_b)",
-        );
-    }
-
-    /// AUDIT: many random false witnesses must all be rejected. Stronger than a
-    /// single corruption — exercises the full prove→verify path on statements
-    /// that are false at varying numbers of hypercube points.
-    #[test]
-    fn audit_many_false_statements_rejected() {
-        let m = 13;
-        for seed in 0..20u64 {
-            let mut rng = Rng::new(0xBADC0DE ^ seed);
-            let a = rng.bits(1 << m);
-            let b = rng.bits(1 << m);
-            let mut c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-            // Flip a random number of bits (1..=4).
-            let nflip = 1 + (rng.next_u64() as usize % 4);
-            for _ in 0..nflip {
-                let idx = rng.next_u64() as usize % c.len();
-                c[idx] = !c[idx];
-            }
-            let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-            let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-            let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-            let mut ch_verify = FsChallenger::new(b"flock-test-v0");
-            let res = verify(m, &proof, &mut ch_verify);
-            assert!(
-                res.is_err(),
-                "false statement (seed={seed}) ACCEPTED: {res:?}"
-            );
-        }
-    }
-
-    /// AUDIT: tamper msg_1 in each round; must reject.
-    #[test]
-    fn audit_round_msg_1_tamper_rejected() {
-        let m = 14;
-        let mut rng = Rng::new(31415);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch_prove = FsChallenger::new(b"flock-test-v0");
-        let (proof, _) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch_prove);
-        for idx in 0..proof.multilinear_rounds.len() {
-            let mut bad = proof.clone();
-            bad.multilinear_rounds[idx].0 += F128::ONE;
-            let mut ch = FsChallenger::new(b"flock-test-v0");
-            assert!(
-                verify(m, &bad, &mut ch).is_err(),
-                "msg_1 tamper round {idx} ACCEPTED"
-            );
-        }
-    }
-
-    /// Determinism: same witness + same challenger seed → same proof.
-    #[test]
-    fn prove_deterministic() {
-        let m = 14;
-        let mut rng = Rng::new(99);
-        let a = rng.bits(1 << m);
-        let b = rng.bits(1 << m);
-        let c: Vec<bool> = a.iter().zip(&b).map(|(x, y)| *x & *y).collect();
-
-        let (a_p, b_p, c_p) = pack_abc(&a, &b, &c);
-        let mut ch1 = FsChallenger::new(b"flock-test-v0");
-        let mut ch2 = FsChallenger::new(b"flock-test-v0");
-        let (proof1, claim1) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch1);
-        let (proof2, claim2) = prove_packed(&a_p, &b_p, &c_p, m, &mut ch2);
-
-        assert_eq!(proof1.round1_ab, proof2.round1_ab);
-        assert_eq!(proof1.round1_c, proof2.round1_c);
-        assert_eq!(proof1.multilinear_rounds, proof2.multilinear_rounds);
-        assert_eq!(proof1.final_a_eval, proof2.final_a_eval);
-        assert_eq!(proof1.final_b_eval, proof2.final_b_eval);
-        assert_eq!(proof1.final_c_eval, proof2.final_c_eval);
-        assert_eq!(claim1.z, claim2.z);
-        assert_eq!(claim1.mlv_challenges, claim2.mlv_challenges);
-    }
-}
+mod tests;

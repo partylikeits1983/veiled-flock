@@ -1,7 +1,7 @@
 # Architecture
 
-This document describes how the active implementation adds zero knowledge to
-FLOCK with VEIL. The normative protocol is defined in [`../SPEC.md`](../SPEC.md).
+This document describes the intended VEIL integration. The protocol and known
+deviations are defined in [`../SPEC.md`](../SPEC.md).
 
 ## Components
 
@@ -96,7 +96,7 @@ The VEIL compiler is split into two phases:
    and proves it against the same commitment.
 
 The outer transcript absorbs the commitment root under
-`veil-flock-mask-root-v0` before zerocheck starts. This removes the circular
+`veil-flock-mask-root` before zerocheck starts. This removes the circular
 dependency without allowing the prover to choose masks after seeing the
 challenges.
 
@@ -159,6 +159,10 @@ the Hadamard proof. These values are committed but never serialized.
 Both VEIL code layers use inverse rate 8 and 160 random padding rows. The
 Fiat--Shamir transcript selects 160 distinct non-adaptive query positions.
 
+The two-phase compiler uses nonce- and channel-separated framed vector and
+Hadamard commitments. Its multiplication batching point excludes 0 and 1 so
+the six-value padding map is invertible for every accepted transcript.
+
 ## Step 6: link VEIL, PCS, and the public statement
 
 After lincheck, the prover has:
@@ -170,7 +174,7 @@ D  = public digest evaluation claim
 ```
 
 The transcript absorbs `value_ab` and `value_c` under
-`veil-flock-output-claims-v0`. The public digest batching challenges are then
+`veil-flock-output-claims`. The public digest batching challenges are then
 sampled.
 
 The prover creates one hiding Ligerito opening for `AB`, `C`, and `D`. The
@@ -188,7 +192,7 @@ for this two-value map remains required.
 The Ligerito prover and verifier agree on acceptance but do not guarantee an
 identical challenger state after the terminal opening. The implementation
 therefore clones the transcript before PCS and labels the clone
-`veil-flock-inner-fork-v0`.
+`veil-flock-inner-fork`.
 
 The original branch verifies Ligerito. The fork verifies VEIL. The fork occurs
 only after the statement, commitment roots, masked PIOP, AB/C values, and
@@ -228,11 +232,18 @@ pseudo-witness's actual terminal evaluations. Production lincheck, PCS, and
 VEIL code then complete the proof.
 
 The generic verifier accepts the simulated proof when driven by the same
-programmed oracle. At batch 256, the simulator programs 17 challenges.
+programmed Fiat--Shamir challenger. At batch 256, the simulator programs 17
+challenges.
+
+Fiat--Shamir, PCS, and VEIL commitments query the same programmable oracle
+under disjoint encodings. The simulator programs the required Fiat--Shamir
+challenges; unprogrammed PCS and VEIL points receive the native SHA-256 answer.
+The executable test checks that all three commitment channels reach the shared
+oracle.
 
 This demonstrates that an accepting transcript can be generated from the
 public statement alone. Proving that its distribution matches a real proof
-requires the remaining arguments listed in `docs/SECURITY.md`.
+requires the remaining arguments listed in [`SECURITY.md`](SECURITY.md).
 
 ## Private and public data
 
@@ -258,4 +269,4 @@ length, timing, or memory access patterns.
 
 ## Diagrams
 
-Sequence and class diagrams for the three crates are in [`../SPEC.md`](../SPEC.md), section 15.
+Sequence and class diagrams for the three crates are in [`../SPEC.md`](../SPEC.md), section 16.

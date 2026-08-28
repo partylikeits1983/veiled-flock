@@ -10,6 +10,7 @@ use crate::pcs::{self, Commitment};
 use crate::proof::{R1csClaim, R1csProofLigerito, ZClaim};
 use crate::r1cs::BlockR1cs;
 use crate::zerocheck;
+use std::sync::OnceLock;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerifyError {
@@ -32,7 +33,6 @@ pub enum VerifyError {
 /// there uses this 1-thread pool and collapses onto a single worker, without
 /// touching the prover's use of the global pool.
 fn verifier_pool() -> &'static rayon::ThreadPool {
-    use std::sync::OnceLock;
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
     POOL.get_or_init(|| {
         rayon::ThreadPoolBuilder::new()

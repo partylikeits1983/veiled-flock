@@ -23,12 +23,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     dot_product::{
-        DotProductError, DotProductProof, VectorParameters, commit_vectors, commit_vectors_framed,
-        prove_dot_product, verify_dot_product, verify_dot_product_framed,
+        DotProductError, DotProductProof, VectorParameters, commit_vectors, prove_dot_product,
+        sample_not_zero_or_one, verify_dot_product,
     },
     hadamard::{
-        HadamardError, HadamardProof, commit_hadamard, commit_hadamard_framed,
-        prove_hadamard_and_dots, verify_hadamard_and_dots, verify_hadamard_and_dots_framed,
+        HadamardError, HadamardProof, commit_hadamard, prove_hadamard_and_dots,
+        verify_hadamard_and_dots,
     },
 };
 
@@ -101,6 +101,7 @@ impl From<HadamardError> for BlockR1csError {
 /// Prove a FLOCK block-R1CS witness.  `a` and `b` are accepted separately so
 /// callers can use FLOCK's fast circuit-specific witness generator instead
 /// of re-applying the very dense substituted matrices.
+#[allow(clippy::too_many_arguments)]
 pub fn prove_block_r1cs<C: Challenger, R: MaskSampler + ?Sized>(
     r1cs: &BlockR1cs,
     z: &[F128],
@@ -110,46 +111,7 @@ pub fn prove_block_r1cs<C: Challenger, R: MaskSampler + ?Sized>(
     parameters: BlockR1csParameters,
     rng: &mut R,
     challenger: &mut C,
-) -> Result<BlockR1csProof, BlockR1csError> {
-    prove_block_r1cs_inner(r1cs, z, a, b, public, parameters, rng, challenger, None)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn prove_block_r1cs_framed<C: Challenger, R: MaskSampler + ?Sized>(
-    r1cs: &BlockR1cs,
-    z: &[F128],
-    a: &[F128],
-    b: &[F128],
-    public: &[PublicEquality],
-    parameters: BlockR1csParameters,
-    rng: &mut R,
-    challenger: &mut C,
     ctx: &RoContext,
-) -> Result<BlockR1csProof, BlockR1csError> {
-    prove_block_r1cs_inner(
-        r1cs,
-        z,
-        a,
-        b,
-        public,
-        parameters,
-        rng,
-        challenger,
-        Some(ctx),
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn prove_block_r1cs_inner<C: Challenger, R: MaskSampler + ?Sized>(
-    r1cs: &BlockR1cs,
-    z: &[F128],
-    a: &[F128],
-    b: &[F128],
-    public: &[PublicEquality],
-    parameters: BlockR1csParameters,
-    rng: &mut R,
-    challenger: &mut C,
-    framed: Option<&RoContext>,
 ) -> Result<BlockR1csProof, BlockR1csError> {
     let parameters = parameters.validate()?;
     validate_relation_shape(r1cs, z, a, b, public)?;
@@ -192,36 +154,24 @@ fn prove_block_r1cs_inner<C: Challenger, R: MaskSampler + ?Sized>(
 
     let witness_parameters = vector_parameters(n + 6, 1, parameters)?;
     let hadamard_parameters = vector_parameters(2 * n + 2, 3, parameters)?;
-    let witness_data = match framed {
-        Some(ctx) => commit_vectors_framed(
-            &[extended_witness],
-            witness_parameters,
-            rng,
-            ctx,
-            RoChannel::Witness,
-        )?,
-        None => commit_vectors(&[extended_witness], witness_parameters, rng)?,
-    };
-    let hadamard_data = match framed {
-        Some(ctx) => commit_hadamard_framed(
-            &hadamard_a,
-            &hadamard_b,
-            &hadamard_c,
-            hadamard_parameters,
-            rng,
-            ctx,
-            RoChannel::MaskP,
-        )?,
-        None => commit_hadamard(
-            &hadamard_a,
-            &hadamard_b,
-            &hadamard_c,
-            hadamard_parameters,
-            rng,
-        )?,
-    };
+    let witness_data = commit_vectors(
+        &[extended_witness],
+        witness_parameters,
+        rng,
+        ctx,
+        RoChannel::Witness,
+    )?;
+    let hadamard_data = commit_hadamard(
+        &hadamard_a,
+        &hadamard_b,
+        &hadamard_c,
+        hadamard_parameters,
+        rng,
+        ctx,
+        RoChannel::MaskP,
+    )?;
 
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs");
     challenger.observe_bytes(&witness_data.root());
     challenger.observe_bytes(&hadamard_data.root());
     let multiplication_rlc = sample_not_zero_or_one(challenger);
@@ -254,26 +204,7 @@ pub fn verify_block_r1cs<C: Challenger>(
     public: &[PublicEquality],
     proof: &BlockR1csProof,
     challenger: &mut C,
-) -> Result<(), BlockR1csError> {
-    verify_block_r1cs_inner(r1cs, public, proof, challenger, None)
-}
-
-pub fn verify_block_r1cs_framed<C: Challenger>(
-    r1cs: &BlockR1cs,
-    public: &[PublicEquality],
-    proof: &BlockR1csProof,
-    challenger: &mut C,
     ctx: &RoContext,
-) -> Result<(), BlockR1csError> {
-    verify_block_r1cs_inner(r1cs, public, proof, challenger, Some(ctx))
-}
-
-fn verify_block_r1cs_inner<C: Challenger>(
-    r1cs: &BlockR1cs,
-    public: &[PublicEquality],
-    proof: &BlockR1csProof,
-    challenger: &mut C,
-    framed: Option<&RoContext>,
 ) -> Result<(), BlockR1csError> {
     let parameters = proof.parameters.validate()?;
     let n = r1cs.n();
@@ -284,21 +215,18 @@ fn verify_block_r1cs_inner<C: Challenger>(
     {
         return Err(BlockR1csError::WrongProofShape);
     }
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs");
     challenger.observe_bytes(&proof.witness.commitment);
     challenger.observe_bytes(&proof.hadamard.commitment);
     let multiplication_rlc = sample_not_zero_or_one(challenger);
     let dot_vector = powers(multiplication_rlc, 2 * n + 2);
-    match framed {
-        Some(ctx) => verify_hadamard_and_dots_framed(
-            &dot_vector,
-            &proof.hadamard,
-            challenger,
-            ctx,
-            RoChannel::MaskP,
-        )?,
-        None => verify_hadamard_and_dots(&dot_vector, &proof.hadamard, challenger)?,
-    }
+    verify_hadamard_and_dots(
+        &dot_vector,
+        &proof.hadamard,
+        challenger,
+        ctx,
+        RoChannel::MaskP,
+    )?;
 
     let link_rlc = challenger.sample_f128();
     let (link_vector, expected_dot) = build_link_claim(
@@ -311,16 +239,13 @@ fn verify_block_r1cs_inner<C: Challenger>(
     if proof.witness.claimed_dot_products.as_slice() != [expected_dot] {
         return Err(BlockR1csError::LinkClaimMismatch);
     }
-    match framed {
-        Some(ctx) => verify_dot_product_framed(
-            &link_vector,
-            &proof.witness,
-            challenger,
-            ctx,
-            RoChannel::Witness,
-        )?,
-        None => verify_dot_product(&link_vector, &proof.witness, challenger)?,
-    }
+    verify_dot_product(
+        &link_vector,
+        &proof.witness,
+        challenger,
+        ctx,
+        RoChannel::Witness,
+    )?;
     Ok(())
 }
 
@@ -446,18 +371,6 @@ pub(crate) fn powers(base: F128, length: usize) -> Vec<F128> {
         .collect()
 }
 
-/// Sample the R1CS batching point from the subset on which VEIL's six-value
-/// padding map is bijective. In characteristic two its final two weights are
-/// non-zero and distinct exactly when `base` is neither zero nor one.
-pub(crate) fn sample_not_zero_or_one<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
-        let value = challenger.sample_f128();
-        if !value.is_zero() && value != F128::ONE {
-            return value;
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use flock_core::{
@@ -521,6 +434,7 @@ mod tests {
         };
         let mut rng = ZkRng::from_seed([61; 32]);
         let mut prover = FsChallenger::new(b"block-r1cs-test");
+        let ctx = RoContext::native([1; 32]);
         let proof = prove_block_r1cs(
             &r1cs,
             &z,
@@ -530,17 +444,18 @@ mod tests {
             parameters,
             &mut rng,
             &mut prover,
+            &ctx,
         )
         .unwrap();
         let mut verifier = FsChallenger::new(b"block-r1cs-test");
-        verify_block_r1cs(&r1cs, &public, &proof, &mut verifier).unwrap();
+        verify_block_r1cs(&r1cs, &public, &proof, &mut verifier, &ctx).unwrap();
 
         let wrong = [PublicEquality {
             index: 1,
             value: F128::ZERO,
         }];
         let mut verifier = FsChallenger::new(b"block-r1cs-test");
-        assert!(verify_block_r1cs(&r1cs, &wrong, &proof, &mut verifier).is_err());
+        assert!(verify_block_r1cs(&r1cs, &wrong, &proof, &mut verifier, &ctx).is_err());
     }
 
     #[test]

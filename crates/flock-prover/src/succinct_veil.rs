@@ -26,15 +26,15 @@ use veil_f128::{
 
 use crate::prover::open_claims_with_precomputed_ligerito_pd_ro;
 
-const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root-v0";
-const CLAIMS_LABEL: &[u8] = b"veil-flock-output-claims-v0";
+const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root";
+const CLAIMS_LABEL: &[u8] = b"veil-flock-output-claims";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctVeilProof {
     pub proof_nonce: [u8; 32],
-    /// All observed F128 messages are one-time-padded. `final_c_eval` is the
-    /// public C-opening value because FLOCK never absorbs that duplicate.
-    pub masked_zerocheck: ZerocheckProof,
+    /// Exactly the zerocheck values observed by Fiat--Shamir, each one-time
+    /// padded. The derived C evaluation is carried once in `c_value`.
+    pub masked_zerocheck: MaskedZerocheckProof,
     pub masked_lincheck: LincheckProof,
     /// The two values checked by the hiding PCS. Randomizer rows in the ZK
     /// circuit make these evaluation claims witness-independent.
@@ -42,6 +42,18 @@ pub struct SuccinctVeilProof {
     pub c_value: F128,
     pub pcs_open: pcs::BatchOpeningProofLigerito,
     pub veil: ConstraintProof,
+}
+
+/// Masked zerocheck wire format for succinct VEIL. This intentionally differs
+/// from [`ZerocheckProof`]: the ordinary proof's derived `final_c_eval` is not
+/// observed by Fiat--Shamir and therefore does not belong in the masked wire.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MaskedZerocheckProof {
+    pub round1_ab: Vec<F128>,
+    pub round1_c: Vec<F128>,
+    pub multilinear_rounds: Vec<(F128, F128)>,
+    pub final_a_eval: F128,
+    pub final_b_eval: F128,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -118,7 +130,6 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
         challenger: &mut crate::sim_oracle::OracleChallenger,
     ) -> Result<(ZerocheckProof, zerocheck::ZerocheckClaim, Option<Vec<F128>>), SuccinctVeilError>
     {
-        const N_INNER: usize = 7;
         let ell = 1usize << zerocheck::K_SKIP;
         let n_mlv = inputs.m - zerocheck::K_SKIP;
         let expected_masks = 2 * ell + 2 * n_mlv + 2;
@@ -128,19 +139,8 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
             ));
         }
 
-        challenger.observe_label(b"flock-zerocheck-v0");
-        let r_skip = challenger.sample_f128_vec(zerocheck::K_SKIP);
-        let r_outer = challenger.sample_f128_vec(inputs.m - zerocheck::K_SKIP - N_INNER);
-        let mut r = vec![F128::ZERO; inputs.m];
-        r[..zerocheck::K_SKIP].copy_from_slice(&r_skip);
-        r[zerocheck::K_SKIP..zerocheck::K_SKIP + 3]
-            .copy_from_slice(&zerocheck::univariate_skip_optimized::small_challenges_ghash());
-        r[zerocheck::K_SKIP + 3..zerocheck::K_SKIP + N_INNER]
-            .copy_from_slice(&zerocheck::univariate_skip_optimized::medium_challenges_ghash());
-        r[zerocheck::K_SKIP + N_INNER..].copy_from_slice(&r_outer);
-        if r[zerocheck::K_SKIP..].contains(&F128::ONE) {
-            return Err(SuccinctVeilError::DegenerateSimulation);
-        }
+        challenger.observe_label(b"flock-zerocheck");
+        let r = zerocheck::sample_eq_point(inputs.m, challenger);
 
         // Reuse the shipped terminal evaluator with zero mask channels; only
         // its a/b/c outputs are relevant to the standard zerocheck.
@@ -217,9 +217,6 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
             let one_plus_rho = F128::ONE + rho;
             let r_eq = r[zerocheck::K_SKIP + i];
             let one_plus_r_eq = F128::ONE + r_eq;
-            if one_plus_r_eq.is_zero() {
-                return Err(SuccinctVeilError::DegenerateSimulation);
-            }
             let g1 = self.random_vec(1)[0];
             let g0 = (running + r_eq * g1) * one_plus_r_eq.inv();
             let g_inf = if i + 1 == n_mlv {
@@ -299,7 +296,16 @@ struct MaskLayout {
 
 impl MaskLayout {
     fn new(r1cs: &BlockR1cs) -> Result<Self, SuccinctVeilError> {
-        if r1cs.m < zerocheck::K_SKIP || r1cs.k_log < r1cs.k_skip {
+        let k = r1cs.k();
+        if r1cs.k_skip != zerocheck::K_SKIP
+            || r1cs.m < zerocheck::K_SKIP + zerocheck::N_INNER
+            || r1cs.k_log < r1cs.k_skip
+            || !r1cs.c0_is_identity()
+            || r1cs.a_0.num_rows != k
+            || r1cs.a_0.num_cols != k
+            || r1cs.b_0.num_rows != k
+            || r1cs.b_0.num_cols != k
+        {
             return Err(SuccinctVeilError::InvalidShape("R1CS mask geometry"));
         }
         Ok(Self {
@@ -313,6 +319,16 @@ impl MaskLayout {
     fn observed_count(self) -> usize {
         2 * self.ell + 2 * self.zc_rounds + 2 + 2 * self.lc_rounds + self.z_partial
     }
+}
+
+fn validate_succinct_parameters(
+    r1cs: &BlockR1cs,
+    pcs_params: &PcsParams,
+) -> Result<MaskLayout, SuccinctVeilError> {
+    if !pcs_params.zk || r1cs.zk.is_none() || pcs_params.m != r1cs.m {
+        return Err(SuccinctVeilError::InvalidParameters);
+    }
+    MaskLayout::new(r1cs)
 }
 
 /// Challenger adapter used only while producing zerocheck and lincheck. It
@@ -341,6 +357,10 @@ impl<'a, C> MaskingChallenger<'a, C> {
 }
 
 impl<C: Challenger> Challenger for MaskingChallenger<'_, C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        self.inner.ro_context(nonce)
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.inner.observe_label(label);
     }
@@ -383,15 +403,14 @@ fn mask_proofs(
     zc: &ZerocheckProof,
     lc: &LincheckProof,
     masks: &[F128],
-    c_value: F128,
-) -> (ZerocheckProof, LincheckProof) {
+) -> (MaskedZerocheckProof, LincheckProof) {
     let mut cursor = 0;
     let mut next = |value: F128| {
         let result = value + masks[cursor];
         cursor += 1;
         result
     };
-    let masked_zc = ZerocheckProof {
+    let masked_zc = MaskedZerocheckProof {
         round1_ab: zc.round1_ab.iter().map(|v| next(*v)).collect(),
         round1_c: zc.round1_c.iter().map(|v| next(*v)).collect(),
         multilinear_rounds: zc
@@ -401,9 +420,6 @@ fn mask_proofs(
             .collect(),
         final_a_eval: next(zc.final_a_eval),
         final_b_eval: next(zc.final_b_eval),
-        // This duplicate is not observed by FLOCK. The shifted circuit binds
-        // the round-1 C reconstruction directly to the public PCS claim.
-        final_c_eval: c_value,
     };
     let masked_lc = LincheckProof {
         rounds: lc
@@ -455,18 +471,15 @@ fn observe_claims<C: Challenger>(challenger: &mut C, ab: F128, c: F128) {
 /// values are the two explicit PCS claim values supplied by the proof.
 fn shifted_verifier_circuit<C: Challenger>(
     r1cs: &BlockR1cs,
-    zc: &ZerocheckProof,
+    zc: &MaskedZerocheckProof,
     lc: &LincheckProof,
     ab_value: F128,
     c_value: F128,
     lincheck_circuit: &dyn LincheckCircuit,
     challenger: &mut C,
 ) -> Result<(ArithmeticCircuit, ZClaim, ZClaim), SuccinctVeilError> {
-    const N_INNER: usize = 7;
     let layout = MaskLayout::new(r1cs)?;
-    if r1cs.k_skip != zerocheck::K_SKIP
-        || r1cs.m < zerocheck::K_SKIP + N_INNER
-        || zc.round1_ab.len() != layout.ell
+    if zc.round1_ab.len() != layout.ell
         || zc.round1_c.len() != layout.ell
         || zc.multilinear_rounds.len() != layout.zc_rounds
         || lc.rounds.len() != layout.lc_rounds
@@ -478,16 +491,8 @@ fn shifted_verifier_circuit<C: Challenger>(
     let mut builder = CircuitBuilder::new(layout.observed_count());
     let mut expressions = ExpressionCursor::new(layout.observed_count());
 
-    challenger.observe_label(b"flock-zerocheck-v0");
-    let r_skip = challenger.sample_f128_vec(zerocheck::K_SKIP);
-    let r_outer = challenger.sample_f128_vec(r1cs.m - zerocheck::K_SKIP - N_INNER);
-    let mut r = vec![F128::ZERO; r1cs.m];
-    r[..zerocheck::K_SKIP].copy_from_slice(&r_skip);
-    r[zerocheck::K_SKIP..zerocheck::K_SKIP + 3]
-        .copy_from_slice(&zerocheck::univariate_skip_optimized::small_challenges_ghash());
-    r[zerocheck::K_SKIP + 3..zerocheck::K_SKIP + N_INNER]
-        .copy_from_slice(&zerocheck::univariate_skip_optimized::medium_challenges_ghash());
-    r[zerocheck::K_SKIP + N_INNER..].copy_from_slice(&r_outer);
+    challenger.observe_label(b"flock-zerocheck");
+    let r = zerocheck::sample_eq_point(r1cs.m, challenger);
 
     let round1_ab = zc
         .round1_ab
@@ -520,18 +525,19 @@ fn shifted_verifier_circuit<C: Challenger>(
         let msg_1 = expressions.unmask(*masked_1);
         let msg_inf = expressions.unmask(*masked_inf);
         let r_eq = r[zerocheck::K_SKIP + i];
-        let one_plus_r_eq = F128::ONE + r_eq;
-        let g0 = running.add(&msg_1.scale(r_eq)).scale(one_plus_r_eq.inv());
 
         challenger.observe_f128(*masked_1);
         challenger.observe_f128(*masked_inf);
         let rho = challenger.sample_f128();
         mlv_challenges.push(rho);
-        let one_plus_rho = F128::ONE + rho;
-        running = g0
-            .scale(one_plus_rho)
-            .add(&msg_1.scale(rho))
-            .add(&msg_inf.scale(rho * one_plus_rho));
+        let [running_weight, one_weight, infinity_weight] =
+            zerocheck::sumcheck_round_weights(r_eq, rho).ok_or(SuccinctVeilError::InvalidShape(
+                "degenerate zerocheck challenge",
+            ))?;
+        running = running
+            .scale(running_weight)
+            .add(&msg_1.scale(one_weight))
+            .add(&msg_inf.scale(infinity_weight));
     }
     let final_a = expressions.unmask(zc.final_a_eval);
     let final_b = expressions.unmask(zc.final_b_eval);
@@ -540,7 +546,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     challenger.observe_f128(zc.final_b_eval);
 
     let x_ab = r1cs.x_ab_from_mlv(z, &mlv_challenges);
-    challenger.observe_label(b"flock-lincheck-v0");
+    challenger.observe_label(b"flock-lincheck");
     let alpha = challenger.sample_f128();
     let eq_inner = lincheck::build_quirky_eq_table(x_ab.z_skip, &x_ab.x_inner_rest, r1cs.k_skip);
     let mut comb_vec = lincheck_circuit.fold_alpha_batched(alpha, &eq_inner);
@@ -593,7 +599,7 @@ fn shifted_verifier_circuit<C: Challenger>(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
+pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
     z_packed: Vec<F128>,
@@ -607,28 +613,30 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
     zerocheck_source: Option<&mut dyn SuccinctZerocheckSource<Ch>>,
     challenger: &mut Ch,
 ) -> Result<(SuccinctVeilProof, Commitment), SuccinctVeilError> {
-    if !pcs_params.zk || r1cs.zk.is_none() {
-        return Err(SuccinctVeilError::InvalidParameters);
-    }
-    let layout = MaskLayout::new(r1cs)?;
+    let layout = validate_succinct_parameters(r1cs, pcs_params)?;
     let mut masks = vec![F128::ZERO; layout.observed_count()];
     let mut mask_rng = rng.fork(b"succinct-veil-transcript-masks");
     mask_rng.fill_f128(&mut masks);
-
-    let placeholder = CircuitBuilder::new(layout.observed_count()).finish();
-    let veil_parameters = ConstraintParameters::succinct_flock_experimental();
-    let mut veil_rng = rng.fork(b"succinct-veil-inner-proof");
-    let veil_commitment =
-        commit_constraint_inputs(&placeholder, &masks, veil_parameters, &mut veil_rng)?;
 
     let mut nonce_rng = rng.fork(b"succinct-veil-proof-nonce");
     let mut nonce_words = [0u64; 4];
     nonce_rng.fill_u64s(&mut nonce_words);
     let mut proof_nonce = [0u8; 32];
-    for (chunk, word) in proof_nonce.chunks_exact_mut(8).zip(nonce_words) {
+    for (chunk, word) in proof_nonce
+        .as_chunks_mut::<8>()
+        .0
+        .iter_mut()
+        .zip(nonce_words)
+    {
         chunk.copy_from_slice(&word.to_le_bytes());
     }
-    let ro = RoContext::native(proof_nonce);
+    let ro = challenger.ro_context(proof_nonce);
+
+    let placeholder = CircuitBuilder::new(layout.observed_count()).finish();
+    let veil_parameters = ConstraintParameters::succinct_flock_experimental();
+    let mut veil_rng = rng.fork(b"succinct-veil-inner-proof");
+    let veil_commitment =
+        commit_constraint_inputs(&placeholder, &masks, veil_parameters, &mut veil_rng, &ro)?;
     let mut witness_rng = rng.fork(b"succinct-veil-witness-pcs");
     let (commitment, prover_data) = pcs::commit::commit_zk_with_ro(
         &z_packed,
@@ -732,7 +740,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
         point: r1cs.c_claim_point(zc_claim.z, &zc_claim.r_rest),
         value: zc_claim.c_eval,
     };
-    let (masked_zerocheck, masked_lincheck) = mask_proofs(&honest_zc, &honest_lc, &masks, c.value);
+    let (masked_zerocheck, masked_lincheck) = mask_proofs(&honest_zc, &honest_lc, &masks);
 
     let mut circuit_challenger = circuit_start;
     let (circuit, circuit_ab, circuit_c) = shifted_verifier_circuit(
@@ -762,7 +770,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
     // inner VEIL transcript here, after all linkage data is bound but before
     // entering that terminal protocol.
     let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    veil_challenger.observe_label(b"veil-flock-inner-fork");
     let s_hat_v_ab = if r1cs.k_log >= pcs::LOG_PACKING {
         Some(pcs::ring_switch::s_hat_v_from_z_vec(
             &z_vec,
@@ -771,25 +779,34 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone>(
     } else {
         None
     };
-    let pcs_open = open_claims_with_precomputed_ligerito_pd_ro(
-        z_packed,
-        &prover_data,
-        &commitment,
-        &[ab.clone(), c.clone()],
-        &[s_hat_v_ab.as_deref(), s_hat_v_c.as_deref()],
-        &pd,
-        &padding,
-        lig_config,
-        &ro,
-        RoChannel::Witness,
-        challenger,
+    // The terminal proofs use independent transcripts and randomness.
+    let (pcs_open, veil) = rayon::join(
+        || {
+            open_claims_with_precomputed_ligerito_pd_ro(
+                z_packed,
+                &prover_data,
+                &commitment,
+                &[ab.clone(), c.clone()],
+                &[s_hat_v_ab.as_deref(), s_hat_v_c.as_deref()],
+                &pd,
+                &padding,
+                lig_config,
+                &ro,
+                RoChannel::Witness,
+                challenger,
+            )
+        },
+        || {
+            prove_constraints_from_commitment(
+                &circuit,
+                veil_commitment,
+                &mut veil_rng,
+                &mut veil_challenger,
+                &ro,
+            )
+        },
     );
-    let veil = prove_constraints_from_commitment(
-        &circuit,
-        veil_commitment,
-        &mut veil_rng,
-        &mut veil_challenger,
-    )?;
+    let veil = veil?;
     Ok((
         SuccinctVeilProof {
             proof_nonce,
@@ -815,14 +832,13 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<(Vec<F128>, F128)>,
     challenger: &mut Ch,
 ) -> Result<(), SuccinctVeilError> {
-    if !pcs_params.zk
-        || r1cs.zk.is_none()
-        || commitment.params != *pcs_params
+    validate_succinct_parameters(r1cs, pcs_params)?;
+    if commitment.params != *pcs_params
         || proof.veil.parameters != ConstraintParameters::succinct_flock_experimental()
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    let ro = RoContext::native(proof.proof_nonce);
+    let ro = challenger.ro_context(proof.proof_nonce);
     bind_statement(challenger, r1cs, commitment, &proof.proof_nonce);
     challenger.observe_label(MASK_ROOT_LABEL);
     challenger.observe_bytes(&proof.veil.linear.commitment);
@@ -838,7 +854,7 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     observe_claims(challenger, proof.ab_value, proof.c_value);
     let pd = packed_direct(challenger);
     let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    veil_challenger.observe_label(b"veil-flock-inner-fork");
     let pd_refs = pd
         .iter()
         .map(|(point, value)| pcs::PackedDirectClaimRef {
@@ -857,6 +873,9 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         RoChannel::Witness,
         challenger,
     )?;
-    verify_constraints(&circuit, &proof.veil, &mut veil_challenger)?;
+    verify_constraints(&circuit, &proof.veil, &mut veil_challenger, &ro)?;
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;

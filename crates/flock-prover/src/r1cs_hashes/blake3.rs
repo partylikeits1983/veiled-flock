@@ -808,8 +808,7 @@ pub fn build_block_r1cs(n_blocks_log: usize) -> BlockR1cs {
 /// sits flush and `useful_bits_zk` fills the block exactly (16,384). The
 /// pair's rows are also A-type, so the effective A-side entropy is
 /// (2·128 + 512) bits/block × 2^n_log blocks — comfortably above the
-/// `128·V_free` budget for every supported batch size (the leakage-rank
-/// audit is the ground truth; see `docs/zk-leakage.md`).
+/// `128·V_free` budget for every supported batch size.
 pub fn zk_config() -> flock_core::zk::ZkConfig {
     flock_core::zk::ZkConfig {
         rand_chunks_a: 2,
@@ -1204,7 +1203,6 @@ pub type Compression = ([u32; 8], [u32; 16], u64, u32, u32);
 /// compressions, padded to `2^n_blocks_log` slots. Padding blocks are
 /// all-zero (trivially satisfy the R1CS). Parallel across instances via rayon.
 pub fn generate_witness(blocks: &[Compression], n_blocks_log: usize) -> Vec<bool> {
-    use rayon::prelude::*;
     let n_total = 1usize << n_blocks_log;
     let n_blocks = blocks.len();
     assert!(
@@ -1412,8 +1410,6 @@ pub fn generate_witness_with_ab_packed(
     Vec<flock_core::field::F128>,
     Vec<flock_core::field::F128>,
 ) {
-    use flock_core::field::F128;
-    use rayon::prelude::*;
     let n_total = 1usize << n_blocks_log;
     let n_blocks = blocks.len();
     assert!(
@@ -1698,7 +1694,6 @@ impl Blake3Setup {
         rng: &mut flock_core::zk::ZkRng,
         challenger: &mut Ch,
     ) -> (flock_core::proof::R1csProofLigerito, Commitment, R1csClaim) {
-        use flock_core::zk::MaskSampler;
         assert_eq!(blocks.len(), self.n_blocks);
         assert!(self.pcs_params.zk, "use Blake3Setup::with_zk");
         let layout = self.r1cs.zk.expect("zk setup carries a layout");
@@ -1771,9 +1766,6 @@ impl Blake3Setup {
         challenger: &mut Ch,
     ) -> Result<(crate::prover::R1csProofZkA1, Commitment), crate::zk_certificate::ZkGateError>
     {
-        use crate::zk_certificate::{StatementFamily, require_certified};
-        use flock_core::zk::MaskSampler;
-
         require_certified(
             StatementFamily::Blake3Batch,
             self.n_blocks,
@@ -1828,9 +1820,8 @@ impl Blake3Setup {
     /// witness *commitment* (this check runs after `bind_statement` absorbs
     /// it), so the event's witness-independence is **computational** — it
     /// rests on the commitment's hiding (ROM assumption), the same step the
-    /// FS lift already relies on — not unconditional. See
-    /// `docs/zk-proof.md` §8. Under that assumption, discarding and
-    /// resampling leaks nothing about the witness.
+    /// FS lift already relies on — not unconditional. Under that assumption,
+    /// discarding and resampling leaks nothing about the witness.
     ///
     /// It is a separate entry point because the check runs thousands of fold
     /// passes over the full cube and dominates proving at production size;
@@ -1851,9 +1842,6 @@ impl Blake3Setup {
         ),
         crate::zk_certificate::ZkGateError,
     > {
-        use crate::zk_certificate::{StatementFamily, require_certified};
-        use flock_core::zk::MaskSampler;
-
         require_certified(
             StatementFamily::Blake3Batch,
             self.n_blocks,
@@ -2161,6 +2149,11 @@ impl Blake3Setup {
 // ---------------------------------------------------------------------------
 
 use super::common::{BM_V, BmRow, add_carry_parts_v, or_bit_row, or_u32_row};
+#[cfg(feature = "zk")]
+use crate::zk_certificate::{StatementFamily, require_certified};
+#[cfg(feature = "zk")]
+use flock_core::zk::MaskSampler;
+use rayon::prelude::*;
 
 #[inline(always)]
 fn bm_xor_rotr(x: &[u32; BM_V], y: &[u32; BM_V], r: u32) -> [u32; BM_V] {
@@ -2317,6 +2310,12 @@ pub fn generate_witness_batch_major(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "zk")]
+    use crate::zk_certificate::{CERTIFIED, StatementFamily, require_certified};
+    use flock_core::challenger::FsChallenger;
+    use flock_core::lincheck::pack_z_lincheck_from_packed;
+    use flock_core::lincheck::{LincheckCircuit, SparseMatrixCircuit};
+    use flock_core::pcs::ligerito::LigeritoProfile;
 
     /// SplitMix64.
     struct Rng(u64);
@@ -2379,8 +2378,6 @@ mod tests {
     #[test]
     #[ignore]
     fn batch_major_prove_fast_roundtrip() {
-        use flock_core::challenger::FsChallenger;
-
         let setup = Blake3Setup::new_batch_major(256);
         let mut rng = Rng::new(0xBA7C_F013);
         let inputs: Vec<Compression> = (0..256)
@@ -2392,9 +2389,9 @@ mod tests {
             })
             .collect();
 
-        let mut ch_p = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-batch-major");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-batch-major");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("batch-major verifier rejected: {e:?}"));
@@ -2402,7 +2399,7 @@ mod tests {
 
         let mut bad = proof.clone();
         bad.zerocheck.final_a_eval.lo ^= 1;
-        let mut ch = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch = FsChallenger::new(b"flock-lig-batch-major");
         assert!(
             setup.verify(&commitment, &bad, &mut ch).is_err(),
             "tampered batch-major proof accepted"
@@ -2571,8 +2568,6 @@ mod tests {
     /// at random α + random eq_inner.
     #[test]
     fn lincheck_circuit_matches_sparse() {
-        use flock_core::lincheck::{LincheckCircuit, SparseMatrixCircuit};
-
         let mut rng = Rng::new(0xB1A_E3_CCA1);
         let (a_0, b_0) = build_matrices();
         let sparse = SparseMatrixCircuit::new(&a_0, &b_0);
@@ -2606,7 +2601,6 @@ mod tests {
     /// to `pack_z_lincheck_from_packed(z)`.
     #[test]
     fn fused_lincheck_matches_separate() {
-        use flock_core::lincheck::pack_z_lincheck_from_packed;
         for &n_blocks in &[1usize, 4, 8, 13] {
             let n_log = min_n_blocks_log(n_blocks).max(3);
             let r1cs = build_block_r1cs(n_log);
@@ -2640,8 +2634,6 @@ mod tests {
     /// R1CS / ring-switch / recursive-sumcheck pipeline end to end.
     #[test]
     fn prove_verify_ligerito_all_profiles() {
-        use flock_core::challenger::FsChallenger;
-        use flock_core::pcs::ligerito::LigeritoProfile;
         let blocks: Vec<Compression> = {
             let mut rng = Rng::new(0x9A11_0F11);
             (0..256)
@@ -2683,7 +2675,6 @@ mod tests {
     #[test]
     #[ignore]
     fn prove_fast_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::new(256);
         let mut rng = Rng::new(0xb1a_3211e);
         let blocks: Vec<Compression> = (0..256)
@@ -2693,9 +2684,9 @@ mod tests {
                 (cv, m, 0u64, 64u32, 11u32)
             })
             .collect();
-        let mut ch_p = FsChallenger::new(b"flock-blake3-lig-v0");
+        let mut ch_p = FsChallenger::new(b"flock-blake3-lig");
         let (proof, commitment, claim_p) = setup.prove_fast(&blocks, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-v0");
+        let mut ch_v = FsChallenger::new(b"flock-blake3-lig");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("ligerito verify rejected: {e:?}"));
@@ -2710,7 +2701,6 @@ mod tests {
     #[test]
     #[ignore] // Heavier — Ligerito needs m=22
     fn prove_fast_zk_ligerito_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(256);
         assert!(setup.r1cs.zk.is_some());
         assert_eq!(
@@ -2749,11 +2739,11 @@ mod tests {
 
         let prove_seeded = |seed: [u8; 32]| {
             let mut zk_rng = flock_core::zk::ZkRng::from_seed(seed);
-            let mut ch_p = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+            let mut ch_p = FsChallenger::new(b"flock-blake3-lig-zk");
             setup.prove_fast_zk_with_rng(&blocks, &mut zk_rng, &mut ch_p)
         };
         let (proof, commitment, claim_p) = prove_seeded([1u8; 32]);
-        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-zk");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
@@ -2762,7 +2752,7 @@ mod tests {
 
         // Fresh seed ⇒ fresh commitment root and different masked values, still verifies.
         let (proof2, commitment2, _) = prove_seeded([2u8; 32]);
-        let mut ch_v2 = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+        let mut ch_v2 = FsChallenger::new(b"flock-blake3-lig-zk");
         setup
             .verify(&commitment2, &proof2, &mut ch_v2)
             .expect("fresh-seed zk proof must verify");
@@ -2784,7 +2774,7 @@ mod tests {
                 1 => bad.zerocheck.final_a_eval.lo ^= 1,
                 _ => bad.pcs_open.zk_blind.as_mut().unwrap().y_g.lo ^= 1,
             }
-            let mut ch = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+            let mut ch = FsChallenger::new(b"flock-blake3-lig-zk");
             assert!(
                 setup.verify(&commitment, &bad, &mut ch).is_err(),
                 "tamper {tamper} must be rejected"
@@ -2809,7 +2799,6 @@ mod tests {
     /// m=15 fixture never reaches.
     #[test]
     fn prove_verify_r1cs_zk_a1_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(256);
         let layout = setup.r1cs.zk.unwrap();
         let mut rng = Rng::new(0xA1E2E);
@@ -2836,7 +2825,7 @@ mod tests {
                     &rand_words,
                 );
             let mut zk_rng = flock_core::zk::ZkRng::from_seed(seed);
-            let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
+            let mut ch = FsChallenger::new(b"flock-a1-e2e");
             crate::prover::prove_r1cs_zk_a1(
                 &setup.r1cs,
                 &setup.pcs_params,
@@ -2851,7 +2840,7 @@ mod tests {
         };
 
         let (proof, comm) = prove([1u8; 32]);
-        let mut chv = FsChallenger::new(b"flock-a1-e2e-v0");
+        let mut chv = FsChallenger::new(b"flock-a1-e2e");
         crate::prover::verify_r1cs_zk_a1(
             &setup.r1cs,
             &setup.pcs_params,
@@ -2864,7 +2853,7 @@ mod tests {
 
         // Fresh masks ⇒ different transcript, still verifies.
         let (proof2, comm2) = prove([2u8; 32]);
-        let mut chv2 = FsChallenger::new(b"flock-a1-e2e-v0");
+        let mut chv2 = FsChallenger::new(b"flock-a1-e2e");
         crate::prover::verify_r1cs_zk_a1(
             &setup.r1cs,
             &setup.pcs_params,
@@ -2893,7 +2882,7 @@ mod tests {
                 2 => bad.zerocheck.multilinear_rounds[2].1.lo ^= 1,
                 _ => bad.proof_nonce[0] ^= 1,
             }
-            let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
+            let mut ch = FsChallenger::new(b"flock-a1-e2e");
             assert!(
                 crate::prover::verify_r1cs_zk_a1(
                     &setup.r1cs,
@@ -2916,7 +2905,6 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn zk_certificate_digest_matches_setup() {
-        use crate::zk_certificate::{CERTIFIED, StatementFamily, require_certified};
         let setup = Blake3Setup::with_zk(256);
         let digest = setup.r1cs.statement_digest();
         let Some(cert) = CERTIFIED
@@ -2954,7 +2942,6 @@ mod tests {
     #[test]
     #[ignore = "builds a second large zk setup; run with --ignored"]
     fn zk_a1_rejects_uncertified_batch_size() {
-        use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::with_zk(512);
         let blocks: Vec<Compression> = (0..512)
             .map(|_| ([0u32; 8], [0u32; 16], 0, 64, 11))
@@ -2976,7 +2963,6 @@ mod tests {
     /// (bool trace → pack → apply → prove) and the fused path agree.
     #[test]
     fn prove_ligerito_generic_matches_prove_fast() {
-        use flock_core::challenger::FsChallenger;
         let setup = Blake3Setup::new(256);
         let mut rng = Rng::new(0xb1a_63112);
         let blocks: Vec<Compression> = (0..256)
@@ -3007,8 +2993,6 @@ mod tests {
     #[test]
     #[ignore] // Heavier — Ligerito needs m=22; run with `cargo test const_pin_all_zero_rejected -- --ignored`
     fn const_pin_all_zero_rejected() {
-        use flock_core::challenger::FsChallenger;
-
         let n = 250; // 6 padding blocks at n_block_slots = 256 (m = 22)
         let setup = Blake3Setup::new(n);
 

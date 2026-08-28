@@ -20,7 +20,8 @@
 //!   the previous one (Merlin-style duplex). SHA-256 is also used for the
 //!   Merkle commitments, so the whole system rests on a single hash.
 
-use crate::field::F128;
+use crate::{field::F128, ro::RoContext};
+use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 
 // `Send` supertrait: the verifier runs its PIOP/PCS replay inside a dedicated
@@ -28,7 +29,13 @@ use sha2::{Digest, Sha256};
 // it threads through must be able to cross into that pool. Both concrete
 // challengers (`RandomChallenger`, `FsChallenger`) are trivially `Send`.
 pub trait Challenger: Send {
-    /// Absorb a domain-separation label (e.g. `b"flock-zerocheck-v0"`). Each
+    /// Build the SHA-256 context used by PCS and auxiliary commitments.
+    /// Simulator challengers override this to share their programmable oracle.
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        RoContext::native(nonce)
+    }
+
+    /// Absorb a domain-separation label (e.g. `b"flock-zerocheck"`). Each
     /// protocol entry should call this once on entry so a transcript from
     /// one protocol cannot be replayed as another.
     fn observe_label(&mut self, _label: &[u8]) {
@@ -191,7 +198,7 @@ pub struct FsChallenger {
 
 impl FsChallenger {
     /// New challenger seeded with a domain-separation tag (e.g.
-    /// `b"flock-r1cs-v0"`). The domain is length-prefixed before being
+    /// `b"flock-r1cs"`). The domain is length-prefixed before being
     /// absorbed so two domains where one is a prefix of the other cannot
     /// produce the same initial state.
     pub fn new(domain: &[u8]) -> Self {
@@ -336,7 +343,6 @@ impl Challenger for FsChallenger {
             // usually falls inside one block (so all threads do useful
             // pre-match work), small enough to avoid the 4× over-scan the old
             // `+2` block caused (which left ~¾ of threads doing cancelled work).
-            use rayon::prelude::*;
             let block: u64 = 1 << (bits.min(24) + 1);
             let mut start: u64 = 0;
             loop {

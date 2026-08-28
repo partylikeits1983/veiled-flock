@@ -54,7 +54,7 @@ pub fn bind_statement<Ch: Challenger>(
     commitment: &Commitment,
     proof_nonce: &[u8; 32],
 ) {
-    challenger.observe_label(b"flock-r1cs-v1");
+    challenger.observe_label(b"flock-r1cs");
     challenger.observe_bytes(&r1cs.statement_digest());
     challenger.observe_bytes(proof_nonce);
     challenger.observe_bytes(&commitment.root);

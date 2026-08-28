@@ -262,6 +262,12 @@ fn ghash_mul_unreduced(a: F128, b: F128) -> F256Unreduced {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(all(
+        target_arch = "x86_64",
+        target_feature = "avx512f",
+        target_feature = "vpclmulqdq"
+    ))]
+    use core::arch::x86_64::*;
 
     struct Rng(u64);
     impl Rng {
@@ -494,7 +500,6 @@ mod tests {
     ))]
     #[test]
     fn ghash_mul_x4_matches_scalar() {
-        use core::arch::x86_64::*;
         let mut rng = Rng::new(0x4A4_C0DE);
         for _ in 0..256 {
             let xs = [

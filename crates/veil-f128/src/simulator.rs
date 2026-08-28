@@ -17,12 +17,13 @@ use flock_core::{
 use crate::{
     block_r1cs::{
         BlockR1csError, BlockR1csParameters, BlockR1csProof, PublicEquality, build_link_claim,
-        powers, sample_not_zero_or_one, validate_public, vector_parameters,
+        powers, validate_public, vector_parameters,
     },
     code::{AdditiveRsCode, CodeError, CodeParameters},
     commitment::MerkleMatrixOpening,
     dot_product::{
-        DotProductProof, VectorParameters, dot_product, sample_nonzero, sample_unique_positions,
+        DotProductProof, VectorParameters, dot_product, sample_nonzero, sample_not_zero_or_one,
+        sample_unique_positions,
     },
     hadamard::HadamardProof,
 };
@@ -73,7 +74,7 @@ pub fn simulate_block_r1cs<C: Challenger, R: MaskSampler + ?Sized>(
     let witness_root = random_hash(rng);
     let hadamard_root = random_hash(rng);
 
-    challenger.observe_label(b"veil-f128-flock-block-r1cs-v1");
+    challenger.observe_label(b"veil-f128-flock-block-r1cs");
     challenger.observe_bytes(&witness_root);
     challenger.observe_bytes(&hadamard_root);
     let multiplication_rlc = sample_not_zero_or_one(challenger);
@@ -129,7 +130,7 @@ fn simulate_dot_product<C: Challenger, R: MaskSampler + ?Sized>(
     programmer: &dyn OracleProgrammer,
 ) -> Result<DotProductProof, SimulationError> {
     let mask_dot_product = random_field(rng);
-    challenger.observe_label(b"veil-f128-dot-product-v1");
+    challenger.observe_label(b"veil-f128-dot-product");
     challenger.observe_f128_slice(dot_vector);
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
@@ -200,7 +201,7 @@ fn simulate_hadamard<C: Challenger, R: MaskSampler + ?Sized>(
     programmer: &dyn OracleProgrammer,
 ) -> Result<HadamardProof, SimulationError> {
     let code = code_for(parameters)?;
-    challenger.observe_label(b"veil-f128-hadamard-v1");
+    challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&root);
     let evaluation_point = challenger.sample_f128();
     let gamma = random_field(rng);

@@ -7,6 +7,7 @@ use std::sync::OnceLock;
 use flock_core::bits::transpose_8_u64s_to_64_bytes;
 use flock_core::field::F128;
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
+use rayon::prelude::*;
 
 /// OR the low 32 bits of `val` into `buf` starting at bit-offset `bit_off`.
 /// Handles u64 straddling when `bit_off % 64 > 32`.
@@ -319,8 +320,6 @@ pub(crate) fn drive_witness_packed_and_lincheck_zk<S: Sync, F>(
 where
     F: Fn(&S, &mut [u64], &mut [u64], &mut [u64]) + Sync,
 {
-    use rayon::prelude::*;
-
     let k = 1usize << k_log;
     let f128_per_block = k / 128;
     let u64_per_block = k / 64;
@@ -640,8 +639,6 @@ pub(crate) fn drive_witness_batch_major<S: Sync, F>(
 where
     F: Fn([&S; BM_V], &mut [BmRow], &mut [BmRow], &mut [BmRow]) + Sync + Send,
 {
-    use rayon::prelude::*;
-
     let n_total = 1usize << n_blocks_log;
     assert!(inputs.len() <= n_total);
     assert!(n_total >= BM_V);

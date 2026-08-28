@@ -17,6 +17,11 @@
 //! Workspace-wide Clippy `allow`s for the hand-tuned numeric kernels are
 //! declared in `[workspace.lints.clippy]` at the repo root.
 
+#[cfg(target_os = "linux")]
+use std::collections::HashSet;
+#[cfg(target_arch = "aarch64")]
+use std::sync::OnceLock;
+
 pub mod bits;
 pub mod challenger;
 pub mod field;
@@ -110,7 +115,6 @@ pub(crate) fn alloc_uninit_f128_vec(n: usize) -> Vec<crate::field::F128> {
 /// homogeneous P-core pool?" (i.e. `current_num_threads() <= this`).
 #[cfg(target_arch = "aarch64")]
 pub(crate) fn perf_core_count_cached() -> usize {
-    use std::sync::OnceLock;
     static N: OnceLock<usize> = OnceLock::new();
     *N.get_or_init(perf_core_count)
 }
@@ -159,7 +163,6 @@ fn perf_core_count() -> usize {
 /// `None` if the topology can't be read (caller falls back to logical count).
 #[cfg(target_os = "linux")]
 fn linux_physical_cores() -> Option<usize> {
-    use std::collections::HashSet;
     let mut cores: HashSet<(String, String)> = HashSet::new();
     for entry in std::fs::read_dir("/sys/devices/system/cpu").ok()? {
         let Ok(entry) = entry else {

@@ -50,7 +50,9 @@ use flock_core::field::F128;
 use flock_core::lincheck::{self, pack_z_lincheck_from_packed};
 use flock_core::pcs::{self, ring_switch};
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout};
+use flock_core::ro::RoContext;
 use flock_core::zerocheck;
+use flock_core::zk::ZkRng;
 
 // ---------------------------------------------------------------------------
 // Recording challenger
@@ -62,6 +64,10 @@ struct RecordingChallenger<C: Challenger> {
 }
 
 impl<C: Challenger> Challenger for RecordingChallenger<C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        self.inner.ro_context(nonce)
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.inner.observe_label(label);
     }
@@ -440,7 +446,6 @@ fn piop_rank_audit_negative_control_without_a_group() {
 /// deterministic function of the payload.
 #[test]
 fn piop_transcript_differential() {
-    use flock_core::zk::ZkRng;
     let r1cs = masked_r1cs();
     let mut rng = Rng(0xD1FF);
     let payload = rng.bits(N_PAYLOAD * BLOCKS);

@@ -155,7 +155,7 @@ impl DigestStatement {
     /// its public inputs.
     pub fn public_digest(&self) -> [u8; 32] {
         let mut h = blake3::Hasher::new();
-        h.update(b"flock-digest-statement-v1");
+        h.update(b"flock-digest-statement");
         h.update(&(self.layout.k_log as u64).to_le_bytes());
         h.update(&(self.layout.region_log as u64).to_le_bytes());
         h.update(&(self.layout.region_bits as u64).to_le_bytes());
@@ -268,7 +268,7 @@ impl DigestChallenges {
     /// otherwise a prover could choose the committed slab to agree with the
     /// public digests only at the point it knew in advance.
     pub fn sample<Ch: Challenger>(stmt: &DigestStatement, challenger: &mut Ch) -> Self {
-        challenger.observe_label(b"flock-digest-bind-v1");
+        challenger.observe_label(b"flock-digest-bind");
         let tau_pos = challenger.sample_f128_vec(stmt.layout.tau_pos_len());
         let instance = challenger.sample_f128_vec(stmt.n_log);
         Self { tau_pos, instance }

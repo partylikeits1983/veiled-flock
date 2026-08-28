@@ -38,12 +38,17 @@
 //!
 //! Random probing can only under-estimate a rank, so a full-rank measurement is
 //! sound evidence of surjectivity; but these run at one challenge tuple and
-//! cover the PIOP block, not the PCS-opening interior. The remaining
-//! obligations are enumerated in `docs/memos/interactive-simulator-design.md`.
+//! cover the PIOP block, not the PCS-opening interior.
 
 #![cfg(feature = "zk")]
 
 use flock_core::field::F128;
+use flock_core::zk::MaskSampler;
+use flock_prover::digest_bind::{DigestChallenges, digest_claim_value};
+use flock_prover::preimage_extractor::ExtractError;
+use flock_prover::preimage_extractor::extract_preimages;
+use flock_prover::preimage_extractor::message_bytes_at;
+use flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
 use flock_prover::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_zk_pinned};
 use flock_prover::r1cs_hashes::blake3_preimage::{
     Blake3PreimageSetup, Blake3PreimageZkSetup, MESSAGE_BYTES,
@@ -107,10 +112,7 @@ fn field_mask_spans_conditioned_round_block_for_fixed_digest() {
 fn undersized_mask_does_not_span_the_round_block() {
     let setup = Blake3PreimageZkSetup::new(N);
     let m = setup.r1cs.m;
-    let spec = flock_core::zerocheck::SmallMaskSpec {
-        d_log: 1,
-        ..flock_core::zerocheck::SmallMaskSpec::default()
-    };
+    let spec = flock_core::zerocheck::SmallMaskSpec { d_log: 1 };
     match check_mask_coverage_fv(spec, m, 0xA11CE) {
         Ok(r) => panic!(
             "an undersized support spanned the whole block ({}/{}) — the coverage check \
@@ -177,8 +179,6 @@ fn randomizers_move_the_terminals_in_both_settings() {
 /// computes itself.
 #[test]
 fn the_digest_claim_is_a_public_function_of_the_statement() {
-    use flock_prover::digest_bind::{DigestChallenges, digest_claim_value};
-
     let setup = Blake3PreimageZkSetup::new(N);
     let secret = msgs(0xAAAA, N);
     let digests = Blake3PreimageSetup::digests_of(&secret);
@@ -243,12 +243,6 @@ fn f128_inverse_roundtrips() {
 /// by the `blake3` crate outside the circuit entirely.
 #[test]
 fn extractor_recovers_the_preimages_from_an_honest_commitment() {
-    use flock_core::zk::MaskSampler;
-    use flock_prover::preimage_extractor::extract_preimages;
-    use flock_prover::r1cs_hashes::blake3::{
-        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-    };
-
     let setup = Blake3PreimageZkSetup::new(N);
     let secret = msgs(0xE0E0_1111, N);
     let digests = Blake3PreimageSetup::digests_of(&secret);
@@ -296,12 +290,6 @@ fn extractor_recovers_the_preimages_from_an_honest_commitment() {
 /// prove nothing.
 #[test]
 fn extraction_fails_on_the_simulators_commitment() {
-    use flock_core::zk::MaskSampler;
-    use flock_prover::preimage_extractor::{ExtractError, extract_preimages};
-    use flock_prover::r1cs_hashes::blake3::{
-        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-    };
-
     let setup = Blake3PreimageZkSetup::new(N);
     // The statement: digests of messages nobody in this test knows a preimage
     // for except the honest party.
@@ -365,12 +353,6 @@ fn extraction_fails_on_the_simulators_commitment() {
 /// prover's mask randomness — must not change what is extracted.
 #[test]
 fn extraction_ignores_the_mask_columns() {
-    use flock_core::zk::MaskSampler;
-    use flock_prover::preimage_extractor::message_bytes_at;
-    use flock_prover::r1cs_hashes::blake3::{
-        ParamPinning, generate_witness_with_ab_packed_and_lincheck_zk_pinned,
-    };
-
     let setup = Blake3PreimageZkSetup::new(N);
     let secret = msgs(0xE0E0_4444, 4);
     let layout = setup.r1cs.zk.expect("zk layout");

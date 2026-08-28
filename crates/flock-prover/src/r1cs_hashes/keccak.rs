@@ -1066,6 +1066,8 @@ impl KeccakSetup {
 // ---------------------------------------------------------------------------
 
 use super::common::{BM_V, SendPtr, nt_store_row};
+use flock_core::bits::transpose_8_u64s_to_64_bytes;
+use rayon::prelude::*;
 
 type VLane = [u64; BM_V];
 type VLanes = [[u64; BM_V]; N_LANES];
@@ -1187,8 +1189,6 @@ unsafe fn build_group_batch_major(
     b: *mut u64,
     stripe: *mut u8,
 ) {
-    use flock_core::bits::transpose_8_u64s_to_64_bytes;
-
     let mut wz = RowWriter::new(z, o0, n_log);
     let mut wa = RowWriter::new(a, o0, n_log);
     let mut wb = RowWriter::new(b, o0, n_log);
@@ -1325,8 +1325,6 @@ pub fn generate_witness_batch_major(
     initial_states: &[State],
     n_keccaks_log: usize,
 ) -> (Vec<F128>, Vec<F128>, Vec<F128>, Vec<u8>) {
-    use rayon::prelude::*;
-
     let n_total = 1usize << n_keccaks_log;
     assert!(initial_states.len() <= n_total);
     assert!(n_total >= BM_V, "batch-major needs n_total >= 8");
@@ -1384,6 +1382,9 @@ pub fn generate_witness_batch_major(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::r1cs_hashes::chain_common::{ChainFold, fold_in_out};
+    use flock_core::challenger::FsChallenger;
+    use flock_core::challenger::RandomChallenger;
 
     /// SplitMix64 PRNG.
     struct Rng(u64);
@@ -1671,13 +1672,12 @@ mod tests {
     #[test]
     #[ignore]
     fn prove_fast_roundtrip() {
-        use flock_core::challenger::FsChallenger;
         let setup = KeccakSetup::new(64);
         let mut rng = Rng::new(0x21111_2170);
         let inputs: Vec<State> = (0..64).map(|_| random_state(&mut rng)).collect();
-        let mut ch_p = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-keccak");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-keccak");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("prove_fast: verifier rejected: {e:?}"));
@@ -1718,14 +1718,12 @@ mod tests {
     #[test]
     #[ignore]
     fn batch_major_prove_fast_roundtrip() {
-        use flock_core::challenger::FsChallenger;
-
         let setup = KeccakSetup::new_batch_major(64);
         let mut rng = Rng::new(0xBA7C_2170);
         let inputs: Vec<State> = (0..64).map(|_| random_state(&mut rng)).collect();
-        let mut ch_p = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-keccak");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-keccak");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("batch-major Ligerito verifier rejected: {e:?}"));
@@ -1739,8 +1737,6 @@ mod tests {
     #[test]
     #[ignore] // Heavier — Ligerito needs m=22; run with `cargo test const_pin_all_zero_rejected -- --ignored`
     fn const_pin_all_zero_rejected() {
-        use flock_core::challenger::FsChallenger;
-
         let n = 60; // < 64 slots ⇒ 4 padding blocks, exercises padding fill
         let setup = KeccakSetup::new(n);
 
@@ -1789,7 +1785,6 @@ mod tests {
     /// word addressing.
     #[test]
     fn batch_major_chain_fold_matches_row_major() {
-        use crate::r1cs_hashes::chain_common::{ChainFold, fold_in_out};
         let n_log = 3;
         let mut rng = Rng::new(0xF01D_BA7C);
         let inputs: Vec<State> = (0..8).map(|_| random_state(&mut rng)).collect();
@@ -1825,7 +1820,6 @@ mod tests {
     #[test]
     #[ignore]
     fn batch_major_prove_chain_ligerito_roundtrip() {
-        use flock_core::challenger::RandomChallenger;
         let setup = KeccakSetup::new_batch_major(64);
         let mut rng = Rng::new(0xBA7C_11C7);
         let x0 = random_state(&mut rng);
@@ -1848,7 +1842,6 @@ mod tests {
     #[test]
     #[ignore]
     fn prove_chain_roundtrip() {
-        use flock_core::challenger::RandomChallenger;
         let setup = KeccakSetup::new(64);
         let n_inst = setup.n_keccak_slots();
         let mut rng = Rng::new(0xC0DE_5170);

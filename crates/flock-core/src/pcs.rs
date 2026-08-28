@@ -42,6 +42,9 @@ pub use ring_switch::{RingSwitchProof, SparseEqTensor};
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::zerocheck::PaddingSpec;
+use crate::zerocheck::multilinear::eq_eval;
+#[cfg(any(test, feature = "zk"))]
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// Batched opening proof: ring-switching frontend + Ligerito backend.
@@ -312,7 +315,6 @@ fn open_zk_blinded<Ch: Challenger>(
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> (ligerito::LigeritoProof, ZkBlindOpening) {
-    use rayon::prelude::*;
     let w = packed_witness.len();
     assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
     assert_eq!(
@@ -341,7 +343,7 @@ fn open_zk_blinded<Ch: Challenger>(
 
     // (2) y_g before c — a prover that could pick y_g after seeing c could
     //     shift the combined target to prove a false claim.
-    challenger.observe_label(b"flock-pcs-zk-blind-v0");
+    challenger.observe_label(b"flock-pcs-zk-blind");
     challenger.observe_f128(y_g);
     let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
     let c_grind_nonce = challenger.grind_pow(c_bits);
@@ -425,7 +427,7 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         precomputed_s_hat_v.len(),
     );
 
-    challenger.observe_label(b"flock-pcs-open-batch-v0");
+    challenger.observe_label(b"flock-pcs-open-batch");
 
     // 1. Ring-switching for all x_outers.
     let t = std::time::Instant::now();
@@ -453,18 +455,17 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
 
     // 2. Observe packed-direct claim values + sample γ_pd.
     for pd in packed_direct {
-        challenger.observe_label(b"flock-pcs-packed-direct-v0");
+        challenger.observe_label(b"flock-pcs-packed-direct");
         challenger.observe_f128(pd.value);
     }
     for pl in packed_linear {
-        challenger.observe_label(b"flock-pcs-packed-linear-v0");
+        challenger.observe_label(b"flock-pcs-packed-linear");
         challenger.observe_f128(pl.value);
     }
     let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
     let gammas_pl: Vec<F128> = (0..n_pl).map(|_| challenger.sample_f128()).collect();
 
     let t = std::time::Instant::now();
-    use rayon::prelude::*;
 
     let l = if let Some((_, out)) = rs_results.first() {
         out.rs_eq_ind.len()
@@ -725,8 +726,6 @@ fn sparse_scatter_add_parallel(
     eq: &SparseEqTensor,
     gamma: F128,
 ) -> (F128, F128) {
-    use rayon::prelude::*;
-
     let c_total = eq.live_tensor.len();
     if c_total == 0 {
         return (F128::ZERO, F128::ZERO);
@@ -898,7 +897,7 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
         return Err(VerifyError::Ligerito);
     }
 
-    challenger.observe_label(b"flock-pcs-open-batch-v0");
+    challenger.observe_label(b"flock-pcs-open-batch");
 
     // 1. Ring-switch SUCCINCT verify per claim — gets sumcheck_claim and a
     //    length-128 `eq_r_dprime` instead of the dense `rs_eq_ind`. Saves
@@ -919,11 +918,11 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
 
     // 2. PD claim values + γ_pd.
     for pd in packed_direct {
-        challenger.observe_label(b"flock-pcs-packed-direct-v0");
+        challenger.observe_label(b"flock-pcs-packed-direct");
         challenger.observe_f128(pd.value);
     }
     for pl in packed_linear {
-        challenger.observe_label(b"flock-pcs-packed-linear-v0");
+        challenger.observe_label(b"flock-pcs-packed-linear");
         challenger.observe_f128(pl.value);
     }
     let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
@@ -948,7 +947,7 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
         let Some(zkb) = &proof.zk_blind else {
             return Err(VerifyError::Ligerito);
         };
-        challenger.observe_label(b"flock-pcs-zk-blind-v0");
+        challenger.observe_label(b"flock-pcs-zk-blind");
         challenger.observe_f128(zkb.y_g);
         let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
         if !challenger.verify_pow(zkb.c_grind_nonce, c_bits) {
@@ -971,7 +970,6 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
     //    For BLAKE3 m=30: ris is 19 dims, yr is 4 dims → 19× prefix reuse.
     let log_n = commitment.params.log_msg_len();
     let eval_b_witness = |ris: &[F128], yr_log_n: usize| -> Vec<F128> {
-        use crate::zerocheck::multilinear::eq_eval;
         let yr_len = 1usize << yr_log_n;
         let prefix_len = ris.len();
 
@@ -1020,7 +1018,6 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
         //      y_suffix is binary (bits of y), so we use the binary-query
         //      specializations of eval_rs_eq_finish / eq_eval — each suffix
         //      step collapses to a single scale_vertical / scalar product.
-        use rayon::prelude::*;
         debug_assert!(yr_log_n <= 32, "yr_log_n > 32 not supported by binary path");
         (0..yr_len)
             .into_par_iter()
@@ -1109,8 +1106,18 @@ pub fn verify_opening_batch_ligerito_mixed_linear_ro<Ch: Challenger>(
 mod tests {
     use super::*;
     use crate::challenger::FsChallenger;
+    #[cfg(feature = "zk")]
+    use crate::ro::{RecordingOracle, RoChannel, RoContext};
+    #[cfg(feature = "zk")]
+    use crate::zerocheck::SmallMaskSpec;
     use crate::zerocheck::multilinear::lagrange_weights_naive;
     use crate::zerocheck::univariate_skip::build_eq;
+    #[cfg(feature = "zk")]
+    use crate::zerocheck::univariate_skip::pack_bits;
+    #[cfg(feature = "zk")]
+    use crate::zk::ZkRng;
+    #[cfg(feature = "zk")]
+    use std::sync::Arc;
 
     struct Rng(u64);
     impl Rng {
@@ -1199,11 +1206,6 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn pcs_zk_roundtrip_and_negatives() {
-        use std::sync::Arc;
-
-        use crate::ro::{RecordingOracle, RoChannel, RoContext};
-        use crate::zerocheck::univariate_skip::build_eq;
-        use crate::zk::ZkRng;
         let m = 13usize;
         let mut rng = Rng::new(0x2CF0);
         let z = rng.bits(1 << m);
@@ -1240,7 +1242,7 @@ mod tests {
             if tamper_mask {
                 prover_data.zk_mask[0] += F128::ONE;
             }
-            let mut ch_p = FsChallenger::new(b"flock-test-lig-zk-v0");
+            let mut ch_p = FsChallenger::new(b"flock-test-lig-zk");
             let mut proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
                 z_packed.clone(),
                 &prover_data,
@@ -1265,7 +1267,7 @@ mod tests {
             (commitment, proof)
         };
         let verify = |commitment: &Commitment, proof: &BatchOpeningProofLigerito| {
-            let mut ch_v = FsChallenger::new(b"flock-test-lig-zk-v0");
+            let mut ch_v = FsChallenger::new(b"flock-test-lig-zk");
             verify_opening_batch_ligerito_mixed_ro(
                 commitment,
                 &[rs_claim],
@@ -1328,9 +1330,6 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn zk_field_mask_hiding_open_roundtrip() {
-        use crate::zerocheck::univariate_skip::pack_bits;
-        use crate::zerocheck::{SmallMaskSpec, univariate_skip::build_eq};
-        use crate::zk::ZkRng;
         let m = 13usize;
         let mut rng = Rng::new(0x9A2B);
         let a = rng.bits(1 << m);
@@ -1361,7 +1360,7 @@ mod tests {
                 &ro,
                 crate::ro::RoChannel::MaskP,
             );
-            let mut ch = FsChallenger::new(b"flock-z2-v0");
+            let mut ch = FsChallenger::new(b"flock-z2");
             ch.observe_bytes(&comm_p.root);
             let (mut zkproof, claim) =
                 crate::zerocheck::prove_packed_padded_zk(&ap, &bp, &cp, &p_small, m, &pad, &mut ch);
@@ -1409,7 +1408,7 @@ mod tests {
                       zkproof: &crate::zerocheck::ZkZerocheckProof,
                       proof_p: &BatchOpeningProofLigerito|
          -> bool {
-            let mut ch = FsChallenger::new(b"flock-z2-v0");
+            let mut ch = FsChallenger::new(b"flock-z2");
             ch.observe_bytes(&comm_p.root);
             let claim = match crate::zerocheck::verify_zk(m, zkproof, &mut ch) {
                 Ok(c) => c,
@@ -1513,7 +1512,7 @@ mod tests {
             ood_samples: vec![0; n_levels],
         };
 
-        let mut ch_p = FsChallenger::new(b"flock-test-lig-v0");
+        let mut ch_p = FsChallenger::new(b"flock-test-lig");
         let proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
             z_packed.clone(),
             &prover_data,
@@ -1526,7 +1525,7 @@ mod tests {
             &mut ch_p,
         );
 
-        let mut ch_v = FsChallenger::new(b"flock-test-lig-v0");
+        let mut ch_v = FsChallenger::new(b"flock-test-lig");
         verify_opening_batch_ligerito_mixed(
             &commitment,
             &[rs_claim],

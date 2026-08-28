@@ -8,15 +8,9 @@
 //! On-disk format:
 //! ```text
 //!   bytes 0..5    "FLOCK"                  (5-byte magic)
-//!   byte  5       VERSION                  (currently 6)
-//!   bytes 6..7    flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
-//!   bytes 7..     bincode-serialized payload
+//!   byte  5       flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
+//!   bytes 6..     bincode-serialized payload
 //! ```
-//!
-//! Versioning is here to make schema changes detectable cleanly: bump
-//! `VERSION` whenever a payload field is added/removed/reordered. Forward
-//! compatibility is NOT promised — `from_bytes` of a different version is
-//! rejected (`UnsupportedVersion`).
 //!
 //! ## Round-trip example
 //! ```ignore
@@ -39,15 +33,6 @@ use flock_core::pcs::Commitment;
 /// Magic bytes prepended to every serialized proof. Lets readers reject
 /// random binary data early.
 pub const MAGIC: [u8; 5] = *b"FLOCK";
-
-/// Format version. Bumped on incompatible serialization changes.
-/// v5 (current) adds the public proof nonce and framed random-oracle domains.
-/// v4 adds `ood_values` + `fold_grinding_nonces` to
-/// `LigeritoProof` and `profile` to `PcsParams` (Johnson+OOD profiles).
-/// v3 restructures `BaseFoldProof`: per-query Merkle paths are replaced by
-/// shared octopus multi-proofs (one per Merkle tree). v2 added `HashKind`
-/// to [`ChainProofBundle`].
-pub const VERSION: u8 = 6;
 
 /// Which hash function a chain proof is over. Carried in
 /// [`ChainProofBundle`] so the verifier (e.g. the CLI) can pick the right
@@ -95,17 +80,14 @@ const KNOWN_FLAVORS: [u8; 3] = [
     FLAVOR_R1CS_ZK_A1,
 ];
 
-/// Header size = 5-byte magic + 1-byte version + 1-byte flavor.
-const HEADER_LEN: usize = 7;
+/// Header size = 5-byte magic + 1-byte flavor.
+const HEADER_LEN: usize = 6;
 
 /// Errors from `from_bytes` / `read_from_file`.
 #[derive(Debug)]
 pub enum DeserializeError {
     /// The 5-byte magic prefix did not match `FLOCK`.
     BadMagic,
-    /// The version byte didn't match this build's `VERSION`. The number is
-    /// the version found in the file.
-    UnsupportedVersion(u8),
     /// The flavor byte was neither `2` (R1cs Ligerito) nor `3` (Chain Ligerito).
     UnknownFlavor(u8),
     /// `from_bytes` was called with a slice shorter than `HEADER_LEN`.
@@ -121,9 +103,6 @@ impl std::fmt::Display for DeserializeError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::BadMagic => write!(f, "bad magic: not a FLOCK proof file"),
-            Self::UnsupportedVersion(v) => {
-                write!(f, "unsupported version {v} (this build expects {VERSION})")
-            }
             Self::UnknownFlavor(v) => write!(f, "unknown flavor byte: {v}"),
             Self::Truncated => write!(f, "input shorter than header ({HEADER_LEN} bytes)"),
             Self::FlavorMismatch { expected, found } => {
@@ -227,7 +206,6 @@ impl ChainProofBundleLigerito {
 
 fn write_header(out: &mut Vec<u8>, flavor: u8) {
     out.extend_from_slice(&MAGIC);
-    out.push(VERSION);
     out.push(flavor);
 }
 
@@ -238,11 +216,7 @@ fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeE
     if bytes[0..5] != MAGIC {
         return Err(DeserializeError::BadMagic);
     }
-    let v = bytes[5];
-    if v != VERSION {
-        return Err(DeserializeError::UnsupportedVersion(v));
-    }
-    let flavor = bytes[6];
+    let flavor = bytes[5];
     if !KNOWN_FLAVORS.contains(&flavor) {
         return Err(DeserializeError::UnknownFlavor(flavor));
     }
@@ -376,8 +350,7 @@ mod tests {
         };
         let bytes = bundle.to_bytes();
         assert_eq!(&bytes[0..5], &MAGIC);
-        assert_eq!(bytes[5], VERSION);
-        assert_eq!(bytes[6], FLAVOR_R1CS_LIGERITO);
+        assert_eq!(bytes[5], FLAVOR_R1CS_LIGERITO);
 
         let bundle2 = R1csProofBundleLigerito::from_bytes(&bytes).expect("must round-trip");
         assert_eq!(bundle2.commitment.root, commitment.root);
@@ -437,7 +410,7 @@ mod tests {
             cv_last_phys: cv_to_phys_bits(&cv_last),
         };
         let bytes = bundle.to_bytes();
-        assert_eq!(bytes[6], FLAVOR_CHAIN_LIGERITO);
+        assert_eq!(bytes[5], FLAVOR_CHAIN_LIGERITO);
 
         let bundle2 = ChainProofBundleLigerito::from_bytes(&bytes).expect("chain round-trip");
         assert_eq!(bundle2.cv_0_phys, bundle.cv_0_phys);
@@ -459,32 +432,9 @@ mod tests {
     fn rejects_bad_magic() {
         let mut bytes = vec![0u8; HEADER_LEN + 10];
         bytes[0..5].copy_from_slice(b"NOPE!");
-        bytes[5] = VERSION;
-        bytes[6] = FLAVOR_R1CS_LIGERITO;
+        bytes[5] = FLAVOR_R1CS_LIGERITO;
         let res = R1csProofBundleLigerito::from_bytes(&bytes);
         assert!(matches!(res, Err(DeserializeError::BadMagic)));
-    }
-
-    #[test]
-    fn rejects_unsupported_version() {
-        let mut bytes = vec![0u8; HEADER_LEN + 10];
-        bytes[0..5].copy_from_slice(&MAGIC);
-        bytes[5] = VERSION.wrapping_add(1);
-        bytes[6] = FLAVOR_R1CS_LIGERITO;
-        let res = R1csProofBundleLigerito::from_bytes(&bytes);
-        assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(_))));
-    }
-
-    #[test]
-    fn old_version_proofs_fail_closed() {
-        for old in [4, 5] {
-            let mut bytes = vec![0u8; HEADER_LEN + 10];
-            bytes[0..5].copy_from_slice(&MAGIC);
-            bytes[5] = old;
-            bytes[6] = FLAVOR_R1CS_ZK_A1;
-            let res = R1csProofBundleZkA1::from_bytes(&bytes);
-            assert!(matches!(res, Err(DeserializeError::UnsupportedVersion(v)) if v == old));
-        }
     }
 
     #[test]
@@ -493,8 +443,7 @@ mod tests {
         // fails before any payload deserialization, so zero payload is fine.
         let mut bytes = vec![0u8; HEADER_LEN + 10];
         bytes[0..5].copy_from_slice(&MAGIC);
-        bytes[5] = VERSION;
-        bytes[6] = FLAVOR_R1CS_LIGERITO;
+        bytes[5] = FLAVOR_R1CS_LIGERITO;
         let res = ChainProofBundleLigerito::from_bytes(&bytes);
         assert!(matches!(
             res,
@@ -511,8 +460,7 @@ mod tests {
         for legacy in [0u8, 1u8] {
             let mut bytes = vec![0u8; HEADER_LEN + 10];
             bytes[0..5].copy_from_slice(&MAGIC);
-            bytes[5] = VERSION;
-            bytes[6] = legacy;
+            bytes[5] = legacy;
             let res = R1csProofBundleLigerito::from_bytes(&bytes);
             assert!(matches!(res, Err(DeserializeError::UnknownFlavor(f)) if f == legacy));
         }

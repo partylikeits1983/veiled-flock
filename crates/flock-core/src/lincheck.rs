@@ -132,6 +132,7 @@ pub use kernels::{
     partial_fold_packed_z_neon_iblock_padded, partial_fold_packed_z_neon_oblock_padded,
     partial_fold_packed_z_neon_single, partial_fold_packed_z_neon_single_padded,
 };
+use rayon::prelude::*;
 
 /// Bench-only A/B toggle: when set, [`partial_fold_packed_z_best`] uses the legacy
 /// `i_inner`-partitioned `partial_fold_packed_z_neon_iblock_padded` instead of the
@@ -323,7 +324,6 @@ impl LincheckCircuit for CscCircuit {
         self.const_pin
     }
     fn fold_alpha_batched(&self, alpha: F128, eq_inner: &[F128]) -> Vec<F128> {
-        use rayon::prelude::*;
         assert_eq!(eq_inner.len(), self.n_cols);
         let one_col = |c: usize| {
             let mut sa = F128::ZERO;
@@ -461,8 +461,8 @@ pub fn zero_lincheck_padding_rows(s_packed: &mut [F128], k_log: usize, useful_bi
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct LincheckMaskTranscript {
     /// `Σ_i comb[i]·S_vec[i]`, bound *before* `gamma_lc` is drawn. A prover
-    /// that misreports this shifts the initial claim by `γ_lc·δ'`; see the
-    /// γ-batching argument (Lemma L6) in `docs/zk-proof.md`.
+    /// that misreports this shifts the initial claim by `γ_lc·δ'`, so it can
+    /// pass only when the batching challenge cancels that nonzero defect.
     pub sigma_lc: F128,
     /// Fiat–Shamir batching challenge, drawn immediately after `sigma_lc`.
     pub gamma_lc: F128,
@@ -574,7 +574,6 @@ pub fn sparse_row_fold(matrix: &SparseBinaryMatrix, eq_table: &[F128]) -> Vec<F1
         // Scatter-reduce: per-thread accumulator, XOR-merge at the end. Each
         // thread allocates a length-n_cols buffer (~256 KB at k=16384) — fine
         // vs the witness-scale buffers already in flight.
-        use rayon::prelude::*;
         matrix
             .rows
             .par_iter()
@@ -681,8 +680,6 @@ pub fn partial_fold_packed_z_fast_padded(
     useful_bits: usize,
     eq_outer: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
-
     let n_log = m - k_log;
     let k = 1usize << k_log;
     let n_outer = 1usize << n_log;
@@ -863,7 +860,6 @@ pub fn pack_z_lincheck_from_packed(
     m: usize,
     k_log: usize,
 ) -> Vec<u8> {
-    use rayon::prelude::*;
     let k = 1usize << k_log;
     let n_total = 1usize << m;
     assert_eq!(z_packed_f128.len(), n_total / 128);
@@ -957,7 +953,6 @@ fn sparse_row_fold_alpha_batched(
     b_0: &SparseBinaryMatrix,
     eq_table: &[F128],
 ) -> Vec<F128> {
-    use rayon::prelude::*;
     let n_cols = a_0.num_cols;
     debug_assert_eq!(b_0.num_cols, n_cols);
     debug_assert_eq!(eq_table.len(), a_0.num_rows);
@@ -1032,7 +1027,6 @@ fn sparse_row_fold_alpha_batched(
 /// `(Σ c_hi·z_hi, Σ (c_hi+c_lo)·(z_hi+z_lo))` over the top-bit split. The
 /// `len()` of `c` and `z` is even; `half = len/2`.
 fn sumcheck_round_eval_par(c: &[F128], z: &[F128]) -> (F128, F128) {
-    use rayon::prelude::*;
     let half = c.len() / 2;
     debug_assert_eq!(z.len(), c.len());
     let (clo, chi) = c.split_at(half);
@@ -1065,7 +1059,6 @@ pub fn sumcheck_bind_top_in_place_par_pub(v: &mut Vec<F128>, r: F128) {
 }
 
 fn sumcheck_bind_top_in_place_par(v: &mut Vec<F128>, r: F128) {
-    use rayon::prelude::*;
     let half = v.len() / 2;
     if half < SUMCHECK_PAR_THRESHOLD {
         for i in 0..half {
@@ -1113,7 +1106,6 @@ fn sumcheck_bind_both_and_eval_next(
     z: &mut Vec<F128>,
     r: F128,
 ) -> (F128, F128) {
-    use rayon::prelude::*;
     let len = comb.len();
     debug_assert_eq!(z.len(), len);
     let half = len / 2;
@@ -1349,7 +1341,7 @@ fn prove_padded_inner<Ch: Challenger>(
     assert_eq!(x_ab.x_inner_rest.len(), inner_rest_len);
     assert_eq!(x_ab.x_outer.len(), n_log);
 
-    challenger.observe_label(b"flock-lincheck-v0");
+    challenger.observe_label(b"flock-lincheck");
     let trace = std::env::var("LINCHECK_TRACE").is_ok();
 
     // 1. Sample α (matches verifier's order). Used to batch the two scalar
@@ -1633,7 +1625,7 @@ pub fn verify_masked<Ch: Challenger>(
         });
     }
 
-    challenger.observe_label(b"flock-lincheck-v0");
+    challenger.observe_label(b"flock-lincheck");
 
     let trace = std::env::var("VERIFY_TRACE").is_ok();
     let fmt = |s: f64| -> String {
@@ -2280,10 +2272,10 @@ mod tests {
 
             // Prove and verify with matched challengers.
             let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
-            let mut ch_p = FsChallenger::new(b"flock-test-v0");
+            let mut ch_p = FsChallenger::new(b"flock-test");
             let (proof, claim_p) = prove(&z_packed, m, k_log, k_skip, &circuit, &x_ab, &mut ch_p);
 
-            let mut ch_v = FsChallenger::new(b"flock-test-v0");
+            let mut ch_v = FsChallenger::new(b"flock-test");
             let claim_v = verify(
                 m, k_log, k_skip, &circuit, &x_ab, v_a, v_b, &proof, &mut ch_v,
             )
@@ -2343,7 +2335,7 @@ mod tests {
             let v_b = mle_eval_bool_quirky(&b, m, k_log, k_skip, &x_ab);
             let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
 
-            let mut ch_p = FsChallenger::new(b"flock-test-v0");
+            let mut ch_p = FsChallenger::new(b"flock-test");
             let (proof, claim_p, _z_vec, mt) = prove_padded_masked_capture_z_vec(
                 &z_packed,
                 m,
@@ -2358,7 +2350,7 @@ mod tests {
                 &mut ch_p,
             );
 
-            let mut ch_v = FsChallenger::new(b"flock-test-v0");
+            let mut ch_v = FsChallenger::new(b"flock-test");
             let claim_v = verify_masked(
                 m,
                 k_log,
@@ -2394,7 +2386,7 @@ mod tests {
             // Non-vacuity: the same statement proved without the channel must
             // produce a different z_partial. (Challenges diverge once σ_lc is
             // absorbed, so this only asserts the transcripts are not equal.)
-            let mut ch_u = FsChallenger::new(b"flock-test-v0");
+            let mut ch_u = FsChallenger::new(b"flock-test");
             let (plain, _) = prove(&z_packed, m, k_log, k_skip, &circuit, &x_ab, &mut ch_u);
             assert_ne!(
                 plain.z_partial, proof.z_partial,
@@ -2425,7 +2417,7 @@ mod tests {
         let v_b = mle_eval_bool_quirky(&b, m, k_log, k_skip, &x_ab);
         let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
 
-        let mut ch_p = FsChallenger::new(b"flock-test-v0");
+        let mut ch_p = FsChallenger::new(b"flock-test");
         let (proof, _claim, _z, mt) = prove_padded_masked_capture_z_vec(
             &z_packed,
             m,
@@ -2442,7 +2434,7 @@ mod tests {
 
         for delta in [1u64, 2, 7, 1 << 33] {
             let bad = mt.sigma_lc + F128::new(delta, 0);
-            let mut ch_v = FsChallenger::new(b"flock-test-v0");
+            let mut ch_v = FsChallenger::new(b"flock-test");
             let got = verify_masked(
                 m,
                 k_log,
@@ -2487,7 +2479,7 @@ mod tests {
 
         let _seed: u64 = 0xFEEDFACE;
         let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
-        let mut ch_p = FsChallenger::new(b"flock-test-v0");
+        let mut ch_p = FsChallenger::new(b"flock-test");
         let (proof, _) = prove(&z_packed, m, k_log, k_skip, &circuit, &x_ab, &mut ch_p);
 
         // Pick a mutation position where BOTH row vectors are nonzero so the
@@ -2524,7 +2516,7 @@ mod tests {
         ];
         for (label, mutate) in mutations {
             let bad = mutate(&proof);
-            let mut ch = FsChallenger::new(b"flock-test-v0");
+            let mut ch = FsChallenger::new(b"flock-test");
             let res = verify(m, k_log, k_skip, &circuit, &x_ab, v_a, v_b, &bad, &mut ch);
             assert!(
                 matches!(res, Err(VerifyError::ConsistencyFailed { .. })),
@@ -2552,20 +2544,20 @@ mod tests {
         let v_b = mle_eval_bool_quirky(&b, m, k_log, k_skip, &x_ab);
 
         let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
-        let mut ch_p = FsChallenger::new(b"flock-test-v0");
+        let mut ch_p = FsChallenger::new(b"flock-test");
         let (proof, _) = prove(&z_packed, m, k_log, k_skip, &circuit, &x_ab, &mut ch_p);
 
         // Truncate z_partial.
         let mut bad = proof.clone();
         bad.z_partial.pop();
-        let mut ch = FsChallenger::new(b"flock-test-v0");
+        let mut ch = FsChallenger::new(b"flock-test");
         assert!(matches!(
             verify(m, k_log, k_skip, &circuit, &x_ab, v_a, v_b, &bad, &mut ch),
             Err(VerifyError::BadVectorLength { .. })
         ));
 
         // Wrong x_inner_rest length.
-        let mut ch = FsChallenger::new(b"flock-test-v0");
+        let mut ch = FsChallenger::new(b"flock-test");
         let bad_x_ab = QuirkyPoint {
             z_skip: x_ab.z_skip,
             x_inner_rest: x_ab.x_inner_rest[..x_ab.x_inner_rest.len() - 1].to_vec(),
@@ -2579,7 +2571,7 @@ mod tests {
         ));
 
         // k_skip > k_log.
-        let mut ch = FsChallenger::new(b"flock-test-v0");
+        let mut ch = FsChallenger::new(b"flock-test");
         assert!(matches!(
             verify(
                 m,

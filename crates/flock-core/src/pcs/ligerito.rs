@@ -34,7 +34,9 @@ use crate::field::F128;
 use crate::lincheck::build_eq_table;
 use crate::merkle::{self, Hash};
 use crate::ntt::additive_ntt_f128::AdditiveNttF128;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 // ===================================================================
 // Config
@@ -600,7 +602,7 @@ pub struct LigeritoSecurityConfig {
     /// Identifier of the proximity-gap analysis used. Self-documents which
     /// theorem the per-level parameters were derived from. Example:
     /// `"ben_sasson_2025_thm_4_6"`.
-    pub analysis_version: String,
+    pub analysis: String,
     /// Field of the protocol. Example: `"f128"`.
     pub field: String,
     /// Hash function used by Merkle + FS challenger. Example: `"sha256"`.
@@ -1017,7 +1019,7 @@ impl LigeritoSecurityConfig {
                     lv.expected_eps_pg_bits,
                     pg_pred,
                     PAPER_COMPAT_TOL_BITS,
-                    analysis = self.analysis_version,
+                    analysis = self.analysis,
                 ));
             }
             if (lv.expected_eps_query_bits - q_pred).abs() > PAPER_COMPAT_TOL_BITS {
@@ -1027,7 +1029,7 @@ impl LigeritoSecurityConfig {
                     lv.expected_eps_query_bits,
                     q_pred,
                     PAPER_COMPAT_TOL_BITS,
-                    analysis = self.analysis_version,
+                    analysis = self.analysis,
                 ));
             }
 
@@ -1181,7 +1183,7 @@ impl LigeritoSecurityConfig {
             log_n,
             initial_k,
             target_security_bits,
-            analysis_version: "no_row_union_over_ben_sasson_2025_cor_1_4".into(),
+            analysis: "no_row_union_over_ben_sasson_2025_cor_1_4".into(),
             field: "f128".into(),
             hash: "sha256".into(),
             grinding_step: GrindingStep::PostCommitPreQueries,
@@ -1336,7 +1338,7 @@ impl LigeritoSecurityConfig {
             });
         }
 
-        let analysis_version = match profile {
+        let analysis = match profile {
             LigeritoProfile::Secure => "no_row_union_over_ben_sasson_2025_cor_1_4",
             LigeritoProfile::Fast | LigeritoProfile::Slim => {
                 "johnson_ood_row_union_over_bchks25_thm_4_6"
@@ -1347,7 +1349,7 @@ impl LigeritoSecurityConfig {
             log_n,
             initial_k,
             target_security_bits: target_bits,
-            analysis_version: analysis_version.into(),
+            analysis: analysis.into(),
             field: "f128".into(),
             hash: "sha256".into(),
             grinding_step: GrindingStep::PostCommitPreQueries,
@@ -1786,8 +1788,6 @@ pub(crate) fn induce_sumcheck_evaluate_at_residual(
     ris_for_basis: &[F128],
     yr_log_n: usize,
 ) -> Vec<F128> {
-    use crate::lincheck::build_eq_table;
-    use rayon::prelude::*;
     assert_eq!(ris_for_basis.len() + yr_log_n, log_msg_cols);
     let n_queries = queries.len();
     let yr_len = 1usize << yr_log_n;
@@ -1896,7 +1896,6 @@ pub(crate) fn induce_sumcheck_poly(
     queries: &[usize],
     alpha: &[F128],
 ) -> (Vec<F128>, F128) {
-    use rayon::prelude::*;
     let n = 1usize << log_msg_cols;
     let n_queries = queries.len();
     assert_eq!(opened_rows.len(), n_queries);
@@ -1994,7 +1993,6 @@ pub(crate) fn induce_sumcheck_poly(
 /// `s=a+b; top=s; bot=t·s+b`, applied in **reverse** layer order. (Baseline:
 /// one parallel sweep per layer.)
 fn transpose_forward_ntt(ntt: &AdditiveNttF128, data: &mut [F128], log_d: usize) {
-    use rayon::prelude::*;
     debug_assert_eq!(data.len(), 1usize << log_d);
     debug_assert!(log_d <= ntt.log_domain_size());
     let n_threads = rayon::current_num_threads().max(1);
@@ -2146,8 +2144,6 @@ fn transpose_forward_ntt_sparse(
     values: &[F128],
     log_d: usize,
 ) -> Vec<F128> {
-    use rayon::prelude::*;
-    use std::collections::HashMap;
     let n = 1usize << log_d;
     // No prefix for small domains — just scatter + full dense transpose.
     let k = if log_d >= 12 { 8usize.min(log_d) } else { 0 };
@@ -2447,7 +2443,6 @@ impl RoundQuad {
 /// Uses a SINGLE combined basis poly. (Previously took `&[Vec<F128>]` and
 /// summed at every pair index; collapsing to one basis happens at glue time.)
 fn round_msg_lsb(f: &[F128], b: &[F128]) -> SumcheckMessage {
-    use rayon::prelude::*;
     let n = f.len();
     debug_assert!(n.is_power_of_two() && n >= 2);
     debug_assert_eq!(b.len(), n);
@@ -2497,7 +2492,6 @@ fn round_msg_lsb(f: &[F128], b: &[F128]) -> SumcheckMessage {
 /// pair. Bit-identical to the unfused path: F128 sums are exact and order-
 /// independent, so `y == mle_eval_inline(f, z)`.
 fn round_msg_and_eval_lsb(f: &[F128], b: &[F128]) -> (SumcheckMessage, F128) {
-    use rayon::prelude::*;
     let n = f.len();
     debug_assert!(n.is_power_of_two() && n >= 2);
     debug_assert_eq!(b.len(), n);
@@ -2540,7 +2534,6 @@ fn round_msg_and_eval_lsb(f: &[F128], b: &[F128]) -> (SumcheckMessage, F128) {
 /// production path uses `fold_and_msg_lsb` instead.
 #[cfg(test)]
 fn partial_eval_lsb_one(evals: &mut Vec<F128>, r: F128) {
-    use rayon::prelude::*;
     let n = evals.len();
     debug_assert!(n.is_power_of_two() && n >= 2);
     let half = n / 2;
@@ -2581,7 +2574,6 @@ fn partial_eval_lsb_one(evals: &mut Vec<F128>, r: F128) {
 /// Returns `(folded_f, folded_b, next_msg)` where `next_msg = round_msg_lsb
 /// (folded_f, folded_b)`. Bit-identical to the unfused sequence.
 fn fold_and_msg_lsb(f: &[F128], b: &[F128], r: F128) -> (Vec<F128>, Vec<F128>, SumcheckMessage) {
-    use rayon::prelude::*;
     let n = f.len();
     debug_assert!(n.is_power_of_two() && n >= 2);
     debug_assert_eq!(b.len(), n);
@@ -2762,7 +2754,6 @@ impl SumcheckProver {
     /// Combine the introduced basis into `combined_basis` with separation α.
     /// `combined_basis[j] += α · b_new[j]` (pointwise), `T_r += α · h_new`.
     pub fn glue(&mut self, alpha: F128) {
-        use rayon::prelude::*;
         let (b_new, h_new) = self
             .pending_glue
             .take()
@@ -2868,7 +2859,7 @@ pub fn recursive_prover<Ch: Challenger>(
     );
     assert!(r >= 1, "recursive_steps must be ≥ 1");
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -2951,7 +2942,7 @@ pub fn recursive_prover_with_l0<Ch: Challenger>(
         "external L0 tree wrong size"
     );
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -3214,7 +3205,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 
     let t_total = std::time::Instant::now();
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
 
     // L0 codeword + tree are borrowed (reused from upstream `pcs::commit`).
@@ -3711,7 +3702,7 @@ where
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
     challenger.observe_bytes(&proof.initial_root);
 
@@ -4285,7 +4276,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-basis-v0");
+    challenger.observe_label(b"flock-ligerito-basis");
     challenger.observe_f128(target);
     challenger.observe_bytes(&proof.initial_root);
 
@@ -5039,7 +5030,7 @@ pub fn recursive_verifier<Ch: Challenger>(
         return false;
     }
 
-    challenger.observe_label(b"flock-ligerito-v0");
+    challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
     challenger.observe_f128_slice(eval_point);
 
@@ -5301,6 +5292,8 @@ pub fn recursive_verifier<Ch: Challenger>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::challenger::Challenger;
+    use std::time::Instant;
 
     /// Worked example: `LigeritoSecurityConfig` for BLAKE3 m=29 at rate 1/2.
     /// Paper-compatible m=29 fast example, mechanically derived in the
@@ -5596,7 +5589,6 @@ mod tests {
     /// or the FS state would diverge between prover and verifier).
     #[test]
     fn ligerito_security_config_drives_roundtrip_with_grinding() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -5742,7 +5734,6 @@ mod tests {
     /// the challenge, and confirms the residual inner product matches.
     #[test]
     fn stateful_sumcheck_single_basis_roundtrip() {
-        use crate::challenger::Challenger;
         let n = 5;
         let len = 1usize << n;
         let f: Vec<F128> = (0..len)
@@ -5804,7 +5795,6 @@ mod tests {
     /// Multi-basis sumcheck: introduce_new + glue mid-protocol. Verifier replays.
     #[test]
     fn stateful_sumcheck_introduce_glue() {
-        use crate::challenger::Challenger;
         let n = 5;
         let len = 1usize << n;
         let mk = |seed: u64| -> Vec<F128> {
@@ -5919,7 +5909,6 @@ mod tests {
     ///      claim that the verifier reduces to a residual eval).
     #[test]
     fn induce_sumcheck_poly_consistent_with_codeword() {
-        use crate::challenger::Challenger;
         let log_msg = 4;
         let log_inv_rate = 1;
         let msg_cols = 1usize << log_msg;
@@ -5979,7 +5968,6 @@ mod tests {
     /// shapes incl. the real m30_fast level dims.
     #[test]
     fn induce_sumcheck_poly_via_ntt_matches_dense() {
-        use crate::challenger::Challenger;
         let shapes = [
             (4usize, 1usize, 0usize, 6usize),
             (3, 1, 2, 5),
@@ -6033,7 +6021,6 @@ mod tests {
     /// the same scattered input, across sizes (incl. > and < the k=8 prefix gate).
     #[test]
     fn transpose_sparse_matches_dense() {
-        use crate::challenger::Challenger;
         for &log_d in &[6usize, 11, 12, 14, 16, 18] {
             for &nq in &[1usize, 5, 43, 218] {
                 let n = 1usize << log_d;
@@ -6066,7 +6053,6 @@ mod tests {
     /// partial-eval challenges used to fold lanes).
     #[test]
     fn induce_sumcheck_poly_with_interleaving_and_v_challenges() {
-        use crate::challenger::Challenger;
         let log_msg = 3; // msg_cols = 8
         let log_interleaved = 2; // num_interleaved = 4
         let log_inv_rate = 1; // block_len = 16
@@ -6127,7 +6113,6 @@ mod tests {
     /// R = 1 (one recursive step).
     #[test]
     fn ligerito_r1_roundtrip_accepts() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -6197,8 +6182,6 @@ mod tests {
         recursive_ks: Vec<usize>,
         log_inv_rates: Vec<usize>,
     ) -> usize {
-        use crate::challenger::Challenger;
-        use std::time::Instant;
         assert_eq!(log_inv_rates.len(), recursive_ks.len() + 1);
 
         // dims sanity: n1 = 16; after k_0=4 → 12; after k_1=3 → 9 → yr = 512 elems.
@@ -6569,7 +6552,6 @@ mod tests {
     /// Multi-level (R = 2) roundtrip.
     #[test]
     fn ligerito_r2_roundtrip_accepts() {
-        use crate::challenger::Challenger;
         let log_n = 18;
         let initial_k = 3;
         let k_0 = 3;
@@ -6633,7 +6615,6 @@ mod tests {
     /// `LigeritoProof` bincode-roundtrips identically.
     #[test]
     fn ligerito_proof_bincode_roundtrip() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -6677,7 +6658,6 @@ mod tests {
     /// `target = poly(z)`) — must round-trip cleanly.
     #[test]
     fn recursive_prover_with_basis_roundtrip_single_claim() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -6747,7 +6727,6 @@ mod tests {
     /// `induce_sumcheck_poly` + `partial_eval_lsb`.
     #[test]
     fn induce_sumcheck_evaluate_at_residual_matches_dense() {
-        use crate::challenger::Challenger;
         let log_msg_cols = 6;
         let yr_log_n = 2;
         let prefix_len = log_msg_cols - yr_log_n;
@@ -6826,7 +6805,6 @@ mod tests {
     /// ever diverged, the honest assertion here would fail.
     #[test]
     fn final_level_binding_pins_yr_to_committed_codeword() {
-        use crate::challenger::Challenger;
         let log_msg_cols = 5; // yr has 32 entries (within the shipped yr_log_n range)
         let log_inv_rate = 1;
         let num_queries = 20;
@@ -6900,7 +6878,6 @@ mod tests {
     /// `b_initial[idx]` at multilinear `point = bit-decomp(idx)`.
     #[test]
     fn recursive_verifier_with_basis_succinct_matches_dense() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -7056,7 +7033,6 @@ mod tests {
     /// reject. Exercises every new prover/verifier code path.
     #[test]
     fn ligerito_ood_and_fold_grinding_roundtrip_and_tamper() {
-        use crate::challenger::Challenger;
         let log_n = 12;
         let initial_k = 2;
         let ks = [2usize, 2];
@@ -7161,7 +7137,6 @@ mod tests {
     /// derived TOML, not a hand-built config.
     #[test]
     fn ligerito_fast_profile_m22_roundtrip() {
-        use crate::challenger::Challenger;
         let m = 22usize;
         let log_n = m - crate::pcs::LOG_PACKING;
         let initial_k = 6;
@@ -7211,7 +7186,6 @@ mod tests {
     /// produces.
     #[test]
     fn recursive_prover_with_basis_roundtrip_batched_claims() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -7297,7 +7271,6 @@ mod tests {
     /// `recursive_prover` when given a matching pre-built L0.
     #[test]
     fn recursive_prover_with_l0_matches_full() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;
@@ -7385,7 +7358,6 @@ mod tests {
     /// Mutation rejection: change one element of yr → verify should fail.
     #[test]
     fn ligerito_r1_rejects_mutated_yr() {
-        use crate::challenger::Challenger;
         let log_n = 14;
         let initial_k = 3;
         let k_0 = 2;

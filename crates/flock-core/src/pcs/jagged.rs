@@ -43,6 +43,7 @@
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::lincheck::build_eq_table;
+use rayon::prelude::*;
 
 /// Configuration of a jagged function: the (zero-padded to `2^k`) column
 /// heights, summarized as the cumulative-height prefix sums.
@@ -242,7 +243,6 @@ fn generate_f_and_claim(
     z_row: &[F128],
     z_col: &[F128],
 ) -> (Vec<F128>, F128) {
-    use rayon::prelude::*;
     let len = 1usize << params.m;
     let area = params.area() as usize;
     let eq_row = build_eq_table(z_row);
@@ -300,7 +300,7 @@ pub fn prove<C: Challenger>(
     assert_eq!(q.len(), len, "q must have 2^m entries");
     assert_eq!(z_row.len(), params.n);
     assert_eq!(z_col.len(), params.k);
-    challenger.observe_label(b"flock-jagged-v0");
+    challenger.observe_label(b"flock-jagged");
 
     // Second sumcheck multilinear B[i] = eq(row_t(i), z_row)·eq(col_t(i), z_col)
     // over the boolean cube (= f̂_t(z_row, z_col, ·) on {0,1}^m), and the claim
@@ -360,7 +360,7 @@ pub fn verify<C: Challenger>(
     if proof.rounds.len() != m {
         return None;
     }
-    challenger.observe_label(b"flock-jagged-v0");
+    challenger.observe_label(b"flock-jagged");
 
     let mut claim = claim_v;
     let mut point = Vec::with_capacity(m);
@@ -462,7 +462,6 @@ fn fold_and_round_fused(a: &mut Vec<F128>, b: &mut Vec<F128>, r: F128) -> (F128,
 /// ~2.6× to ~6× parallel scaling (hits the memory-bandwidth ceiling). See
 /// `scaling_diag`.
 fn round_msg_par(a: &[F128], b: &[F128]) -> (F128, F128) {
-    use rayon::prelude::*;
     const C: usize = 1 << 14;
     a.par_chunks(C)
         .zip(b.par_chunks(C))
@@ -486,7 +485,6 @@ fn round_msg_par(a: &[F128], b: &[F128]) -> (F128, F128) {
 /// Parallel out-of-place fold (no message), `ao/bo` length `a.len()/2`. Used for
 /// the final round (size 2 → 1), where there is no successor message.
 fn fold_oop_par(a: &[F128], b: &[F128], r: F128, ao: &mut [F128], bo: &mut [F128]) {
-    use rayon::prelude::*;
     ao.par_iter_mut()
         .zip(bo.par_iter_mut())
         .enumerate()
@@ -507,7 +505,6 @@ fn fold_and_round_oop_par(
     ao: &mut [F128],
     bo: &mut [F128],
 ) -> (F128, F128) {
-    use rayon::prelude::*;
     debug_assert_eq!(a.len(), 2 * ao.len());
     debug_assert!(a.len() >= 4);
     // Output chunk of `CO`; the aligned input chunk is `2*CO` (output is half
@@ -550,6 +547,7 @@ mod tests {
     use super::*;
     use crate::challenger::{FsChallenger, RandomChallenger};
     use crate::zerocheck::multilinear::fold_in_place_pair;
+    use std::time::{Duration, Instant};
 
     fn sample_vec(ch: &mut RandomChallenger, n: usize) -> Vec<F128> {
         (0..n).map(|_| ch.sample_f128()).collect()
@@ -694,8 +692,6 @@ mod tests {
     #[test]
     #[ignore = "heavy benchmark; run explicitly with --release --ignored --nocapture"]
     fn runtime_m25() {
-        use std::time::Instant;
-
         // Match the full-prover profile (P-core pool) for an apples-to-apples ratio.
         let _ = crate::init_perf_thread_pool();
         let (n, k, m) = (13usize, 12usize, 25usize); // 2^25 dense F128 elements
@@ -765,7 +761,7 @@ mod tests {
             let mut a = q.clone();
             let mut bb = b.clone();
             let mut ch = FsChallenger::new(b"flock-jagged-bench");
-            ch.observe_label(b"flock-jagged-v0");
+            ch.observe_label(b"flock-jagged");
             let t = Instant::now();
             if fused {
                 let (mut g1, mut gi) = round_msg(&a, &bb);
@@ -800,7 +796,7 @@ mod tests {
             let mut sb = vec![F128::ZERO; len / 2];
             let mut cur = len;
             let mut ch = FsChallenger::new(b"flock-jagged-bench");
-            ch.observe_label(b"flock-jagged-v0");
+            ch.observe_label(b"flock-jagged");
             let t = Instant::now();
             let (mut g1, mut gi) = if fused {
                 round_msg_par(&a[..cur], &bb[..cur])
@@ -898,8 +894,6 @@ mod tests {
     #[test]
     #[ignore = "diagnostic; run with --release --ignored --nocapture"]
     fn scaling_diag() {
-        use rayon::prelude::*;
-        use std::time::{Duration, Instant};
         let _ = crate::init_perf_thread_pool();
         let m = 25usize;
         let len = 1usize << m;

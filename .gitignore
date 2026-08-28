@@ -41,6 +41,8 @@ benchmarks/cache/
 
 # Agent-skill tooling (installed locally, not part of the project)
 .claude/skills/
+.claude/
+.mcp.json
 .agents/
 skills-lock.json
 

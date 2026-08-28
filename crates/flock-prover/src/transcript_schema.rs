@@ -36,9 +36,8 @@ use flock_core::pcs::{BatchOpeningProofLigerito, Commitment, PcsParams, ZkBlindO
 use flock_core::zerocheck::ZkZerocheckProof;
 
 use crate::prover::R1csProofZkA1;
-
-/// Version of the schema itself; bump on any reclassification or reshape.
-pub const A1_SCHEMA_VERSION: u32 = 5;
+use FlatValue::*;
+use LeakageClass::*;
 
 /// Security classification of a transcript field.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -175,7 +174,6 @@ fn flatten_opening(
     algebraic: LeakageClass,
     opening: &BatchOpeningProofLigerito,
 ) {
-    use FlatValue::*;
     let BatchOpeningProofLigerito {
         ring_switches,
         ligerito,
@@ -395,7 +393,6 @@ const OPEN_SH_PATHS: OpeningPaths = opening_paths!("open_s_h");
 /// fields, in prover message order (commitments → zerocheck → lincheck →
 /// P opening → Q opening → witness opening).
 pub fn flatten_a1(commitment: &Commitment, proof: &R1csProofZkA1) -> Vec<FlatField> {
-    use FlatValue::*;
     let mut out = Vec::with_capacity(64);
     let R1csProofZkA1 {
         proof_nonce,
@@ -731,14 +728,12 @@ impl<'a> Cursor<'a> {
 
 fn f128_pairs(v: Vec<F128>) -> Vec<(F128, F128)> {
     assert_eq!(v.len() % 2, 0);
-    v.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+    v.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
 }
 
 fn bytes_hashes(b: &[u8]) -> Vec<Hash> {
     assert_eq!(b.len() % 32, 0);
-    b.chunks_exact(32)
-        .map(|c| <Hash>::try_from(c).unwrap())
-        .collect()
+    b.as_chunks::<32>().0.to_vec()
 }
 
 fn one_hash(b: &[u8]) -> Hash {
@@ -889,7 +884,6 @@ pub fn unflatten_a1(flat: &[FlatField]) -> (Commitment, R1csProofZkA1) {
 /// transcript classification; `manifest_of` extracted from a real proof must
 /// equal it exactly.
 pub const A1_FIELD_MANIFEST: &[(&str, LeakageClass, bool)] = {
-    use LeakageClass::*;
     &[
         ("proof_nonce", Metadata, true),
         ("commitment.root", HiddenHash, true),
@@ -1119,13 +1113,12 @@ pub fn manifest_of(flat: &[FlatField]) -> Vec<(&'static str, LeakageClass, bool)
     out
 }
 
-/// Hash of the full schema: version + per-field `(path, group, class, fs,
-/// unit, len)` in order. Pinned per supported shape; a reshape or
+/// Hash of every per-field `(path, group, class, fs, unit, len)` tuple in
+/// order. Pinned per supported shape; a reshape or
 /// reclassification without an intentional pin bump fails the tests.
 pub fn schema_hash(flat: &[FlatField]) -> [u8; 32] {
     let mut h = blake3::Hasher::new();
     h.update(b"flock-a1-transcript-schema");
-    h.update(&A1_SCHEMA_VERSION.to_le_bytes());
     for f in flat {
         h.update(f.path.as_bytes());
         h.update(&[0u8]);

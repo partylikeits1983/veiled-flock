@@ -2,9 +2,9 @@
 
 ## 1. Status
 
-This document specifies the active succinct zk-FLOCK implementation. The
-protocol is experimental. It has executable tests and a simulator, but it does
-not yet have an end-to-end formal zero-knowledge proof.
+This document specifies the intended succinct zk-FLOCK protocol and wire
+format. The implementation is experimental and lacks an end-to-end
+zero-knowledge proof. Section 15 lists known deviations.
 
 The words **MUST**, **MUST NOT**, **SHOULD**, and **MAY** are normative.
 
@@ -130,15 +130,18 @@ The ordered fields are:
 5. two values for each lincheck round; and
 6. 64 lincheck `z_partial` values.
 
-`final_c_eval` is not an observed FLOCK message. It stores the explicit C
-opening claim. The shifted circuit reconstructs the same value from masked
-`round1_c`.
+`final_c_eval` is not an observed FLOCK message and is omitted from the masked
+wire type. The explicit C opening is stored once as `c_value`; the shifted
+circuit reconstructs the same value from masked `round1_c`.
 
 ## 7. Shifted verifier circuit
 
 The verifier derives all FLOCK challenges from the public masked transcript.
 It then constructs an arithmetic circuit `C_shifted` whose private inputs are
 the mask vector `h`.
+
+The sampled equality coordinates used by the compressed quadratic recurrence
+exclude `1`, where reconstructing `G(0)` from `G(1)` is non-invertible.
 
 For each public masked value `v_masked[i]`, the circuit reconstructs:
 
@@ -213,12 +216,12 @@ The transcript order is:
 
 1. absorb the public digest statement;
 2. bind the witness commitment, proof nonce, circuit, and PCS shape;
-3. absorb the VEIL mask commitment under `veil-flock-mask-root-v0`;
+3. absorb the VEIL mask commitment under `veil-flock-mask-root`;
 4. process the masked zerocheck transcript;
 5. process the masked lincheck transcript;
-6. absorb AB and C values under `veil-flock-output-claims-v0`;
+6. absorb AB and C values under `veil-flock-output-claims`;
 7. derive the public digest claim;
-8. fork the transcript under `veil-flock-inner-fork-v0`;
+8. fork the transcript under `veil-flock-inner-fork`;
 9. verify the hiding PCS opening on the original branch; and
 10. verify the VEIL constraint proof on the fork.
 
@@ -228,7 +231,7 @@ fork.
 
 ## 11. Proof format
 
-The CLI bundle uses magic `VFLK0003` and contains:
+The CLI bundle contains:
 
 ```text
 public digest list
@@ -245,14 +248,14 @@ VEIL constraint proof
 The bundle MUST NOT contain messages, raw FLOCK witness data, unmasked PIOP
 messages, the mask vector, or VEIL private padding values.
 
-The CLI transcript domain is `veiled-flock-cli-succinct-v0`. Decoding MUST be
+The CLI transcript domain is `veiled-flock-cli-succinct`. Decoding MUST be
 canonical and MUST reject trailing data.
 
 ## 12. Verification
 
 The verifier MUST:
 
-1. reject an empty digest list or invalid bundle magic;
+1. reject an empty or oversized digest list;
 2. reconstruct the padded setup from the digest count;
 3. reject mismatched commitment or proof parameters;
 4. reconstruct `C_shifted` from the masked proof;
@@ -318,14 +321,26 @@ The following remain required:
 
 No QROM or production-security claim is made.
 
-## 15. Diagrams
+## 15. Implementation notes
+
+1. Section 13's simulator programs the required Fiat--Shamir challenges.
+   Fiat--Shamir, witness PCS, and inner VEIL hashing query the same programmable
+   oracle under disjoint encodings; unprogrammed points receive the native
+   SHA-256 answer.
+2. The CLI accepts at most 256 public digests and applies the bundle size limit
+   both while reading and during `bincode` deserialization. It also rejects
+   non-canonical encodings and trailing bytes.
+
+See [`docs/SECURITY.md`](docs/SECURITY.md).
+
+## 16. Diagrams
 
 This section is informative. It describes the code, not the protocol.
-Sections 1 to 14 hold the normative rules.
+Sections 1 to 15 hold the normative rules.
 
-The section has three groups. Subsections 15.1 to 15.8 hold sequence
-diagrams for `flock-core`, `veil-f128`, and `flock-prover`. Subsections 15.9
-to 15.13 hold class diagrams. Subsection 15.14 lists omissions and
+The section has three groups. Subsections 16.1 to 16.8 hold sequence
+diagrams for `flock-core`, `veil-f128`, and `flock-prover`. Subsections 16.9
+to 16.13 hold class diagrams. Subsection 16.14 lists omissions and
 deviations.
 
 Legend for the sequence diagrams: each lane pipe holds a fixed column on
@@ -351,7 +366,7 @@ Anchors have the form `crates/<crate>/src/<file>.rs:LINE`. An anchor points
 at a definition. The suffix `(call site)` marks a call. The text `same as N`
 repeats the anchor of message N.
 
-### 15.1 flock-core prover
+### 16.1 flock-core prover
 
 `flock-core` owns the FLOCK PIOP, the PCS, the Merkle and random-oracle
 layers, the transcript, and the verifier. It depends on no sibling crate. It
@@ -360,12 +375,12 @@ has no internal orchestrator. The driver imposes the order of `zerocheck`,
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `caller` | `prove_succinct_veil_r1cs` (the driver) | `crates/flock-prover/src/succinct_veil.rs:596` |
-| `r1cs` | `BlockR1cs` | `crates/flock-core/src/r1cs.rs:56` |
-| `ZC` | `zerocheck::prove_packed_padded_capture_s_hat_v_c` | `crates/flock-core/src/zerocheck.rs:406` |
-| `LC` | `lincheck::prove_padded_capture_z_vec` | `crates/flock-core/src/lincheck.rs:1250` |
-| `PCS` | `pcs::commit::commit_zk_with_ro` and `pcs::open_batch_*` | `crates/flock-core/src/pcs/commit.rs:286` |
-| `CH` | `Challenger` | `crates/flock-core/src/challenger.rs:30` |
+| `caller` | `prove_succinct_veil_r1cs` (the driver) | `crates/flock-prover/src/succinct_veil.rs:602` |
+| `r1cs` | `BlockR1cs` | `crates/flock-core/src/r1cs.rs:60` |
+| `ZC` | `zerocheck::prove_packed_padded_capture_s_hat_v_c` | `crates/flock-core/src/zerocheck.rs:449` |
+| `LC` | `lincheck::prove_padded_capture_z_vec` | `crates/flock-core/src/lincheck.rs:1242` |
+| `PCS` | `pcs::commit::commit_zk_with_ro` and `pcs::open_batch_*` | `crates/flock-core/src/pcs/commit.rs:287` |
+| `CH` | `Challenger` | `crates/flock-core/src/challenger.rs:31` |
 
 ```text
   caller  r1cs    ZC      LC      PCS     CH
@@ -390,31 +405,31 @@ has no internal orchestrator. The driver imposes the order of `zerocheck`,
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `pcs::commit::commit_zk_with_ro` | `crates/flock-core/src/pcs/commit.rs:286` |
+| 1 | `pcs::commit::commit_zk_with_ro` | `crates/flock-core/src/pcs/commit.rs:287` |
 | 2 | `bind_statement`; its last step is `observe_bytes(&commitment.root)` at `crates/flock-core/src/proof.rs:60` | `crates/flock-core/src/proof.rs:51` |
-| 3 | `Challenger::observe_label`, then `observe_bytes`; `crates/flock-prover/src/succinct_veil.rs:642` (call site) | `crates/flock-core/src/challenger.rs:34` |
-| 4 | `BlockR1cs::padding_spec` | `crates/flock-core/src/r1cs.rs:235` |
-| 5 | `zerocheck::prove_packed_padded_capture_s_hat_v_c` | `crates/flock-core/src/zerocheck.rs:406` |
-| 6 | `univariate_skip::build_eq`; entry at `crates/flock-core/src/zerocheck.rs:118` | `crates/flock-core/src/zerocheck/univariate_skip.rs:31` |
-| 7 | `Challenger::observe_f128_slice` | `crates/flock-core/src/challenger.rs:42` |
-| 8 | `Challenger::sample_f128` | `crates/flock-core/src/challenger.rs:54` |
-| 9 | `ZerocheckClaim` | `crates/flock-core/src/zerocheck.rs:293` |
-| 10 | `BlockR1cs::x_ab_from_mlv` | `crates/flock-core/src/r1cs.rs:253` |
-| 11 | `lincheck::prove_padded_capture_z_vec` | `crates/flock-core/src/lincheck.rs:1250` |
+| 3 | `Challenger::observe_label`, then `observe_bytes`; `crates/flock-prover/src/succinct_veil.rs:650` (call site) | `crates/flock-core/src/challenger.rs:41` |
+| 4 | `BlockR1cs::padding_spec` | `crates/flock-core/src/r1cs.rs:239` |
+| 5 | `zerocheck::prove_packed_padded_capture_s_hat_v_c` | `crates/flock-core/src/zerocheck.rs:449` |
+| 6 | `univariate_skip::build_eq`; entry at `crates/flock-core/src/zerocheck.rs:167` | `crates/flock-core/src/zerocheck/univariate_skip.rs:32` |
+| 7 | `Challenger::observe_f128_slice` | `crates/flock-core/src/challenger.rs:49` |
+| 8 | `Challenger::sample_f128` | `crates/flock-core/src/challenger.rs:61` |
+| 9 | `ZerocheckClaim` | `crates/flock-core/src/zerocheck.rs:336` |
+| 10 | `BlockR1cs::x_ab_from_mlv` | `crates/flock-core/src/r1cs.rs:257` |
+| 11 | `lincheck::prove_padded_capture_z_vec` | `crates/flock-core/src/lincheck.rs:1242` |
 | 12 | return of message 7 | same as 7 |
 | 13 | return of message 8 | same as 8 |
 | 14 | `LincheckClaim` | `crates/flock-core/src/lincheck.rs:394` |
-| 15 | `pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro` | `crates/flock-core/src/pcs.rs:165` |
-| 16 | `pcs::BatchOpeningProofLigerito` | `crates/flock-core/src/pcs.rs:51` |
+| 15 | `pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro` | `crates/flock-core/src/pcs.rs:168` |
+| 16 | `pcs::BatchOpeningProofLigerito` | `crates/flock-core/src/pcs.rs:54` |
 
 Message 6 is a branch on the skip parameter, not a separate protocol. Small
 instances take the multilinear path in
-`crates/flock-core/src/zerocheck/multilinear.rs`. Subsection 15.14 lists the
+`crates/flock-core/src/zerocheck/multilinear.rs`. Subsection 16.14 lists the
 four skip modules and their anchors.
 
-### 15.2 flock-core verifier
+### 16.2 flock-core verifier
 
-The verifier mirrors 15.1. It replays `bind_statement` first, then each
+The verifier mirrors 16.1. It replays `bind_statement` first, then each
 sub-protocol replays its own rounds. A different absorb order derives
 different challenges, and the verifier rejects.
 
@@ -422,10 +437,10 @@ different challenges, and the verifier rejects.
 |---|---|---|
 | `caller` | the driver | `crates/flock-core/src/verifier.rs:60` |
 | `VC` | `verifier::verify_core` | `crates/flock-core/src/verifier.rs:288` |
-| `ZC` | `zerocheck::verify` | `crates/flock-core/src/zerocheck.rs:687` |
-| `LC` | `lincheck::verify` | `crates/flock-core/src/lincheck.rs:1551` |
-| `PCS` | `pcs::verify_opening_batch_ligerito_mixed_ro` | `crates/flock-core/src/pcs.rs:848` |
-| `CH` | `Challenger` | `crates/flock-core/src/challenger.rs:30` |
+| `ZC` | `zerocheck::verify` | `crates/flock-core/src/zerocheck.rs:719` |
+| `LC` | `lincheck::verify` | `crates/flock-core/src/lincheck.rs:1543` |
+| `PCS` | `pcs::verify_opening_batch_ligerito_mixed_ro` | `crates/flock-core/src/pcs.rs:847` |
+| `CH` | `Challenger` | `crates/flock-core/src/challenger.rs:31` |
 
 ```text
   caller  VC      ZC      LC      PCS     CH
@@ -449,29 +464,29 @@ different challenges, and the verifier rejects.
 |---|---|---|
 | 1 | `verifier::verify_core` | `crates/flock-core/src/verifier.rs:288` |
 | 2 | `bind_statement`, called from `verify_core` | `crates/flock-core/src/proof.rs:51` |
-| 3 | `zerocheck::verify` | `crates/flock-core/src/zerocheck.rs:687` |
-| 4 | `Challenger::observe_f128_slice` and `Challenger::sample_f128` | `crates/flock-core/src/challenger.rs:42` |
-| 5 | `zerocheck::VerifyError` | `crates/flock-core/src/zerocheck.rs:331` |
-| 6 | `ZerocheckClaim` | `crates/flock-core/src/zerocheck.rs:293` |
-| 7 | `BlockR1cs::x_ab_from_mlv` | `crates/flock-core/src/r1cs.rs:253` |
-| 8 | `lincheck::verify` | `crates/flock-core/src/lincheck.rs:1551` |
+| 3 | `zerocheck::verify` | `crates/flock-core/src/zerocheck.rs:719` |
+| 4 | `Challenger::observe_f128_slice` and `Challenger::sample_f128` | `crates/flock-core/src/challenger.rs:49` |
+| 5 | `zerocheck::VerifyError` | `crates/flock-core/src/zerocheck.rs:374` |
+| 6 | `ZerocheckClaim` | `crates/flock-core/src/zerocheck.rs:336` |
+| 7 | `BlockR1cs::x_ab_from_mlv` | `crates/flock-core/src/r1cs.rs:257` |
+| 8 | `lincheck::verify` | `crates/flock-core/src/lincheck.rs:1543` |
 | 9 | `lincheck::VerifyError` | `crates/flock-core/src/lincheck.rs:478` |
 | 10 | `LincheckClaim` | `crates/flock-core/src/lincheck.rs:394` |
 | 11 | return of message 1 | same as 1 |
-| 12 | `pcs::verify_opening_batch_ligerito_mixed_ro` | `crates/flock-core/src/pcs.rs:848` |
-| 13 | `pcs::VerifyError` | `crates/flock-core/src/pcs.rs:71` |
+| 12 | `pcs::verify_opening_batch_ligerito_mixed_ro` | `crates/flock-core/src/pcs.rs:847` |
+| 13 | `pcs::VerifyError` | `crates/flock-core/src/pcs.rs:74` |
 
-### 15.3 flock-core PCS internals
+### 16.3 flock-core PCS internals
 
-This diagram expands the `PCS` lane of 15.1.
+This diagram expands the `PCS` lane of 16.1.
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `call` | the driver; entry points `crates/flock-core/src/pcs/commit.rs:286` and `crates/flock-core/src/pcs.rs:165` | `crates/flock-prover/src/succinct_veil.rs:596` |
-| `cmt` | `pcs::commit` | `crates/flock-core/src/pcs/commit.rs:286` |
-| `rsw` | `pcs::ring_switch` | `crates/flock-core/src/pcs/ring_switch.rs:2298` |
-| `lig` | `pcs::ligerito` | `crates/flock-core/src/pcs/ligerito.rs:3068` |
-| `mrk` | `merkle` | `crates/flock-core/src/merkle.rs:288` |
+| `call` | the driver; entry points `crates/flock-core/src/pcs/commit.rs:287` and `crates/flock-core/src/pcs.rs:168` | `crates/flock-prover/src/succinct_veil.rs:602` |
+| `cmt` | `pcs::commit` | `crates/flock-core/src/pcs/commit.rs:287` |
+| `rsw` | `pcs::ring_switch` | `crates/flock-core/src/pcs/ring_switch.rs:2282` |
+| `lig` | `pcs::ligerito` | `crates/flock-core/src/pcs/ligerito.rs:3059` |
+| `mrk` | `merkle` | `crates/flock-core/src/merkle.rs:289` |
 | `ro` | `ro::RoContext` | `crates/flock-core/src/ro.rs:83` |
 
 ```text
@@ -493,27 +508,27 @@ This diagram expands the `PCS` lane of 15.1.
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `pcs::commit::commit_zk_with_ro` | `crates/flock-core/src/pcs/commit.rs:286` |
-| 2 | `replicate_message_fill_zk`; `crates/flock-core/src/pcs/commit.rs:304` (call site) | `crates/flock-core/src/pcs/commit.rs:286` |
-| 3 | `finalize_commit`, the private tail of every commit path; `crates/flock-core/src/pcs/commit.rs:305` (call site) | `crates/flock-core/src/pcs/commit.rs:377` |
-| 4 | `merkle::merkle_tree_framed` | `crates/flock-core/src/merkle.rs:288` |
+| 1 | `pcs::commit::commit_zk_with_ro` | `crates/flock-core/src/pcs/commit.rs:287` |
+| 2 | `replicate_message_fill_zk`; `crates/flock-core/src/pcs/commit.rs:304` (call site) | `crates/flock-core/src/pcs/commit.rs:318` |
+| 3 | `finalize_commit`, the private tail of every commit path; `crates/flock-core/src/pcs/commit.rs:305` (call site) | `crates/flock-core/src/pcs/commit.rs:376` |
+| 4 | `merkle::merkle_tree_framed` | `crates/flock-core/src/merkle.rs:289` |
 | 5 | `ro::RoContext` | `crates/flock-core/src/ro.rs:83` |
-| 6 | `pcs::commit::Commitment` and `pcs::commit::ProverData` | `crates/flock-core/src/pcs/commit.rs:123` |
-| 7 | `ring_switch::prove_batched_padded_with_precomputed`; `crates/flock-core/src/pcs.rs:436` (call site) | `crates/flock-core/src/pcs/ring_switch.rs:2298` |
-| 8 | `RingSwitchProof`, re-exported at `crates/flock-core/src/pcs.rs:40` | `crates/flock-core/src/pcs/ring_switch.rs:2034` |
-| 9 | `ligerito::recursive_prover_with_basis_precomputed_round0_zk_with_ro`, the zk twin | `crates/flock-core/src/pcs/ligerito.rs:3068` |
-| 10 | `merkle::merkle_tree_framed`; `crates/flock-core/src/pcs/ligerito.rs:2375` (call site) | `crates/flock-core/src/merkle.rs:288` |
-| 11 | `merkle::merkle_multi_proof`; `crates/flock-core/src/pcs/ligerito.rs:2826` (call site) | `crates/flock-core/src/merkle.rs:705` |
-| 12 | `pcs::ZkBlindOpening` | `crates/flock-core/src/pcs.rs:65` |
+| 6 | `pcs::commit::Commitment` and `pcs::commit::ProverData` | `crates/flock-core/src/pcs/commit.rs:124` |
+| 7 | `ring_switch::prove_batched_padded_with_precomputed`; `crates/flock-core/src/pcs.rs:438` (call site) | `crates/flock-core/src/pcs/ring_switch.rs:2282` |
+| 8 | `RingSwitchProof`, re-exported at `crates/flock-core/src/pcs.rs:40` | `crates/flock-core/src/pcs/ring_switch.rs:2018` |
+| 9 | `ligerito::recursive_prover_with_basis_precomputed_round0_zk_with_ro`, the zk twin | `crates/flock-core/src/pcs/ligerito.rs:3059` |
+| 10 | `merkle::merkle_tree_framed`; `crates/flock-core/src/pcs/ligerito.rs:2371` (call site) | `crates/flock-core/src/merkle.rs:289` |
+| 11 | `merkle::merkle_multi_proof`; `crates/flock-core/src/pcs/ligerito.rs:2817` (call site) | `crates/flock-core/src/merkle.rs:702` |
+| 12 | `pcs::ZkBlindOpening` | `crates/flock-core/src/pcs.rs:68` |
 
 The non-zk twin of message 3, `commit_into_with_ro`
-(`crates/flock-core/src/pcs/commit.rs:229`), is not on this path. The non-zk
+(`crates/flock-core/src/pcs/commit.rs:230`), is not on this path. The non-zk
 twin of message 9,
 `recursive_prover_with_basis_precomputed_round0_with_ro`
-(`crates/flock-core/src/pcs/ligerito.rs:3138`), is not on this path.
-`pcs::pack::pack_witness` (`crates/flock-core/src/pcs/pack.rs:40`) is not
+(`crates/flock-core/src/pcs/ligerito.rs:3129`), is not on this path.
+`pcs::pack::pack_witness` (`crates/flock-core/src/pcs/pack.rs:41`) is not
 on the succinct path; the witness arrives packed, and the only non-test
-caller is `crates/flock-prover/src/prover.rs:866`.
+caller is `crates/flock-prover/src/prover.rs:869`.
 
 `merkle` selects a kernel at compile time from
 `crates/flock-core/src/merkle/aarch64.rs` and
@@ -521,14 +536,14 @@ caller is `crates/flock-prover/src/prover.rs:866`.
 `RoContext` and an `RoChannel` for domain separation. The unframed twins
 serve the non-zk paths, and a wrong choice changes the hash domain.
 
-### 15.4 veil-f128 masked transcript
+### 16.4 veil-f128 masked transcript
 
 `veil-f128` is the native GF(2^128) VEIL backend. It proves that a masked
 FLOCK verifier transcript, expressed as an arithmetic circuit, is satisfied.
 It depends only on `flock-core` with `features = ["zk"]`. It re-exports
 `F128` at `crates/veil-f128/src/lib.rs:32`. Upstream VEIL needs a two-adic
 multiplicative subgroup, and GF(2^128) has none. `AdditiveRsCode` supplies
-an additive-domain code instead; see `docs/DECISIONS.md` D002.
+an additive-domain code instead.
 
 The flow has two phases. `commit_constraint_inputs` (messages 1 to 8)
 commits before any challenge exists. `prove_constraints_from_commitment`
@@ -537,14 +552,14 @@ lets the caller bind the commitment root into an outer transcript first.
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `call` | `prove_succinct_veil_r1cs` (the driver) | `crates/flock-prover/src/succinct_veil.rs:596` |
-| `cons` | `constraints` | `crates/veil-f128/src/constraints.rs:418` |
+| `call` | `prove_succinct_veil_r1cs` (the driver) | `crates/flock-prover/src/succinct_veil.rs:602` |
+| `cons` | `constraints` | `crates/veil-f128/src/constraints.rs:426` |
 | `dot` | `dot_product` | `crates/veil-f128/src/dot_product.rs:131` |
 | `had` | `hadamard` | `crates/veil-f128/src/hadamard.rs:75` |
 | `code` | `AdditiveRsCode` | `crates/veil-f128/src/code.rs:95` |
 | `ntt` | `AdditiveCosetNtt` | `crates/veil-f128/src/ntt.rs:167` |
-| `cmt` | `MerkleMatrix` | `crates/veil-f128/src/commitment.rs:14` |
-| `CH` | `Challenger` (from `flock-core`) | `crates/flock-core/src/challenger.rs:30` |
+| `cmt` | `MerkleMatrix` | `crates/veil-f128/src/commitment.rs:11` |
+| `CH` | `Challenger` (from `flock-core`) | `crates/flock-core/src/challenger.rs:31` |
 
 ```text
   call  cons  dot   had   code  ntt   cmt   CH
@@ -575,58 +590,58 @@ lets the caller bind the commitment root into an outer transcript first.
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `commit_constraint_inputs` | `crates/veil-f128/src/constraints.rs:418` |
-| 2 | `ConstraintParameters::validate`; `crates/veil-f128/src/constraints.rs:424` (call site) | `crates/veil-f128/src/constraints.rs:304` |
-| 3 | `MaskSampler::fill_f128`; `crates/veil-f128/src/constraints.rs:441` (call site) | `crates/flock-core/src/zk.rs:36` |
-| 4 | `commit_vectors`, the unframed entry point | `crates/veil-f128/src/dot_product.rs:131` |
+| 1 | `commit_constraint_inputs` | `crates/veil-f128/src/constraints.rs:426` |
+| 2 | `ConstraintParameters::validate`; `crates/veil-f128/src/constraints.rs:433` (call site) | `crates/veil-f128/src/constraints.rs:348` |
+| 3 | `MaskSampler::fill_f128`; `crates/veil-f128/src/constraints.rs:450` (call site) | `crates/flock-core/src/zk.rs:38` |
+| 4 | `commit_vectors` | `crates/veil-f128/src/dot_product.rs:131` |
 | 5 | `AdditiveRsCode::encode_batch` | `crates/veil-f128/src/code.rs:144` |
 | 6 | `AdditiveCosetNtt::forward` | `crates/veil-f128/src/ntt.rs:196` |
-| 7 | `MerkleMatrix::new`; `commit_vectors` resolves `framed = None` | `crates/veil-f128/src/commitment.rs:29` |
-| 8 | `ConstraintCommitment`; constructed at `crates/veil-f128/src/constraints.rs:458` | `crates/veil-f128/src/constraints.rs:290` |
-| 9 | `prove_constraints_from_commitment` | `crates/veil-f128/src/constraints.rs:468` |
-| 10 | `padded_circuit`; `crates/veil-f128/src/constraints.rs:487` (call site); `ArithmeticCircuit::is_satisfied` at `crates/veil-f128/src/constraints.rs:483` | `crates/veil-f128/src/constraints.rs:596` |
-| 11 | `Challenger::observe_label`, then `observe_bytes`; `crates/veil-f128/src/constraints.rs:500` (call site) | `crates/flock-core/src/challenger.rs:34` |
-| 12 | `multiplication_vectors` | `crates/veil-f128/src/constraints.rs:631` |
-| 13 | `commit_hadamard`, the unframed entry point | `crates/veil-f128/src/hadamard.rs:75` |
+| 7 | `MerkleMatrix::new`, with an `RoContext` and an `RoChannel` | `crates/veil-f128/src/commitment.rs:26` |
+| 8 | `ConstraintCommitment`; constructed at `crates/veil-f128/src/constraints.rs:469` | `crates/veil-f128/src/constraints.rs:295` |
+| 9 | `prove_constraints_from_commitment` | `crates/veil-f128/src/constraints.rs:479` |
+| 10 | `padded_circuit`; `crates/veil-f128/src/constraints.rs:499` (call site); `ArithmeticCircuit::is_satisfied` at `crates/veil-f128/src/constraints.rs:495` | `crates/veil-f128/src/constraints.rs:623` |
+| 11 | `Challenger::observe_label`, then `observe_bytes`; `crates/veil-f128/src/constraints.rs:512` (call site) | `crates/flock-core/src/challenger.rs:41` |
+| 12 | `multiplication_vectors` | `crates/veil-f128/src/constraints.rs:658` |
+| 13 | `commit_hadamard` | `crates/veil-f128/src/hadamard.rs:75` |
 | 14 | `AdditiveRsCode::encode_square` | `crates/veil-f128/src/code.rs:162` |
-| 15 | `MerkleMatrix::new` | `crates/veil-f128/src/commitment.rs:29` |
-| 16 | `Challenger::observe_bytes`; `crates/veil-f128/src/constraints.rs:513` (call site) | `crates/flock-core/src/challenger.rs:49` |
-| 17 | `Challenger::sample_f128`, twice: `multiplication_rlc` at `crates/veil-f128/src/constraints.rs:514`, `constraint_rlc` at `crates/veil-f128/src/constraints.rs:522` | `crates/flock-core/src/challenger.rs:54` |
-| 18 | `prove_hadamard_and_dots` | `crates/veil-f128/src/hadamard.rs:151` |
-| 19 | `MerkleMatrix::open` | `crates/veil-f128/src/commitment.rs:84` |
-| 20 | `prove_dot_product` | `crates/veil-f128/src/dot_product.rs:199` |
+| 15 | `MerkleMatrix::new` | `crates/veil-f128/src/commitment.rs:26` |
+| 16 | `Challenger::observe_bytes`; `crates/veil-f128/src/constraints.rs:535` (call site) | `crates/flock-core/src/challenger.rs:56` |
+| 17 | `sample_not_zero_or_one` for `multiplication_rlc` at `crates/veil-f128/src/constraints.rs:535`; `Challenger::sample_f128` for `constraint_rlc` at `crates/veil-f128/src/constraints.rs:542` | `crates/flock-core/src/challenger.rs:61` |
+| 18 | `prove_hadamard_and_dots` | `crates/veil-f128/src/hadamard.rs:133` |
+| 19 | `MerkleMatrix::open` | `crates/veil-f128/src/commitment.rs:70` |
+| 20 | `prove_dot_product` | `crates/veil-f128/src/dot_product.rs:179` |
 | 21 | return of message 19 | same as 19 |
-| 22 | `ConstraintProof` | `crates/veil-f128/src/constraints.rs:277` |
+| 22 | `ConstraintProof` | `crates/veil-f128/src/constraints.rs:282` |
 
 The verifier mirror is `verify_constraints`
-(`crates/veil-f128/src/constraints.rs:539`). It uses
-`verify_hadamard_and_dots_framed` (`crates/veil-f128/src/hadamard.rs:244`)
-and `verify_dot_product_framed` (`crates/veil-f128/src/dot_product.rs:276`).
-The block-R1CS entry points `prove_block_r1cs_framed`
-(`crates/veil-f128/src/block_r1cs.rs:118`) and `verify_block_r1cs_framed`
-(`crates/veil-f128/src/block_r1cs.rs:261`) are not on the succinct path.
+(`crates/veil-f128/src/constraints.rs:559`). It uses
+`verify_hadamard_and_dots` (`crates/veil-f128/src/hadamard.rs:220`)
+and `verify_dot_product` (`crates/veil-f128/src/dot_product.rs:248`).
+The block-R1CS entry points `prove_block_r1cs`
+(`crates/veil-f128/src/block_r1cs.rs:105`) and `verify_block_r1cs`
+(`crates/veil-f128/src/block_r1cs.rs:202`) are not on the succinct path.
 
-This path commits unframed. Messages 7 and 15 use `MerkleMatrix::new`
-(`crates/veil-f128/src/commitment.rs:29`), not `new_framed`
-(`crates/veil-f128/src/commitment.rs:33`). Message 5 produces base codewords,
+`MerkleMatrix::new` (`crates/veil-f128/src/commitment.rs:26`) takes an
+`RoContext` and an `RoChannel`, so every commitment is domain-separated. The
+former `new_framed` twin is gone. Message 5 produces base codewords,
 and message 14 produces the square code. `crates/veil-f128/src/ntt.rs` is a
 separate NTT with two disjoint domains, and it is slower by design. Only
 `CodeError` implements `Display` and `std::error::Error`
 (`crates/veil-f128/src/code.rs:66`).
 
-### 15.5 veil-f128 simulator
+### 16.5 veil-f128 simulator
 
 The simulator produces a transcript without a witness. It samples in the
 same order as the prover.
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `call` | the driver | `crates/veil-f128/src/simulator.rs:60` |
-| `sim` | `simulate_block_r1cs` | `crates/veil-f128/src/simulator.rs:60` |
-| `prog` | `OracleProgrammer` | `crates/veil-f128/src/simulator.rs:32` |
-| `had` | `simulate_hadamard` | `crates/veil-f128/src/simulator.rs:193` |
+| `call` | the driver | `crates/veil-f128/src/simulator.rs:61` |
+| `sim` | `simulate_block_r1cs` | `crates/veil-f128/src/simulator.rs:61` |
+| `prog` | `OracleProgrammer` | `crates/veil-f128/src/simulator.rs:33` |
+| `had` | `simulate_hadamard` | `crates/veil-f128/src/simulator.rs:194` |
 | `code` | `AdditiveRsCode` | `crates/veil-f128/src/code.rs:95` |
-| `CH` | `Challenger` | `crates/flock-core/src/challenger.rs:30` |
+| `CH` | `Challenger` | `crates/flock-core/src/challenger.rs:31` |
 
 ```text
   call  sim   prog  had   code  CH
@@ -648,41 +663,42 @@ same order as the prover.
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `simulate_block_r1cs` | `crates/veil-f128/src/simulator.rs:60` |
-| 2 | `validate_public` at `crates/veil-f128/src/block_r1cs.rs:353`; `vector_parameters` | `crates/veil-f128/src/block_r1cs.rs:327` |
-| 3 | `random_hash` | `crates/veil-f128/src/simulator.rs:384` |
-| 4 | `Challenger::observe_bytes` | `crates/flock-core/src/challenger.rs:49` |
-| 5 | `sample_not_zero_or_one`, a `pub(crate)` helper of `block_r1cs` | `crates/veil-f128/src/block_r1cs.rs:452` |
-| 6 | `powers`, a `pub(crate)` helper of `block_r1cs` | `crates/veil-f128/src/block_r1cs.rs:438` |
-| 7 | `simulate_hadamard` | `crates/veil-f128/src/simulator.rs:193` |
-| 8 | `OracleProgrammer` | `crates/veil-f128/src/simulator.rs:32` |
-| 9 | `OracleProgrammingError` | `crates/veil-f128/src/simulator.rs:37` |
+| 1 | `simulate_block_r1cs` | `crates/veil-f128/src/simulator.rs:61` |
+| 2 | `validate_public` at `crates/veil-f128/src/block_r1cs.rs:278`; `vector_parameters` | `crates/veil-f128/src/block_r1cs.rs:252` |
+| 3 | `random_hash` | `crates/veil-f128/src/simulator.rs:385` |
+| 4 | `Challenger::observe_bytes` | `crates/flock-core/src/challenger.rs:56` |
+| 5 | `sample_not_zero_or_one`, a `pub(crate)` helper of `dot_product` | `crates/veil-f128/src/dot_product.rs:363` |
+| 6 | `powers`, a `pub(crate)` helper of `block_r1cs` | `crates/veil-f128/src/block_r1cs.rs:363` |
+| 7 | `simulate_hadamard` | `crates/veil-f128/src/simulator.rs:194` |
+| 8 | `OracleProgrammer` | `crates/veil-f128/src/simulator.rs:33` |
+| 9 | `OracleProgrammingError` | `crates/veil-f128/src/simulator.rs:38` |
 | 10 | `AdditiveRsCode::decode_square` at `crates/veil-f128/src/code.rs:153`; `AdditiveRsCode::square_to_base` | `crates/veil-f128/src/code.rs:179` |
-| 11 | `simulate_dot_product` | `crates/veil-f128/src/simulator.rs:120` |
+| 11 | `simulate_dot_product` | `crates/veil-f128/src/simulator.rs:121` |
 | 12 | `BlockR1csProof` | `crates/veil-f128/src/block_r1cs.rs:68` |
 
 The simulator calls `pub(crate)` helpers of `block_r1cs`:
-`build_link_claim` (`crates/veil-f128/src/block_r1cs.rs:366`), `powers`,
-`sample_not_zero_or_one`, `validate_public`, and `vector_parameters`. This
+`build_link_claim` (`crates/veil-f128/src/block_r1cs.rs:291`), `powers`,
+`validate_public`, and `vector_parameters`, plus `sample_not_zero_or_one`
+from `dot_product`. This
 dependency is intentional. A simulator with a different sample order is
 unsound.
 
-### 15.6 flock-prover prove
+### 16.6 flock-prover prove
 
 `flock-prover` is the top tier. It holds the two binaries, the R1CS hash
 circuits, proof I/O, the succinct VEIL glue, and the ZK certificate. It
 re-exports `flock-core` at `crates/flock-prover/src/lib.rs:15`. It depends on
 `veil-f128` only under the `veil` feature. The active statement is
 `Blake3PreimageZkSetup` at
-`crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:413`. Its entry
+`crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:409`. Its entry
 points are `prove_succinct`, `verify_succinct`, and `simulate_succinct`.
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `CLI` | `veiled_flock::prove` | `crates/flock-prover/src/bin/veiled_flock.rs:117` |
-| `SETUP` | `Blake3PreimageZkSetup` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:413` |
-| `WIT` | `generate_witness_with_ab_packed_and_lincheck_zk_pinned` | `crates/flock-prover/src/r1cs_hashes/blake3.rs:1545` |
-| `SV` | `prove_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:596` |
+| `CLI` | `veiled_flock::prove` | `crates/flock-prover/src/bin/veiled_flock.rs:107` |
+| `SETUP` | `Blake3PreimageZkSetup` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:409` |
+| `WIT` | `generate_witness_with_ab_packed_and_lincheck_zk_pinned` | `crates/flock-prover/src/r1cs_hashes/blake3.rs:1541` |
+| `SV` | `prove_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:602` |
 | `CORE` | `flock_core` crate root; `pcs` at `:27`, `lincheck` at `:24`, `zerocheck` at `:36` | `crates/flock-core/src/lib.rs:1` |
 | `VEIL` | `veil_f128::constraints` | `crates/veil-f128/src/constraints.rs:1` |
 
@@ -713,62 +729,63 @@ points are `prove_succinct`, `verify_succinct`, and `simulate_succinct`.
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `Blake3PreimageZkSetup::prove_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:528` |
-| 2 | `Blake3PreimageZkSetup::statement` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:509` |
-| 3 | `generate_witness_with_ab_packed_and_lincheck_zk_pinned` | `crates/flock-prover/src/r1cs_hashes/blake3.rs:1545` |
+| 1 | `Blake3PreimageZkSetup::prove_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:523` |
+| 2 | `Blake3PreimageZkSetup::statement` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:505` |
+| 3 | `generate_witness_with_ab_packed_and_lincheck_zk_pinned` | `crates/flock-prover/src/r1cs_hashes/blake3.rs:1541` |
 | 4 | return of message 3 | same as 3 |
-| 5 | `absorb_statement`, the active path; the legacy twin is `crates/flock-prover/src/veiled_preimage.rs:347` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:896` |
-| 6 | `prove_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:596` |
-| 7 | `MaskLayout::new` | `crates/flock-prover/src/succinct_veil.rs:613` (call site) |
-| 8 | `commit_constraint_inputs`; `crates/flock-prover/src/succinct_veil.rs:622` (call site) | `crates/veil-f128/src/constraints.rs:418` |
-| 9 | `pcs::commit::commit_zk_with_ro`; `crates/flock-prover/src/succinct_veil.rs:633` (call site) | `crates/flock-core/src/pcs/commit.rs:286` |
-| 10 | `bind_statement`; `crates/flock-prover/src/succinct_veil.rs:641` (call site) | `crates/flock-core/src/proof.rs:51` |
-| 11 | `zerocheck::prove_packed_padded_capture_s_hat_v_c`; `crates/flock-prover/src/succinct_veil.rs:680` (call site) | `crates/flock-core/src/zerocheck.rs:406` |
-| 12 | `lincheck::prove_padded_capture_z_vec`; `crates/flock-prover/src/succinct_veil.rs:708` (call site) | `crates/flock-core/src/lincheck.rs:1250` |
-| 13 | `mask_proofs`; `crates/flock-prover/src/succinct_veil.rs:735` (call site) | `crates/flock-prover/src/succinct_veil.rs:382` |
-| 14 | `shifted_verifier_circuit`; `crates/flock-prover/src/succinct_veil.rs:738` (call site) | `crates/flock-prover/src/succinct_veil.rs:456` |
-| 15 | `veil_challenger` fork, before the terminal Ligerito protocol | `crates/flock-prover/src/succinct_veil.rs:764` (call site) |
-| 16 | `open_claims_with_precomputed_ligerito_pd_ro`; `crates/flock-prover/src/succinct_veil.rs:774` (call site) | `crates/flock-prover/src/prover.rs:114` |
-| 17 | `prove_constraints_from_commitment`; `crates/flock-prover/src/succinct_veil.rs:787` (call site); consumes the commitment of message 8 | `crates/veil-f128/src/constraints.rs:468` |
+| 5 | `absorb_statement`, the active path; the legacy twin is `crates/flock-prover/src/veiled_preimage.rs:341` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:890` |
+| 6 | `prove_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:602` |
+| 7 | `MaskLayout::new`, via `validate_succinct_parameters` at `crates/flock-prover/src/succinct_veil.rs:324` | `crates/flock-prover/src/succinct_veil.rs:331` (call site) |
+| 8 | `commit_constraint_inputs`; `crates/flock-prover/src/succinct_veil.rs:639` (call site) | `crates/veil-f128/src/constraints.rs:426` |
+| 9 | `pcs::commit::commit_zk_with_ro`; `crates/flock-prover/src/succinct_veil.rs:641` (call site) | `crates/flock-core/src/pcs/commit.rs:287` |
+| 10 | `bind_statement`; `crates/flock-prover/src/succinct_veil.rs:649` (call site) | `crates/flock-core/src/proof.rs:51` |
+| 11 | `zerocheck::prove_packed_padded_capture_s_hat_v_c`; `crates/flock-prover/src/succinct_veil.rs:688` (call site) | `crates/flock-core/src/zerocheck.rs:449` |
+| 12 | `lincheck::prove_padded_capture_z_vec`; `crates/flock-prover/src/succinct_veil.rs:716` (call site) | `crates/flock-core/src/lincheck.rs:1242` |
+| 13 | `mask_proofs`; `crates/flock-prover/src/succinct_veil.rs:743` (call site) | `crates/flock-prover/src/succinct_veil.rs:402` |
+| 14 | `shifted_verifier_circuit`; `crates/flock-prover/src/succinct_veil.rs:746` (call site) | `crates/flock-prover/src/succinct_veil.rs:472` |
+| 15 | `veil_challenger` fork, before the terminal Ligerito protocol | `crates/flock-prover/src/succinct_veil.rs:772` (call site) |
+| 16 | `open_claims_with_precomputed_ligerito_pd_ro`; `crates/flock-prover/src/succinct_veil.rs:785` (call site) | `crates/flock-prover/src/prover.rs:118` |
+| 17 | `prove_constraints_from_commitment`; `crates/flock-prover/src/succinct_veil.rs:800` (call site); consumes the commitment of message 8 | `crates/veil-f128/src/constraints.rs:479` |
 | 18 | `SuccinctVeilProof` | `crates/flock-prover/src/succinct_veil.rs:33` |
 | 19 | return of message 1 | same as 1 |
-| 20 | `Bundle` | `crates/flock-prover/src/bin/veiled_flock.rs:18` |
+| 20 | `Bundle` | `crates/flock-prover/src/bin/veiled_flock.rs:21` |
 
 Message 20 is the write side of `proof_io`. The helpers are
-`write_bytes_to_file` (`crates/flock-prover/src/proof_io.rs:264`) and
-`read_bytes_from_file` (`crates/flock-prover/src/proof_io.rs:280`). The
-`veiled_flock` binary has its own `Bundle` encoder with magic `VFLK0003`
+`write_bytes_to_file` (`crates/flock-prover/src/proof_io.rs:238`) and
+`read_bytes_from_file` (`crates/flock-prover/src/proof_io.rs:254`). The
+`veiled_flock` binary has its own `bincode` `Bundle` encoder under the
+domain `veiled-flock-cli-succinct`, with a 640 KiB size cap
 (`crates/flock-prover/src/bin/veiled_flock.rs:15`).
 
 The `pd` argument of message 16 is produced between messages 14 and 15.
-`observe_claims` runs at `crates/flock-prover/src/succinct_veil.rs:758`, and
-`packed_direct` runs at `crates/flock-prover/src/succinct_veil.rs:759`.
-Message 16 consumes `pd` at `crates/flock-prover/src/succinct_veil.rs:780`.
+`observe_claims` runs at `crates/flock-prover/src/succinct_veil.rs:766`, and
+`packed_direct` runs at `crates/flock-prover/src/succinct_veil.rs:767`.
+Message 16 consumes `pd` at `crates/flock-prover/src/succinct_veil.rs:791`.
 `packed_direct` is a closure from the caller, declared at
-`crates/flock-prover/src/succinct_veil.rs:606`, so it has no lane.
+`crates/flock-prover/src/succinct_veil.rs:612`, so it has no lane.
 
 `absorb_statement` exists twice: the active one at
-`crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:896` and the legacy
-one at `crates/flock-prover/src/veiled_preimage.rs:347`. An unqualified
+`crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:890` and the legacy
+one at `crates/flock-prover/src/veiled_preimage.rs:341`. An unqualified
 reference resolves to the module in scope. `crates/flock-prover/src/prover.rs`
 is the orchestration hub; 16 of the 30 source files reference `prover::`.
 New protocol glue belongs there, not in a binary.
 
-### 15.7 flock-prover verify
+### 16.7 flock-prover verify
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `CLI` | `veiled_flock::verify` | `crates/flock-prover/src/bin/veiled_flock.rs:138` |
-| `SETUP` | `Blake3PreimageZkSetup::verify_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:597` |
-| `SV` | `verify_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:808` |
+| `CLI` | `veiled_flock::verify` | `crates/flock-prover/src/bin/veiled_flock.rs:130` |
+| `SETUP` | `Blake3PreimageZkSetup::verify_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:590` |
+| `SV` | `verify_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:825` |
 | `CORE` | `flock_core::verifier` | `crates/flock-core/src/verifier.rs:199` |
-| `VEIL` | `veil_f128::constraints::verify_constraints` | `crates/veil-f128/src/constraints.rs:539` |
+| `VEIL` | `veil_f128::constraints::verify_constraints` | `crates/veil-f128/src/constraints.rs:559` |
 
 ```text
   CLI    SETUP  SV     CORE   VEIL
   |      |      |      |      |
-  |*     |      |      |      |     1 read bundle + magic VFLK0003 check
-  |*     |      |      |      |     2 re-serialize and byte-compare (canonicality)
+  |*     |      |      |      |     1 read bundle (640 KiB size cap)
+  |*     |      |      |      |     2 decode_bundle (rejects trailing bytes)
   |----->|      |      |      |     3 verify_succinct
   |      |*     |      |      |     4 statement + validate
   |      |------------>|      |     5 absorb_statement
@@ -788,22 +805,22 @@ New protocol glue belongs there, not in a binary.
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `MAGIC` = `VFLK0003` | `crates/flock-prover/src/bin/veiled_flock.rs:15` |
-| 2 | `Bundle`; re-serialized and compared byte for byte | `crates/flock-prover/src/bin/veiled_flock.rs:18` |
-| 3 | `Blake3PreimageZkSetup::verify_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:597` |
-| 4 | `Blake3PreimageZkSetup::statement` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:509` |
-| 5 | `absorb_statement` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:896` |
-| 6 | `verify_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:808` |
-| 7 | `SuccinctVeilError::InvalidParameters` | `crates/flock-prover/src/succinct_veil.rs:48` |
+| 1 | `DOMAIN` = `veiled-flock-cli-succinct`; `MAX_BUNDLE_BYTES` | `crates/flock-prover/src/bin/veiled_flock.rs:15` |
+| 2 | `decode_bundle`; `bundle_options` sets a limit and rejects trailing bytes | `crates/flock-prover/src/bin/veiled_flock.rs:176` |
+| 3 | `Blake3PreimageZkSetup::verify_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:590` |
+| 4 | `Blake3PreimageZkSetup::statement` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:505` |
+| 5 | `absorb_statement` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:890` |
+| 6 | `verify_succinct_veil_r1cs` | `crates/flock-prover/src/succinct_veil.rs:825` |
+| 7 | `SuccinctVeilError::InvalidParameters` | `crates/flock-prover/src/succinct_veil.rs:60` |
 | 8 | `bind_statement` | `crates/flock-core/src/proof.rs:51` |
-| 9 | `Challenger::observe_label` | `crates/flock-core/src/challenger.rs:34` |
-| 10 | `shifted_verifier_circuit` | `crates/flock-prover/src/succinct_veil.rs:456` |
-| 11 | `pcs::PackedDirectClaimRef` | `crates/flock-core/src/pcs.rs:804` |
-| 12 | `veil_challenger` fork; mirrors message 15 of 15.6 | `crates/flock-prover/src/succinct_veil.rs:764` |
+| 9 | `Challenger::observe_label` | `crates/flock-core/src/challenger.rs:41` |
+| 10 | `shifted_verifier_circuit` | `crates/flock-prover/src/succinct_veil.rs:472` |
+| 11 | `pcs::PackedDirectClaimRef` | `crates/flock-core/src/pcs.rs:803` |
+| 12 | `veil_challenger` fork; mirrors message 15 of 16.6 | `crates/flock-prover/src/succinct_veil.rs:772` |
 | 13 | `verifier::verify_claims_ligerito_with_config_pd_ro` | `crates/flock-core/src/verifier.rs:199` |
-| 14 | `From<pcs::VerifyError> for SuccinctVeilError` | `crates/flock-prover/src/succinct_veil.rs:286` |
-| 15 | `verify_constraints` | `crates/veil-f128/src/constraints.rs:539` |
-| 16 | `From<ConstraintError> for SuccinctVeilError` | `crates/flock-prover/src/succinct_veil.rs:280` |
+| 14 | `From<pcs::VerifyError> for SuccinctVeilError` | `crates/flock-prover/src/succinct_veil.rs:283` |
+| 15 | `verify_constraints` | `crates/veil-f128/src/constraints.rs:559` |
+| 16 | `From<ConstraintError> for SuccinctVeilError` | `crates/flock-prover/src/succinct_veil.rs:277` |
 | 17 | return of message 6 | same as 6 |
 
 The verifier re-derives the shifted circuit (message 10). It does not trust
@@ -812,12 +829,12 @@ point as the prover (message 12). Both steps are essential.
 
 Both binaries parse `argv` by hand. `veiled_flock` needs
 `required-features = ["veil"]`, and `flock_chain` builds with default
-features. `RandomChallenger` (`crates/flock-core/src/challenger.rs:101`)
+features. `RandomChallenger` (`crates/flock-core/src/challenger.rs:108`)
 ignores observed messages. It is gated behind
 `cfg(any(test, feature = "unsound-challenger"))`. Never enable it for a
 build that produces real proofs.
 
-### 15.8 flock-prover simulator and certificate
+### 16.8 flock-prover simulator and certificate
 
 The simulator path makes the zero-knowledge claim checkable. It produces a
 transcript without a witness. `SealedStatement` makes the witness unreachable
@@ -825,12 +842,12 @@ by type.
 
 | Lane | Symbol | Anchor |
 |---|---|---|
-| `call` | the driver (test or certificate harness) | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:641` |
-| `SETUP` | `Blake3PreimageZkSetup::simulate_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:641` |
+| `call` | the driver (test or certificate harness) | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:634` |
+| `SETUP` | `Blake3PreimageZkSetup::simulate_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:634` |
 | `SEAL` | `SealedStatement` | `crates/flock-prover/src/sim_seal.rs:10` |
-| `ORC` | `sim_oracle` | `crates/flock-prover/src/sim_oracle.rs:58` |
-| `SIM` | `RomZerocheckSimulator` and `preimage_simulator` | `crates/flock-prover/src/succinct_veil.rs:80` |
-| `CERT` | `zk_certificate` | `crates/flock-prover/src/zk_certificate.rs:52` |
+| `ORC` | `sim_oracle` | `crates/flock-prover/src/sim_oracle.rs:62` |
+| `SIM` | `RomZerocheckSimulator` and `preimage_simulator` | `crates/flock-prover/src/succinct_veil.rs:92` |
+| `CERT` | `zk_certificate` | `crates/flock-prover/src/zk_certificate.rs:49` |
 
 ```text
   call   SETUP   SEAL    ORC    SIM    CERT
@@ -852,20 +869,20 @@ by type.
 
 | # | Symbol | Anchor |
 |---|---|---|
-| 1 | `Blake3PreimageZkSetup::simulate_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:641` |
+| 1 | `Blake3PreimageZkSetup::simulate_succinct` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:634` |
 | 2 | `SealedStatement` | `crates/flock-prover/src/sim_seal.rs:10` |
-| 3 | `zk::ZkRng` | `crates/flock-core/src/zk.rs:56` |
-| 4 | `ProgrammableOracle` at `crates/flock-prover/src/sim_oracle.rs:58`; `sim_oracle::shared_oracle` | `crates/flock-prover/src/sim_oracle.rs:166` |
-| 5 | `sim_oracle::ro_context` | `crates/flock-prover/src/sim_oracle.rs:192` |
-| 6 | `RomZerocheckSimulator::new` | `crates/flock-prover/src/succinct_veil.rs:87` |
-| 7 | `sim_oracle::OracleChallenger` | `crates/flock-prover/src/sim_oracle.rs:206` |
-| 8 | `SuccinctZerocheckSource::emit`, the only trait method (`crates/flock-prover/src/succinct_veil.rs:69`); impl at `crates/flock-prover/src/succinct_veil.rs:113`; `crates/flock-prover/src/succinct_veil.rs:668` (call site) | `crates/flock-prover/src/succinct_veil.rs:68` |
-| 9 | `preimage_simulator::SimulatedProof`; produced by `simulate` at `crates/flock-prover/src/preimage_simulator.rs:454` | `crates/flock-prover/src/preimage_simulator.rs:442` |
-| 10 | `zk_certificate::ZkCertificate`; `require_certified` at `crates/flock-prover/src/zk_certificate.rs:223` | `crates/flock-prover/src/zk_certificate.rs:52` |
-| 11 | `zk_certificate::ZkGateError` | `crates/flock-prover/src/zk_certificate.rs:79` |
+| 3 | `zk::ZkRng` | `crates/flock-core/src/zk.rs:55` |
+| 4 | `ProgrammableOracle` at `crates/flock-prover/src/sim_oracle.rs:62`; `sim_oracle::shared_oracle` | `crates/flock-prover/src/sim_oracle.rs:191` |
+| 5 | `sim_oracle::ro_context` | `crates/flock-prover/src/sim_oracle.rs:228` |
+| 6 | `RomZerocheckSimulator::new` | `crates/flock-prover/src/succinct_veil.rs:99` |
+| 7 | `sim_oracle::OracleChallenger` | `crates/flock-prover/src/sim_oracle.rs:249` |
+| 8 | `SuccinctZerocheckSource::emit`, the only trait method (`crates/flock-prover/src/succinct_veil.rs:81`); impl at `crates/flock-prover/src/succinct_veil.rs:125`; `crates/flock-prover/src/succinct_veil.rs:676` (call site) | `crates/flock-prover/src/succinct_veil.rs:80` |
+| 9 | `preimage_simulator::SimulatedProof`; produced by `simulate` at `crates/flock-prover/src/preimage_simulator.rs:455` | `crates/flock-prover/src/preimage_simulator.rs:443` |
+| 10 | `zk_certificate::ZkCertificate`; `require_certified` at `crates/flock-prover/src/zk_certificate.rs:214` | `crates/flock-prover/src/zk_certificate.rs:49` |
+| 11 | `zk_certificate::ZkGateError` | `crates/flock-prover/src/zk_certificate.rs:73` |
 | 12 | `sim_game::SimGameLedger` records the hop sequence behind the claim | `crates/flock-prover/src/sim_game.rs:58` |
 
-### 15.9 Class diagram: crate dependencies
+### 16.9 Class diagram: crate dependencies
 
 The three manifests define the direction. `crates/flock-core/Cargo.toml`
 lists no workspace dependency. `crates/veil-f128/Cargo.toml` lists
@@ -893,7 +910,7 @@ lists no workspace dependency. `crates/veil-f128/Cargo.toml` lists
 Arrows point from the dependent crate to its dependency. Cargo enforces the
 direction at compile time, so no cycle across crates is possible.
 
-### 15.10 Class diagram: flock-core
+### 16.10 Class diagram: flock-core
 
 ```text
 +----------------------------------+    +------------------------------------+
@@ -938,19 +955,19 @@ direction at compile time, so no cycle across crates is possible.
 |---|---|
 | `F128`; re-exported at `crates/flock-core/src/field.rs:14` | `crates/flock-core/src/field/gf2_128.rs:24` |
 | `F256Unreduced` | `crates/flock-core/src/field/gf2_128.rs:141` |
-| `BlockR1cs` | `crates/flock-core/src/r1cs.rs:56` |
-| `WitnessLayout` | `crates/flock-core/src/r1cs.rs:39` |
-| `SparseBinaryMatrix` | `crates/flock-core/src/r1cs.rs:14` |
-| `PcsParams` | `crates/flock-core/src/pcs/commit.rs:32` |
-| `Commitment` | `crates/flock-core/src/pcs/commit.rs:123` |
-| `ProverData` | `crates/flock-core/src/pcs/commit.rs:134` |
-| `BatchOpeningProofLigerito` | `crates/flock-core/src/pcs.rs:51` |
-| `ZkBlindOpening` | `crates/flock-core/src/pcs.rs:65` |
-| `pcs::VerifyError` | `crates/flock-core/src/pcs.rs:71` |
-| `ZerocheckProof` | `crates/flock-core/src/zerocheck.rs:313` |
-| `ZerocheckClaim` | `crates/flock-core/src/zerocheck.rs:293` |
-| `PaddingSpec` | `crates/flock-core/src/zerocheck.rs:258` |
-| `zerocheck::VerifyError` | `crates/flock-core/src/zerocheck.rs:331` |
+| `BlockR1cs` | `crates/flock-core/src/r1cs.rs:60` |
+| `WitnessLayout` | `crates/flock-core/src/r1cs.rs:43` |
+| `SparseBinaryMatrix` | `crates/flock-core/src/r1cs.rs:18` |
+| `PcsParams` | `crates/flock-core/src/pcs/commit.rs:33` |
+| `Commitment` | `crates/flock-core/src/pcs/commit.rs:124` |
+| `ProverData` | `crates/flock-core/src/pcs/commit.rs:135` |
+| `BatchOpeningProofLigerito` | `crates/flock-core/src/pcs.rs:54` |
+| `ZkBlindOpening` | `crates/flock-core/src/pcs.rs:68` |
+| `pcs::VerifyError` | `crates/flock-core/src/pcs.rs:74` |
+| `ZerocheckProof` | `crates/flock-core/src/zerocheck.rs:356` |
+| `ZerocheckClaim` | `crates/flock-core/src/zerocheck.rs:336` |
+| `PaddingSpec` | `crates/flock-core/src/zerocheck.rs:301` |
+| `zerocheck::VerifyError` | `crates/flock-core/src/zerocheck.rs:374` |
 | `LincheckProof` | `crates/flock-core/src/lincheck.rs:379` |
 | `LincheckClaim` | `crates/flock-core/src/lincheck.rs:394` |
 | `QuirkyPoint` | `crates/flock-core/src/lincheck.rs:361` |
@@ -958,22 +975,22 @@ direction at compile time, so no cycle across crates is possible.
 | `R1csProofLigerito` | `crates/flock-core/src/proof.rs:18` |
 | `ZClaim` | `crates/flock-core/src/proof.rs:26` |
 | `RoContext` | `crates/flock-core/src/ro.rs:83` |
-| `RoChannel` | `crates/flock-core/src/ro.rs:56` |
-| `ZkRng` | `crates/flock-core/src/zk.rs:56` |
-| trait `Challenger` | `crates/flock-core/src/challenger.rs:30` |
-| trait `ByteOracle` | `crates/flock-core/src/ro.rs:204` |
-| trait `MaskSampler` | `crates/flock-core/src/zk.rs:36` |
-| trait `LincheckCircuit` | `crates/flock-core/src/lincheck.rs:173` |
-| `FsChallenger`, implements `Challenger` | `crates/flock-core/src/challenger.rs:184` |
-| `RandomChallenger`, implements `Challenger` | `crates/flock-core/src/challenger.rs:101` |
-| `CscCircuit`, implements `LincheckCircuit` | `crates/flock-core/src/lincheck.rs:249` |
-| `SparseMatrixCircuit`, implements `LincheckCircuit` | `crates/flock-core/src/lincheck.rs:197` |
-| `PlaybackSampler`, implements `MaskSampler` | `crates/flock-core/src/zk.rs:124` |
-| `ZeroSampler`, implements `MaskSampler` | `crates/flock-core/src/zk.rs:148` |
+| `RoChannel` | `crates/flock-core/src/ro.rs:52` |
+| `ZkRng` | `crates/flock-core/src/zk.rs:55` |
+| trait `Challenger` | `crates/flock-core/src/challenger.rs:31` |
+| trait `ByteOracle` | `crates/flock-core/src/ro.rs:203` |
+| trait `MaskSampler` | `crates/flock-core/src/zk.rs:35` |
+| trait `LincheckCircuit` | `crates/flock-core/src/lincheck.rs:174` |
+| `FsChallenger`, implements `Challenger` | `crates/flock-core/src/challenger.rs:191` |
+| `RandomChallenger`, implements `Challenger` | `crates/flock-core/src/challenger.rs:108` |
+| `CscCircuit`, implements `LincheckCircuit` | `crates/flock-core/src/lincheck.rs:250` |
+| `SparseMatrixCircuit`, implements `LincheckCircuit` | `crates/flock-core/src/lincheck.rs:198` |
+| `PlaybackSampler`, implements `MaskSampler` | `crates/flock-core/src/zk.rs:123` |
+| `ZeroSampler`, implements `MaskSampler` | `crates/flock-core/src/zk.rs:147` |
 
 `ZkRng` also implements `MaskSampler`.
 
-### 15.11 Class diagram: veil-f128
+### 16.11 Class diagram: veil-f128
 
 ```text
 +------------------------------------+    +--------------------------------------+
@@ -991,7 +1008,7 @@ direction at compile time, so no cycle across crates is possible.
 |------------------------------------|    |--------------------------------------|
 | - rows, columns                    |    | - num_inputs, num_variables          |
 |------------------------------------|    | - multiplications, linear_cons       |
-| + new_framed(..)                   |    |--------------------------------------|
+| + new(..)                          |    |--------------------------------------|
 | + root() -> Hash                   |    | + num_inputs(), num_variables()      |
 | + open(&[usize])                   |    | + is_satisfied(&self, witness)       |
 +------------------------------------+    +--------------------------------------+
@@ -1011,8 +1028,8 @@ direction at compile time, so no cycle across crates is possible.
 | `CodeParameters` | `crates/veil-f128/src/code.rs:18` |
 | `CodeError`; `Display` and `std::error::Error` at `crates/veil-f128/src/code.rs:66` | `crates/veil-f128/src/code.rs:57` |
 | `AdditiveCosetNtt` | `crates/veil-f128/src/ntt.rs:167` |
-| `MerkleMatrix` | `crates/veil-f128/src/commitment.rs:14` |
-| `MerkleMatrixOpening` | `crates/veil-f128/src/commitment.rs:22` |
+| `MerkleMatrix` | `crates/veil-f128/src/commitment.rs:11` |
+| `MerkleMatrixOpening` | `crates/veil-f128/src/commitment.rs:19` |
 | `VectorParameters` | `crates/veil-f128/src/dot_product.rs:28` |
 | `DotProductProverData` | `crates/veil-f128/src/dot_product.rs:93` |
 | `DotProductProof` | `crates/veil-f128/src/dot_product.rs:102` |
@@ -1024,23 +1041,23 @@ direction at compile time, so no cycle across crates is possible.
 | `BlockR1csProof` | `crates/veil-f128/src/block_r1cs.rs:68` |
 | `BlockR1csError` | `crates/veil-f128/src/block_r1cs.rs:76` |
 | `PublicEquality` | `crates/veil-f128/src/block_r1cs.rs:62` |
-| `LinearCombination` | `crates/veil-f128/src/constraints.rs:29` |
-| `ArithmeticCircuit` | `crates/veil-f128/src/constraints.rs:119` |
-| `CircuitBuilder` | `crates/veil-f128/src/constraints.rs:191` |
-| `ConstraintProof` | `crates/veil-f128/src/constraints.rs:277` |
-| `ConstraintCommitment` | `crates/veil-f128/src/constraints.rs:290` |
-| `ConstraintParameters` | `crates/veil-f128/src/constraints.rs:304` |
-| `ConstraintError` | `crates/veil-f128/src/constraints.rs:362` |
-| `SimulationError` | `crates/veil-f128/src/simulator.rs:40` |
-| trait `OracleProgrammer` | `crates/veil-f128/src/simulator.rs:32` |
+| `LinearCombination` | `crates/veil-f128/src/constraints.rs:34` |
+| `ArithmeticCircuit` | `crates/veil-f128/src/constraints.rs:124` |
+| `CircuitBuilder` | `crates/veil-f128/src/constraints.rs:196` |
+| `ConstraintProof` | `crates/veil-f128/src/constraints.rs:282` |
+| `ConstraintCommitment` | `crates/veil-f128/src/constraints.rs:295` |
+| `ConstraintParameters` | `crates/veil-f128/src/constraints.rs:309` |
+| `ConstraintError` | `crates/veil-f128/src/constraints.rs:367` |
+| `SimulationError` | `crates/veil-f128/src/simulator.rs:41` |
+| trait `OracleProgrammer` | `crates/veil-f128/src/simulator.rs:33` |
 | `From<DotProductError> for BlockR1csError` | `crates/veil-f128/src/block_r1cs.rs:89` |
 | `From<HadamardError> for BlockR1csError` | `crates/veil-f128/src/block_r1cs.rs:95` |
 | `From<CodeError> for DotProductError` | `crates/veil-f128/src/dot_product.rs:125` |
 | `From<CodeError> for HadamardError` | `crates/veil-f128/src/hadamard.rs:63` |
-| `From<BlockR1csError> for SimulationError` | `crates/veil-f128/src/simulator.rs:47` |
-| `From<CodeError> for SimulationError` | `crates/veil-f128/src/simulator.rs:53` |
+| `From<BlockR1csError> for SimulationError` | `crates/veil-f128/src/simulator.rs:48` |
+| `From<CodeError> for SimulationError` | `crates/veil-f128/src/simulator.rs:54` |
 
-### 15.12 Class diagram: flock-prover
+### 16.12 Class diagram: flock-prover
 
 ```text
 +--------------------------------------+    +----------------------------------------+
@@ -1054,31 +1071,31 @@ direction at compile time, so no cycle across crates is possible.
 
 | Type | Anchor |
 |---|---|
-| `Blake3PreimageZkSetup` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:413` |
+| `Blake3PreimageZkSetup` | `crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs:409` |
 | `SuccinctVeilProof` | `crates/flock-prover/src/succinct_veil.rs:33` |
-| `SuccinctVeilError` | `crates/flock-prover/src/succinct_veil.rs:48` |
-| `SuccinctZerocheckInputs<'a>` | `crates/flock-prover/src/succinct_veil.rs:57` |
-| `RomZerocheckSimulator` | `crates/flock-prover/src/succinct_veil.rs:80` |
-| trait `SuccinctZerocheckSource` | `crates/flock-prover/src/succinct_veil.rs:68` |
+| `SuccinctVeilError` | `crates/flock-prover/src/succinct_veil.rs:60` |
+| `SuccinctZerocheckInputs<'a>` | `crates/flock-prover/src/succinct_veil.rs:69` |
+| `RomZerocheckSimulator` | `crates/flock-prover/src/succinct_veil.rs:92` |
+| trait `SuccinctZerocheckSource` | `crates/flock-prover/src/succinct_veil.rs:80` |
 | `SealedStatement<'a>` | `crates/flock-prover/src/sim_seal.rs:10` |
 | `SimCoins` | `crates/flock-prover/src/sim_seal.rs:57` |
-| `ZkCertificate` | `crates/flock-prover/src/zk_certificate.rs:52` |
-| `StatementFamily` | `crates/flock-prover/src/zk_certificate.rs:45` |
-| `ZkGateError` | `crates/flock-prover/src/zk_certificate.rs:79` |
+| `ZkCertificate` | `crates/flock-prover/src/zk_certificate.rs:49` |
+| `StatementFamily` | `crates/flock-prover/src/zk_certificate.rs:42` |
+| `ZkGateError` | `crates/flock-prover/src/zk_certificate.rs:73` |
 | `SimGameLedger` | `crates/flock-prover/src/sim_game.rs:58` |
 | `SimGameHop` | `crates/flock-prover/src/sim_game.rs:8` |
-| `ProgrammableOracle` | `crates/flock-prover/src/sim_oracle.rs:58` |
-| `OracleChallenger` | `crates/flock-prover/src/sim_oracle.rs:206` |
-| `SimulatedProof` | `crates/flock-prover/src/preimage_simulator.rs:442` |
-| `SimError` | `crates/flock-prover/src/preimage_simulator.rs:160` |
-| `HashKind` | `crates/flock-prover/src/proof_io.rs:56` |
-| `DeserializeError` | `crates/flock-prover/src/proof_io.rs:103` |
-| `BundleReadError` | `crates/flock-prover/src/proof_io.rs:303` |
-| `R1csProofBundleLigerito` | `crates/flock-prover/src/proof_io.rs:150` |
-| `ChainProofBundleLigerito` | `crates/flock-prover/src/proof_io.rs:161` |
-| `R1csProofBundleZkA1` | `crates/flock-prover/src/proof_io.rs:191` |
+| `ProgrammableOracle` | `crates/flock-prover/src/sim_oracle.rs:62` |
+| `OracleChallenger` | `crates/flock-prover/src/sim_oracle.rs:249` |
+| `SimulatedProof` | `crates/flock-prover/src/preimage_simulator.rs:443` |
+| `SimError` | `crates/flock-prover/src/preimage_simulator.rs:161` |
+| `HashKind` | `crates/flock-prover/src/proof_io.rs:41` |
+| `DeserializeError` | `crates/flock-prover/src/proof_io.rs:88` |
+| `BundleReadError` | `crates/flock-prover/src/proof_io.rs:277` |
+| `R1csProofBundleLigerito` | `crates/flock-prover/src/proof_io.rs:129` |
+| `ChainProofBundleLigerito` | `crates/flock-prover/src/proof_io.rs:140` |
+| `R1csProofBundleZkA1` | `crates/flock-prover/src/proof_io.rs:170` |
 
-### 15.13 Class diagram: cross-crate relations
+### 16.13 Class diagram: cross-crate relations
 
 Only edges that cross a crate boundary appear.
 
@@ -1105,24 +1122,24 @@ Only edges that cross a crate boundary appear.
 Review enforces the wrapper rule; the compiler does not. Do not put a `veil-f128`
 error type in a `flock-prover` signature without a `veil` gate.
 `SuccinctVeilError` wraps it (`From<ConstraintError>` at
-`crates/flock-prover/src/succinct_veil.rs:280`). `VeiledPreimageError` wraps
+`crates/flock-prover/src/succinct_veil.rs:277`). `VeiledPreimageError` wraps
 it on the legacy path.
 
-### 15.14 Omissions and deviations
+### 16.14 Omissions and deviations
 
 | Item | Anchor | Status |
 |---|---|---|
-| `pcs/jagged.rs` | declared at `crates/flock-core/src/pcs.rs:23`; doc comment at `crates/flock-core/src/r1cs.rs:28` | No call sites in the workspace. Absent from 15.3 and 15.10. |
-| `ArithmeticCircuit::complete_witness` | `crates/veil-f128/src/constraints.rs:143` | No call sites in the workspace. Absent from 15.4. |
+| `pcs/jagged.rs` | declared at `crates/flock-core/src/pcs.rs:23`; doc comment at `crates/flock-core/src/r1cs.rs:32` | No call sites in the workspace. Absent from 16.3 and 16.10. |
+| `ArithmeticCircuit::complete_witness` | `crates/veil-f128/src/constraints.rs:148` | No call sites in the workspace. Absent from 16.4. |
 | `pcs` imports from `zerocheck` | `crates/flock-core/src/pcs.rs:44`; `crates/flock-core/src/pcs/ring_switch.rs:63` | Layer inversion: PCS sits below the PIOP by design. Drawn as is. Do not deepen. |
-| `ro` and `merkle` cycle | `crates/flock-core/src/ro.rs:83`; `crates/flock-core/src/merkle.rs:288` | `Hash` lives in `merkle` and is the oracle output type. Drawn as is. Do not deepen. |
-| Univariate-skip modules | declared at `crates/flock-core/src/zerocheck.rs:24` to `crates/flock-core/src/zerocheck.rs:27`; import at `crates/flock-core/src/zerocheck.rs:34` | Message 6 of 15.1 is a branch. `_naive` and `_optimized` twins compute the same round-1 polynomial. The optimized module runs. |
-| `univariate_skip.rs` reference path | `build_eq` at `crates/flock-core/src/zerocheck/univariate_skip.rs:31`; `round1_naive` at `crates/flock-core/src/zerocheck/univariate_skip.rs:68`; `round1_extract_c_packed` at `crates/flock-core/src/zerocheck/univariate_skip.rs:277` | Readable reference. |
+| `ro` and `merkle` cycle | `crates/flock-core/src/ro.rs:83`; `crates/flock-core/src/merkle.rs:289` | `Hash` lives in `merkle` and is the oracle output type. Drawn as is. Do not deepen. |
+| Univariate-skip modules | declared at `crates/flock-core/src/zerocheck.rs:24` to `crates/flock-core/src/zerocheck.rs:27`; import at `crates/flock-core/src/zerocheck.rs:34` | Message 6 of 16.1 is a branch. `_naive` and `_optimized` twins compute the same round-1 polynomial. The optimized module runs. |
+| `univariate_skip.rs` reference path | `build_eq` at `crates/flock-core/src/zerocheck/univariate_skip.rs:32`; `round1_naive` at `crates/flock-core/src/zerocheck/univariate_skip.rs:69`; `round1_extract_c_packed` at `crates/flock-core/src/zerocheck/univariate_skip.rs:277` | Readable reference. |
 | `univariate_skip_deg4.rs` | `round1_deg4_naive` at `crates/flock-core/src/zerocheck/univariate_skip_deg4.rs:85` | Degree-4 twin. |
 | `univariate_skip_optimized.rs`, `univariate_skip_deg4_optimized.rs` | `crates/flock-core/src/zerocheck/univariate_skip_optimized.rs`; `crates/flock-core/src/zerocheck/univariate_skip_deg4_optimized.rs` | Production path. Drawn as one participant. |
-| `veil` feature | `.github/workflows/lint.yml`; `.github/workflows/test.yml`; `scripts/zk-certify.sh` | No CI workflow builds it. `simulator.rs` has no inline tests, and `crates/veil-f128/tests/` does not exist. Subsections 15.4 to 15.8 come from a read of the source. |
-| `flock-core` numeric kernels | `field/gf2_128.rs`, `field/gf2_8.rs`, `field/phi8.rs`, `field/f128_slice.rs`, `ntt/additive_ntt_f128.rs`, `ntt/parallel_f128.rs`, `ntt/inv_table.rs`, `ntt/inv_table_deg4.rs`, `merkle/aarch64.rs`, `merkle/x86_64.rs`, `linalg.rs`, `bits.rs`, `scratch.rs`, `permutation.rs` | Hand-tuned arithmetic with no outward relations. Absent from 15.10. |
-| `pcs/ligerito.rs` | `crates/flock-core/src/pcs/ligerito.rs:3068` | 7498 lines. Drawn as one participant in 15.3. Internal types absent from 15.10. |
+| `veil` feature | `.github/workflows/ci.yml`; `Makefile` | CI runs `make test`: `cargo check --all-features` plus two `--features veil` smoke tests. `simulator.rs` in `veil-f128` has no inline tests, and `crates/veil-f128/tests/` does not exist. |
+| `flock-core` numeric kernels | `field/gf2_128.rs`, `field/gf2_8.rs`, `field/phi8.rs`, `field/f128_slice.rs`, `ntt/additive_ntt_f128.rs`, `ntt/parallel_f128.rs`, `ntt/inv_table.rs`, `ntt/inv_table_deg4.rs`, `merkle/aarch64.rs`, `merkle/x86_64.rs`, `linalg.rs`, `bits.rs`, `scratch.rs`, `permutation.rs` | Hand-tuned arithmetic with no outward relations. Absent from 16.10. |
+| `pcs/ligerito.rs` | `crates/flock-core/src/pcs/ligerito.rs:3059` | 7470 lines. Drawn as one participant in 16.3. Internal types absent from 16.10. |
 | `symbolic` feature | `pcs/tensor_algebra.rs`, `pcs/symbolic_opening.rs`, `pcs/zk_audit.rs`; trait `SymScalar` at `crates/flock-core/src/symbolic/scalar.rs:6` | Offline audit and symbolic execution. Not on the prove or verify path. |
-| `flock-prover` primitives with fan-out 0 to 1 | `chain.rs`, `merkle_path.rs`, `digest_bind.rs`, `ligerito_decode.rs`, `sim_ext.rs`, `zk_audit_support.rs`, `zk_rank_check.rs`, `transcript_schema.rs`; `r1cs_hashes/{blake3,sha2,keccak,keccak3,common}.rs` | Absent from 15.12. |
-| `veiled_preimage.rs` | `crates/flock-prover/src/veiled_preimage.rs:347` | Legacy whole-R1CS path, 504 lines. Not dead. Shown only where a name collides with the active path. |
+| `flock-prover` primitives with fan-out 0 to 1 | `chain.rs`, `merkle_path.rs`, `digest_bind.rs`, `ligerito_decode.rs`, `sim_ext.rs`, `zk_audit_support.rs`, `zk_rank_check.rs`, `transcript_schema.rs`; `r1cs_hashes/{blake3,sha2,keccak,keccak3,common}.rs` | Absent from 16.12. |
+| `veiled_preimage.rs` | `crates/flock-prover/src/veiled_preimage.rs:341` | Legacy whole-R1CS path, 498 lines. Not dead. Shown only where a name collides with the active path. |

@@ -1,8 +1,7 @@
 //! Zero-knowledge mode support: the prover-side DRBG that feeds every mask,
 //! and the randomizer-witness block layout shared by the hash encoders.
 //!
-//! Two mask species make Flock's transcript simulatable (see
-//! `docs/zk-leakage.md`):
+//! Two mask species support the randomized witness and hiding commitment:
 //!
 //! 1. **Randomizer witness rows** — extra R1CS rows of the form `u·1 = u`
 //!    (A-type; the row's A entry is a self-loop on a fresh witness column
@@ -12,7 +11,7 @@
 //!    the two, since sumcheck folds merge A- and B-regions — so masking is
 //!    argued conditionally: fix the B-bits, the transcript is affine in the
 //!    A-bits with full image, and mix over the B-bits. With enough bits every
-//!    revealed value is uniform; see `docs/zk-leakage.md` §3.
+//!    revealed value is uniform.
 //!    [`ZkBlockLayout`] describes where they live inside a block; it is part
 //!    of the statement and is bound into `BlockR1cs::statement_digest`.
 //! 2. **PCS masks** — the low-half mask block and the blinder codeword `g` of
@@ -62,7 +61,7 @@ pub struct ZkRng {
 impl ZkRng {
     pub fn from_seed(key: [u8; 32]) -> Self {
         let mut h = blake3::Hasher::new_keyed(&key);
-        h.update(b"flock-zk-drbg-v0");
+        h.update(b"flock-zk-drbg");
         Self {
             key,
             forks: 0,
@@ -84,7 +83,7 @@ impl ZkRng {
     /// parent's own output stream.
     pub fn fork(&mut self, label: &[u8]) -> Self {
         let mut h = blake3::Hasher::new_keyed(&self.key);
-        h.update(b"flock-zk-fork-v0");
+        h.update(b"flock-zk-fork");
         h.update(&self.forks.to_le_bytes());
         h.update(&(label.len() as u64).to_le_bytes());
         h.update(label);
@@ -133,7 +132,7 @@ impl MaskSampler for PlaybackSampler<'_> {
             "PlaybackSampler: odd u64 request"
         );
         let n = out.len() / 2;
-        for (i, chunk) in out.chunks_exact_mut(2).enumerate() {
+        for (i, chunk) in out.as_chunks_mut::<2>().0.iter_mut().enumerate() {
             let v = self.data[self.pos + i];
             chunk[0] = v.lo;
             chunk[1] = v.hi;
@@ -297,7 +296,7 @@ impl ZkBlockLayout {
     /// layout determines which polynomial family the statement quantifies
     /// over, so it is part of the statement).
     pub fn absorb_into(&self, h: &mut blake3::Hasher) {
-        h.update(b"flock-zk-layout-v0");
+        h.update(b"flock-zk-layout");
         h.update(&(self.rand_bit_base as u64).to_le_bytes());
         h.update(&(self.chunks_a as u64).to_le_bytes());
         h.update(&(self.chunks_b as u64).to_le_bytes());

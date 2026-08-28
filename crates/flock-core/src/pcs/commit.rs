@@ -18,6 +18,7 @@ use crate::field::F128;
 use crate::merkle::{self, Hash};
 use crate::ntt::AdditiveNttF128;
 use crate::pcs::pack::LOG_PACKING;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 /// PCS configuration. Polynomial-basis subspace `{1, x, x², …}` for the NTT.
@@ -321,7 +322,6 @@ pub(crate) fn replicate_message_fill_zk(
     g: &[F128],
     num_ntts: usize,
 ) {
-    use rayon::prelude::*;
     debug_assert_eq!(mask.len(), z_packed.len());
     debug_assert_eq!(g.len(), 2 * z_packed.len());
     let wide = 2 * num_ntts;
@@ -352,7 +352,6 @@ pub(crate) fn replicate_message_fill_zk(
 /// `forward_transform_interleaved_from_layer(…, r)`. Every slot of `codeword`
 /// is written (input contents may be stale/uninit).
 pub(crate) fn replicate_message_fill(codeword: &mut [F128], msg: &[F128]) {
-    use rayon::prelude::*;
     let msg_len = msg.len();
     debug_assert!(codeword.len().is_multiple_of(msg_len));
     const COPY_CHUNK: usize = 1 << 16;
@@ -503,6 +502,9 @@ pub fn prefault_codeword_during<R>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ntt::AdditiveNttF128;
+    #[cfg(feature = "zk")]
+    use crate::zk::{MaskSampler, ZkRng};
 
     struct Rng(u64);
     impl Rng {
@@ -537,7 +539,6 @@ mod tests {
     /// interleaving widths.
     #[test]
     fn commit_matches_full_ntt_oracle() {
-        use crate::ntt::AdditiveNttF128;
         let mut rng = Rng::new(0xFEED);
         for (m, log_inv_rate, log_batch_size) in [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3)] {
             let params = PcsParams {
@@ -589,8 +590,6 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn commit_zk_matches_wide_oracle() {
-        use crate::ntt::AdditiveNttF128;
-        use crate::zk::{MaskSampler, ZkRng};
         let mut rng = Rng::new(0xC0FFEE);
         for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
             let params = PcsParams {

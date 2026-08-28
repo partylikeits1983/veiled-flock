@@ -17,8 +17,7 @@ use flock_core::{
 use serde::{Deserialize, Serialize};
 use veil_f128::{
     BlockR1csError, BlockR1csParameters, BlockR1csProof, OracleProgrammer, OracleProgrammingError,
-    PublicEquality, SimulationError, prove_block_r1cs_framed, simulate_block_r1cs,
-    verify_block_r1cs_framed,
+    PublicEquality, SimulationError, prove_block_r1cs, simulate_block_r1cs, verify_block_r1cs,
 };
 
 use crate::r1cs_hashes::{
@@ -30,7 +29,7 @@ use crate::r1cs_hashes::{
 };
 use crate::sim_oracle::{SharedOracle, ro_context};
 
-const TRANSCRIPT_LABEL: &[u8] = b"veiled-flock-blake3-preimage-direct-v1";
+const TRANSCRIPT_LABEL: &[u8] = b"veiled-flock-blake3-preimage-direct";
 
 #[derive(Clone, Debug)]
 pub struct VeiledBlake3Setup {
@@ -41,7 +40,6 @@ pub struct VeiledBlake3Setup {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct VeiledBlake3Proof {
-    pub version: u32,
     pub n_blocks: usize,
     pub r1cs_digest: [u8; 32],
     pub commitment_nonce: [u8; 32],
@@ -138,7 +136,7 @@ impl VeiledBlake3Setup {
             &commitment_nonce,
             digests,
         );
-        let r1cs = prove_block_r1cs_framed(
+        let r1cs = prove_block_r1cs(
             &self.r1cs,
             &z,
             &a,
@@ -150,7 +148,6 @@ impl VeiledBlake3Setup {
             &ro,
         )?;
         Ok(VeiledBlake3Proof {
-            version: 1,
             n_blocks: self.n_blocks,
             r1cs_digest,
             commitment_nonce,
@@ -164,8 +161,7 @@ impl VeiledBlake3Setup {
         digests: &[[u8; DIGEST_BYTES]],
         challenger: &mut C,
     ) -> Result<(), VeiledPreimageError> {
-        if proof.version != 1
-            || proof.n_blocks != self.n_blocks
+        if proof.n_blocks != self.n_blocks
             || proof.r1cs_digest != self.r1cs.statement_digest()
             || proof.r1cs.parameters != self.parameters
             || digests.len() != self.n_blocks
@@ -181,7 +177,7 @@ impl VeiledBlake3Setup {
             digests,
         );
         let ro = RoContext::native(proof.commitment_nonce);
-        verify_block_r1cs_framed(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
+        verify_block_r1cs(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
         Ok(())
     }
 
@@ -220,7 +216,6 @@ impl VeiledBlake3Setup {
             &programmer,
         )?;
         Ok(VeiledBlake3Proof {
-            version: 1,
             n_blocks: self.n_blocks,
             r1cs_digest,
             commitment_nonce,
@@ -238,8 +233,7 @@ impl VeiledBlake3Setup {
         challenger: &mut C,
         oracle: SharedOracle,
     ) -> Result<(), VeiledPreimageError> {
-        if proof.version != 1
-            || proof.n_blocks != self.n_blocks
+        if proof.n_blocks != self.n_blocks
             || proof.r1cs_digest != self.r1cs.statement_digest()
             || proof.r1cs.parameters != self.parameters
             || digests.len() != self.n_blocks
@@ -255,7 +249,7 @@ impl VeiledBlake3Setup {
             digests,
         );
         let ro = ro_context(proof.commitment_nonce, oracle);
-        verify_block_r1cs_framed(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
+        verify_block_r1cs(&self.r1cs, &public, &proof.r1cs, challenger, &ro)?;
         Ok(())
     }
 }

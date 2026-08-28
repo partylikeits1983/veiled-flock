@@ -9,9 +9,9 @@
 //! behind it.
 //!
 //! A [`ZkCertificate`] binds every input the certificate's validity depends
-//! on: protocol version, circuit digest, zk layout digest, transcript schema
-//! version, field representation, fold order, endianness, PCS parameters,
-//! batch size, generator revision, plus the list of evidence tests that
+//! on: protocol identifier, circuit digest, zk layout digest, field
+//! representation, fold order, endianness, PCS parameters, batch size,
+//! generator identifier, plus the list of evidence tests that
 //! produced it. [`require_certified`] is called by the gated prove entry
 //! points; it returns an error (never a silent pass) when no certificate
 //! matches.
@@ -23,17 +23,14 @@
 use flock_core::pcs::PcsParams;
 use flock_core::r1cs::BlockR1cs;
 
-/// Wire/protocol version of the reference construction. Bumped for A2 (the
-/// lincheck mask channel): the wire format gained `comm_s`, `open_s`,
-/// `sigma_lc` and `s_eval`, and the lincheck transcript changed meaning, so
-/// an A1′-only certificate must not certify this protocol.
-pub const PROTOCOL_VERSION: &str = "flock-zk-fv-v3";
+/// Stable protocol identifier bound by every certificate.
+pub const PROTOCOL_ID: &str = "flock-zk-fv";
 
 /// Field representation the certificates were computed over.
 pub const FIELD_REPR: &str = "gf2_128_ghash";
 
 /// Fold order / univariate-skip convention the certificates assume.
-pub const FOLD_ORDER: &str = "uniskip6-lsb-first-v0";
+pub const FOLD_ORDER: &str = "uniskip6-lsb-first";
 
 /// Byte/bit order of the packed witness the certificates assume.
 pub const ENDIANNESS: &str = "le-lsb-first";
@@ -50,23 +47,20 @@ pub enum StatementFamily {
 /// A checked certificate for one exact configuration.
 #[derive(Clone, Debug)]
 pub struct ZkCertificate {
-    pub protocol_version: &'static str,
+    pub protocol_id: &'static str,
     pub family: StatementFamily,
     /// Number of BLAKE3 compressions in the batch.
     pub batch_size: usize,
     /// `r1cs.statement_digest()` — binds the matrices, shape, and zk layout.
     pub circuit_digest: [u8; 32],
-    /// Transcript schema version the coordinate classification was made at.
-    pub transcript_schema_version: u32,
     pub field_repr: &'static str,
     pub fold_order: &'static str,
     pub endianness: &'static str,
     pub pcs_m: usize,
     pub pcs_log_inv_rate: usize,
     pub pcs_log_batch_size: usize,
-    /// Certificate-generator revision (bump when the probing methodology or
-    /// the certified predicate changes).
-    pub generator_rev: &'static str,
+    /// Identifier of the certificate generator and certified predicate.
+    pub generator_id: &'static str,
     /// Tests that constitute this certificate's evidence. Must be exactly
     /// the set of tests `scripts/zk-certify.sh` runs — asserted in both
     /// directions by `zk_certificate_evidence_matches_script`, by exact name
@@ -117,7 +111,7 @@ impl std::error::Error for ZkGateError {}
 /// set of tests `scripts/zk-certify.sh` runs, in script order — asserted in
 /// both directions by `zk_certificate_evidence_matches_script`.
 #[allow(dead_code)]
-const EVIDENCE_V1: &[&str] = &[
+const EVIDENCE: &[&str] = &[
     "native_tree_hasher_matches_one_shot_reference",
     "external_backend_reproduces_native_digests_and_records",
     "tree_root_separates_nonce_channel_depth_level_index",
@@ -138,7 +132,7 @@ const EVIDENCE_V1: &[&str] = &[
     "game_hops_are_complete_and_ordered",
     "production_ledger_exposes_recursive_sibling_gate_at_q64",
     "recorded_leaf_queries_reconstruct_committed_message",
-    "prefix_diverges_on_statement_nonce_and_version_tuple",
+    "prefix_diverges_on_statement_nonce_and_protocol_tuple",
     "simulated_prefix_is_rejected_and_fresh_prefix_reaches_extractor",
     "field_mask_spans_conditioned_round_block_for_fixed_digest",
     "undersized_mask_does_not_span_the_round_block",
@@ -157,42 +151,40 @@ const EVIDENCE_V1: &[&str] = &[
 /// `scripts/zk-certify.sh` run and binds each exact circuit digest.
 pub const CERTIFIED: &[ZkCertificate] = &[
     ZkCertificate {
-        protocol_version: PROTOCOL_VERSION,
+        protocol_id: PROTOCOL_ID,
         family: StatementFamily::Blake3Batch,
         batch_size: 256,
         circuit_digest: [
-            0x4a, 0x39, 0x8c, 0xa2, 0xe7, 0x3d, 0x9d, 0x1f, 0x70, 0x61, 0x1b, 0xd6, 0xa2, 0xa4,
-            0x08, 0xb0, 0x40, 0x4a, 0xab, 0xdd, 0xcf, 0x6c, 0xf7, 0x5c, 0x29, 0xcf, 0xa4, 0x12,
-            0xf7, 0x2f, 0x84, 0x23,
+            0xc4, 0x6a, 0x68, 0x63, 0x2b, 0xd4, 0x23, 0x19, 0x26, 0x37, 0x21, 0x6b, 0xdd, 0x8d,
+            0x61, 0xe2, 0x95, 0x6a, 0xaf, 0xa0, 0x03, 0x04, 0xfe, 0x30, 0x80, 0x8d, 0xf2, 0xe8,
+            0x34, 0xe7, 0x82, 0x3f,
         ],
-        transcript_schema_version: crate::transcript_schema::A1_SCHEMA_VERSION,
         field_repr: FIELD_REPR,
         fold_order: FOLD_ORDER,
         endianness: ENDIANNESS,
         pcs_m: 22,
         pcs_log_inv_rate: 1,
         pcs_log_batch_size: 6,
-        generator_rev: "symbolic-fv-ro-v1",
-        evidence: EVIDENCE_V1,
+        generator_id: "symbolic-fv-ro",
+        evidence: EVIDENCE,
     },
     ZkCertificate {
-        protocol_version: PROTOCOL_VERSION,
+        protocol_id: PROTOCOL_ID,
         family: StatementFamily::Blake3Preimage,
         batch_size: 256,
         circuit_digest: [
-            0xe7, 0x1b, 0xde, 0x2b, 0x05, 0x3b, 0x1b, 0x69, 0x74, 0x12, 0xd2, 0xd3, 0x0c, 0x2e,
-            0x2e, 0x57, 0xf7, 0xb5, 0xf1, 0x82, 0x24, 0x84, 0xfc, 0xbc, 0xc1, 0x5c, 0x89, 0xea,
-            0x20, 0x28, 0x90, 0xd5,
+            0x33, 0xcb, 0x2a, 0x40, 0x4f, 0x1b, 0x19, 0x77, 0x5e, 0x0c, 0x38, 0x11, 0x89, 0xd1,
+            0x4e, 0xc9, 0x0d, 0x00, 0xf9, 0xcd, 0x75, 0xa9, 0x68, 0x5d, 0x1f, 0xc0, 0x1c, 0x6b,
+            0x72, 0x58, 0x2d, 0x4f,
         ],
-        transcript_schema_version: crate::transcript_schema::A1_SCHEMA_VERSION,
         field_repr: FIELD_REPR,
         fold_order: FOLD_ORDER,
         endianness: ENDIANNESS,
         pcs_m: 22,
         pcs_log_inv_rate: 1,
         pcs_log_batch_size: 6,
-        generator_rev: "symbolic-fv-ro-v1",
-        evidence: EVIDENCE_V1,
+        generator_id: "symbolic-fv-ro",
+        evidence: EVIDENCE,
     },
 ];
 
@@ -209,8 +201,7 @@ fn find_shape(
             && c.pcs_m == params.m
             && c.pcs_log_inv_rate == params.log_inv_rate
             && c.pcs_log_batch_size == params.log_batch_size
-            && c.protocol_version == PROTOCOL_VERSION
-            && c.transcript_schema_version == crate::transcript_schema::A1_SCHEMA_VERSION
+            && c.protocol_id == PROTOCOL_ID
             && c.field_repr == FIELD_REPR
             && c.fold_order == FOLD_ORDER
             && c.endianness == ENDIANNESS

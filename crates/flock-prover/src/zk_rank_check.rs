@@ -145,10 +145,7 @@ mod tests {
 
     #[test]
     fn undersized_latent_support_fails() {
-        let spec = SmallMaskSpec {
-            d_log: 1,
-            ..SmallMaskSpec::default()
-        };
+        let spec = SmallMaskSpec { d_log: 1 };
         let failed = check_mask_coverage_fv(spec, 22, 0)
             .expect_err("one latent bit cannot cover 32 round coordinates");
         assert!(!failed.report.covered());

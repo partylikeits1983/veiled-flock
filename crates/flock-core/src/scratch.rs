@@ -18,6 +18,7 @@
 //! e.g. after the last prove of a batch.
 
 use crate::field::F128;
+use rayon::prelude::*;
 use std::sync::Mutex;
 
 static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
@@ -107,7 +108,6 @@ pub fn give_f128(v: Vec<F128>) {
 /// b_combined → 11 buffers. ~1.1 GB resident at m = 29; release with
 /// [`clear`].
 pub fn prewarm_prover(m: usize) {
-    use rayon::prelude::*;
     if m < 7 {
         return;
     }

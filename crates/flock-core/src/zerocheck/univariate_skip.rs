@@ -20,6 +20,7 @@
 
 use crate::field::{F8, F128, mul_by_x, phi8};
 use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
+use rayon::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -140,7 +141,6 @@ pub fn round1_naive(
 
 /// Pack a bit vector LSB-first into bytes.
 pub fn pack_bits(bits: &[bool]) -> Vec<u8> {
-    use rayon::prelude::*;
     let n_bytes = bits.len().div_ceil(8);
     let mut out = vec![0u8; n_bytes];
     // Each output byte depends on 8 contiguous input bits — disjoint, so
@@ -544,6 +544,8 @@ pub fn round1_evals_on_s(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::pcs::pack::pack_witness;
+    use crate::pcs::ring_switch::fold_1b_rows_naive;
 
     struct Rng(u64);
     impl Rng {
@@ -776,8 +778,6 @@ mod tests {
     /// suffix `r[k_skip + 1 ..]` (everything past `prefix0 = r[k_skip]`).
     #[test]
     fn extract_c_with_s_hat_v_matches_fold_1b_rows() {
-        use crate::pcs::pack::pack_witness;
-        use crate::pcs::ring_switch::fold_1b_rows_naive;
         // K_SKIP = 6 is the production setup (LOG_PACKING = 7, so 2 · 2^K_SKIP
         // = 128 matches s_hat_v's length). The kernel needs m >= K_SKIP + 1 =
         // 7 for pack_witness, plus the SplitEqGhash's n_lo + n_hi machinery
