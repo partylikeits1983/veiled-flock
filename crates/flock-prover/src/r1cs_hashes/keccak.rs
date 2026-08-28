@@ -1675,9 +1675,9 @@ mod tests {
         let setup = KeccakSetup::new(64);
         let mut rng = Rng::new(0x21111_2170);
         let inputs: Vec<State> = (0..64).map(|_| random_state(&mut rng)).collect();
-        let mut ch_p = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-keccak");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-keccak");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("prove_fast: verifier rejected: {e:?}"));
@@ -1721,9 +1721,9 @@ mod tests {
         let setup = KeccakSetup::new_batch_major(64);
         let mut rng = Rng::new(0xBA7C_2170);
         let inputs: Vec<State> = (0..64).map(|_| random_state(&mut rng)).collect();
-        let mut ch_p = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-keccak");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-keccak-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-keccak");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("batch-major Ligerito verifier rejected: {e:?}"));

@@ -216,12 +216,12 @@ The transcript order is:
 
 1. absorb the public digest statement;
 2. bind the witness commitment, proof nonce, circuit, and PCS shape;
-3. absorb the VEIL mask commitment under `veil-flock-mask-root-v0`;
+3. absorb the VEIL mask commitment under `veil-flock-mask-root`;
 4. process the masked zerocheck transcript;
 5. process the masked lincheck transcript;
-6. absorb AB and C values under `veil-flock-output-claims-v0`;
+6. absorb AB and C values under `veil-flock-output-claims`;
 7. derive the public digest claim;
-8. fork the transcript under `veil-flock-inner-fork-v0`;
+8. fork the transcript under `veil-flock-inner-fork`;
 9. verify the hiding PCS opening on the original branch; and
 10. verify the VEIL constraint proof on the fork.
 
@@ -248,7 +248,7 @@ VEIL constraint proof
 The bundle MUST NOT contain messages, raw FLOCK witness data, unmasked PIOP
 messages, the mask vector, or VEIL private padding values.
 
-The CLI transcript domain is `veiled-flock-cli-succinct-v0`. Decoding MUST be
+The CLI transcript domain is `veiled-flock-cli-succinct`. Decoding MUST be
 canonical and MUST reject trailing data.
 
 ## 12. Verification

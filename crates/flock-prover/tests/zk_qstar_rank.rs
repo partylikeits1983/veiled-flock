@@ -1,7 +1,7 @@
 use flock_core::field::F128;
 use flock_core::linalg::F128Span;
 use flock_core::zerocheck::{
-    K_SKIP, QStarKind, SmallMaskSpec, mask_functional_matrix_fv,
+    K_SKIP, SmallMaskSpec, mask_functional_matrix_fv,
     multilinear::{fold_in_place_pair, round_pair_naive},
     univariate_skip::build_eq,
 };
@@ -92,10 +92,7 @@ fn qstar_functional_matrix_matches_dense_schedule() {
 
 #[test]
 fn affine_linear_qstar_has_full_conditioned_rank_across_certified_shapes() {
-    let spec = SmallMaskSpec {
-        d_log: 12,
-        q_star: QStarKind::AffineLinearV1,
-    };
+    let spec = SmallMaskSpec { d_log: 12 };
     for m in [13usize, 15, 22] {
         let n = m - K_SKIP;
         assert!(

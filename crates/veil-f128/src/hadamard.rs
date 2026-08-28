@@ -152,7 +152,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
     let code = code_for(parameters)?;
     let root = commitment.root();
 
-    challenger.observe_label(b"veil-f128-hadamard-v1");
+    challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&root);
     let evaluation_point = challenger.sample_f128();
     let product_mask_reduced = code.square_to_base(&product_mask_intermediate)?;
@@ -235,7 +235,7 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
     }
     let code = code_for(parameters)?;
 
-    challenger.observe_label(b"veil-f128-hadamard-v1");
+    challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&proof.commitment);
     let evaluation_point = challenger.sample_f128();
     challenger.observe_f128(proof.gamma);

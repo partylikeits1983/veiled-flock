@@ -12,7 +12,7 @@ use flock_prover::{
 };
 use serde::{Deserialize, Serialize};
 
-const DOMAIN: &[u8] = b"veiled-flock-cli-succinct-v0";
+const DOMAIN: &[u8] = b"veiled-flock-cli-succinct";
 const MAX_MESSAGES: usize = 256;
 // Bound file reads and decoder allocation for untrusted proof bundles.
 const MAX_BUNDLE_BYTES: u64 = 640 * 1024;

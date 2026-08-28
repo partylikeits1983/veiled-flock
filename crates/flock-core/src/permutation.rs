@@ -72,7 +72,7 @@ use crate::pcs::{
 use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::univariate_skip::{SplitEqGhash, build_eq};
 
-const DOMAIN: &[u8] = b"flock-perm-v0";
+const DOMAIN: &[u8] = b"flock-perm";
 
 // ---------------------------------------------------------------------------
 // Proof / claim / error types

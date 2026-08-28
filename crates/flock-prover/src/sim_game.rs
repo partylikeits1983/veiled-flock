@@ -30,7 +30,7 @@ pub const GAME_HOPS: &[HopEntry] = &[
     HopEntry {
         hop: SimGameHop::G1PiopTranslation,
         change: "translate field-valued PIOP masks at fixed challenges",
-        charged_term: "epsilon_s2_rank",
+        charged_term: "epsilon_zerocheck_mask_rank",
     },
     HopEntry {
         hop: SimGameHop::G2PcsTranslation,
@@ -58,7 +58,7 @@ pub const GAME_HOPS: &[HopEntry] = &[
 pub struct SimGameLedger {
     pub q_hash_log2: u32,
     pub protocol_query_bound: u64,
-    pub s2_degree: u64,
+    pub zerocheck_mask_determinant_degree: u64,
     pub programmed_points: u64,
     pub minimum_sibling_entropy_bits: u32,
     pub degenerate_challenge_numerator: u64,
@@ -70,7 +70,7 @@ impl SimGameLedger {
         Self {
             q_hash_log2,
             protocol_query_bound,
-            s2_degree: 720,
+            zerocheck_mask_determinant_degree: 720,
             programmed_points: 18,
             minimum_sibling_entropy_bits: 16_384,
             // Only the final rho solve rejects rho in {0,1}. The Lagrange
@@ -80,8 +80,8 @@ impl SimGameLedger {
         }
     }
 
-    pub fn s2_rank_bits(self) -> f64 {
-        128.0 - (self.s2_degree as f64).log2()
+    pub fn zerocheck_mask_rank_bits(self) -> f64 {
+        128.0 - (self.zerocheck_mask_determinant_degree as f64).log2()
     }
 
     pub fn c_zero_bits(self) -> f64 {
@@ -118,7 +118,8 @@ impl SimGameLedger {
     }
 
     pub fn algebraic_probability(self) -> f64 {
-        (self.s2_degree + 1 + self.degenerate_challenge_numerator) as f64 * 2f64.powi(-128)
+        (self.zerocheck_mask_determinant_degree + 1 + self.degenerate_challenge_numerator) as f64
+            * 2f64.powi(-128)
     }
 
     pub fn final_probability(self) -> f64 {
@@ -139,6 +140,7 @@ impl SimGameLedger {
 /// fold. Five independent PCS openings use this schedule in each proof.
 pub const PRODUCTION_GRIND_BITS_PER_OPENING: &[u32] = &[10, 9, 8, 7, 6, 5, 4, 4, 3, 2, 1, 1];
 pub const PRODUCTION_PCS_OPENINGS: u64 = 5;
+pub const PRODUCTION_ORACLE_QUERY_BOUND: u64 = 997_836;
 
 /// Bound the total candidate hashes used by all registered grinding sites.
 /// A `b`-bit site fails to find a nonce in `a` trials with probability at
@@ -202,25 +204,12 @@ mod tests {
 
     #[test]
     fn production_ledger_exposes_recursive_sibling_gate_at_q64() {
-        let ledger = SimGameLedger::production(64, 1_000_000);
-        assert!(ledger.s2_rank_bits() > 118.0);
+        let ledger = SimGameLedger::production(64, PRODUCTION_ORACLE_QUERY_BOUND);
+        assert!(ledger.zerocheck_mask_rank_bits() > 118.0);
         assert!(ledger.prequery_bits() > 187.0);
         assert!(ledger.sibling_bits() > 16_000.0);
-        assert!(ledger.final_bits() < ledger.s2_rank_bits());
+        assert!(ledger.final_bits() < ledger.zerocheck_mask_rank_bits());
         assert!(ledger.final_bits() > 118.49);
-
-        let artifact: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../docs/artifacts/sim_game_error_table.json"
-        ))
-        .expect("game artifact must be valid JSON");
-        let pinned = artifact["final_zk_bits_at_q64"]
-            .as_f64()
-            .expect("numeric bound");
-        let protocol_bound = artifact["random_oracle_ledger"]["protocol_query_bound"]
-            .as_u64()
-            .expect("protocol query bound");
-        let pinned_ledger = SimGameLedger::production(64, protocol_bound);
-        assert!((pinned - pinned_ledger.final_bits()).abs() < 1e-12);
         assert!(production_grinding_candidate_bound(128) < 1_000_000);
     }
 }

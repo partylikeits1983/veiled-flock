@@ -49,7 +49,7 @@ run flock-core --lib merkle::tests::tree_root_separates_nonce_channel_depth_leve
 run flock-core --lib merkle::tests::external_framed_tree_matches_native_and_records_every_node
 run flock-core --lib merkle::tests::framed_midstate_simd_matches_scalar_all_tail_shapes
 
-# Generic symbolic kernels, exact S2 coverage, and the S3 opening translator.
+# Generic symbolic kernels, exact zerocheck mask coverage, and the PCS opening translator.
 run flock-core symbolic_kernels concrete_symbolic_kernels_match_native_references
 run flock-core symbolic_kernels toy_exact_polynomials_match_evaluation_and_degree_semantics
 run flock-core symbolic_kernels challenge_dependent_inversion_is_not_part_of_sym_scalar
@@ -69,7 +69,7 @@ run flock-prover --lib sim_oracle::tests::oracle_pow_state_digest_is_an_oracle_q
 run flock-prover --lib sim_game::tests::game_hops_are_complete_and_ordered
 run flock-prover --lib sim_game::tests::production_ledger_exposes_recursive_sibling_gate_at_q64
 run flock-prover --lib preimage_extractor::tests::recorded_leaf_queries_reconstruct_committed_message
-run flock-prover --lib sim_ext::tests::prefix_diverges_on_statement_nonce_and_version_tuple
+run flock-prover --lib sim_ext::tests::prefix_diverges_on_statement_nonce_and_protocol_tuple
 run flock-prover --lib sim_ext::tests::simulated_prefix_is_rejected_and_fresh_prefix_reaches_extractor
 
 # Fixed-digest production relation: non-vacuous rank, public binding,
@@ -81,11 +81,11 @@ run flock-prover preimage_zk_certificate fixed_digest_circuit_is_not_the_batch_c
 run flock-prover preimage_zk_certificate extractor_recovers_the_preimages_from_an_honest_commitment
 run flock-prover preimage_zk_certificate extraction_fails_on_the_simulators_commitment
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::simulator_produces_an_accepting_proof_without_any_preimage
-run flock-prover --lib r1cs_hashes::blake3_preimage::tests::production_random_oracle_ledger_matches_artifact
+run flock-prover --lib r1cs_hashes::blake3_preimage::tests::production_random_oracle_counts_match_registered_bounds
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::honest_prover_on_the_patched_vector_is_rejected
 run flock-prover --lib r1cs_hashes::blake3_preimage::tests::zk_preimage_roundtrip
 
-# Registered batch profile remains live under the same protocol version.
+# Registered batch profile remains live under the same protocol identifier.
 run flock-prover --lib r1cs_hashes::blake3::tests::prove_verify_r1cs_zk_a1_roundtrip
 
 # Machine-checked bound adapters and the dual-column knowledge ledger.

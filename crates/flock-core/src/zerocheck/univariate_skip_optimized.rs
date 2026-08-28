@@ -933,8 +933,8 @@ mod tests {
     /// zerocheck `(r, v)` claim as an OOD-equivalent) also depends on it
     /// — see the soundness writeup. If any subset of these seven values is
     /// F₂-dependent, the SZ bound `(m−7)/|F|` for collisions between
-    /// distinct candidate codewords' MLEs at `r` no longer holds, and a
-    /// cheating prover could engineer their witness so two candidates'
+    /// distinct codewords' MLEs at `r` no longer holds, and a cheating prover
+    /// could engineer their witness so two decoded words'
     /// MLEs agree at the friendly point with probability 1.
     ///
     /// The check: form the 7×128 binary matrix whose rows are the bit

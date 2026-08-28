@@ -1,7 +1,7 @@
 //! LEGACY P/Q regression fixture. The active certificate is the symbolic
 //! field-valued coverage and PCS translator suite; this file is retained only
 //! to detect drift in the historical audit vehicle and is not certification
-//! evidence for protocol `flock-zk-fv-v3`.
+//! evidence for protocol `flock-zk-fv`.
 //!
 //! **The joint full-transcript coverage certificate** for the A1′ reference
 //! prover (Workstreams D + E).

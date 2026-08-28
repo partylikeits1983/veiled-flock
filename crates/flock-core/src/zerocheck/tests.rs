@@ -9,9 +9,9 @@ mod helpers;
 
 use helpers::{Rng, ScriptedEqChallenger};
 
-const TEST_DOMAIN: &[u8] = b"flock-zerocheck-test-v0";
-const ZK_TEST_DOMAIN: &[u8] = b"flock-zerocheck-zk-test-v0";
-const ORDERING_TEST_DOMAIN: &[u8] = b"flock-zerocheck-ordering-test-v0";
+const TEST_DOMAIN: &[u8] = b"flock-zerocheck-test";
+const ZK_TEST_DOMAIN: &[u8] = b"flock-zerocheck-zk-test";
+const ORDERING_TEST_DOMAIN: &[u8] = b"flock-zerocheck-ordering-test";
 
 #[test]
 fn equality_point_rejects_noninvertible_outer_coordinates() {

@@ -2389,9 +2389,9 @@ mod tests {
             })
             .collect();
 
-        let mut ch_p = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch_p = FsChallenger::new(b"flock-lig-batch-major");
         let (proof, commitment, claim_p) = setup.prove_fast(&inputs, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch_v = FsChallenger::new(b"flock-lig-batch-major");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("batch-major verifier rejected: {e:?}"));
@@ -2399,7 +2399,7 @@ mod tests {
 
         let mut bad = proof.clone();
         bad.zerocheck.final_a_eval.lo ^= 1;
-        let mut ch = FsChallenger::new(b"flock-lig-batch-major-v0");
+        let mut ch = FsChallenger::new(b"flock-lig-batch-major");
         assert!(
             setup.verify(&commitment, &bad, &mut ch).is_err(),
             "tampered batch-major proof accepted"
@@ -2684,9 +2684,9 @@ mod tests {
                 (cv, m, 0u64, 64u32, 11u32)
             })
             .collect();
-        let mut ch_p = FsChallenger::new(b"flock-blake3-lig-v0");
+        let mut ch_p = FsChallenger::new(b"flock-blake3-lig");
         let (proof, commitment, claim_p) = setup.prove_fast(&blocks, &mut ch_p);
-        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-v0");
+        let mut ch_v = FsChallenger::new(b"flock-blake3-lig");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("ligerito verify rejected: {e:?}"));
@@ -2739,11 +2739,11 @@ mod tests {
 
         let prove_seeded = |seed: [u8; 32]| {
             let mut zk_rng = flock_core::zk::ZkRng::from_seed(seed);
-            let mut ch_p = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+            let mut ch_p = FsChallenger::new(b"flock-blake3-lig-zk");
             setup.prove_fast_zk_with_rng(&blocks, &mut zk_rng, &mut ch_p)
         };
         let (proof, commitment, claim_p) = prove_seeded([1u8; 32]);
-        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+        let mut ch_v = FsChallenger::new(b"flock-blake3-lig-zk");
         let claim_v = setup
             .verify(&commitment, &proof, &mut ch_v)
             .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
@@ -2752,7 +2752,7 @@ mod tests {
 
         // Fresh seed ⇒ fresh commitment root and different masked values, still verifies.
         let (proof2, commitment2, _) = prove_seeded([2u8; 32]);
-        let mut ch_v2 = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+        let mut ch_v2 = FsChallenger::new(b"flock-blake3-lig-zk");
         setup
             .verify(&commitment2, &proof2, &mut ch_v2)
             .expect("fresh-seed zk proof must verify");
@@ -2774,7 +2774,7 @@ mod tests {
                 1 => bad.zerocheck.final_a_eval.lo ^= 1,
                 _ => bad.pcs_open.zk_blind.as_mut().unwrap().y_g.lo ^= 1,
             }
-            let mut ch = FsChallenger::new(b"flock-blake3-lig-zk-v0");
+            let mut ch = FsChallenger::new(b"flock-blake3-lig-zk");
             assert!(
                 setup.verify(&commitment, &bad, &mut ch).is_err(),
                 "tamper {tamper} must be rejected"
@@ -2825,7 +2825,7 @@ mod tests {
                     &rand_words,
                 );
             let mut zk_rng = flock_core::zk::ZkRng::from_seed(seed);
-            let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
+            let mut ch = FsChallenger::new(b"flock-a1-e2e");
             crate::prover::prove_r1cs_zk_a1(
                 &setup.r1cs,
                 &setup.pcs_params,
@@ -2840,7 +2840,7 @@ mod tests {
         };
 
         let (proof, comm) = prove([1u8; 32]);
-        let mut chv = FsChallenger::new(b"flock-a1-e2e-v0");
+        let mut chv = FsChallenger::new(b"flock-a1-e2e");
         crate::prover::verify_r1cs_zk_a1(
             &setup.r1cs,
             &setup.pcs_params,
@@ -2853,7 +2853,7 @@ mod tests {
 
         // Fresh masks ⇒ different transcript, still verifies.
         let (proof2, comm2) = prove([2u8; 32]);
-        let mut chv2 = FsChallenger::new(b"flock-a1-e2e-v0");
+        let mut chv2 = FsChallenger::new(b"flock-a1-e2e");
         crate::prover::verify_r1cs_zk_a1(
             &setup.r1cs,
             &setup.pcs_params,
@@ -2882,7 +2882,7 @@ mod tests {
                 2 => bad.zerocheck.multilinear_rounds[2].1.lo ^= 1,
                 _ => bad.proof_nonce[0] ^= 1,
             }
-            let mut ch = FsChallenger::new(b"flock-a1-e2e-v0");
+            let mut ch = FsChallenger::new(b"flock-a1-e2e");
             assert!(
                 crate::prover::verify_r1cs_zk_a1(
                     &setup.r1cs,

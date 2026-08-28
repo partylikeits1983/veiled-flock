@@ -107,7 +107,7 @@ fn a1_schema_manifest_and_bijectivity() {
     //    the constant (printed below).
     let h = schema_hash(&flat);
     let hex: String = h.iter().map(|b| format!("{b:02x}")).collect();
-    const PINNED_M15: &str = "364b775016ee4ab4df278b34ba1b0c2db409f83aaddb8e06f5ac4f6cd38e4e32";
+    const PINNED_M15: &str = "36e8802ecff2d8410c9a6f36a71725a7214df87d0ee9f5fb853536d0a9b07315";
     assert_eq!(
         hex, PINNED_M15,
         "schema hash changed for the m=15 fixture shape"

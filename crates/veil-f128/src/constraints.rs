@@ -509,7 +509,7 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
     } = commitment;
     let linear_root = linear_data.root();
     let mut constraints = padded.linear_constraints.clone();
-    challenger.observe_label(b"veil-f128-constraint-system-v0");
+    challenger.observe_label(b"veil-f128-constraint-system");
     challenger.observe_bytes(&linear_root);
 
     // The padded circuit always has the two masking products, even when the
@@ -590,7 +590,7 @@ pub fn verify_constraints<C: Challenger>(
     }
 
     let mut constraints = padded.linear_constraints.clone();
-    challenger.observe_label(b"veil-f128-constraint-system-v0");
+    challenger.observe_label(b"veil-f128-constraint-system");
     challenger.observe_bytes(&proof.linear.commitment);
     challenger.observe_bytes(&proof.hadamard.commitment);
     let multiplication_rlc = sample_not_zero_or_one(challenger);

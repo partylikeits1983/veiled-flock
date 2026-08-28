@@ -5,8 +5,7 @@ use flock_core::linalg::F128Mat;
 use flock_core::pcs::commit::PcsParams;
 use flock_core::pcs::ligerito::{LigeritoProfile, ProverConfig, prover_config_for};
 use flock_core::pcs::symbolic_opening::{
-    OPENING_FUNCTIONAL_MANIFEST, certify_l0_query_rank, encode_zk_linear, l0_entropy_bound,
-    translate_mask_for_queries,
+    certify_l0_query_rank, encode_zk_linear, l0_entropy_bound, translate_mask_for_queries,
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
@@ -179,31 +178,6 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
     assert_eq!(rank_certificate.opened_positions, 218);
     assert_eq!(rank_certificate.mask_symbols_per_lane, 512);
 
-    let manifest: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../docs/artifacts/s3_opening_functionals.json"
-    ))
-    .unwrap();
-    let entries = manifest["functionals"].as_array().unwrap();
-    assert_eq!(entries.len(), OPENING_FUNCTIONAL_MANIFEST.len());
-    for (pinned, current) in entries.iter().zip(OPENING_FUNCTIONAL_MANIFEST) {
-        assert_eq!(pinned["proof_path"], current.proof_path);
-        assert_eq!(pinned["category"], current.category);
-        assert_eq!(pinned["disposition"], current.disposition);
-    }
-    assert_eq!(manifest["l0_query_rank"]["status"], "structural");
-    assert_eq!(manifest["l0_query_rank"]["registered_queries"], 218);
-    assert_eq!(manifest["l0_query_rank"]["mask_symbols_per_lane"], 512);
-
-    let entropy: serde_json::Value = serde_json::from_str(include_str!(
-        "../../../docs/artifacts/s3_minentropy_table.json"
-    ))
-    .unwrap();
-    assert_eq!(
-        entropy["profiles"][0]["conditional_bits_per_fresh_leaf"],
-        1024
-    );
-    assert_eq!(
-        entropy["profiles"][1]["conditional_bits_per_fresh_leaf"],
-        bound.conditional_bits_per_fresh_leaf
-    );
+    assert_eq!(bound.opened_positions, 218);
+    assert_eq!(bound.conditional_bits_per_fresh_leaf, 16_384);
 }

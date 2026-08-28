@@ -43,78 +43,8 @@ pub struct L0QueryRankCertificate {
     pub mask_symbols_per_lane: usize,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct OpeningFunctionalEntry {
-    pub proof_path: &'static str,
-    pub category: &'static str,
-    pub disposition: &'static str,
-}
-
-pub const OPENING_FUNCTIONAL_MANIFEST: &[OpeningFunctionalEntry] = &[
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.initial_proof.opened_rows",
-        category: "l0_opened_rows",
-        disposition: "translated_exactly",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.recursive_proofs[*].opened_rows",
-        category: "recursive_opened_rows",
-        disposition: "determined_by_invariant_F",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.final_proof.{yr,opened_rows}",
-        category: "final_values",
-        disposition: "determined_by_invariant_F",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.sumcheck_transcript",
-        category: "sumcheck_messages",
-        disposition: "determined_by_invariant_F",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.ood_values",
-        category: "ood_values",
-        disposition: "determined_by_invariant_F",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "zk_blind.y_g",
-        category: "blinder_claim",
-        disposition: "invariant_for_claim_kernel_delta",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ring_switches[*].s_hat_v",
-        category: "ring_switch_values",
-        disposition: "piop_layer_claim_coordinate",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.{initial_root,recursive_roots}",
-        category: "merkle_roots",
-        disposition: "random_oracle_boundary",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.*_proof.merkle_proof",
-        category: "merkle_siblings",
-        disposition: "conditional_entropy_boundary",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "ligerito.{grinding_nonces,fold_grinding_nonces};zk_blind.c_grind_nonce",
-        category: "grinding_nonces",
-        disposition: "regrind_on_invariant_prefix",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "verifier_recomputed",
-        category: "derived_values",
-        disposition: "functions_of_classified_inputs",
-    },
-    OpeningFunctionalEntry {
-        proof_path: "code_membership",
-        category: "code_parity",
-        disposition: "covered_by_exact_encode_matrix",
-    },
-];
-
 /// Exhaustive destructuring makes proof-schema additions fail compilation
-/// until the functional manifest is updated.
+/// until their replacement behavior is reviewed here.
 pub fn assert_proof_fields_classified(proof: &BatchOpeningProofLigerito) {
     let BatchOpeningProofLigerito {
         ring_switches,

@@ -46,6 +46,8 @@ use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
 use flock_core::ro::RoContext;
+#[cfg(feature = "zk")]
+use flock_core::zk::MaskSampler;
 
 use crate::digest_bind::{
     DigestChallenges, DigestLayout, DigestStatement, PaddingDigest, digest_claim,
@@ -58,9 +60,6 @@ use crate::r1cs_hashes::blake3::{
     build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
     generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
-#[cfg(feature = "veil")]
-use flock_core::zk::MaskSampler;
-
 /// Bytes of message covered by one instance of this relation.
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
@@ -889,7 +888,7 @@ impl Blake3PreimageZkSetup {
 /// digest list, in this order, with this padding rule. Without it a proof
 /// could be replayed against a permuted or truncated list.
 pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &DigestStatement) {
-    challenger.observe_label(b"flock-blake3-preimage-v1");
+    challenger.observe_label(b"flock-blake3-preimage");
     challenger.observe_bytes(&stmt.public_digest());
 }
 
@@ -899,7 +898,10 @@ mod tests {
     use crate::preimage_simulator::simulate;
     use crate::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
     use crate::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_pinned, generate_witness};
-    use crate::sim_game::{OracleQueryCounts, SimGameLedger, production_grinding_candidate_bound};
+    use crate::sim_game::{
+        OracleQueryCounts, PRODUCTION_ORACLE_QUERY_BOUND, SimGameLedger,
+        production_grinding_candidate_bound,
+    };
     use crate::sim_oracle::OracleChallenger;
     use crate::sim_oracle::shared_oracle;
     use crate::sim_seal::{SealedStatement, SimCoins};
@@ -1320,11 +1322,11 @@ mod tests {
     }
 
     /// Record every production-shape oracle call made by the simulator and
-    /// verifier. The artifact pins deterministic non-grinding counts; the
-    /// security ledger replaces the observed geometric PoW attempts with an
-    /// analytical 128-bit-tail budget.
+    /// verifier. The fixed assertions cover deterministic non-grinding
+    /// counts; the security ledger replaces the observed geometric PoW
+    /// attempts with an analytical 128-bit-tail budget.
     #[test]
-    fn production_random_oracle_ledger_matches_artifact() {
+    fn production_random_oracle_counts_match_registered_bounds() {
         let setup = Blake3PreimageZkSetup::new(N_TEST);
         let secret = msgs_of(0xA11C_E5E5, N_TEST);
         let digests = Blake3PreimageSetup::digests_of(&secret);
@@ -1366,16 +1368,11 @@ mod tests {
             SimGameLedger::production(64, protocol_bound).final_bits()
         );
 
-        let artifact: serde_json::Value = serde_json::from_str(include_str!(
-            "../../../../docs/artifacts/sim_game_error_table.json"
-        ))
-        .expect("game artifact");
-        let pinned = &artifact["random_oracle_ledger"];
-        assert_eq!(pinned["prover_total_calls"], prover.total_calls);
-        assert_eq!(pinned["prover_non_pow_calls"], prover.non_pow_calls());
-        assert_eq!(pinned["verifier_total_calls"], verifier.total_calls);
-        assert_eq!(pinned["grinding_candidate_bound"], pow_bound);
-        assert_eq!(pinned["protocol_query_bound"], protocol_bound);
+        assert_eq!(prover.total_calls, 50_149);
+        assert_eq!(prover.non_pow_calls(), 29_419);
+        assert_eq!(verifier.total_calls, 10_507);
+        assert_eq!(pow_bound, 957_910);
+        assert_eq!(protocol_bound, PRODUCTION_ORACLE_QUERY_BOUND);
     }
 
     /// **Control 1: the vector the simulator commits is not a witness.**

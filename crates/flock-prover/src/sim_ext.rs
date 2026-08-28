@@ -10,13 +10,13 @@ use crate::preimage_extractor::{
 };
 use crate::prover::R1csProofZkA1;
 use crate::r1cs_hashes::blake3_preimage::{DIGEST_BYTES, MESSAGE_BYTES};
-use crate::zk_certificate::PROTOCOL_VERSION;
+use crate::zk_certificate::PROTOCOL_ID;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SimulatedPrefix {
     pub statement_digest: [u8; 32],
     pub proof_nonce: [u8; 32],
-    pub protocol_version: &'static str,
+    pub protocol_id: &'static str,
 }
 
 impl SimulatedPrefix {
@@ -24,7 +24,7 @@ impl SimulatedPrefix {
         Self {
             statement_digest: statement.public_digest(),
             proof_nonce,
-            protocol_version: PROTOCOL_VERSION,
+            protocol_id: PROTOCOL_ID,
         }
     }
 }
@@ -60,7 +60,7 @@ pub enum SimExtError {
     Extraction(ExtractError),
 }
 
-/// Extract on a fresh `(statement digest, proof nonce, protocol version)`
+/// Extract on a fresh `(statement digest, proof nonce, protocol identifier)`
 /// prefix. Same-prefix simulation extractability is intentionally not claimed.
 pub fn extract_on_fresh_prefix(
     simulated: &SimulatedPrefixSet,
@@ -85,7 +85,7 @@ mod tests {
     use crate::r1cs_hashes::blake3_preimage::Blake3PreimageZkSetup;
 
     #[test]
-    fn prefix_diverges_on_statement_nonce_and_version_tuple() {
+    fn prefix_diverges_on_statement_nonce_and_protocol_tuple() {
         let setup = Blake3PreimageZkSetup::new(256);
         let a = vec![[1u8; DIGEST_BYTES]; 256];
         let mut b = a.clone();
@@ -98,7 +98,7 @@ mod tests {
         let prefix = SimulatedPrefix::new(&stmt_a, nonce_a);
         assert_ne!(prefix, SimulatedPrefix::new(&stmt_b, nonce_a));
         assert_ne!(prefix, SimulatedPrefix::new(&stmt_a, nonce_b));
-        assert_eq!(prefix.protocol_version, PROTOCOL_VERSION);
+        assert_eq!(prefix.protocol_id, PROTOCOL_ID);
     }
 
     #[test]

@@ -26,8 +26,8 @@ use veil_f128::{
 
 use crate::prover::open_claims_with_precomputed_ligerito_pd_ro;
 
-const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root-v0";
-const CLAIMS_LABEL: &[u8] = b"veil-flock-output-claims-v0";
+const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root";
+const CLAIMS_LABEL: &[u8] = b"veil-flock-output-claims";
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SuccinctVeilProof {
@@ -139,7 +139,7 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
             ));
         }
 
-        challenger.observe_label(b"flock-zerocheck-v0");
+        challenger.observe_label(b"flock-zerocheck");
         let r = zerocheck::sample_eq_point(inputs.m, challenger);
 
         // Reuse the shipped terminal evaluator with zero mask channels; only
@@ -491,7 +491,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     let mut builder = CircuitBuilder::new(layout.observed_count());
     let mut expressions = ExpressionCursor::new(layout.observed_count());
 
-    challenger.observe_label(b"flock-zerocheck-v0");
+    challenger.observe_label(b"flock-zerocheck");
     let r = zerocheck::sample_eq_point(r1cs.m, challenger);
 
     let round1_ab = zc
@@ -546,7 +546,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     challenger.observe_f128(zc.final_b_eval);
 
     let x_ab = r1cs.x_ab_from_mlv(z, &mlv_challenges);
-    challenger.observe_label(b"flock-lincheck-v0");
+    challenger.observe_label(b"flock-lincheck");
     let alpha = challenger.sample_f128();
     let eq_inner = lincheck::build_quirky_eq_table(x_ab.z_skip, &x_ab.x_inner_rest, r1cs.k_skip);
     let mut comb_vec = lincheck_circuit.fold_alpha_batched(alpha, &eq_inner);
@@ -770,7 +770,7 @@ pub fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     // inner VEIL transcript here, after all linkage data is bound but before
     // entering that terminal protocol.
     let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    veil_challenger.observe_label(b"veil-flock-inner-fork");
     let s_hat_v_ab = if r1cs.k_log >= pcs::LOG_PACKING {
         Some(pcs::ring_switch::s_hat_v_from_z_vec(
             &z_vec,
@@ -854,7 +854,7 @@ pub fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     observe_claims(challenger, proof.ab_value, proof.c_value);
     let pd = packed_direct(challenger);
     let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(b"veil-flock-inner-fork-v0");
+    veil_challenger.observe_label(b"veil-flock-inner-fork");
     let pd_refs = pd
         .iter()
         .map(|(point, value)| pcs::PackedDirectClaimRef {

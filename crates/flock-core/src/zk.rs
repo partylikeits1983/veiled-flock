@@ -61,7 +61,7 @@ pub struct ZkRng {
 impl ZkRng {
     pub fn from_seed(key: [u8; 32]) -> Self {
         let mut h = blake3::Hasher::new_keyed(&key);
-        h.update(b"flock-zk-drbg-v0");
+        h.update(b"flock-zk-drbg");
         Self {
             key,
             forks: 0,
@@ -83,7 +83,7 @@ impl ZkRng {
     /// parent's own output stream.
     pub fn fork(&mut self, label: &[u8]) -> Self {
         let mut h = blake3::Hasher::new_keyed(&self.key);
-        h.update(b"flock-zk-fork-v0");
+        h.update(b"flock-zk-fork");
         h.update(&self.forks.to_le_bytes());
         h.update(&(label.len() as u64).to_le_bytes());
         h.update(label);
@@ -296,7 +296,7 @@ impl ZkBlockLayout {
     /// layout determines which polynomial family the statement quantifies
     /// over, so it is part of the statement).
     pub fn absorb_into(&self, h: &mut blake3::Hasher) {
-        h.update(b"flock-zk-layout-v0");
+        h.update(b"flock-zk-layout");
         h.update(&(self.rand_bit_base as u64).to_le_bytes());
         h.update(&(self.chunks_a as u64).to_le_bytes());
         h.update(&(self.chunks_b as u64).to_le_bytes());

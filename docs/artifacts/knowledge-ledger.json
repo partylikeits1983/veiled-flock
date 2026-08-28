@@ -1,5 +1,5 @@
 {
-  "protocol": "flock-zk-fv-v3",
+  "protocol": "flock-zk-fv",
   "adversary_random_oracle_queries_log2": 64,
   "dominant_interactive_term": "257/2^field_bits (L0 fold access structure)",
   "profiles": [
