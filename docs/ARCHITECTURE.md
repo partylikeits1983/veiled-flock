@@ -266,3 +266,7 @@ Public proof data:
 
 The proof does not hide batch size, circuit shape, parameter profile, proof
 length, timing, or memory access patterns.
+
+## Diagrams
+
+Sequence and class diagrams for the three crates are in [`../SPEC.md`](../SPEC.md), section 16.
