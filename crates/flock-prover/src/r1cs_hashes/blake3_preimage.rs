@@ -978,6 +978,32 @@ mod tests {
             .collect()
     }
 
+    /// The largest full-ZK shape that `validate_batch_opening` accepts today.
+    /// `PcsParams` adds one to the committed message dimension in zk mode, so
+    /// 2048 blocks (R1CS m25) loads the Ligerito m26 config.
+    ///
+    /// 4096 blocks would load Ligerito m27, whose `fold_grinding_bits[0] = 5`
+    /// makes the outer blind grind 6 bits — above `MAX_BLIND_GRINDING_BITS`.
+    /// That shape is rejected on this branch and on its base.
+    #[cfg(feature = "veil")]
+    #[test]
+    fn largest_supported_zk_shape_grinds_every_udr_fold_round() {
+        let blocks = 2048;
+        let setup = Blake3PreimageZkSetup::new(blocks);
+        let messages = msgs_of(0x2048_5EED, blocks);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+        let (proof, commitment) = setup.prove(&messages, &digests).expect("prove m26 shape");
+        setup
+            .verify(&commitment, &proof, &digests)
+            .expect("verify m26 shape");
+        // Ligerito m26 Secure grinds at L0 (6 rounds), L1 (3) and L2 (3).
+        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 12);
+        assert!(
+            proof.pcs_open.ligerito.fold_grinding_nonces.len()
+                <= crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as usize
+        );
+    }
+
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_veil_preimage_roundtrip_and_mutations() {

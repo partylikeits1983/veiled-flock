@@ -102,13 +102,13 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
         zk: true,
     };
     assert!(validate_l0_hiding_budget(&params, &[512]).is_ok());
-    validate_batch_opening(&params, &[512], &[0], &[1]).unwrap();
+    validate_batch_opening(&params, &[512], &[0], &[1], &[6]).unwrap();
     assert!(matches!(
         validate_l0_hiding_budget(&params, &[513]),
         Err(SuccinctVeilError::InvalidShape("L0 hiding query budget"))
     ));
     assert!(matches!(
-        validate_batch_opening(&params, &[512], &[1], &[1]),
+        validate_batch_opening(&params, &[512], &[1], &[1], &[6]),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
     assert!(matches!(
@@ -116,10 +116,19 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
             &params,
             &[512],
             &[0],
-            &[super::MAX_LIGERITO_GRINDING_BITS + 1]
+            &[super::MAX_LIGERITO_GRINDING_BITS + 1],
+            &[6]
         ),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
+    // The grind-site cap counts fold ROUNDS, not levels. Three levels that
+    // each grind six rounds are 18 sites, above the cap of 16, even though
+    // the level count is only three.
+    assert!(matches!(
+        validate_batch_opening(&params, &[512], &[0, 0, 0], &[1, 1, 1], &[6, 6, 6]),
+        Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
+    ));
+    validate_batch_opening(&params, &[512], &[0, 0, 0], &[1, 1, 1], &[6, 6, 3]).unwrap();
 }
 
 #[test]

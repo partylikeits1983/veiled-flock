@@ -759,15 +759,36 @@ fn validate_l0_hiding_budget(
     Ok(())
 }
 
+/// Fold rounds per Ligerito level: L0 folds `initial_k` times, and level
+/// `i + 1` folds `recursive_ks[i]` times. The prover grinds once per round of
+/// a level that carries a positive fold grind.
+fn fold_rounds_of(initial_k: usize, recursive_ks: &[usize]) -> Vec<usize> {
+    std::iter::once(initial_k)
+        .chain(recursive_ks.iter().copied())
+        .collect()
+}
+
 fn validate_batch_opening(
     pcs_params: &PcsParams,
     queries: &[usize],
     grinding_bits: &[usize],
     fold_grinding_bits: &[usize],
+    fold_rounds: &[usize],
 ) -> Result<(), SuccinctVeilError> {
     validate_l0_hiding_budget(pcs_params, queries)?;
-    let positive_fold_sites = fold_grinding_bits.iter().filter(|bits| **bits > 0).count();
+    // Count grind sites the way the proof does: one nonce per fold ROUND of a
+    // level that carries a positive grind, not one per level. UDR levels grind
+    // flat, so a level contributes all of its rounds. `ligerito_grinding_is_bounded`
+    // applies the same cap to the emitted nonce vector, so both gates must
+    // bound the same quantity.
+    let positive_fold_sites: usize = fold_grinding_bits
+        .iter()
+        .zip(fold_rounds)
+        .filter(|(bits, _)| **bits > 0)
+        .map(|(_, rounds)| *rounds)
+        .sum();
     if grinding_bits.iter().any(|bits| *bits != 0)
+        || fold_grinding_bits.len() != fold_rounds.len()
         || fold_grinding_bits
             .iter()
             .any(|bits| *bits > MAX_LIGERITO_GRINDING_BITS)
@@ -775,7 +796,7 @@ fn validate_batch_opening(
     {
         return Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"));
     }
-    let blind_grinding_bits = fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let blind_grinding_bits = pcs::ligerito::l0_derived_grind_bits(fold_grinding_bits);
     if queries[0] == 0 || !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_grinding_bits) {
         return Err(SuccinctVeilError::InvalidShape("batch opening certificate"));
     }
@@ -1230,6 +1251,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         &lig_config.queries,
         &lig_config.grinding_bits,
         &lig_config.fold_grinding_bits,
+        &fold_rounds_of(lig_config.initial_k, &lig_config.recursive_ks),
     )?;
     let mut masks = vec![F128::ZERO; layout.observed_count()];
     let mut mask_rng = rng.fork(b"succinct-veil-transcript-masks");
@@ -1407,7 +1429,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         .map(|claim| claim.evaluate(g_top))
         .collect::<Vec<_>>();
     observe_direct_blinds(challenger, &public_direct_blind_values);
-    let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
     if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
         return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
     }
@@ -1537,6 +1559,7 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         &lig_config.queries,
         &lig_config.grinding_bits,
         &lig_config.fold_grinding_bits,
+        &fold_rounds_of(lig_config.initial_k, &lig_config.recursive_ks),
     )?;
     if commitment.params != *pcs_params
         || proof.veil.parameters != ConstraintParameters::succinct_flock_secure()
@@ -1575,7 +1598,7 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         ));
     }
     observe_direct_blinds(challenger, &proof.public_direct_blind_values);
-    let blind_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
     if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits)
         || proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
         || !challenger.verify_pow(proof.blind_grind_nonce, blind_bits)
