@@ -1,6 +1,7 @@
 # zk-FLOCK
 
-Experimental succinct VEIL wrapper for FLOCK.
+Experimental succinct VEIL wrapper for FLOCK, with a separate Lean
+formalization of the production protocol model.
 
 The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
 digest in an ordered batch:
@@ -13,10 +14,17 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 
 ## Security status
 
-The implementation has completeness, mutation, serialization, and simulator
-tests. It does not have end-to-end zero-knowledge, soundness, or knowledge
-proofs. It is unaudited and unsuitable for production secrets. See
-[SECURITY.md](docs/SECURITY.md).
+The Lean development proves statistical zero knowledge for the formal
+production protocol model. The main theorem is
+`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126` in
+`lean/VeiledFlock/Production/Security/FormalZK.lean`, with concrete distance
+bound `< 2^-126` in the finite classical programmable-random-oracle model.
+
+That theorem is about the formal model. The Rust implementation remains
+experimental and unaudited, and this repository does not include a full
+mechanized Rust-to-Lean correspondence proof, concrete SHA-256-as-random-oracle
+theorem, QROM theorem, argument-of-knowledge extraction theorem, or
+side-channel audit. See [SECURITY.md](docs/SECURITY.md).
 
 ## Usage
 
@@ -35,11 +43,13 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
 `messages.bin` must contain one or more concatenated 64-byte messages. The
 proof bundle includes the ordered public digests.
 
-## Benchmarks
+## Lean Verification
 
 ```sh
-cargo bench -p flock-prover --bench blake3_native_chain
-cargo bench -p flock-prover --bench keccak_native_chain
+cd lean
+lake build VeiledFlock
+cd ..
+scripts/lean-axioms.sh
 ```
 
 ## Documentation

@@ -1,7 +1,12 @@
-# Security status
+# Security target and scope
 
-This implementation is experimental, unaudited, and unsuitable for production
-secrets.
+VEIL-FLOCK targets a zero-knowledge succinct argument for the pinned 64-byte
+BLAKE3-preimage relation in the classical programmable random-oracle model
+(pROM). The Lean development contains a machine-checked statistical-ZK theorem
+for the formal production protocol model. The Rust implementation remains
+experimental and unaudited, and the repository does not contain a full
+mechanized correspondence proof from every Rust code path to that Lean model.
+Do not use it to protect production secrets.
 
 ## Claim status
 
@@ -12,11 +17,31 @@ secrets.
 | Raw messages absent from proof types | Checked by serialization tests and code review |
 | Mutation rejection | Tested for statement and major proof components |
 | Public-input-only simulated acceptance | Implemented with one programmable oracle for Fiat--Shamir, PCS, and VEIL hashing |
-| Distributional zero knowledge | Not proved |
+| Distributional zero knowledge | Proved for the Lean formal production model with bound `< 2^-126`; Rust correspondence not proved |
 | Composed adversarial soundness | Not proved; only component evidence and estimates |
 | Argument of knowledge/extraction | Partial components exist; no active end-to-end theorem |
-| Classical-ROM composition | Not proved; the executable harness uses one oracle, but no composition theorem is claimed |
+| Classical-ROM composition | Proved for the finite Lean formal model; concrete SHA-256 instantiation not proved |
 | QROM security | Not claimed |
+
+## Lean formal theorem
+
+The Lean endpoint
+`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126` proves that,
+for the formal production protocol model, every valid public statement and
+witness satisfying the pinned relation has a real adversary view within
+`2^-126` statistical distance of a witness-free simulated view. The adversary
+is classical and adaptive, all coins are finite, and the oracle is the modeled
+programmable random oracle.
+
+The companion theorem
+`VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime`
+certifies the witness-free simulator by an explicit algebraic/pROM machine
+cost model.
+
+This is a formal-model theorem, not a proof that every Rust execution path
+implements the model. It also does not claim concrete SHA-256-as-random-oracle
+security, QROM security, argument-of-knowledge extraction, production
+readiness, or side-channel privacy.
 
 ## Active path
 
@@ -43,9 +68,11 @@ decoder before proof vectors are constructed.
 
 ## Open requirements
 
-1. Prove the additive-code properties, AB/C masking rank, hiding Ligerito,
-   transcript fork, and ROM composition for the active path.
-2. Audit side channels, randomness, and secret erasure.
+1. Establish and review a Rust-to-Lean correspondence proof for every
+   production code path.
+2. Independently audit the cryptography, side channels, randomness, and secret
+   erasure.
 
-Do not describe or deploy this implementation as a zero-knowledge argument
-until these requirements are resolved and independently reviewed.
+Do not describe or deploy the Rust implementation as an audited
+zero-knowledge argument until these requirements are resolved and independently
+reviewed.
