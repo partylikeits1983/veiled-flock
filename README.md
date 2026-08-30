@@ -61,6 +61,15 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
 `scripts/zk-certify.sh` runs the executable Rust certificate suite and
 random-oracle surface checks.
 
+To build and audit the Lean formalization:
+
+```sh
+make formal-proof
+```
+
+This downloads the pinned Mathlib cache, builds the Lean proof with a progress
+bar, and audits the resulting theorems for non-standard axioms.
+
 ## Documentation
 
 - [Protocol specification](SPEC.md)
