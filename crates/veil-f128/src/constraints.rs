@@ -313,31 +313,13 @@ pub struct ConstraintParameters {
 }
 
 impl ConstraintParameters {
-    pub const fn conservative() -> Self {
-        Self {
-            linear_padding: 112,
-            hadamard_padding: 128,
-            inverse_rate: 16,
-        }
-    }
-
-    /// Test profile matching the direct FLOCK experiment. The base code is
-    /// rate 1/4 and its square/product code is rate 1/2; 128 queries
-    /// contribute roughly 53 bits in the square-code unique-decoding term.
-    pub const fn flock_experimental() -> Self {
-        Self {
-            linear_padding: 128,
-            hadamard_padding: 128,
-            inverse_rate: 4,
-        }
-    }
-
-    /// Profile for the succinct FLOCK transcript compiler. With at most a
-    /// handful of product rows, the square code has rate at most 1/4; 160
-    /// non-adaptive queries give about 108 bits for the unique-decoding
-    /// proximity term `(5/8)^160`. This remains an experimental, unaudited
-    /// profile rather than a production security claim.
-    pub const fn succinct_flock_experimental() -> Self {
+    /// Fail-closed profile for the succinct FLOCK transcript compiler.
+    ///
+    /// The active caller must additionally run [`certify_constraint_soundness`]
+    /// against the exact shifted circuit. The certificate uses the actual
+    /// operand and product-code dimensions, the finite-length unique-decoding
+    /// backoff, and additive (rather than minimum-per-round) error composition.
+    pub const fn succinct_flock_secure() -> Self {
         Self {
             linear_padding: 160,
             hadamard_padding: 160,
@@ -359,7 +341,7 @@ impl ConstraintParameters {
 
 impl Default for ConstraintParameters {
     fn default() -> Self {
-        Self::conservative()
+        Self::succinct_flock_secure()
     }
 }
 
@@ -373,8 +355,173 @@ pub enum ConstraintError {
     UnsatisfiedCircuit,
     WrongProofShape,
     LinearClaimMismatch,
+    InsufficientSoundness,
     Dot(DotProductError),
     Hadamard(HadamardError),
+}
+
+/// Minimum soundness floor accepted by the production succinct compiler.
+/// The exact active profile currently clears this floor without treating
+/// concrete SHA-256 as an information-theoretic primitive.
+pub const SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS: f64 = 100.0;
+
+/// Executable additive soundness ledger for the live VEIL constraint layer.
+///
+/// The dot-product term follows VEIL Lemma 3.4:
+/// `eps_pg + (1-gamma)^queries`. The Hadamard term follows its binding theorem:
+/// `eps_pg + eps_pg_product + eps_linear_bias +
+/// (1-gamma_product)^queries`. The remaining two terms bind the Hadamard rows
+/// to the shifted circuit and batch all resulting linear constraints.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ConstraintSoundnessBound {
+    pub linear_code_length: usize,
+    pub linear_dimension: usize,
+    pub linear_gamma: f64,
+    pub hadamard_code_length: usize,
+    pub hadamard_dimension: usize,
+    pub hadamard_gamma: f64,
+    pub product_dimension: usize,
+    pub product_gamma: f64,
+    pub query_count: usize,
+    pub linear_proximity_probability: f64,
+    pub linear_query_probability: f64,
+    pub hadamard_operand_proximity_probability: f64,
+    pub hadamard_product_proximity_probability: f64,
+    pub hadamard_product_query_probability: f64,
+    pub hadamard_reduction_probability: f64,
+    pub hadamard_link_probability: f64,
+    pub constraint_batch_probability: f64,
+}
+
+impl ConstraintSoundnessBound {
+    pub fn probability(self) -> f64 {
+        self.linear_proximity_probability
+            + self.linear_query_probability
+            + self.hadamard_operand_proximity_probability
+            + self.hadamard_product_proximity_probability
+            + self.hadamard_product_query_probability
+            + self.hadamard_reduction_probability
+            + self.hadamard_link_probability
+            + self.constraint_batch_probability
+    }
+
+    pub fn bits(self) -> f64 {
+        -self.probability().log2()
+    }
+}
+
+/// Certify the exact finite-length RS geometry and additive VEIL binding error
+/// of `circuit` under `parameters`.
+///
+/// For an `RS[N,K]` (or a fixed non-zero multiplier thereof), use the
+/// conservative relative distance `delta = 1-K/N` and the largest radius in
+/// the proved unique-decoding interval,
+/// `gamma = delta/2 - 3/(delta*N)`. A binary fold has at most
+/// `floor(gamma*N+1)` bad non-zero scalars. We upper-bound division by
+/// `2^128-1` and `2^128-2` with division by `2^127`, avoiding any unsound
+/// floating-point approximation of those denominators.
+pub fn certify_constraint_soundness(
+    circuit: &ArithmeticCircuit,
+    parameters: ConstraintParameters,
+) -> Result<ConstraintSoundnessBound, ConstraintError> {
+    let parameters = parameters.validate()?;
+    if circuit.num_variables != circuit.num_inputs
+        || circuit
+            .multiplications
+            .iter()
+            .any(|gate| gate.materialized_output.is_some())
+    {
+        return Err(ConstraintError::MalformedCircuit);
+    }
+    let padded = padded_circuit(circuit);
+    let linear_dimension = padded
+        .num_variables
+        .checked_add(parameters.linear_padding)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let hadamard_dimension = padded
+        .multiplications
+        .len()
+        .checked_add(parameters.hadamard_padding)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let linear_code_length = linear_dimension
+        .next_power_of_two()
+        .checked_mul(parameters.inverse_rate)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let hadamard_code_length = hadamard_dimension
+        .next_power_of_two()
+        .checked_mul(parameters.inverse_rate)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let product_dimension = 2 * hadamard_dimension.next_power_of_two() - 1;
+    let linear_gamma = unique_decoding_radius(linear_code_length, linear_dimension)?;
+    let hadamard_gamma = unique_decoding_radius(hadamard_code_length, hadamard_dimension)?;
+    let product_gamma = unique_decoding_radius(hadamard_code_length, product_dimension)?;
+    let query_count = parameters.linear_padding;
+    if parameters.hadamard_padding != query_count {
+        // The current theorem/ledger intentionally fixes one common query
+        // budget. A future asymmetric profile needs its own explicit ledger.
+        return Err(ConstraintError::InvalidParameters);
+    }
+
+    let nonzero_denominator = 2f64.powi(127);
+    let field_size = 2f64.powi(128);
+    let binary_pg =
+        |gamma: f64, length: usize| (gamma * length as f64 + 1.0).floor() / nonzero_denominator;
+    let linear_proximity_probability = binary_pg(linear_gamma, linear_code_length);
+    // Four operand rows are Horner-folded by one non-zero scalar. A union
+    // over its three binary folds is valid without assuming independence.
+    let hadamard_operand_proximity_probability =
+        3.0 * binary_pg(hadamard_gamma, hadamard_code_length);
+    let hadamard_product_proximity_probability = binary_pg(product_gamma, hadamard_code_length);
+
+    let hadamard_multiplications = padded.multiplications.len();
+    let hadamard_reduction_probability =
+        hadamard_multiplications.saturating_sub(1) as f64 / field_size;
+    // The shared F\{0,1} challenge links all three Hadamard rows. If any row
+    // is false, acceptance requires one non-zero polynomial of this degree to
+    // vanish; no extra factor of three is needed.
+    let hadamard_link_probability =
+        hadamard_multiplications.saturating_sub(1) as f64 / nonzero_denominator;
+    // padded_circuit adds one constraint and Hadamard linkage adds three.
+    let combined_constraints = padded.linear_constraints.len() + 3;
+    let constraint_batch_probability = combined_constraints.saturating_sub(1) as f64 / field_size;
+
+    let bound = ConstraintSoundnessBound {
+        linear_code_length,
+        linear_dimension,
+        linear_gamma,
+        hadamard_code_length,
+        hadamard_dimension,
+        hadamard_gamma,
+        product_dimension,
+        product_gamma,
+        query_count,
+        linear_proximity_probability,
+        linear_query_probability: (1.0 - linear_gamma).powi(query_count as i32),
+        hadamard_operand_proximity_probability,
+        hadamard_product_proximity_probability,
+        hadamard_product_query_probability: (1.0 - product_gamma).powi(query_count as i32),
+        hadamard_reduction_probability,
+        hadamard_link_probability,
+        constraint_batch_probability,
+    };
+    if !bound.bits().is_finite() || bound.bits() < SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS {
+        return Err(ConstraintError::InsufficientSoundness);
+    }
+    Ok(bound)
+}
+
+fn unique_decoding_radius(code_length: usize, dimension: usize) -> Result<f64, ConstraintError> {
+    if dimension == 0 || dimension >= code_length {
+        return Err(ConstraintError::InvalidParameters);
+    }
+    let n = code_length as f64;
+    let delta = 1.0 - dimension as f64 / n;
+    let gamma = delta / 2.0 - 3.0 / (delta * n);
+    let size_floor = 3.0 * 2.0f64.sqrt() / n.sqrt();
+    if delta < size_floor || gamma < delta / 3.0 || gamma <= 0.0 {
+        return Err(ConstraintError::InsufficientSoundness);
+    }
+    Ok(gamma)
 }
 
 impl From<DotProductError> for ConstraintError {
@@ -414,6 +561,7 @@ pub fn prove_constraints_with_parameters<C: Challenger, R: MaskSampler + ?Sized>
     challenger: &mut C,
     ro: &RoContext,
 ) -> Result<ConstraintProof, ConstraintError> {
+    certify_constraint_soundness(circuit, parameters)?;
     let commitment = commit_constraint_inputs(circuit, inputs, parameters, rng, ro)?;
     prove_constraints_from_commitment(circuit, commitment, rng, challenger, ro)
 }
@@ -483,6 +631,7 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
     challenger: &mut C,
     ro: &RoContext,
 ) -> Result<ConstraintProof, ConstraintError> {
+    certify_constraint_soundness(circuit, commitment.parameters)?;
     if circuit.num_variables != circuit.num_inputs
         || circuit.num_inputs != commitment.circuit_inputs
         || circuit
@@ -560,9 +709,11 @@ pub fn verify_constraints<C: Challenger>(
     circuit: &ArithmeticCircuit,
     proof: &ConstraintProof,
     challenger: &mut C,
-    ro: &RoContext,
+    linear_ro: &RoContext,
+    hadamard_ro: &RoContext,
 ) -> Result<(), ConstraintError> {
     let parameters = proof.parameters.validate()?;
+    certify_constraint_soundness(circuit, parameters)?;
     if circuit.num_variables != circuit.num_inputs
         || circuit
             .multiplications
@@ -599,7 +750,7 @@ pub fn verify_constraints<C: Challenger>(
         &dot_vector,
         &proof.hadamard,
         challenger,
-        ro,
+        hadamard_ro,
         RoChannel::VeilHadamard,
     )?;
     append_multiplication_link_constraints(&padded, &dot_vector, &proof.hadamard, &mut constraints);
@@ -614,7 +765,7 @@ pub fn verify_constraints<C: Challenger>(
         &dot_vector,
         &proof.linear,
         challenger,
-        ro,
+        linear_ro,
         RoChannel::VeilLinear,
     )?;
     Ok(())
@@ -761,7 +912,7 @@ mod tests {
         let proof =
             prove_constraints(&circuit, &[mask], &mut rng, &mut prover_challenger, &ro).unwrap();
         let mut verifier_challenger = FsChallenger::new(b"veil-f128-constraints-test");
-        verify_constraints(&circuit, &proof, &mut verifier_challenger, &ro).unwrap();
+        verify_constraints(&circuit, &proof, &mut verifier_challenger, &ro, &ro).unwrap();
     }
 
     #[test]
@@ -798,6 +949,49 @@ mod tests {
         )
         .unwrap();
         let mut verifier_challenger = FsChallenger::new(b"veil-f128-linear-test");
-        verify_constraints(&circuit, &proof, &mut verifier_challenger, &ro).unwrap();
+        verify_constraints(&circuit, &proof, &mut verifier_challenger, &ro, &ro).unwrap();
+    }
+
+    #[test]
+    fn succinct_flock_profile_has_a_concrete_additive_soundness_bound() {
+        // Exact production shifted-circuit shape: 754 independently masked
+        // inputs, one live multiplication, and 259 linear constraints.
+        let mut builder = CircuitBuilder::new(754);
+        let zero = builder.constant(F128::ZERO);
+        builder.assert_mul(&zero, &zero, &zero);
+        for _ in 0..259 {
+            builder.assert_zero(&zero);
+        }
+        let circuit = builder.finish();
+        let bound =
+            certify_constraint_soundness(&circuit, ConstraintParameters::succinct_flock_secure())
+                .unwrap();
+
+        assert_eq!(bound.linear_dimension, 920);
+        assert_eq!(bound.linear_code_length, 8192);
+        assert_eq!(bound.hadamard_dimension, 163);
+        assert_eq!(bound.hadamard_code_length, 2048);
+        assert_eq!(bound.product_dimension, 511);
+        assert_eq!(bound.query_count, 160);
+        assert!(bound.bits() > SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS);
+        assert!(bound.bits() < 110.0);
+    }
+
+    #[test]
+    fn succinct_soundness_certificate_rejects_an_underqueried_profile() {
+        let mut builder = CircuitBuilder::new(754);
+        let zero = builder.constant(F128::ZERO);
+        builder.assert_mul(&zero, &zero, &zero);
+        builder.assert_zero(&zero);
+        let circuit = builder.finish();
+        let weak = ConstraintParameters {
+            linear_padding: 32,
+            hadamard_padding: 32,
+            inverse_rate: 8,
+        };
+        assert_eq!(
+            certify_constraint_soundness(&circuit, weak),
+            Err(ConstraintError::InsufficientSoundness)
+        );
     }
 }

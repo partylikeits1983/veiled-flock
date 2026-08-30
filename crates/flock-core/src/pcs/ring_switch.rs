@@ -1359,6 +1359,44 @@ pub fn fold_1b_rows_naive(packed_witness: &[F128], suffix_tensor: &[F128]) -> Ve
         })
 }
 
+/// Compute the 128 slice evaluations used by ring switching at `x_outer`.
+pub fn s_hat_v_at_point(packed_witness: &[F128], x_outer: &[F128]) -> Vec<F128> {
+    assert!(!x_outer.is_empty());
+    assert_eq!(packed_witness.len(), 1usize << (x_outer.len() - 1));
+    let suffix_tensor = build_eq_parallel(&x_outer[1..]);
+    fold_1b_rows_naive(packed_witness, &suffix_tensor)
+}
+
+/// Apply packed-field multiplication to a ring-switch slice vector.
+///
+/// If `s` is computed from `g`, the result is the slice vector computed from
+/// the packed vector whose entries are `scalar * g[i]`.
+pub fn scale_s_hat_v(s: &[F128], scalar: F128) -> Vec<F128> {
+    assert_eq!(s.len(), 1usize << LOG_PACKING);
+    let mut out = vec![F128::ZERO; 1usize << LOG_PACKING];
+    for (input_bit, value) in s.iter().enumerate() {
+        let basis = if input_bit < 64 {
+            F128::new(1u64 << input_bit, 0)
+        } else {
+            F128::new(0, 1u64 << (input_bit - 64))
+        };
+        let product = scalar * basis;
+        let mut lo = product.lo;
+        while lo != 0 {
+            let output_bit = lo.trailing_zeros() as usize;
+            out[output_bit] += *value;
+            lo &= lo - 1;
+        }
+        let mut hi = product.hi;
+        while hi != 0 {
+            let output_bit = hi.trailing_zeros() as usize;
+            out[64 + output_bit] += *value;
+            hi &= hi - 1;
+        }
+    }
+    out
+}
+
 /// Compute the verifier's claim check: `Σ_i weights[i] · s_hat_v[i]`.
 pub fn claim_check(weights: &[F128], s_hat_v: &[F128]) -> F128 {
     inner_product(weights, s_hat_v)
@@ -2841,6 +2879,38 @@ mod tests {
                 hi: self.next_u64(),
             }
         }
+    }
+
+    #[test]
+    fn packed_scaling_commutes_with_slice_evaluation() {
+        let mut rng = Rng::new(0x5ca1e);
+        let log_len = 6;
+        let packed = (0..1usize << log_len)
+            .map(|_| rng.f128())
+            .collect::<Vec<_>>();
+        let point = (0..=log_len).map(|_| rng.f128()).collect::<Vec<_>>();
+        let scalar = rng.f128();
+        let scaled_packed = packed
+            .iter()
+            .map(|value| scalar * *value)
+            .collect::<Vec<_>>();
+
+        let slices = s_hat_v_at_point(&packed, &point);
+        let scaled_slices = scale_s_hat_v(&slices, scalar);
+        assert_eq!(scaled_slices, s_hat_v_at_point(&scaled_packed, &point));
+    }
+
+    #[test]
+    fn distinct_scalars_act_differently_on_a_nonzero_slice_vector() {
+        let mut slices = vec![F128::ZERO; 1usize << LOG_PACKING];
+        slices[37] = F128::new(0x1234, 0x5678);
+        let first = F128::new(0xaaaa, 0xbbbb);
+        let second = F128::new(0xcccc, 0xdddd);
+
+        assert_ne!(
+            scale_s_hat_v(&slices, first),
+            scale_s_hat_v(&slices, second)
+        );
     }
 
     /// Reference: directly compute ẑ_skip(z_skip, x_outer) for a Boolean witness `z`.

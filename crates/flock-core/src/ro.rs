@@ -76,7 +76,7 @@ impl RoChannel {
 }
 
 /// The immutable context every point-oracle call is framed against: the
-/// per-proof nonce (public; provides freshness) and the backend that answers
+/// per-tree/object nonce (public; provides freshness) and the backend that answers
 /// queries (native SHA-256, or an external recording/programmable oracle used
 /// in the simulator and extractor).
 #[derive(Clone)]
@@ -96,7 +96,7 @@ pub enum RoBackend {
 }
 
 impl RoContext {
-    /// A production context with a fresh per-proof `nonce`.
+    /// A production context with a fresh per-tree/object `nonce`.
     pub fn native(nonce: [u8; 32]) -> Self {
         Self {
             nonce,

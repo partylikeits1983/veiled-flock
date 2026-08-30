@@ -1,7 +1,7 @@
 //! Straightline full-codeword decoder used by the recording-oracle extractor.
 //!
-//! The inverse additive NTT recovers a candidate coefficient vector. The
-//! candidate is truncated to the declared message dimension, re-encoded, and
+//! The inverse additive NTT recovers a coefficient vector. The declared
+//! message portion is re-encoded and
 //! accepted only when it lies inside the code's unique-decoding radius.
 
 use flock_core::field::F128;
@@ -68,14 +68,14 @@ pub fn decode_zk_codeword(
         }
     }
 
-    let mut candidate_coefficients = coefficients.clone();
+    let mut message_coefficients = coefficients.clone();
     for position in message_positions..positions {
-        candidate_coefficients[position * lanes..(position + 1) * lanes].fill(F128::ZERO);
+        message_coefficients[position * lanes..(position + 1) * lanes].fill(F128::ZERO);
     }
-    let candidate = forward_columns(&candidate_coefficients, positions, lanes);
+    let reencoded = forward_columns(&message_coefficients, positions, lanes);
     let row_distance = codeword
         .chunks_exact(lanes)
-        .zip(candidate.chunks_exact(lanes))
+        .zip(reencoded.chunks_exact(lanes))
         .filter(|(received, encoded)| received != encoded)
         .count();
     let unique_radius = (positions - message_positions) / 2;
@@ -92,15 +92,15 @@ pub fn decode_zk_codeword(
     for position in 0..message_positions {
         if position < mask_positions {
             mask.extend_from_slice(
-                &candidate_coefficients[position * lanes..position * lanes + f_lanes],
+                &message_coefficients[position * lanes..position * lanes + f_lanes],
             );
         } else {
             witness.extend_from_slice(
-                &candidate_coefficients[position * lanes..position * lanes + f_lanes],
+                &message_coefficients[position * lanes..position * lanes + f_lanes],
             );
         }
         blinder.extend_from_slice(
-            &candidate_coefficients[position * lanes + f_lanes..position * lanes + 2 * f_lanes],
+            &message_coefficients[position * lanes + f_lanes..position * lanes + 2 * f_lanes],
         );
     }
     Ok(DecodedZkCodeword {

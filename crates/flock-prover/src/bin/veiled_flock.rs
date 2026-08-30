@@ -2,27 +2,15 @@
 
 use std::{env, fs, io::Read, process::ExitCode, time::Instant};
 
-use bincode::Options;
 use flock_prover::{
-    challenger::FsChallenger,
-    pcs::Commitment,
-    r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, DIGEST_BYTES, MESSAGE_BYTES},
-    succinct_veil::SuccinctVeilProof,
-    zk::ZkRng,
+    proof_io::{MAX_VEIL_FLOCK_BUNDLE_BYTES, VeilFlockProofBundle},
+    r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE_BLOCKS, MESSAGE_BYTES},
 };
-use serde::{Deserialize, Serialize};
 
-const DOMAIN: &[u8] = b"veiled-flock-cli-succinct";
-const MAX_MESSAGES: usize = 256;
+const MAX_MESSAGES: usize = MAX_ZK_PREIMAGE_BLOCKS;
 // Bound file reads and decoder allocation for untrusted proof bundles.
-const MAX_BUNDLE_BYTES: u64 = 640 * 1024;
-
-#[derive(Serialize, Deserialize)]
-struct Bundle {
-    digests: Vec<[u8; DIGEST_BYTES]>,
-    commitment: Commitment,
-    proof: SuccinctVeilProof,
-}
+const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
+type Bundle = VeilFlockProofBundle;
 
 const USAGE: &str = "\
 veiled_flock — experimental VEIL argument for 64-byte BLAKE3 preimages
@@ -32,7 +20,7 @@ Usage:
   veiled_flock verify --in FILE
   veiled_flock demo
 
-The message file must contain 1..=256 concatenated 64-byte messages. The
+The message file must contain 1..=2048 concatenated 64-byte messages. The
 proof bundle contains their public BLAKE3 digests and the VEIL proof, but never
 the messages.
 ";
@@ -112,35 +100,23 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
         .iter()
         .map(|message| *blake3::hash(message).as_bytes())
         .collect::<Vec<_>>();
-    let setup = Blake3PreimageZkSetup::new_succinct(messages.len());
-    let mut rng = ZkRng::from_entropy();
-    let mut challenger = FsChallenger::new(DOMAIN);
+    let setup = Blake3PreimageZkSetup::new(messages.len());
     let started = Instant::now();
     let (proof, commitment) = setup
-        .prove_succinct(&messages, &digests, &mut rng, &mut challenger)
+        .prove(&messages, &digests)
         .map_err(|error| format!("proof generation failed: {error:?}"))?;
     eprintln!("proved in {:.3}s", started.elapsed().as_secs_f64());
-    Ok(Bundle {
-        digests,
-        commitment,
-        proof,
-    })
+    Ok(Bundle::new(digests, commitment, proof))
 }
 
 fn verify(bundle: &Bundle) -> Result<(), String> {
     if bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
         return Err("invalid bundle statement shape".to_string());
     }
-    let setup = Blake3PreimageZkSetup::new_succinct(bundle.digests.len());
-    let mut challenger = FsChallenger::new(DOMAIN);
+    let setup = Blake3PreimageZkSetup::new(bundle.digests.len());
     let started = Instant::now();
     setup
-        .verify_succinct(
-            &bundle.commitment,
-            &bundle.proof,
-            &bundle.digests,
-            &mut challenger,
-        )
+        .verify(&bundle.commitment, &bundle.proof, &bundle.digests)
         .map_err(|error| format!("verification failed: {error:?}"))?;
     eprintln!("verified in {:.3}s", started.elapsed().as_secs_f64());
     Ok(())
@@ -160,16 +136,9 @@ fn read_bundle(path: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn bundle_options() -> impl Options {
-    bincode::DefaultOptions::new()
-        .with_fixint_encoding()
-        .with_limit(MAX_BUNDLE_BYTES)
-        .reject_trailing_bytes()
-}
-
 fn encode_bundle(bundle: &Bundle) -> Result<Vec<u8>, String> {
-    bundle_options()
-        .serialize(bundle)
+    bundle
+        .to_bytes()
         .map_err(|error| format!("cannot encode proof: {error}"))
 }
 
@@ -179,9 +148,7 @@ fn decode_bundle(bytes: &[u8]) -> Result<Bundle, String> {
             "proof bundle exceeds the {MAX_BUNDLE_BYTES}-byte limit"
         ));
     }
-    bundle_options()
-        .deserialize(bytes)
-        .map_err(|error| format!("cannot decode proof bundle: {error}"))
+    Bundle::from_bytes(bytes).map_err(|error| format!("cannot decode proof bundle: {error}"))
 }
 
 #[derive(Default)]

@@ -1,268 +1,125 @@
 # Architecture
 
-This document describes the intended VEIL integration. The protocol and known
-deviations are defined in [`../SPEC.md`](../SPEC.md).
+VEIL-FLOCK has one zero-knowledge path and three linked proof layers.
 
-## Components
+| Layer | Role |
+|---|---|
+| FLOCK PIOP | Reduce the pinned Boolean R1CS to witness evaluations |
+| Shielded FLOCK PCS | Commit once and batch-open AB, C, and public digest claims |
+| VEIL | Prove the masked affine and nonlinear verifier relations |
 
-The implementation has three proof layers.
+The public entry point is
+`Blake3PreimageZkSetup::{new,prove,verify,simulate}`. There is no alternate ZK
+proof flavor or legacy masking API.
 
-| Layer | Purpose | Implementation |
-|---|---|---|
-| FLOCK PIOP | Reduce Boolean R1CS satisfaction to two witness-evaluation claims | `flock-core` zerocheck and lincheck |
-| FLOCK PCS | Commit to the randomized witness and open the AB, C, and digest claims | hiding ring-switch and Ligerito |
-| VEIL | Prove that the masked PIOP transcript is an accepting FLOCK transcript | `veil-f128` constraint, dot-product, and Hadamard protocols |
+## Pinned relation
 
-The public API is `Blake3PreimageZkSetup::{prove_succinct,
-verify_succinct,simulate_succinct}`. The CLI uses these methods. The older
-direct whole-R1CS implementation in `veiled_preimage.rs` is not on the active
-path.
+The public statement is an ordered list of BLAKE3 digests. The private witness
+contains one 64-byte message per digest. The circuit pins the BLAKE3 IV,
+counter zero, block length 64, and `CHUNK_START|CHUNK_END|ROOT` flags. A
+short list is padded deterministically to the next registered power-of-two
+shape, with a 256-slot production floor and a 2048-slot ceiling. The verifier
+pins each exact circuit digest and its Secure PCS parameters.
 
-## Baseline FLOCK flow
+## Outer shielded commitment
 
-For witness `z`, FLOCK computes `a = A z`, `b = B z`, and `c = z`. It commits
-only to `z`.
+The witness is packed over `GF(2^128)` and committed with the blinded additive
+RS encoder. Per lane, the coefficient message is `[mu || z]`: `mu` is a
+uniform degree-`<k` low block and `z` occupies the next `k` novel-basis
+coefficients. The image is the registered `RS[N,2k]` code. Evaluation of the
+low block on any union of at most `k` distinct positions is a full-row-rank
+Vandermonde map, so those opened rows are uniform for fixed `z`.
 
-```text
-z --commit--> Com(z)
+One additional full random row enters the nonzero shielded linear combination.
+The algebraic translation tests couple this uniform fold jointly with every
+opened initial column and public direct functional. Subtracting the padding
+contribution leaves the virtual full message `[mu || z] + c*g`, which is
+uniform. Its claim basis is `[0 || b]`, so it proves exactly the original
+claims about `z`. Recursive Ligerito therefore runs unchanged after this
+boundary.
 
-(a, b, c)
-    |
-    +-- zerocheck --> evaluations of a, b, c
-    |
-    +-- lincheck  --> AB evaluation claim on z
+The outer witness, VEIL-linear, and VEIL-Hadamard initial trees each have an
+independently sampled 256-bit tree nonce and a fresh 256-bit salt per leaf.
+The separate Fiat--Shamir proof nonce and all three tree nonces are bound into
+the transcript. Recursive trees need no privacy salt because their complete
+inputs are already witness-independent.
 
-AB claim + C claim + public digest claim
-    |
-    +-- ring-switch/Ligerito opening against Com(z)
-```
+## Masked FLOCK verifier
 
-Ordinary FLOCK sends the zerocheck and lincheck messages directly. Those
-messages depend on the witness, so ordinary FLOCK is not zero knowledge.
+At the 256-slot floor, the PIOP exposes 242 field coordinates and its two
+ring-switch claims expose 512 more. Each of the 754 coordinates receives a
+distinct uniform field mask. Every circuit-size doubling adds two sumcheck
+coordinates, so the registered 512/1024/2048-slot shapes use 756/758/760
+masks. The mask layout is derived from the exact circuit and checked against
+the registered count; proving and verification fail if the transcript consumes
+a different number or order.
 
-## Step 1: randomize and hide the witness
-
-`Blake3PreimageZkSetup::new_succinct` builds the pinned BLAKE3 R1CS with FLOCK
-ZK randomizer rows. Batches are padded to at least 256 slots.
-
-`prove_succinct` validates every supplied preimage, samples fresh randomizer
-rows for every slot, and generates:
-
-```text
-z, A z, B z, lincheck(z)
-```
-
-`prove_succinct_veil_r1cs` commits to `z` with `commit_zk_with_ro`. This is
-FLOCK's hiding commitment, not the ordinary commitment. It adds a random low
-message half and a full-support blinder codeword before Ligerito encoding.
-
-The public digest claim is a random multilinear evaluation of the digest cells
-inside `z`. The verifier computes its expected value from the public digest
-list. The claim is included in the same opening as the PIOP claims.
-
-## Step 2: mask every exposed PIOP value
-
-The prover samples a uniform `GF(2^128)` vector `h`. Its length is exactly the
-number of zerocheck and lincheck values observed by the FLOCK challenger. At
-batch 256 this is 242 values.
-
-`MaskingChallenger` wraps the normal FLOCK challenger. Whenever FLOCK observes
-a field value `v_i`, the wrapper observes:
+At fixed challenge history the visible affine transcript has the form
 
 ```text
-v'_i = v_i + h_i
+Y = A*w + B*r + d(public).
 ```
 
-It preserves FLOCK's labels, scalar framing, vector framing, challenge
-sampling, and proof-of-work methods. The serialized zerocheck and lincheck
-proofs contain the same masked values that were absorbed by Fiat--Shamir.
+Each visible coordinate is encoded as `private + fresh_mask`, and the prover
+and verifier check the exact mask cursor. The generic Lean masking theorem
+shows why that coordinate map is surjective; a follow-up conformance proof must
+connect the theorem to this Rust layout. Adaptive composition then conditions
+on each already-independent prefix before sampling the next verifier challenge.
 
-Masking the messages alone is insufficient: the verifier cannot check FLOCK's
-equations without the original values, and revealing `h` would remove the
-privacy. VEIL solves this problem.
+Ring switching is tested over `GF(2)`: the 128 by 128 matrix for a field
+challenge is built from the production basis decomposition and multiplication
+routine, then compared on all basis vectors. The masked witness, blinder, and
+folded slices obey the same committed `q = z + c*g` relation.
 
-## Step 3: commit to the masks before challenges
+## VEIL nonlinear linkage
 
-The shifted FLOCK verifier depends on Fiat--Shamir challenges derived from the
-masked transcript. The mask commitment must therefore precede those
-challenges, while the final shifted circuit cannot be constructed until after
-they exist.
+The mask commitment is made before FLOCK derives challenges. Once the masked
+transcript is known, the shifted verifier circuit reconstructs each hidden
+value from its public masked coordinate and private pad. It checks every
+zerocheck and lincheck recurrence, the terminal multiplication, AB/C linkage,
+ring-switch linkage, and public-functional linkage.
 
-The VEIL compiler is split into two phases:
+VEIL uses additive-domain Reed--Solomon codes over `GF(2^128)`. Operand and
+product codes have separately checked ZK projection, distance, and query
+budgets. Pointwise products lie in `RS[N,2K-1]`. The exact reduction function
+is checked on every pair of basis vectors, which suffices by bilinearity.
 
-1. `commit_constraint_inputs` commits to `h` and six private multiplication
-   pads using an empty placeholder circuit with the final input count.
-2. `prove_constraints_from_commitment` receives the completed shifted circuit
-   and proves it against the same commitment.
+The initial VEIL linear and Hadamard trees each use their own channel, tree
+nonce, and independent 256-bit leaf salts. Simulation constructs a shifted
+circuit genuinely satisfied by simulator-owned masks, so the ordinary ZK VEIL
+prover is never invoked on an unsatisfied assignment.
 
-The outer transcript absorbs the commitment root under
-`veil-flock-mask-root` before zerocheck starts. This removes the circular
-dependency without allowing the prover to choose masks after seeing the
-challenges.
+## Single batched opening
 
-## Step 4: construct the shifted verifier
+The exact claim manifest is formed and absorbed before batching challenges.
+One fresh witness commitment produces exactly one opening containing AB, C,
+and the public digest functional. Claim identifiers are canonical and
+duplicates are rejected. The union of distinct initial positions is checked
+against the code-padding budget.
 
-`shifted_verifier_circuit` replays the public masked transcript and derives the
-same challenges as the prover. Each original value is represented inside the
-circuit as:
+The public digest functional is derived only from the public statement. Its
+raw evaluation is safe because equal public statements induce witness
+differences in the functional's kernel; the joint PCS translation test checks
+this condition on the production construction.
 
-```text
-v_i = public(v'_i) + private(h_i)
-```
+## Simulator boundary
 
-The circuit checks:
+Before the uniform-fold boundary, the simulator uses algebraic FLOCK and VEIL
+simulators with challenges sampled from the honest distributions. It creates
+an arbitrary representative of the public affine fiber only to evaluate the
+linear post-processing needed to form the same joint distribution. This
+representative is not asserted to satisfy BLAKE3.
 
-1. the round-one C interpolation;
-2. every zerocheck folding equation;
-3. the final `a_eval * b_eval` relation;
-4. every lincheck folding equation;
-5. the final lincheck dot product;
-6. the AB evaluation value; and
-7. the C evaluation value.
+After the joint fold is uniform, the simulator runs ordinary recursive
+Ligerito and deterministic/randomized post-processing honestly. All
+Fiat--Shamir programming follows the production 256-bit block layout,
+including rejection sampling and uniform unused halves.
 
-The shifted circuit has one multiplication from the FLOCK decision. The
-remaining checks are linear over `GF(2^128)`.
+## Random-oracle compilation
 
-The AB and C values are public proof fields. The shifted circuit proves that
-they are the outputs of the hidden FLOCK transcript. The PCS independently
-proves that the same values are evaluations of `Com(z)`. This is the binding
-edge between VEIL and FLOCK.
-
-## Step 5: prove the shifted circuit with VEIL
-
-The upstream VEIL Rust implementation uses multiplicative-subgroup codes over
-a two-adic prime field. `GF(2^128)` has no two-adic multiplicative subgroup, so
-`veil-f128` implements the same required interfaces with additive-domain
-Reed--Solomon codes.
-
-`AdditiveRsCode` represents a message as evaluations on an additive subspace,
-interpolates it, and evaluates it on a disjoint affine subspace. Pointwise
-products lie in a square code with twice the degree. `square_to_base` is the
-VEIL reduction from the square-code message to the base message positions.
-
-The constraint compiler reduces the shifted circuit to:
-
-- one Hadamard proof for multiplication constraints; and
-- one dot-product proof for the batched linear constraints and links to the
-  Hadamard claims.
-
-It appends private values:
-
-```text
-(r, s, r*s, r+1, t, (r+1)*t)
-```
-
-The products `r*s` and `(r+1)*t` add two dummy Hadamard rows. Together with
-`r + (r+1) + 1 = 0`, they randomize the three dot-product claims exposed by
-the Hadamard proof. These values are committed but never serialized.
-
-Both VEIL code layers use inverse rate 8 and 160 random padding rows. The
-Fiat--Shamir transcript selects 160 distinct non-adaptive query positions.
-
-The two-phase compiler uses nonce- and channel-separated framed vector and
-Hadamard commitments. Its multiplication batching point excludes 0 and 1 so
-the six-value padding map is invertible for every accepted transcript.
-
-## Step 6: link VEIL, PCS, and the public statement
-
-After lincheck, the prover has:
-
-```text
-AB = (point_ab, value_ab)
-C  = (point_c,  value_c)
-D  = public digest evaluation claim
-```
-
-The transcript absorbs `value_ab` and `value_c` under
-`veil-flock-output-claims`. The public digest batching challenges are then
-sampled.
-
-The prover creates one hiding Ligerito opening for `AB`, `C`, and `D`. The
-shifted circuit checks `value_ab` and `value_c`; Ligerito checks all three
-claims against `Com(z)`. The verifier, not the prover, derives the value for
-`D` from the digest list.
-
-FLOCK randomizer rows change `value_ab` and `value_c` between proofs of the
-same witness. These rows are the privacy mechanism for the two values that are
-not covered by the transcript one-time pad. A formal all-challenge rank proof
-for this two-value map remains required.
-
-## Step 7: separate the terminal transcripts
-
-The Ligerito prover and verifier agree on acceptance but do not guarantee an
-identical challenger state after the terminal opening. The implementation
-therefore clones the transcript before PCS and labels the clone
-`veil-flock-inner-fork`.
-
-The original branch verifies Ligerito. The fork verifies VEIL. The fork occurs
-only after the statement, commitment roots, masked PIOP, AB/C values, and
-digest challenge are fixed. Both branches are linked through the same roots
-and AB/C claims.
-
-This fork is an explicit experimental composition boundary and still requires
-a formal proof.
-
-## Verification path
-
-`verify_succinct_veil_r1cs` performs the reverse process:
-
-1. check the registered PCS and VEIL parameters;
-2. bind the statement, nonce, and witness commitment;
-3. absorb the VEIL mask root;
-4. reconstruct the shifted circuit from the masked proofs;
-5. derive the AB, C, and public digest claims;
-6. create the same transcript fork;
-7. verify the hiding Ligerito opening; and
-8. verify the VEIL constraint proof.
-
-Acceptance requires both proof systems to verify. Mutation tests cover the
-statement, nonce, witness root, masked zerocheck, masked lincheck, AB claim,
-VEIL dot proof, VEIL Hadamard proof, and Ligerito rows.
-
-## Simulator
-
-`simulate_succinct` takes public digests and no preimage. It constructs a valid
-FLOCK witness for unrelated random messages, replaces the public digest cells
-with the requested targets, and commits to the resulting pseudo-witness.
-
-The pseudo-witness does not satisfy the hash R1CS. `RomZerocheckSimulator`
-therefore samples the zerocheck messages, programs the zerocheck challenges,
-and solves the final quadratic coefficient so the transcript ends at the
-pseudo-witness's actual terminal evaluations. Production lincheck, PCS, and
-VEIL code then complete the proof.
-
-The generic verifier accepts the simulated proof when driven by the same
-programmed Fiat--Shamir challenger. At batch 256, the simulator programs 17
-challenges.
-
-Fiat--Shamir, PCS, and VEIL commitments query the same programmable oracle
-under disjoint encodings. The simulator programs the required Fiat--Shamir
-challenges; unprogrammed PCS and VEIL points receive the native SHA-256 answer.
-The executable test checks that all three commitment channels reach the shared
-oracle.
-
-This demonstrates that an accepting transcript can be generated from the
-public statement alone. Proving that its distribution matches a real proof
-requires the remaining arguments listed in [`SECURITY.md`](SECURITY.md).
-
-## Private and public data
-
-Private data:
-
-- 64-byte messages;
-- FLOCK witness wires and randomizer rows;
-- transcript mask vector `h`;
-- FLOCK PCS blinding data; and
-- VEIL code padding, additive masks, product masks, and six private pads.
-
-Public proof data:
-
-- digest list and padded shape;
-- proof nonce and commitment roots;
-- masked zerocheck and lincheck messages;
-- AB and C evaluation values;
-- hiding Ligerito opening; and
-- VEIL dot-product and Hadamard proofs.
-
-The proof does not hide batch size, circuit shape, parameter profile, proof
-length, timing, or memory access patterns.
+One lazy classical random oracle serves Fiat--Shamir, Merkle, VEIL, and
+grinding under injective role-separated encodings. The simulator shares one
+table across adaptive proofs and programs only undefined points. Fresh proof
+nonces, tree channels, leaf salts, and masks make sequential composition
+independent even for correlated witnesses. The exact pROM bound and
+limitations are stated in [SECURITY.md](SECURITY.md).

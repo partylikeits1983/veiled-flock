@@ -1252,8 +1252,8 @@ pub fn evaluate_zk_terminals_packed_padded(
 /// isolation: the round pairs `(M_j(1), M_j(∞))` of the `P·Q★` product
 /// sumcheck, at the same challenge schedule the masked prover uses.
 ///
-/// This is the map whose F₂ image the prover's per-proof coverage
-/// self-check measures (`flock_prover::zk_rank_check`). It runs the SAME
+/// This is the map whose F2 image is measured by the symbolic mask coverage
+/// test. It runs the SAME
 /// kernels as [`prove_packed_padded_zk`] — the skip fold and the naive
 /// round-pair kernel on the same folded cubes — so what is measured is the
 /// shipped map, not a re-derivation of it.

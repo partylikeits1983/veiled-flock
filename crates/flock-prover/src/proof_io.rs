@@ -26,6 +26,8 @@
 use std::io;
 use std::path::Path;
 
+#[cfg(feature = "veil")]
+use bincode::Options;
 use serde::{Deserialize, Serialize};
 
 use flock_core::pcs::Commitment;
@@ -66,19 +68,21 @@ impl HashKind {
 }
 
 /// Flavor discriminator (1 byte). Lets a generic reader peek what kind of
-/// bundle a file holds without parsing the payload first. Values 0/1 are
-/// reserved: they were the legacy BaseFold R1cs/Chain flavors.
+/// bundle a file holds without parsing the payload first.
 const FLAVOR_R1CS_LIGERITO: u8 = 2;
 const FLAVOR_CHAIN_LIGERITO: u8 = 3;
-/// A1′ reference zk proof bundle ([`R1csProofBundleZkA1`]).
-const FLAVOR_R1CS_ZK_A1: u8 = 4;
+/// Full-view VEIL-FLOCK proof for the fixed 64-byte BLAKE3-preimage relation.
+const FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE: u8 = 5;
 
 /// All flavor bytes this build understands (for the unknown-flavor check).
 const KNOWN_FLAVORS: [u8; 3] = [
     FLAVOR_R1CS_LIGERITO,
     FLAVOR_CHAIN_LIGERITO,
-    FLAVOR_R1CS_ZK_A1,
+    FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE,
 ];
+
+#[cfg(feature = "veil")]
+pub const MAX_VEIL_FLOCK_BUNDLE_BYTES: u64 = 1024 * 1024;
 
 /// Header size = 5-byte magic + 1-byte flavor.
 const HEADER_LEN: usize = 6;
@@ -145,6 +149,55 @@ pub struct ChainProofBundleLigerito {
     pub cv_last_phys: Vec<bool>,
 }
 
+/// Canonical wire bundle for the full-view VEIL-FLOCK BLAKE3 preimage
+/// instantiation. The outer flavor byte fixes this payload shape.
+#[cfg(feature = "veil")]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct VeilFlockProofBundle {
+    pub digests: Vec<[u8; 32]>,
+    pub commitment: Commitment,
+    pub proof: crate::succinct_veil::SuccinctVeilProof,
+}
+
+#[cfg(feature = "veil")]
+impl VeilFlockProofBundle {
+    pub fn new(
+        digests: Vec<[u8; 32]>,
+        commitment: Commitment,
+        proof: crate::succinct_veil::SuccinctVeilProof,
+    ) -> Self {
+        Self {
+            digests,
+            commitment,
+            proof,
+        }
+    }
+
+    fn options() -> impl Options {
+        bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .with_limit(MAX_VEIL_FLOCK_BUNDLE_BYTES)
+            .reject_trailing_bytes()
+    }
+
+    pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
+        let mut out = Vec::with_capacity(HEADER_LEN + 1024);
+        write_header(&mut out, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE);
+        Self::options().serialize_into(&mut out, self)?;
+        Ok(out)
+    }
+
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
+        if bytes.len() as u64 > MAX_VEIL_FLOCK_BUNDLE_BYTES {
+            return Err(DeserializeError::Bincode(Box::new(
+                bincode::ErrorKind::SizeLimit,
+            )));
+        }
+        let payload = parse_header(bytes, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE)?;
+        Ok(Self::options().deserialize(payload)?)
+    }
+}
+
 impl R1csProofBundleLigerito {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
@@ -154,34 +207,6 @@ impl R1csProofBundleLigerito {
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
         let payload = parse_header(bytes, FLAVOR_R1CS_LIGERITO)?;
-        Ok(bincode::deserialize(payload)?)
-    }
-}
-
-/// Bundles an A1′ reference zk proof with its witness commitment. The
-/// verifier additionally needs the (public) statement setup and PCS params;
-/// `proof.comm_p` travels inside the proof itself.
-///
-/// The canonical field classification of everything in this bundle lives in
-/// [`crate::transcript_schema`]; `from_bytes` + `transcript_schema::flatten_a1`
-/// form the independent transcript parser.
-#[cfg(feature = "zk")]
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct R1csProofBundleZkA1 {
-    pub commitment: Commitment,
-    pub proof: crate::prover::R1csProofZkA1,
-}
-
-#[cfg(feature = "zk")]
-impl R1csProofBundleZkA1 {
-    pub fn to_bytes(&self) -> Vec<u8> {
-        let mut out = Vec::with_capacity(HEADER_LEN + 1024);
-        write_header(&mut out, FLAVOR_R1CS_ZK_A1);
-        bincode::serialize_into(&mut out, self).expect("bincode serialize R1csProofBundleZkA1");
-        out
-    }
-    pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
-        let payload = parse_header(bytes, FLAVOR_R1CS_ZK_A1)?;
         Ok(bincode::deserialize(payload)?)
     }
 }

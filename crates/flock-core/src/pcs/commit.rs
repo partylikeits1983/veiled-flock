@@ -135,6 +135,10 @@ pub struct Commitment {
 pub struct ProverData {
     pub codeword: Vec<F128>,
     pub merkle_tree: Vec<Hash>,
+    /// ZK mode only: one independent salt for every initial L0 leaf. Opened
+    /// salts travel with the L0 multi-proof; recursive commitments are made
+    /// only after the witness-independent fold and therefore remain unsalted.
+    pub initial_leaf_salts: Vec<[u8; 32]>,
     /// zk mode only: the uniform low-half mask block of the committed message
     /// `message′ = [zk_mask ‖ z_packed]` (length `2^{m−7}`; empty otherwise).
     pub zk_mask: Vec<F128>,
@@ -252,7 +256,7 @@ pub fn commit_into_with_ro(
     // layers' full-buffer reads and multiplies.
     replicate_message_fill(&mut codeword, z_packed);
 
-    finalize_commit(codeword, params, ro, channel)
+    finalize_commit(codeword, params, ro, channel, Vec::new())
 }
 
 /// Zero-knowledge commit: commits `message′ = [mask ‖ z_packed]` (uniform
@@ -300,10 +304,25 @@ pub fn commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
     rng.fill_f128(&mut mask);
     let mut blind = crate::scratch::take_f128(2 * w);
     rng.fill_f128(&mut blind);
+    let mut salt_fields = vec![F128::ZERO; 2 * params.n_leaves()];
+    rng.fill_f128(&mut salt_fields);
+    let initial_leaf_salts = salt_fields
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|pair| {
+            let mut salt = [0u8; 32];
+            salt[..8].copy_from_slice(&pair[0].lo.to_le_bytes());
+            salt[8..16].copy_from_slice(&pair[0].hi.to_le_bytes());
+            salt[16..24].copy_from_slice(&pair[1].lo.to_le_bytes());
+            salt[24..].copy_from_slice(&pair[1].hi.to_le_bytes());
+            salt
+        })
+        .collect::<Vec<_>>();
 
     let mut codeword = crate::scratch::take_f128(params.codeword_len_f128());
     replicate_message_fill_zk(&mut codeword, &mask, z_packed, &blind, params.num_ntts());
-    let (commitment, mut pd) = finalize_commit(codeword, params, ro, channel);
+    let (commitment, mut pd) = finalize_commit(codeword, params, ro, channel, initial_leaf_salts);
     pd.zk_mask = mask;
     pd.zk_blind = blind;
     (commitment, pd)
@@ -378,6 +397,7 @@ fn finalize_commit(
     params: &PcsParams,
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
+    initial_leaf_salts: Vec<[u8; 32]>,
 ) -> (Commitment, ProverData) {
     let timing = std::env::var_os("FLOCK_COMMIT_TIMING").is_some();
     let t_ntt = std::time::Instant::now();
@@ -414,7 +434,18 @@ fn finalize_commit(
     // Initial tree: one leaf per codeword position, each containing the
     // row-batch lanes (num_ntts F_{2^128} values = 2^log_batch_size). This is
     // Ligerito's L0 commitment.
-    let merkle_tree = merkle::merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0);
+    let merkle_tree = if initial_leaf_salts.is_empty() {
+        merkle::merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0)
+    } else {
+        merkle::merkle_tree_framed_salted(
+            codeword_bytes,
+            params.n_leaves(),
+            &initial_leaf_salts,
+            ro,
+            channel,
+            0,
+        )
+    };
     let root = *merkle_tree.last().expect("merkle tree non-empty");
     if timing {
         eprintln!(
@@ -431,6 +462,7 @@ fn finalize_commit(
         ProverData {
             codeword,
             merkle_tree,
+            initial_leaf_salts,
             zk_mask: Vec::new(),
             zk_blind: Vec::new(),
         },
@@ -635,9 +667,10 @@ mod tests {
                 core::slice::from_raw_parts(oracle.as_ptr() as *const u8, oracle.len() * 16)
             };
             let ro = crate::ro::RoContext::plain();
-            let oracle_root = *crate::merkle::merkle_tree_framed(
+            let oracle_root = *crate::merkle::merkle_tree_framed_salted(
                 oracle_bytes,
                 params.n_leaves(),
+                &pd.initial_leaf_salts,
                 &ro,
                 crate::ro::RoChannel::Witness,
                 0,

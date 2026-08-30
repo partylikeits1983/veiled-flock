@@ -1,9 +1,5 @@
-# Offline exact ZK certificates: the expensive image-coverage / conditional
-# joint-coverage jobs (tens of thousands of real prover runs) plus the m=22
-# end-to-end A1' runs. Too heavy for the per-PR Test workflow; runs weekly
-# and on demand. scripts/zk-certify.sh is the single source of truth for
-# what counts as certificate evidence — its manifest must list exactly the
-# tests named in the ZkCertificate registry's `evidence` field.
+# Full executable Rust ZK certificate suite. It runs weekly and on demand; the
+# per-PR workflow separately keeps the ordinary Rust checks mandatory.
 
 name: ZK certificates
 
