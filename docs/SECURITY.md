@@ -116,8 +116,18 @@ share one 256-bit output where applicable, unused halves remain uniform, and
 nonzero or not-zero-or-one challenges use exact rejection sampling. Outer
 blinding grinding uses the canonical first-success nonce and accepts only the
 first 4096 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
-the ledger conservatively reserves sixteen grind sites although the registered
-profiles use at most three live fold-grinding sites.
+the ledger conservatively reserves sixteen grind sites. At most three levels of
+a registered full-ZK shape carry a positive fold grind, and such a shape emits
+at most twelve fold-grind nonces.
+
+The Secure profile is in the unique-decoding regime, where the fold-challenge
+grind is flat: every fold round of a level grinds the full
+`fold_grinding_bits`. The Johnson profiles taper the grind by one bit per fold
+round, because their row-union factor makes each later round one bit stronger.
+`LigeritoSecurityConfig::aggregate_soundness_bound` charges the worst-round
+proximity error and the full grind in every round, so both regimes match the
+ledger exactly.
+
 The public prove and verify methods instantiate the pinned SHA-256 transcript
 domain internally; substituting the test-only random challenger is not part of
 their API.

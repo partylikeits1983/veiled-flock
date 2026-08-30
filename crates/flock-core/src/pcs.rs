@@ -1424,6 +1424,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: vec![0; n_levels],
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
         let v = crate::pcs::ligerito::VerifierConfig {
@@ -1437,6 +1438,7 @@ mod tests {
             queries,
             grinding_bits: vec![0; n_levels],
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
         (p, v)
@@ -1737,6 +1739,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
         let lig_v_cfg = crate::pcs::ligerito::VerifierConfig {
@@ -1750,6 +1753,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
 

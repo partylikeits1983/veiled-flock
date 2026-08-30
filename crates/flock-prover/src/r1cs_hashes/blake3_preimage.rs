@@ -583,8 +583,10 @@ impl Blake3PreimageZkSetup {
         .expect("full-ZK setup requires a registered Secure Ligerito configuration");
         let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
             .expect("registered Secure Ligerito configuration must validate");
+        // The full-ZK path opens the hiding wide-leaf L0 commitment, so the
+        // ledger must also carry the `c` combination event.
         config
-            .aggregate_soundness_bound()
+            .aggregate_soundness_bound_zk_l0()
             .expect("registered Secure Ligerito aggregate bound")
             .probability()
     }
@@ -1069,7 +1071,9 @@ mod tests {
         oversized_blind_grind.blind_grind_nonce = crate::succinct_veil::MAX_BLIND_GRIND_TRIALS;
         rejects(&oversized_blind_grind, &commitment, &digests);
 
-        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 1);
+        // The registered Secure shape is UDR, so L0 grinds its one
+        // fold-grind bit in every one of its six fold rounds.
+        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 6);
         let mut oversized_ligerito_grind = proof.clone();
         oversized_ligerito_grind
             .pcs_open

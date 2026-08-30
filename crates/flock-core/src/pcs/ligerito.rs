@@ -127,6 +127,20 @@ pub struct ProverConfig {
     /// proximity-gap term, which lives on the fold challenges. Length =
     /// recursive_steps + 1.
     pub fold_grinding_bits: Vec<usize>,
+    /// Per-level fold-grind taper flag (L0, ..., L_r). Length =
+    /// recursive_steps + 1.
+    ///
+    /// `true` charges fold round `j` only `fold_grinding_bits − j` bits. That
+    /// discount is correct ONLY in the Johnson regime, where the App. C.3
+    /// `mca-commutes` row-union factor `2^{ℓ−1−j}` already makes round `j`
+    /// exactly `j` bits better than the worst round that
+    /// `expected_eps_pg_bits` reports.
+    ///
+    /// `false` charges every fold round the full `fold_grinding_bits`. The
+    /// unique-decoding regime needs this: its list has size 1, so no row-union
+    /// factor exists and every round carries the same proximity error. Flat
+    /// grinding is always the conservative choice.
+    pub fold_grinding_taper: Vec<bool>,
     /// Per-commit-level out-of-domain samples (L0, ..., L_r), taken right
     /// after the level's Merkle root enters the transcript. `[0]` must be 0:
     /// L0 is bound by the opening's own (post-commit, random-point)
@@ -150,6 +164,9 @@ pub struct VerifierConfig {
     /// Per-level fold-challenge PoW grinding bits (one grind per fold
     /// challenge of the level). Length = recursive_steps + 1.
     pub fold_grinding_bits: Vec<usize>,
+    /// Per-level fold-grind taper flag; mirrors
+    /// [`ProverConfig::fold_grinding_taper`]. Length = recursive_steps + 1.
+    pub fold_grinding_taper: Vec<bool>,
     /// Per-commit-level OOD samples. Length = recursive_steps + 1.
     pub ood_samples: Vec<usize>,
 }
@@ -164,6 +181,30 @@ const UDR_TARGET_BITS: f64 = 100.0;
 const ZERO_PROBABILITY: f64 = 0.0;
 const BINARY_PROBABILITY_BASE: f64 = 2.0;
 const MIN_EFFECTIVE_FOLD_COUNT: usize = 1;
+/// Extra PoW bits the hiding L0 combination challenge `c` carries over the
+/// level's registered fold grind. Mirrors `pcs::open_zk` / `pcs::verify`.
+const ZK_L0_EXTRA_GRIND_BITS: f64 = 1.0;
+
+/// PoW bits ground before fold round `j` of level `lvl`. The prover and both
+/// verifiers share this so their transcripts cannot drift.
+///
+/// A Johnson level tapers by one bit per round: the App. C.3 `mca-commutes`
+/// row-union factor already makes round `j` that much stronger. A UDR level
+/// grinds the full width in every round, because its list has size 1 and no
+/// row-union factor exists. See [`ProverConfig::fold_grinding_taper`].
+fn fold_round_grind_bits(
+    fold_grinding_bits: &[usize],
+    fold_grinding_taper: &[bool],
+    lvl: usize,
+    j: usize,
+) -> u32 {
+    let bits = fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32;
+    if fold_grinding_taper.get(lvl).copied().unwrap_or(false) {
+        bits.saturating_sub(j as u32)
+    } else {
+        bits
+    }
+}
 const ROUNDED_DIAGNOSTIC_HALF_ULP_BITS: f64 = 0.05;
 const FULL_RELATIVE_DISTANCE: f64 = 1.0;
 const UDR_MAX_RADIUS_DISTANCE_DIVISOR: f64 = 2.0;
@@ -266,6 +307,7 @@ pub fn default_config(
         queries,
         grinding_bits,
         fold_grinding_bits: vec![0usize; n_levels],
+        fold_grinding_taper: vec![false; n_levels],
         ood_samples: vec![0usize; n_levels],
     })
 }
@@ -446,6 +488,7 @@ pub fn default_verifier_config(
         queries: p.queries,
         grinding_bits: p.grinding_bits,
         fold_grinding_bits: p.fold_grinding_bits,
+        fold_grinding_taper: p.fold_grinding_taper,
         ood_samples: p.ood_samples,
     })
 }
@@ -933,6 +976,19 @@ impl LigeritoSecurityConfig {
     /// query phase, and OOD event. This is intentionally separate from the
     /// historical per-round minimum diagnostic: callers making an aggregate
     /// security claim must use this union bound.
+    ///
+    /// The proximity term charges `fold_count · 2^-(eps_pg + fold_grinding)`
+    /// per level, so it prices every fold round at the worst-round proximity
+    /// error and the full fold grind. Both regimes honour that ledger:
+    ///
+    /// * UDR levels grind flat, so round `j` really does pay
+    ///   `eps_pg + fold_grinding_bits`.
+    /// * Johnson levels taper the grind by `j` bits, but the row-union factor
+    ///   makes round `j`'s error `eps_pg + j`, so the sum is unchanged.
+    ///
+    /// [`ProverConfig::fold_grinding_taper`] is what keeps the two in step.
+    /// A full-ZK opening adds one more L0 event; use
+    /// [`Self::aggregate_soundness_bound_zk_l0`] for that.
     pub fn aggregate_soundness_bound(&self) -> Result<AggregateSoundnessBound, String> {
         self.validate()?;
         let mut proximity_probability = ZERO_PROBABILITY;
@@ -958,6 +1014,27 @@ impl LigeritoSecurityConfig {
             query_probability,
             ood_probability,
         })
+    }
+
+    /// Additive whole-opening bound for a **hiding (full-ZK)** opening.
+    ///
+    /// The zk L0 commitment carries wide leaves `[f' lanes ‖ g lanes]` and the
+    /// recursion runs on `F = f' + c·g`. That combination is one extra L0
+    /// proximity event on top of the folds
+    /// [`Self::aggregate_soundness_bound`] already charges. The prover and the
+    /// verifier guard `c` with `fold_grinding_bits[0] + 1` bits of PoW (see
+    /// `pcs::open_zk` and `pcs::verify`), so the event costs
+    /// `2^-(eps_pg(L0) + fold_grinding_bits[0] + 1)`.
+    pub fn aggregate_soundness_bound_zk_l0(&self) -> Result<AggregateSoundnessBound, String> {
+        let mut bound = self.aggregate_soundness_bound()?;
+        let l0 = self
+            .levels
+            .first()
+            .ok_or_else(|| "empty levels".to_string())?;
+        let (pg_bits, _) = l0.paper_predicted_bits();
+        let c_grind_bits = l0.fold_grinding_bits as f64 + ZK_L0_EXTRA_GRIND_BITS;
+        bound.proximity_probability += BINARY_PROBABILITY_BASE.powf(-(pg_bits + c_grind_bits));
+        Ok(bound)
     }
 
     /// Validate that the config is internally consistent and matches the
@@ -1497,6 +1574,14 @@ impl LigeritoSecurityConfig {
         let grinding_bits: Vec<usize> = self.levels.iter().map(|lv| lv.grinding_bits).collect();
         let fold_grinding_bits: Vec<usize> =
             self.levels.iter().map(|lv| lv.fold_grinding_bits).collect();
+        // Only the Johnson regime earns the per-round taper: its row-union
+        // factor already pays back one bit per fold round. UDR levels grind
+        // flat, because their proximity error is the same in every round.
+        let fold_grinding_taper: Vec<bool> = self
+            .levels
+            .iter()
+            .map(|lv| matches!(lv.regime, SoundnessRegime::JohnsonOod))
+            .collect();
         let ood_samples: Vec<usize> = self.levels.iter().map(|lv| lv.ood_samples).collect();
         let prover = ProverConfig {
             log_inv_rates: log_inv_rates.clone(),
@@ -1509,6 +1594,7 @@ impl LigeritoSecurityConfig {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: fold_grinding_bits.clone(),
+            fold_grinding_taper: fold_grinding_taper.clone(),
             ood_samples: ood_samples.clone(),
         };
         let verifier = VerifierConfig {
@@ -1522,6 +1608,7 @@ impl LigeritoSecurityConfig {
             queries,
             grinding_bits,
             fold_grinding_bits,
+            fold_grinding_taper,
             ood_samples,
         };
         Ok((prover, verifier))
@@ -3344,8 +3431,14 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     );
     let mut ood_values: Vec<F128> = Vec::new();
     let mut fold_grinding_nonces: Vec<u64> = Vec::new();
-    let fold_bits =
-        |lvl: usize| -> u32 { config.fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32 };
+    let fold_round_bits = |lvl: usize, j: usize| -> u32 {
+        fold_round_grind_bits(
+            &config.fold_grinding_bits,
+            &config.fold_grinding_taper,
+            lvl,
+            j,
+        )
+    };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
 
     let _t = std::time::Instant::now();
@@ -3362,12 +3455,12 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         // each of these lane-fold challenges, so each one is individually
         // PoW-guarded (a cheating prover re-rolls a fold challenge by
         // varying the preceding sumcheck message; the grind prices every
-        // such attempt). Tapered per round: round j folds a 2^{ℓ-j}-row word
-        // whose MCA error carries the factor 2^{ℓ-1-j} (App. C.3 Lemma
-        // `mca-commutes`), so it needs (fold_bits − j) bits — one fewer per
-        // round than the worst (j=0) round `fold_grinding_bits` is sized for.
-        // Derived from fold_grinding_bits + round index; not stored.
-        let bits = fold_bits(0).saturating_sub(j as u32);
+        // such attempt). A Johnson level tapers per round: round j folds a
+        // 2^{ℓ-j}-row word whose MCA error carries the factor 2^{ℓ-1-j}
+        // (App. C.3 Lemma `mca-commutes`), so it needs (fold_bits − j) bits.
+        // A UDR level has no row-union factor, so every round carries the
+        // same proximity error and grinds the full `fold_grinding_bits`.
+        let bits = fold_round_bits(0, j);
         if bits > 0 {
             fold_grinding_nonces.push(challenger.grind_pow(bits));
         }
@@ -3525,9 +3618,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         let _t = std::time::Instant::now();
         for j in 0..k_i {
             // These folds fold level i+1's commitment — fold-challenge
-            // grinding guards its proximity-gap term. Tapered per round:
-            // round j needs (fold_bits − j) bits (see L0 loop).
-            let bits = fold_bits(i + 1).saturating_sub(j as u32);
+            // grinding guards its proximity-gap term. Tapered per round only
+            // in the Johnson regime (see L0 loop).
+            let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 fold_grinding_nonces.push(challenger.grind_pow(bits));
             }
@@ -3845,8 +3938,14 @@ where
     challenger.observe_f128(start_msg.u_2);
     let mut running_quad = RoundQuad::from_msg(start_msg, t_r);
 
-    let fold_bits =
-        |lvl: usize| -> u32 { config.fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32 };
+    let fold_round_bits = |lvl: usize, j: usize| -> u32 {
+        fold_round_grind_bits(
+            &config.fold_grinding_bits,
+            &config.fold_grinding_taper,
+            lvl,
+            j,
+        )
+    };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
     if config.ood_samples.first().copied().unwrap_or(0) != 0 {
         return false; // L0 must be bound by the opening's own eval claim
@@ -3864,9 +3963,9 @@ where
 
     let mut r_lane_fold = Vec::with_capacity(initial_k);
     for j in 0..initial_k {
-        // Fold-challenge PoW mirror (L0's lane folds), tapered per round to
-        // (fold_bits − j) — see the prover's L0 loop.
-        let bits = fold_bits(0).saturating_sub(j as u32);
+        // Fold-challenge PoW mirror (L0's lane folds) — see the prover's L0
+        // loop for when the per-round taper applies.
+        let bits = fold_round_bits(0, j);
         if bits > 0 {
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
@@ -4042,9 +4141,9 @@ where
         }
         let mut level_rs = Vec::with_capacity(k_i);
         for j in 0..k_i {
-            // Fold-challenge PoW mirror (level i+1's folds), tapered per round
-            // to (fold_bits − j) — see the prover's L0 loop.
-            let bits = fold_bits(i + 1).saturating_sub(j as u32);
+            // Fold-challenge PoW mirror (level i+1's folds) — see the
+            // prover's L0 loop for when the per-round taper applies.
+            let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
@@ -4426,8 +4525,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     challenger.observe_f128(start_msg.u_2);
     let mut running_quad = RoundQuad::from_msg(start_msg, t_r);
 
-    let fold_bits =
-        |lvl: usize| -> u32 { config.fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32 };
+    let fold_round_bits = |lvl: usize, j: usize| -> u32 {
+        fold_round_grind_bits(
+            &config.fold_grinding_bits,
+            &config.fold_grinding_taper,
+            lvl,
+            j,
+        )
+    };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
     if config.ood_samples.first().copied().unwrap_or(0) != 0 {
         return false; // L0 must be bound by the opening's own eval claim
@@ -4440,9 +4545,9 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
 
     let mut r_lane_fold = Vec::with_capacity(initial_k);
     for j in 0..initial_k {
-        // Fold-challenge PoW mirror (L0's lane folds), tapered per round to
-        // (fold_bits − j) — see the prover's L0 loop.
-        let bits = fold_bits(0).saturating_sub(j as u32);
+        // Fold-challenge PoW mirror (L0's lane folds) — see the prover's L0
+        // loop for when the per-round taper applies.
+        let bits = fold_round_bits(0, j);
         if bits > 0 {
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
@@ -4571,9 +4676,9 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         }
         let mut level_rs = Vec::with_capacity(k_i);
         for j in 0..k_i {
-            // Fold-challenge PoW mirror (level i+1's folds), tapered per round
-            // to (fold_bits − j) — see the prover's L0 loop.
-            let bits = fold_bits(i + 1).saturating_sub(j as u32);
+            // Fold-challenge PoW mirror (level i+1's folds) — see the
+            // prover's L0 loop for when the per-round taper applies.
+            let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
@@ -5839,6 +5944,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -5870,6 +5976,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"pow-test");
@@ -6364,6 +6471,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let verifier_cfg = VerifierConfig {
@@ -6377,6 +6485,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let _ = num_queries; // queries derived per-level from log_inv_rates now
@@ -6441,6 +6550,7 @@ mod tests {
             queries: queries_per_level.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; r + 1],
+            fold_grinding_taper: vec![false; r + 1],
             ood_samples: vec![0; r + 1],
         };
         let v_cfg = VerifierConfig {
@@ -6454,6 +6564,7 @@ mod tests {
             queries: queries_per_level,
             grinding_bits,
             fold_grinding_bits: vec![0; r + 1],
+            fold_grinding_taper: vec![false; r + 1],
             ood_samples: vec![0; r + 1],
         };
 
@@ -6805,6 +6916,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 3],
+            fold_grinding_taper: vec![false; 3],
             ood_samples: vec![0; 3],
         };
         let v_cfg = VerifierConfig {
@@ -6818,6 +6930,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 3],
+            fold_grinding_taper: vec![false; 3],
             ood_samples: vec![0; 3],
         };
 
@@ -6860,6 +6973,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut p_ch = crate::challenger::FsChallenger::new(b"serde");
@@ -6904,6 +7018,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -6934,6 +7049,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"basis-test");
@@ -7124,6 +7240,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7154,6 +7271,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7216,6 +7334,8 @@ mod tests {
         }
         let queries = vec![20usize; r + 1];
         let grinding_bits = vec![0usize; r + 1];
+        // These shapes grind flat, like every UDR level.
+        let fold_grinding_taper = vec![false; r + 1];
         let p = ProverConfig {
             log_inv_rates: log_inv_rates.clone(),
             recursive_steps: r,
@@ -7227,6 +7347,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: fold_grinding_bits.clone(),
+            fold_grinding_taper: fold_grinding_taper.clone(),
             ood_samples: ood_samples.clone(),
         };
         let v = VerifierConfig {
@@ -7240,6 +7361,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits,
+            fold_grinding_taper,
             ood_samples,
         };
         (p, v)
@@ -7447,6 +7569,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7477,6 +7600,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"batched");
@@ -7517,6 +7641,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7568,6 +7693,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"l0-test");
@@ -7606,6 +7732,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let verifier_cfg = VerifierConfig {
@@ -7619,6 +7746,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7685,5 +7813,161 @@ mod tests {
         // same root.
         let w2 = ligero_commit(&poly, log_msg, log_interleaved, log_inv_rate, &ntt);
         assert_eq!(w.root(), w2.root());
+    }
+}
+
+#[cfg(test)]
+mod fold_grind_taper_tests {
+    use super::*;
+
+    fn security_config(m: usize, profile: LigeritoProfile) -> LigeritoSecurityConfig {
+        let source = embedded_security_config(m, profile).expect("registered config");
+        LigeritoSecurityConfig::from_toml_str(source).expect("config validates")
+    }
+
+    /// Only the Johnson regime buys the per-round taper. Every Secure config
+    /// is UDR, so every full-ZK shape must grind flat.
+    #[test]
+    fn regime_selects_the_fold_grind_taper() {
+        for m in 22..=35 {
+            let secure = security_config(m, LigeritoProfile::Secure);
+            let (prover, verifier) = secure.to_prover_verifier_configs().unwrap();
+            assert!(
+                prover.fold_grinding_taper.iter().all(|&t| !t),
+                "m{m} Secure is UDR, so no level may taper"
+            );
+            assert_eq!(prover.fold_grinding_taper, verifier.fold_grinding_taper);
+            assert_eq!(prover.fold_grinding_taper.len(), secure.levels.len());
+
+            for profile in [LigeritoProfile::Fast, LigeritoProfile::Slim] {
+                let johnson = security_config(m, profile);
+                let (prover, _) = johnson.to_prover_verifier_configs().unwrap();
+                assert!(
+                    prover.fold_grinding_taper.iter().all(|&t| t),
+                    "m{m} {profile:?} is JohnsonOod, so every level tapers"
+                );
+            }
+        }
+    }
+
+    /// A UDR level emits one nonce per fold round, all at the registered
+    /// width. The tapered reading would drop the rounds whose bits reach 0.
+    #[test]
+    fn udr_level_grinds_every_fold_round_at_full_width() {
+        let log_n = 12;
+        let initial_k = 3;
+        let k_0 = 2;
+        let log_inv_rate = 1;
+        let fold_bits = 2usize;
+
+        let mut rng = crate::challenger::RandomChallenger::new(0xF01D_6417);
+        let poly: Vec<F128> = (0..(1usize << log_n)).map(|_| rng.sample_f128()).collect();
+        let z: Vec<F128> = (0..log_n).map(|_| rng.sample_f128()).collect();
+        let b = build_eq_table(&z);
+        let target: F128 = poly
+            .iter()
+            .zip(b.iter())
+            .map(|(&a, &c)| a * c)
+            .fold(F128::ZERO, |a, x| a + x);
+
+        let log_inv_rates = vec![log_inv_rate, log_inv_rate];
+        let build = |taper: bool| {
+            let prover = ProverConfig {
+                log_inv_rates: log_inv_rates.clone(),
+                recursive_steps: 1,
+                initial_log_msg_cols: log_n - initial_k,
+                initial_log_num_interleaved: initial_k,
+                initial_k,
+                recursive_log_msg_cols: vec![log_n - initial_k - k_0],
+                recursive_ks: vec![k_0],
+                queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
+                grinding_bits: vec![0; 2],
+                fold_grinding_bits: vec![fold_bits, 0],
+                fold_grinding_taper: vec![taper; 2],
+                ood_samples: vec![0; 2],
+            };
+            let verifier = VerifierConfig {
+                log_inv_rates: log_inv_rates.clone(),
+                recursive_steps: 1,
+                initial_log_msg_cols: log_n - initial_k,
+                initial_log_num_interleaved: initial_k,
+                initial_k,
+                recursive_log_msg_cols: vec![log_n - initial_k - k_0],
+                recursive_ks: vec![k_0],
+                queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
+                grinding_bits: vec![0; 2],
+                fold_grinding_bits: vec![fold_bits, 0],
+                fold_grinding_taper: vec![taper; 2],
+                ood_samples: vec![0; 2],
+            };
+            (prover, verifier)
+        };
+
+        let log_msg_cols_0 = log_n - initial_k;
+        let ntt_0 = AdditiveNttF128::standard(log_msg_cols_0 + log_inv_rate);
+        let wtns_0 = ligero_commit(&poly, log_msg_cols_0, initial_k, log_inv_rate, &ntt_0);
+        let initial_root = wtns_0.root();
+
+        let prove_and_verify = |taper: bool| -> usize {
+            let (p_cfg, v_cfg) = build(taper);
+            let mut p_ch = crate::challenger::FsChallenger::new(b"taper-test");
+            let proof = recursive_prover_with_basis(
+                &p_cfg,
+                poly.clone(),
+                b.clone(),
+                target,
+                &wtns_0.mat,
+                &wtns_0.tree,
+                &mut p_ch,
+            );
+            let mut v_ch = crate::challenger::FsChallenger::new(b"taper-test");
+            assert!(
+                recursive_verifier_with_basis(&v_cfg, &proof, &b, target, &initial_root, &mut v_ch),
+                "verifier must accept its own taper setting"
+            );
+            proof.fold_grinding_nonces.len()
+        };
+
+        // Flat: 3 L0 rounds at 2 bits each.
+        assert_eq!(prove_and_verify(false), initial_k);
+        // Tapered: 2 bits, 1 bit, then 0 bits — the last round emits nothing.
+        assert_eq!(prove_and_verify(true), initial_k - 1);
+    }
+
+    /// The aggregate ledger charges the full grind in every fold round, and
+    /// the UDR protocol now pays it. Guard the advertised PCS bits.
+    #[test]
+    fn secure_aggregate_bits_match_the_flat_ledger() {
+        let expected = [
+            (22usize, 116.584f64),
+            (23, 116.420),
+            (24, 116.432),
+            (25, 116.086),
+            (26, 116.067),
+        ];
+        for (m, bits) in expected {
+            let cfg = security_config(m, LigeritoProfile::Secure);
+            let got = cfg.aggregate_soundness_bound().unwrap().bits();
+            assert!(
+                (got - bits).abs() < 0.01,
+                "m{m}: aggregate PCS bits {got:.3}, expected {bits:.3}"
+            );
+        }
+    }
+
+    /// The hiding L0 combination is one extra proximity event, so the full-ZK
+    /// ledger must be strictly weaker than the plain one — by less than a bit.
+    #[test]
+    fn zk_l0_ledger_charges_the_c_combination() {
+        for m in 22..=26 {
+            let cfg = security_config(m, LigeritoProfile::Secure);
+            let plain = cfg.aggregate_soundness_bound().unwrap().bits();
+            let zk = cfg.aggregate_soundness_bound_zk_l0().unwrap().bits();
+            assert!(zk < plain, "m{m}: zk ledger must charge more than plain");
+            assert!(
+                plain - zk < 1.0,
+                "m{m}: one guarded L0 event costs less than a bit"
+            );
+        }
     }
 }

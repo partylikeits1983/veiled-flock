@@ -80,6 +80,7 @@ fn tiny_config() -> ProverConfig {
         queries,
         grinding_bits: vec![0; n_levels],
         fold_grinding_bits: vec![0; n_levels],
+        fold_grinding_taper: vec![false; n_levels],
         ood_samples: vec![0; n_levels],
     }
 }
