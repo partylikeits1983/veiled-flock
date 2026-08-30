@@ -3,11 +3,12 @@
 VEIL-FLOCK targets a zero-knowledge succinct argument for the pinned 64-byte
 BLAKE3-preimage relation in the classical programmable random-oracle model
 (pROM). The repository contains an executable witness-free simulator, generic
-Lean masking lemmas, algebraic translation tests, and concrete security
-ledgers. It does not yet contain a machine-checked end-to-end theorem connecting
-those lemmas to the Rust implementation. Treat the protocol as a candidate
-construction, not as a proved or audited zero-knowledge system, and do not use
-it to protect production secrets.
+Lean masking lemmas, algebraic translation tests, concrete security ledgers,
+and a machine-checked Lean theorem for the formal production protocol model. It
+does not yet contain an independent audit or a full mechanized correspondence
+proof from every Rust code path to that Lean model. Treat the implementation as
+a candidate construction, not as an audited zero-knowledge system, and do not
+use it to protect production secrets.
 
 ## Target properties
 
@@ -26,13 +27,15 @@ it to protect production secrets.
 
 ## Target zero-knowledge theorem
 
-The formalization must establish that, for every valid public statement `x`,
-every witness `w` satisfying the pinned relation, every adaptive classical
-adversary making at most `Q_H` oracle queries, and every sequence of fresh
-proofs, the real verifier view is
-indistinguishable from `Blake3PreimageZkSetup::simulate(x)`, which receives no
-preimage. One shared lazy oracle table is used across all proofs. The simulator
-programs only undefined points and aborts if a point was queried first.
+The Lean endpoint
+`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126` proves that,
+for the formal production protocol model, every valid public statement and
+witness satisfying the pinned relation has a real adversary view within
+`2^-126` statistical distance of a witness-free simulated view. The adversary
+is classical and adaptive, all coins are finite, and the oracle is the modeled
+programmable random oracle. The companion theorem
+`VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime`
+certifies the simulator by an explicit algebraic/pROM machine-cost model.
 
 For `P` proofs, `J` programmed points per proof, and the implementation cap
 `Q_P` on protocol oracle calls per proof, the executable conservative bound is
@@ -50,7 +53,7 @@ inputs, oracle collisions, collisions in any of the four nonce domains (one
 Fiat--Shamir proof nonce plus three initial-tree nonces), and failure of the
 bounded outer or Ligerito grinds. `ClassicalPromZkBound` computes this sum.
 
-The theorem requires fresh independent proof nonces, witness-code padding,
+The formal theorem requires fresh independent proof nonces, witness-code padding,
 masking rows, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts
 for every proof. The API creates a fresh commitment for each proof; commitment
 reuse is not an exposed operation. The public prover and simulator draw every
@@ -59,9 +62,9 @@ are not accepted by the public full-ZK API.
 
 ## Algebraic privacy obligations
 
-The production code enforces the following runtime checks. The follow-up
-formalization must prove that they discharge the corresponding privacy
-obligations:
+The production code enforces the following runtime checks. The Lean model
+discharges the formal protocol's privacy chain; a separate Rust-to-Lean
+correspondence proof for every production code path remains outside this PR:
 
 1. The outer blinded additive-RS encoder is linear, restricts to ordinary
    FLOCK when its padding is zero, and has a query budget no larger than its
