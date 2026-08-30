@@ -1,21 +1,24 @@
-//! Example: zero-knowledge proof of knowledge of a root of a public
-//! polynomial over `GF(2^8)`, as a complete FLOCK argument.
+//! Example: zero-knowledge proof of which valid root of a public polynomial over
+//! `GF(2^8)` was selected, as a complete FLOCK argument.
 //!
 //! The relation is a Boolean R1CS with `C = I`, the circuit convention of
 //! this repository. One block holds one instance:
 //!
 //! - wire 0 is the constant one, pinned by the lincheck;
-//! - wires 1..=8 hold the secret root;
+//! - wires 1..=8 hold the selected root;
 //! - each Horner step `acc = acc * root + coefficient` spends 64 product
 //!   rows (`t_ij = acc_i * root_j`) and 8 reduction rows (linear XOR through
 //!   the constant wire, with the public coefficient bits folded in);
 //! - an OR chain reduces the final accumulator to one bit, and the row of the
 //!   constant wire forces that bit to zero, so `p(root) = 0`.
 //!
-//! The batch tiles `2^(M - K_LOG)` copies of the block. The proof is the full
-//! FLOCK pipeline under VEIL: hiding commitment of the packed witness, masked
-//! zerocheck with univariate skip, masked lincheck, and two ring-switched
-//! openings (`ab` and `c`) with masked slices.
+//! The public polynomial has multiple public roots; because `GF(2^8)` is tiny,
+//! the proof hides which valid root was selected, not the root set itself. The
+//! batch tiles `2^(M - K_LOG)` copies of the block, each with fresh private
+//! randomizer rows. The proof is the full FLOCK pipeline under VEIL: hiding
+//! commitment of the packed witness, masked zerocheck with univariate skip,
+//! masked lincheck, and two ring-switched openings (`ab` and `c`) with masked
+//! slices.
 //!
 //! Two functions encode the protocol:
 //!
@@ -42,6 +45,12 @@ const M: usize = 22;
 /// One instance per `2^K_LOG`-bit block.
 const K_LOG: usize = 12;
 const DEGREE: usize = 50;
+/// Public root set for the demo statement. The proof hides which valid root is
+/// used as the witness; the small field makes the set itself enumerable.
+const PUBLIC_ROOTS: [u8; 8] = [0x13, 0x57, 0x9b, 0xce, 0x22, 0x84, 0xf1, 0x6d];
+/// Extra private rows that are copied through free constraints and do not
+/// affect the public polynomial relation.
+const RANDOMIZER_ROWS: usize = 256;
 /// `x^8 + x^4 + x^3 + x + 1`, the AES field polynomial.
 const MODULUS: u16 = 0x11b;
 
@@ -83,14 +92,47 @@ fn horner(coeffs: &[u8], x: u8) -> u8 {
     coeffs.iter().rev().fold(0u8, |acc, &c| gf8_mul(acc, x) ^ c)
 }
 
-/// `p(x) = (x + root) * q(x)` with `q(x) = 1 + x + ... + x^(degree-1)`.
-fn make_polynomial_with_root(root: u8, degree: usize) -> Vec<u8> {
-    let mut result = vec![0u8; degree + 1];
-    for i in 0..degree {
-        result[i] ^= root;
-        result[i + 1] ^= 1;
+fn poly_mul(a: &[u8], b: &[u8]) -> Vec<u8> {
+    let mut result = vec![0u8; a.len() + b.len() - 1];
+    for (i, &ai) in a.iter().enumerate() {
+        for (j, &bj) in b.iter().enumerate() {
+            result[i + j] ^= gf8_mul(ai, bj);
+        }
     }
     result
+}
+
+/// `p(x) = q(x) * prod_i (x + roots[i])`, where
+/// `q(x) = 1 + x + ... + x^(degree - roots.len())`.
+fn make_polynomial_with_roots(roots: &[u8], degree: usize) -> Vec<u8> {
+    assert!(!roots.is_empty(), "the statement needs at least one root");
+    assert!(roots.len() <= degree, "too many roots for the degree");
+    let mut product = vec![1u8];
+    for &root in roots {
+        product = poly_mul(&product, &[root, 1]);
+    }
+    let cofactor = vec![1u8; degree - roots.len() + 1];
+    let result = poly_mul(&product, &cofactor);
+    assert_eq!(result.len(), degree + 1);
+    result
+}
+
+fn public_polynomial() -> Vec<u8> {
+    make_polynomial_with_roots(&PUBLIC_ROOTS, DEGREE)
+}
+
+fn choose_public_root<R: MaskSampler + ?Sized>(rng: &mut R) -> u8 {
+    let mut word = [0u64; 1];
+    rng.fill_u64s(&mut word);
+    PUBLIC_ROOTS[word[0] as usize % PUBLIC_ROOTS.len()]
+}
+
+fn randomizer_bits<R: MaskSampler + ?Sized>(rng: &mut R, count: usize) -> Vec<bool> {
+    let mut words = vec![0u64; count.div_ceil(64)];
+    rng.fill_u64s(&mut words);
+    (0..count)
+        .map(|index| (words[index / 64] >> (index % 64)) & 1 == 1)
+        .collect()
 }
 
 // ============================================================================
@@ -105,6 +147,8 @@ struct Layout {
     steps: Vec<([usize; 64], [usize; 8])>,
     /// OR chain: `(product, or)` pairs, `or = x + y + product`.
     ors: Vec<(usize, usize)>,
+    /// Free private rows included in the committed witness.
+    randomizers: Vec<usize>,
     useful_bits: usize,
 }
 
@@ -126,11 +170,13 @@ impl Layout {
             })
             .collect();
         let ors = (0..7).map(|_| (alloc(), alloc())).collect();
+        let randomizers = (0..RANDOMIZER_ROWS).map(|_| alloc()).collect();
         Self {
             const_wire,
             root,
             steps,
             ors,
+            randomizers,
             useful_bits: next,
         }
     }
@@ -211,6 +257,12 @@ fn build_r1cs(layout: &Layout, coeffs: &[u8]) -> BlockR1cs {
     a_rows[one] = vec![one, layout.nonzero_flag()];
     b_rows[one] = vec![one];
 
+    // Free randomizer rows: `u = u * 1`.
+    for &wire in &layout.randomizers {
+        a_rows[wire] = vec![wire];
+        b_rows[wire] = vec![one];
+    }
+
     BlockR1cs {
         m: M,
         k_log: K_LOG,
@@ -239,12 +291,17 @@ fn build_r1cs(layout: &Layout, coeffs: &[u8]) -> BlockR1cs {
     }
 }
 
-/// One block of the witness for `root`; every wire follows its R1CS row.
-fn block_witness(layout: &Layout, coeffs: &[u8], root: u8) -> Vec<bool> {
+/// One block of the witness for `root`; every non-randomizer wire follows its
+/// R1CS row, and the randomizer rows are caller-supplied private bits.
+fn block_witness(layout: &Layout, coeffs: &[u8], root: u8, randomizers: &[bool]) -> Vec<bool> {
+    assert_eq!(randomizers.len(), layout.randomizers.len());
     let mut z = vec![false; 1usize << K_LOG];
     z[layout.const_wire] = true;
     for (bit, &wire) in layout.root.iter().enumerate() {
         z[wire] = (root >> bit) & 1 == 1;
+    }
+    for (&wire, &bit) in layout.randomizers.iter().zip(randomizers) {
+        z[wire] = bit;
     }
     let mut acc = coeffs[DEGREE];
     for (step, (products, acc_wires)) in layout.steps.iter().enumerate() {
@@ -278,9 +335,20 @@ fn block_witness(layout: &Layout, coeffs: &[u8], root: u8) -> Vec<bool> {
     z
 }
 
-/// Tile the block over the batch.
-fn full_witness(block: &[bool]) -> Vec<bool> {
-    block.repeat(1usize << (M - K_LOG))
+/// Tile the relation over the batch, refreshing randomizer rows per block.
+fn full_witness<R: MaskSampler + ?Sized>(
+    layout: &Layout,
+    coeffs: &[u8],
+    root: u8,
+    rng: &mut R,
+) -> Vec<bool> {
+    let instances = 1usize << (M - K_LOG);
+    let mut witness = Vec::with_capacity(1usize << M);
+    for _ in 0..instances {
+        let randomizers = randomizer_bits(rng, layout.randomizers.len());
+        witness.extend(block_witness(layout, coeffs, root, &randomizers));
+    }
+    witness
 }
 
 // ============================================================================
@@ -353,20 +421,26 @@ fn verify(pcs: &BitPcs, r1cs: &BlockR1cs, proof: ZkProof) -> Result<(), VeilErro
 fn main() {
     flock_core::init_perf_thread_pool();
     let mut rng = ZkRng::from_entropy();
-    let mut secret = [0u64; 1];
-    rng.fill_u64s(&mut secret);
-    let secret_root = secret[0] as u8;
-    let coeffs = make_polynomial_with_root(secret_root, DEGREE);
+    let coeffs = public_polynomial();
+    let selected_root = choose_public_root(&mut rng.fork(b"veil-examples-root-choice"));
     assert_eq!(
-        horner(&coeffs, secret_root),
+        horner(&coeffs, selected_root),
         0,
-        "polynomial should vanish at root"
+        "polynomial should vanish at the selected root"
     );
-    eprintln!("Public polynomial over GF(2^8), degree {DEGREE}");
+    eprintln!(
+        "Public polynomial over GF(2^8), degree {DEGREE}, {} valid public roots",
+        PUBLIC_ROOTS.len()
+    );
 
     let layout = Layout::new(DEGREE);
     let r1cs = build_r1cs(&layout, &coeffs);
-    let z = full_witness(&block_witness(&layout, &coeffs, secret_root));
+    let z = full_witness(
+        &layout,
+        &coeffs,
+        selected_root,
+        &mut rng.fork(b"veil-examples-root-randomizers"),
+    );
     assert!(r1cs.satisfies(&z), "witness should satisfy the R1CS");
     eprintln!(
         "R1CS: 2^{K_LOG}-bit blocks, {} useful wires, 2^{} instances",
@@ -382,22 +456,38 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use veil_examples::{F128, RING_WIDTH, compute_mask_length};
+    use veil_examples::{
+        F128, RING_WIDTH, ZkVerifierCtx, assert_no_unmasked_f128_values, bit_mle_eval,
+        compute_mask_length, ring_slices,
+    };
     use veil_f128::ConstraintError;
 
     use super::*;
 
-    const ROOT: u8 = 0x53;
+    const ROOT_A: u8 = PUBLIC_ROOTS[0];
+    const ROOT_B: u8 = PUBLIC_ROOTS[1];
 
-    fn witness_for(root: u8) -> Vec<bool> {
-        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
-        full_witness(&block_witness(&Layout::new(DEGREE), &coeffs, root))
+    fn witness_for(root: u8, seed: u8) -> Vec<bool> {
+        let coeffs = public_polynomial();
+        full_witness(
+            &Layout::new(DEGREE),
+            &coeffs,
+            root,
+            &mut ZkRng::from_seed([seed; 32]),
+        )
     }
 
     fn fixture() -> (BitPcs, BlockR1cs, Vec<bool>) {
-        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
+        let coeffs = public_polynomial();
         let r1cs = build_r1cs(&Layout::new(DEGREE), &coeffs);
-        (BitPcs::new(M).unwrap(), r1cs, witness_for(ROOT))
+        (BitPcs::new(M).unwrap(), r1cs, witness_for(ROOT_A, 0xA0))
+    }
+
+    fn first_non_root(coeffs: &[u8]) -> u8 {
+        (0u16..=u8::MAX as u16)
+            .map(|value| value as u8)
+            .find(|&root| horner(coeffs, root) != 0)
+            .expect("not every field element is a root")
     }
 
     /// Zerocheck, lincheck, and two ring claims.
@@ -412,9 +502,19 @@ mod tests {
 
     #[test]
     fn gf8_arithmetic_is_consistent() {
-        for root in [0u8, 1, 2, 0x53, 0xff] {
-            let coeffs = make_polynomial_with_root(root, DEGREE);
+        let coeffs = public_polynomial();
+        assert_eq!(coeffs.len(), DEGREE + 1);
+        assert_eq!(coeffs[DEGREE], 1);
+        let mut public_roots = PUBLIC_ROOTS.to_vec();
+        public_roots.sort_unstable();
+        let actual_roots = (0u16..=u8::MAX as u16)
+            .map(|value| value as u8)
+            .filter(|&root| horner(&coeffs, root) == 0)
+            .collect::<Vec<_>>();
+        assert_eq!(actual_roots, public_roots);
+        for root in PUBLIC_ROOTS {
             assert_eq!(horner(&coeffs, root), 0, "root {root:#x}");
+            assert_ne!(coeffs[0], root, "the constant coefficient leaked a root");
         }
         // Commutativity and the AES identity 0x53 * 0xca = 1.
         assert_eq!(gf8_mul(0x53, 0xca), 1);
@@ -426,7 +526,51 @@ mod tests {
     fn witness_satisfies_the_r1cs_and_wrong_root_does_not() {
         let (_, r1cs, z) = fixture();
         assert!(r1cs.satisfies(&z));
-        assert!(!r1cs.satisfies(&witness_for(ROOT ^ 1)));
+        let non_root = first_non_root(&public_polynomial());
+        assert!(!r1cs.satisfies(&witness_for(non_root, 0xA1)));
+    }
+
+    #[test]
+    fn same_public_statement_accepts_multiple_roots() {
+        let coeffs = public_polynomial();
+        let layout = Layout::new(DEGREE);
+        let r1cs = build_r1cs(&layout, &coeffs);
+        let a = full_witness(&layout, &coeffs, ROOT_A, &mut ZkRng::from_seed([0xA2; 32]));
+        let b = full_witness(&layout, &coeffs, ROOT_B, &mut ZkRng::from_seed([0xA3; 32]));
+        assert_eq!(
+            r1cs.statement_digest(),
+            build_r1cs(&layout, &coeffs).statement_digest()
+        );
+        assert!(r1cs.satisfies(&a));
+        assert!(r1cs.satisfies(&b));
+        assert_ne!(a, b);
+
+        let pcs = BitPcs::new(M).unwrap();
+        let (proof_a, _) = prove(&pcs, &r1cs, &a, ZkRng::from_seed([0xA6; 32])).unwrap();
+        let (proof_b, _) = prove(&pcs, &r1cs, &b, ZkRng::from_seed([0xA7; 32])).unwrap();
+        verify(&pcs, &r1cs, proof_a.clone()).unwrap();
+        verify(&pcs, &r1cs, proof_b.clone()).unwrap();
+        assert_ne!(proof_a.masked_transcript, proof_b.masked_transcript);
+    }
+
+    #[test]
+    fn randomizer_rows_are_private_and_non_fixed() {
+        let coeffs = public_polynomial();
+        let layout = Layout::new(DEGREE);
+        let witness = full_witness(&layout, &coeffs, ROOT_A, &mut ZkRng::from_seed([0xA4; 32]));
+        let block_size = 1usize << K_LOG;
+        let first = layout
+            .randomizers
+            .iter()
+            .map(|&wire| witness[wire])
+            .collect::<Vec<_>>();
+        let second = layout
+            .randomizers
+            .iter()
+            .map(|&wire| witness[block_size + wire])
+            .collect::<Vec<_>>();
+        assert!(first.iter().any(|bit| *bit));
+        assert_ne!(first, second);
     }
 
     #[test]
@@ -449,9 +593,46 @@ mod tests {
     }
 
     #[test]
+    fn proof_surface_omits_unmasked_terminal_data() {
+        let (pcs, r1cs, z) = fixture();
+        let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([0xA8; 32])).unwrap();
+
+        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs.clone())).unwrap();
+        replay.read_oracle(M).unwrap();
+        replay.absorb_label(b"veil-examples-root-statement");
+        replay.absorb_bytes(&r1cs.statement_digest());
+        let zc = zerocheck_verify(M, &mut replay).unwrap();
+        let z_skip = zc.z;
+        let mlv_challenges = zc.mlv_challenges.clone();
+        let r_rest = zc.r_rest.clone();
+        let circuit: &dyn LincheckCircuit = r1cs.csc_lincheck_circuit();
+        let lc = lincheck_verify(
+            &r1cs,
+            circuit,
+            &r1cs.x_ab_from_mlv(z_skip, &mlv_challenges),
+            zc.a_eval,
+            zc.b_eval,
+            &mut replay,
+        )
+        .unwrap();
+
+        let x_ab = r1cs.x_ab_from_mlv(z_skip, &mlv_challenges);
+        let ab_point = r1cs.ab_claim_point(lc.r_inner_skip, &lc.r_inner_rest, &x_ab.x_outer);
+        let c_point = r1cs.c_claim_point(z_skip, &r_rest);
+        let packed = pack_witness(&z, M);
+        let mut sensitive = vec![
+            bit_mle_eval(&packed, &ab_point),
+            bit_mle_eval(&packed, &c_point),
+        ];
+        sensitive.extend(ring_slices(&packed, &ab_point));
+        sensitive.extend(ring_slices(&packed, &c_point));
+        assert_no_unmasked_f128_values(&proof, sensitive);
+    }
+
+    #[test]
     fn wrong_root_is_not_provable() {
         let (pcs, r1cs, _) = fixture();
-        let bad = witness_for(ROOT ^ 1);
+        let bad = witness_for(first_non_root(&public_polynomial()), 0xA5);
         let error = prove(&pcs, &r1cs, &bad, ZkRng::from_seed([2; 32])).unwrap_err();
         assert_eq!(
             error,
@@ -492,9 +673,10 @@ mod tests {
     fn wrong_statement_is_rejected() {
         let (pcs, r1cs, z) = fixture();
         let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([4; 32])).unwrap();
+        let other_roots = [0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80];
         let other = build_r1cs(
             &Layout::new(DEGREE),
-            &make_polynomial_with_root(ROOT ^ 1, DEGREE),
+            &make_polynomial_with_roots(&other_roots, DEGREE),
         );
         assert!(verify(&pcs, &other, proof).is_err());
     }

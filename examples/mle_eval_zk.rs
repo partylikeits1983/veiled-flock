@@ -81,7 +81,9 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use veil_examples::{RING_WIDTH, compute_mask_length};
+    use veil_examples::{
+        RING_WIDTH, ZkVerifierCtx, assert_no_unmasked_f128_values, compute_mask_length, ring_slices,
+    };
 
     use super::*;
 
@@ -110,6 +112,32 @@ mod tests {
         assert_eq!(proof.commitments.len(), 1);
         assert_eq!(proof.pcs_openings.len(), 1);
         verify(&pcs, proof).unwrap();
+    }
+
+    #[test]
+    fn simulator_style_independent_view_verifies() {
+        let (pcs, packed, rng) = fixture(8);
+        let (proof, _) = prove(&pcs, packed, rng).unwrap();
+        let simulated_packed = random_packed_bits(
+            &mut ZkRng::from_seed([0x51; 32]).fork(b"simulated-data"),
+            &pcs,
+        );
+        let (simulated, _) = prove(&pcs, simulated_packed, ZkRng::from_seed([0x52; 32])).unwrap();
+        verify(&pcs, proof.clone()).unwrap();
+        verify(&pcs, simulated.clone()).unwrap();
+        assert_ne!(proof.masked_transcript, simulated.masked_transcript);
+    }
+
+    #[test]
+    fn proof_surface_omits_unmasked_eval_and_slices() {
+        let (pcs, packed, rng) = fixture(9);
+        let (proof, _) = prove(&pcs, packed.clone(), rng).unwrap();
+        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs.clone())).unwrap();
+        replay.read_oracle(M).unwrap();
+        let point = sample_quirky_point(&mut replay, M, K_LOG).unwrap();
+        let mut sensitive = vec![bit_mle_eval(&packed, &point)];
+        sensitive.extend(ring_slices(&packed, &point));
+        assert_no_unmasked_f128_values(&proof, sensitive);
     }
 
     #[test]

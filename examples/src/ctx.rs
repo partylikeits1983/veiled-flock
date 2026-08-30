@@ -1133,7 +1133,7 @@ impl ReadingCtx for ZkVerifierCtx {
 mod tests {
     use super::*;
     use crate::flock::{sample_quirky_point, sample_quirky_point_sending};
-    use crate::pcs::{bit_mle_eval, random_packed_bits};
+    use crate::pcs::{bit_mle_eval, random_packed_bits, ring_slices};
 
     const M: usize = 22;
     const K_LOG: usize = 6;
@@ -1188,6 +1188,45 @@ mod tests {
         assert_eq!(proof.pcs_openings.len(), 3);
         assert_eq!(proof.blinded_slices.len(), 3);
         verify(&pcs, proof).unwrap();
+    }
+
+    #[test]
+    fn transcript_and_ring_values_use_disjoint_one_time_pads() {
+        let pcs = BitPcs::new(M).unwrap();
+        let mut rng = ZkRng::from_seed([6; 32]);
+        let mut data_rng = rng.fork(b"data");
+        let tables: Vec<Vec<F128>> = (0..3)
+            .map(|_| random_packed_bits(&mut data_rng, &pcs))
+            .collect();
+        let mask_length = compute_mask_length(Some(&pcs), body).unwrap();
+        let mut pctx =
+            ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng).unwrap();
+        for table in &tables {
+            pctx.commit_bits(table.clone()).unwrap();
+        }
+        let shared = sample_quirky_point_sending(&mut pctx, M, K_LOG).unwrap();
+        let other = sample_quirky_point_sending(&mut pctx, M, K_LOG).unwrap();
+        let evals = [
+            bit_mle_eval(&tables[0], &shared),
+            bit_mle_eval(&tables[1], &shared),
+            bit_mle_eval(&tables[2], &other),
+        ];
+        pctx.send_values(&evals);
+        body(&mut pctx).unwrap();
+
+        let masks = pctx.masks.clone();
+        let mut expected = evals.to_vec();
+        for (oracle_index, point) in [(0, &shared), (1, &shared), (2, &other)] {
+            expected.extend(ring_slices(&tables[oracle_index], point));
+            let committed = &pctx.oracles[oracle_index];
+            let g_top = &committed.prover_data.zk_blind[committed.packed.len()..];
+            expected.extend(ring_slices(g_top, point));
+        }
+        let proof = pctx.prove().unwrap();
+        assert_eq!(expected.len(), proof.masked_transcript.len());
+        for (index, value) in expected.into_iter().enumerate() {
+            assert_eq!(proof.masked_transcript[index], value + masks[index]);
+        }
     }
 
     #[test]

@@ -132,7 +132,10 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use flock_core::zerocheck::K_SKIP;
-    use veil_examples::{RING_WIDTH, compute_mask_length};
+    use veil_examples::{
+        RING_WIDTH, ZkVerifierCtx, assert_no_unmasked_f128_values, bit_mle_eval,
+        compute_mask_length, ring_slices,
+    };
     use veil_f128::ConstraintError;
 
     use super::*;
@@ -168,6 +171,51 @@ mod tests {
         assert_eq!(proof.commitments.len(), 3);
         assert_eq!(proof.pcs_openings.len(), 3);
         verify(&pcs, proof).unwrap();
+    }
+
+    #[test]
+    fn simulator_style_independent_view_verifies() {
+        let (pcs, a, b, c, rng) = fixture(8);
+        let (a, b, c) = (BitVector::new(&a), BitVector::new(&b), BitVector::new(&c));
+        let (proof, _) = prove(&pcs, &a, &b, &c, rng).unwrap();
+
+        let mut simulated_rng = ZkRng::from_seed([0x61; 32]);
+        let (sa, sb, sc) = random_instance(&mut simulated_rng.fork(b"simulated-data"), &pcs);
+        let (sa, sb, sc) = (
+            BitVector::new(&sa),
+            BitVector::new(&sb),
+            BitVector::new(&sc),
+        );
+        let (simulated, _) = prove(&pcs, &sa, &sb, &sc, ZkRng::from_seed([0x62; 32])).unwrap();
+
+        verify(&pcs, proof.clone()).unwrap();
+        verify(&pcs, simulated.clone()).unwrap();
+        assert_ne!(proof.masked_transcript, simulated.masked_transcript);
+    }
+
+    #[test]
+    fn proof_surface_omits_unmasked_evals_and_slices() {
+        let (pcs, a, b, c, rng) = fixture(9);
+        let (a, b, c) = (BitVector::new(&a), BitVector::new(&b), BitVector::new(&c));
+        let (proof, _) = prove(&pcs, &a, &b, &c, rng).unwrap();
+
+        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs.clone())).unwrap();
+        replay.read_oracle(M).unwrap();
+        replay.read_oracle(M).unwrap();
+        replay.read_oracle(M).unwrap();
+        let out = zerocheck_verify(M, &mut replay).unwrap();
+        let ab_point = quirky(out.z, &out.mlv_challenges);
+        let c_point = quirky(out.z, &out.r_rest);
+
+        let mut sensitive = vec![
+            bit_mle_eval(&a.packed, &ab_point),
+            bit_mle_eval(&b.packed, &ab_point),
+            bit_mle_eval(&c.packed, &c_point),
+        ];
+        sensitive.extend(ring_slices(&a.packed, &ab_point));
+        sensitive.extend(ring_slices(&b.packed, &ab_point));
+        sensitive.extend(ring_slices(&c.packed, &c_point));
+        assert_no_unmasked_f128_values(&proof, sensitive);
     }
 
     #[test]
