@@ -6,14 +6,23 @@ cd "$(dirname "$0")/.."
 MANIFEST=zk-certify-manifest.txt
 : > "$MANIFEST"
 
+on_err() {
+  local status=$?
+  printf '\n=== manifest (INCOMPLETE, status %s) ===\n' "$status"
+  cat "$MANIFEST"
+  exit "$status"
+}
+trap on_err ERR
+
 run() {
   local label="$1"
   shift
   printf '=== %s ===\n' "$label"
+  local t0=$SECONDS
   if "$@"; then
-    printf '%s ok\n' "$label" >> "$MANIFEST"
+    printf '%s ok %ss\n' "$label" "$((SECONDS - t0))" >> "$MANIFEST"
   else
-    printf '%s FAILED\n' "$label" >> "$MANIFEST"
+    printf '%s FAILED %ss\n' "$label" "$((SECONDS - t0))" >> "$MANIFEST"
     return 1
   fi
 }
@@ -23,6 +32,7 @@ run veil cargo test --release -p veil-f128 --lib
 run prover cargo test --release -p flock-prover --features veil --lib --bins --tests
 run lean-build sh -c 'cd lean && lake build'
 run lean-axioms scripts/lean-axioms.sh
+run lean-formal-zk sh -c 'cd lean && lake env lean VeiledFlock/ProductionFormalZKAxiomAudit.lean'
 
 # Every production SHA-256 invocation must pass through the reviewed random-
 # oracle implementations. Circuit modules and comments are excluded.
