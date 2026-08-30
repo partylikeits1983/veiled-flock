@@ -195,18 +195,25 @@ fn fold_round_grind_bits(
         fold_grinding_taper.len(),
         "fold grind width and taper flag must cover the same levels"
     );
-    let bits = fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32;
-    if fold_grinding_taper.get(lvl).copied().unwrap_or(false) {
-        bits.saturating_sub(j as u32)
+    let bits = fold_grinding_bits.get(lvl).copied().unwrap_or(0);
+    let bits = if fold_grinding_taper.get(lvl).copied().unwrap_or(false) {
+        bits.saturating_sub(j)
     } else {
         bits
-    }
+    };
+    bits.try_into().unwrap_or(u32::MAX)
 }
 
 /// PoW bits shared by hiding L0 `c` and outer blind challenges.
 /// This is one bit more than L0's registered fold grind.
 pub fn l0_derived_grind_bits(fold_grinding_bits: &[usize]) -> u32 {
-    fold_grinding_bits.first().copied().unwrap_or(0) as u32 + L0_DERIVED_EXTRA_GRIND_BITS
+    fold_grinding_bits
+        .first()
+        .copied()
+        .unwrap_or(0)
+        .saturating_add(L0_DERIVED_EXTRA_GRIND_BITS as usize)
+        .try_into()
+        .unwrap_or(u32::MAX)
 }
 
 /// Number of queries for 100-bit soundness in the **unique-decoding regime**

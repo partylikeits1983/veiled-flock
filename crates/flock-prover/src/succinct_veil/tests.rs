@@ -113,13 +113,13 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
         zk: true,
     };
     assert!(validate_l0_hiding_budget(&params, &[512]).is_ok());
-    validate_batch_opening(&params, &[512], &[0], &[1], &[6]).unwrap();
+    validate_batch_opening(&params, &[512], &[0], &[1], &[false], 6, &[]).unwrap();
     assert!(matches!(
         validate_l0_hiding_budget(&params, &[513]),
         Err(SuccinctVeilError::InvalidShape("L0 hiding query budget"))
     ));
     assert!(matches!(
-        validate_batch_opening(&params, &[512], &[1], &[1], &[6]),
+        validate_batch_opening(&params, &[512], &[1], &[1], &[false], 6, &[]),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
     assert!(matches!(
@@ -128,17 +128,40 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
             &[512],
             &[0],
             &[super::MAX_LIGERITO_GRINDING_BITS + 1],
-            &[6]
+            &[false],
+            6,
+            &[]
         ),
+        Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
+    ));
+    assert!(matches!(
+        validate_batch_opening(&params, &[512], &[0], &[1], &[true], 6, &[]),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
     // The grind-site cap counts fold rounds, not levels.
     // Three six-round levels are 18 sites, above the cap of 16.
     assert!(matches!(
-        validate_batch_opening(&params, &[512], &[0, 0, 0], &[1, 1, 1], &[6, 6, 6]),
+        validate_batch_opening(
+            &params,
+            &[512, 1, 1],
+            &[0, 0, 0],
+            &[1, 1, 1],
+            &[false, false, false],
+            6,
+            &[6, 6]
+        ),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
-    validate_batch_opening(&params, &[512], &[0, 0, 0], &[1, 1, 1], &[6, 6, 3]).unwrap();
+    validate_batch_opening(
+        &params,
+        &[512, 1, 1],
+        &[0, 0, 0],
+        &[1, 1, 1],
+        &[false, false, false],
+        6,
+        &[6, 3],
+    )
+    .unwrap();
 }
 
 #[test]
