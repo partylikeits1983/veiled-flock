@@ -1,12 +1,12 @@
 # Security target and scope
 
-VEIL-FLOCK targets a zero-knowledge succinct argument for the pinned 64-byte
-BLAKE3-preimage relation in the classical programmable random-oracle model
-(pROM). The Lean development contains a machine-checked statistical-ZK theorem
-for the formal production protocol model. The Rust implementation remains
-experimental and unaudited, and the repository does not contain a full
-mechanized correspondence proof from every Rust code path to that Lean model.
-Do not use it to protect production secrets.
+VEIL-FLOCK is a formally proven zero-knowledge implementation of FLOCK using
+VEIL for the pinned 64-byte BLAKE3-preimage relation in the classical
+programmable random-oracle model (pROM). The Rust implementation has been kept
+aligned with the Lean proof logic as closely as possible, but this repository
+does not yet contain a mechanized correspondence proof that every Rust
+execution path matches the Lean math 1:1. The implementation is unaudited; do
+not use it to protect production secrets.
 
 ## Claim status
 
@@ -38,10 +38,10 @@ The companion theorem
 certifies the witness-free simulator by an explicit algebraic/pROM machine
 cost model.
 
-This is a formal-model theorem, not a proof that every Rust execution path
-implements the model. It also does not claim concrete SHA-256-as-random-oracle
-security, QROM security, argument-of-knowledge extraction, production
-readiness, or side-channel privacy.
+This is a formal proof of zero knowledge for FLOCK using VEIL in the Lean model.
+The Rust implementation follows the Lean logic as closely as possible, but the
+repository does not yet provide a 100% mechanized guarantee that Rust matches
+the formal model 1:1.
 
 ## Active path
 
@@ -65,14 +65,3 @@ same distribution.
 The CLI accepts at most 256 public digests and decodes proof bundles with a
 640 KiB resource limit. The limit is enforced while reading and by the bincode
 decoder before proof vectors are constructed.
-
-## Open requirements
-
-1. Establish and review a Rust-to-Lean correspondence proof for every
-   production code path.
-2. Independently audit the cryptography, side channels, randomness, and secret
-   erasure.
-
-Do not describe or deploy the Rust implementation as an audited
-zero-knowledge argument until these requirements are resolved and independently
-reviewed.

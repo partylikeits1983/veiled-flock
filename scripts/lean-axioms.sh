@@ -17,7 +17,9 @@ cd "$(dirname "$0")/../lean"
 # Extract declared theorem names. All Flockzk theorems live in namespace
 # FlockZk; `section` blocks (e.g. PMF) do not change the fully-qualified name.
 names_file=$(mktemp -t flockzk-axiom-names-XXXXXX)
-audit_file=$(mktemp -t flockzk-axioms-XXXXXX).lean
+audit_tmp=$(mktemp -t flockzk-axioms-XXXXXX)
+audit_file="$audit_tmp.lean"
+mv "$audit_tmp" "$audit_file"
 trap 'rm -f "$names_file" "$audit_file"' EXIT
 
 grep -hE '^theorem [A-Za-z_]' Flockzk/*.lean \
