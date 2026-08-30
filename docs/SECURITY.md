@@ -1,14 +1,11 @@
 # Security target and scope
 
-VEIL-FLOCK targets a zero-knowledge succinct argument for the pinned 64-byte
-BLAKE3-preimage relation in the classical programmable random-oracle model
-(pROM). The repository contains an executable witness-free simulator, algebraic
-translation tests, and concrete security ledgers. This Rust implementation
-does not include the separate Lean theorem for the formal production protocol
-model, an independent audit, or a full mechanized correspondence proof from
-every Rust code path to that model. Treat the implementation as a
-candidate construction, not as an audited zero-knowledge system, and do not use
-it to protect production secrets.
+VEIL-FLOCK is a formally proved zero-knowledge protocol model for the pinned
+64-byte BLAKE3-preimage relation in the classical programmable random-oracle
+model (pROM), together with a corresponding Rust implementation. The Rust code
+is kept aligned with the Lean model, but this repository does not yet contain a
+mechanized correspondence proof from every executable Rust path to the model.
+The implementation is unaudited; do not use it to protect production secrets.
 
 ## Target properties
 
@@ -16,7 +13,7 @@ it to protect production secrets.
 |---|---|
 | Relation | Ordered batch of 1-4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
 | Completeness | Honest proofs verify |
-| Zero knowledge | Targeted for adaptive classical pROM; formal theorem tracked separately |
+| Zero knowledge | Proved for the finite Lean production model with distance `< 2^-126`; Rust correspondence not proved |
 | Algebraic privacy | Perfect, conditioned on the public statement and accepted challenge history |
 | Noninteractive privacy loss | Random-oracle prequery, collision, nonce-collision, and bounded-grinding events |
 | Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Secure Ligerito |
@@ -30,14 +27,18 @@ Fiat--Shamir challenge. The Rust checks bind that padding rule; a later
 Lean/Rust correspondence proof should connect the padding adapter to the
 exact-shape formal theorem.
 
-## Target zero-knowledge argument
+## Lean formal theorem
 
-The intended formal statement is that every valid public statement and witness
-satisfying the pinned relation has a real adversary view within `2^-126`
-statistical distance of a witness-free simulated view. The adversary is
-classical and adaptive, all coins are finite, and the oracle is the modeled
-programmable random oracle. The companion efficiency claim is that the
-simulator is bounded by an explicit algebraic/pROM machine-cost model.
+`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126` proves that
+every valid public statement and witness satisfying the pinned relation has a
+real adaptive adversary view within `2^-126` statistical distance of a
+witness-free simulated view in the finite classical pROM model.
+
+The companion theorem
+`VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime`
+certifies the witness-free simulator under an explicit algebraic/pROM machine
+cost model. These are theorems about the Lean production model; they are not a
+mechanized proof that every Rust execution matches that model.
 
 For `P` proofs, `J` programmed points per proof, and the implementation cap
 `Q_P` on protocol oracle calls per proof, the executable conservative bound is
@@ -55,7 +56,7 @@ inputs, oracle collisions, collisions in any of the four nonce domains (one
 Fiat--Shamir proof nonce plus three initial-tree nonces), and failure of the
 bounded outer or Ligerito grinds. `ClassicalPromZkBound` computes this sum.
 
-The target argument requires fresh independent proof nonces, witness-code padding,
+The proved model requires fresh independent proof nonces, witness-code padding,
 masking rows, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts
 for every proof. The API creates a fresh commitment for each proof; commitment
 reuse is not an exposed operation. The public prover and simulator draw every
@@ -92,8 +93,9 @@ for every production code path:
    is fixed before batching challenges, claims are canonical, and the union of
    distinct initial queries stays within the padding budget.
 8. After the uniform-fold boundary, recursive Ligerito is ordinary
-   witness-independent post-processing. No recursive-round-specific privacy
-   assumption is needed.
+   witness-independent post-processing. Recursive openings use the canonical
+   unsalted Merkle domain; only the initial witness-dependent L0 opening carries
+   leaf salts. No recursive-round-specific privacy assumption is needed.
 
 The simulator samples honest-distribution challenges first, constructs the
 masked FLOCK transcript algebraically, and programs the exact SHA-256 squeeze
@@ -109,7 +111,9 @@ domains are disjoint. Each witness-dependent initial leaf contains a fresh
 256-bit salt. The outer witness, VEIL linear, and VEIL Hadamard trees each use
 an independently sampled 256-bit tree nonce and a distinct channel. All three
 tree nonces are transcript-bound before the first PIOP challenge. Recursive
-Ligerito trees are generated after the uniform-fold boundary.
+Ligerito trees are generated after the uniform-fold boundary and are verified
+only in the unsalted domain; the verifier rejects non-empty recursive salts and
+noncanonical recursive proof-vector lengths.
 
 Fiat--Shamir sampling matches production block semantics: two `F128` values
 share one 256-bit output where applicable, unused halves remain uniform, and

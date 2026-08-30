@@ -24,3 +24,23 @@ jobs:
 
       - name: Test
         run: make test
+
+  lean:
+    name: Lean
+    runs-on: ubuntu-latest
+    env:
+      LEAN_NUM_THREADS: 2
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build and independently check Lean proofs
+        uses: leanprover/lean-action@v1
+        with:
+          lake-package-directory: lean
+          auto-config: false
+          build: true
+          leanchecker: true
+          use-mathlib-cache: true
+
+      - name: Audit theorem axioms
+        run: scripts/lean-axioms.sh

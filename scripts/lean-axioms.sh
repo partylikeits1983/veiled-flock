@@ -1,11 +1,12 @@
 #!/bin/bash
-# Audit the axioms of every theorem exported by the Flockzk Lean library.
+# Audit the axioms of the legacy Flockzk theorems and the formal VEIL-FLOCK
+# statistical-ZK theorem chain.
 #
 # `lake build` succeeding does not by itself prove the development is free of
 # extra axioms (`sorry` compiles to `sorryAx`; a stray `axiom` declaration
-# would also pass). This script generates `#print axioms` for every theorem
-# declared in lean/Flockzk/*.lean and fails unless each depends on at most
-# the three standard axioms: propext, Classical.choice, Quot.sound.
+# would also pass). This script generates `#print axioms` and fails unless
+# each checked theorem depends on at most the three standard axioms: propext,
+# Classical.choice, Quot.sound.
 #
 # Usage: scripts/lean-axioms.sh   (run from the repo root; needs `lake build`
 # to have succeeded first so the .olean files exist)
@@ -15,22 +16,36 @@ cd "$(dirname "$0")/../lean"
 
 # Extract declared theorem names. All Flockzk theorems live in namespace
 # FlockZk; `section` blocks (e.g. PMF) do not change the fully-qualified name.
-names=$(grep -hE '^theorem [A-Za-z_]' Flockzk/*.lean | awk '{print $2}' | sort -u)
+names_file=$(mktemp -t flockzk-axiom-names-XXXXXX)
+audit_file=$(mktemp -t flockzk-axioms-XXXXXX).lean
+trap 'rm -f "$names_file" "$audit_file"' EXIT
 
-if [ -z "$names" ]; then
+grep -hE '^theorem [A-Za-z_]' Flockzk/*.lean \
+  | awk '{print "FlockZk." $2}' \
+  | sort -u > "$names_file"
+
+cat >> "$names_file" <<'EOF'
+VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126
+VeiledFlock.ProductionFormalZK.veil_flock_statistical_distance_lt_two_pow_neg_126
+VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime
+VeiledFlock.ProductionStatisticalZK.veil_flock_statistical_zk_126_of_good_coupling
+VeiledFlock.ProductionStatisticalDistance.real_eq_simulated_after_coinEquiv_of_globalGood
+VeiledFlock.ProductionOperationalGood.globalGood_implies_productionGood
+VeiledFlock.ProductionOperationalTape.productionDecode_measure_preserving
+EOF
+
+if [ ! -s "$names_file" ]; then
   echo "lean-axioms: no theorems found — extraction broken?" >&2
   exit 1
 fi
 
-audit_file=$(mktemp -t flockzk-axioms-XXXXXX).lean
-trap 'rm -f "$audit_file"' EXIT
-
 {
   echo "import Flockzk"
-  for n in $names; do
-    echo "#print axioms FlockZk.$n"
+  echo "import VeiledFlock"
+  while IFS= read -r n; do
+    echo "#print axioms $n"
   done
-} > "$audit_file"
+} < "$names_file" > "$audit_file"
 
 out=$(lake env lean "$audit_file" 2>&1) || {
   echo "$out"
@@ -49,7 +64,7 @@ bad=$(echo "$out" \
   | tr ',' '\n' | tr -d ' ' | sort -u \
   | grep -vE '^(propext|Classical\.choice|Quot\.sound)$' || true)
 
-count=$(echo "$names" | wc -l | tr -d ' ')
+count=$(wc -l < "$names_file" | tr -d ' ')
 if [ -n "$bad" ]; then
   echo "lean-axioms: FAILED — non-standard axioms found:" >&2
   echo "$bad" >&2
