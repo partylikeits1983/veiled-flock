@@ -14,7 +14,7 @@ it to protect production secrets.
 
 | Property | Scope |
 |---|---|
-| Relation | Ordered batch of 1–2048 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048-slot shape |
+| Relation | Ordered batch of 1-4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
 | Completeness | Honest proofs verify |
 | Zero knowledge | Targeted for adaptive classical pROM; formal theorem tracked separately |
 | Algebraic privacy | Perfect, conditioned on the public statement and accepted challenge history |
@@ -47,7 +47,7 @@ P*J*Q_H/2^256
 + P*Q_P*Q_H/2^256
 + (Q_H + P*Q_P)^2/2^257
 + 4*P*(P-1)/2^257
-+ P*((31/32)^4096 + 16*(31/32)^4096).
++ P*((63/64)^8192 + 16*(31/32)^4096).
 ```
 
 The terms respectively cover challenge prequeries, hidden initial-Merkle
@@ -80,7 +80,7 @@ for every production code path:
 4. At the 256-slot floor, the 242 FLOCK transcript coordinates and 512 ring
    coordinates consume 754 independent field one-time pads. Each circuit-size
    doubling adds two sumcheck coordinates and two independent pads, reaching
-   760 pads at 2048 slots. Proving and verification check the exact mask cursor
+   762 pads at 4096 slots. Proving and verification check the exact mask cursor
    and circuit inventory; the generic Lean one-time-pad lemma remains to be
    connected to this layout.
 5. The exact F2-linear ring-switch matrix is checked against production field
@@ -115,7 +115,7 @@ Fiat--Shamir sampling matches production block semantics: two `F128` values
 share one 256-bit output where applicable, unused halves remain uniform, and
 nonzero or not-zero-or-one challenges use exact rejection sampling. Outer
 blinding grinding uses the canonical first-success nonce and accepts only the
-first 4096 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
+first 8192 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
 the ledger conservatively reserves sixteen grind sites. At most three levels of
 a registered full-ZK shape carry a positive fold grind, and such a shape emits
 at most twelve fold-grind nonces.

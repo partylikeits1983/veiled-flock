@@ -69,10 +69,9 @@ use crate::r1cs_hashes::blake3::{
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
 pub const DIGEST_BYTES: usize = 32;
-/// Largest batch covered by the registered full-ZK circuit and PCS
-/// certificates. Smaller batches are padded to the next power-of-two shape,
-/// with a 256-slot production floor.
-pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 2048;
+/// Largest batch covered by the registered full-ZK circuit and PCS certificates.
+/// Smaller batches are padded to the next power-of-two shape.
+pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -978,8 +977,8 @@ mod tests {
             .collect()
     }
 
-    /// Exercises the current largest ZK shape accepted by batch opening.
-    /// The rejected 4096 path would require a 6-bit outer blind grind.
+    /// Exercises the largest accepted ZK shape, including its 6-bit outer blind
+    /// grind and the bounded UDR fold-grind schedule.
     #[cfg(feature = "veil")]
     #[test]
     fn largest_supported_zk_shape_grinds_every_udr_fold_round() {
@@ -987,11 +986,25 @@ mod tests {
         let setup = Blake3PreimageZkSetup::new(blocks);
         let messages = msgs_of(0x5EED, blocks);
         let digests = Blake3PreimageSetup::digests_of(&messages);
-        let (proof, commitment) = setup.prove(&messages, &digests).expect("prove m26 shape");
+        let (proof, commitment) = setup.prove(&messages, &digests).expect("prove m27 shape");
         setup
             .verify(&commitment, &proof, &digests)
-            .expect("verify m26 shape");
-        // Ligerito m26 Secure grinds at L0 (6 rounds), L1 (3) and L2 (3).
+            .expect("verify m27 shape");
+        let bundle =
+            crate::proof_io::VeilFlockProofBundle::new(digests.clone(), commitment, proof.clone());
+        let encoded = bundle.to_bytes().expect("serialize largest bundle");
+        assert!(
+            encoded.len() <= crate::proof_io::MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
+            "largest proof bundle is {} bytes",
+            encoded.len()
+        );
+        let decoded = crate::proof_io::VeilFlockProofBundle::from_bytes(&encoded)
+            .expect("decode largest bundle");
+        assert_eq!(decoded, bundle);
+        setup
+            .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
+            .expect("verify decoded m27 shape");
+        // Ligerito m27 Secure grinds at L0 (6 rounds), L1 (3) and L2 (3).
         assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 12);
         assert!(
             proof.pcs_open.ligerito.fold_grinding_nonces.len()
@@ -1319,9 +1332,8 @@ mod tests {
     #[test]
     fn succinct_simulator_query_cap_covers_every_registered_shape() {
         let oracle = crate::sim_oracle::shared_oracle();
-        // These are the smallest public batches selecting every registered
-        // 256/512/1024/2048-slot circuit.
-        for n_blocks in [1usize, 257, 513, 1025] {
+        // These are the smallest public batches selecting each registered shape.
+        for n_blocks in [1usize, 257, 513, 1025, 2049] {
             let setup = Blake3PreimageZkSetup::new(n_blocks);
             let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
             let before = oracle

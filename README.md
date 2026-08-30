@@ -29,7 +29,7 @@ caveats.
 
 - Full-ZK BLAKE3-preimage proving, verifying, and witness-free simulation via
   `Blake3PreimageZkSetup::{new, prove, verify, simulate}`.
-- Registered 256/512/1024/2048-slot circuit shapes for batches of 1-2048
+- Registered 256/512/1024/2048/4096-slot circuit shapes for batches of 1-4096
   concatenated 64-byte messages.
 - Fresh OS-sampled prover/simulator coins, typed transcript framing, tree
   nonces, leaf salts, and the reviewed random-oracle path.
@@ -50,7 +50,7 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
 
 `messages.bin` must contain one or more concatenated 64-byte messages. The
 proof bundle includes the ordered public digests. Full-ZK batches support up
-to 2048 messages and use registered 256/512/1024/2048-slot circuit shapes.
+to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
 
 ## Verification
 

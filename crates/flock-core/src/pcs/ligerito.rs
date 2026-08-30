@@ -7906,8 +7906,8 @@ mod fold_grind_taper_tests {
     }
 
     /// Ligerito configs reachable from accepted full-ZK R1CS shapes.
-    /// ZK commits one extra message dimension: R1CS m22..m25 -> PCS m23..m26.
-    const FULL_ZK_LIGERITO_CONFIGS: std::ops::RangeInclusive<usize> = 23..=26;
+    /// ZK commits one extra message dimension: R1CS m22..m26 -> PCS m23..m27.
+    const FULL_ZK_LIGERITO_CONFIGS: std::ops::RangeInclusive<usize> = 23..=27;
 
     /// Pinned aggregate PCS bits; this is a value pin, not a taper test.
     /// It catches formula or TOML drift in the advertised numbers.
