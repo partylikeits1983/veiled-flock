@@ -38,14 +38,14 @@ cd "$repo_root/lean"
 echo "formal-proof: preparing the pinned Mathlib cache" >&2
 "$lake_bin" exe cache get
 
-echo "formal-proof: building the VeiledFlock Lean proofs" >&2
+echo "formal-proof: building the Flockzk Lean proofs" >&2
 if $interactive; then
   draw_progress 0 1
 else
   echo "Lean build [  0%] 0/? targets" >&2
 fi
 set +e
-"$lake_bin" build VeiledFlock 2>&1 | {
+"$lake_bin" build Flockzk 2>&1 | {
   next_report=0
   saw_progress=$interactive
   completed=0

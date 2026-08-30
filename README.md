@@ -67,8 +67,8 @@ To build and audit the Lean formalization:
 make formal-proof
 ```
 
-This downloads the pinned Mathlib cache, builds the Lean proof with a progress
-bar, and audits the resulting theorems for non-standard axioms.
+This downloads the pinned Mathlib cache, builds the `Flockzk` Lean proof
+library with a progress bar, and audits its theorems for non-standard axioms.
 
 ## Documentation
 
