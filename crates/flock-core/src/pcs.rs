@@ -478,7 +478,7 @@ fn open_zk_blinded<Ch: Challenger>(
     //     shift the combined target to prove a false claim.
     challenger.observe_label(b"flock-pcs-zk-blind");
     challenger.observe_f128(y_g);
-    let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
     let c_grind_nonce = challenger.grind_pow(c_bits);
     let c = challenger.sample_f128();
 
@@ -1190,7 +1190,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         };
         challenger.observe_label(b"flock-pcs-zk-blind");
         challenger.observe_f128(zkb.y_g);
-        let c_bits = lig_config.fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+        let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
         if !challenger.verify_pow(zkb.c_grind_nonce, c_bits) {
             return Err(VerifyError::Ligerito);
         }
@@ -1424,6 +1424,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: vec![0; n_levels],
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
         let v = crate::pcs::ligerito::VerifierConfig {
@@ -1437,6 +1438,7 @@ mod tests {
             queries,
             grinding_bits: vec![0; n_levels],
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
         (p, v)
@@ -1737,6 +1739,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
         let lig_v_cfg = crate::pcs::ligerito::VerifierConfig {
@@ -1750,6 +1753,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits: vec![0; n_levels],
+            fold_grinding_taper: vec![false; n_levels],
             ood_samples: vec![0; n_levels],
         };
 

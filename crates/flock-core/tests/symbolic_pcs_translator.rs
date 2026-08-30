@@ -32,6 +32,7 @@ fn tiny_config() -> ProverConfig {
         queries: vec![6, 4, 4],
         grinding_bits: vec![0; 3],
         fold_grinding_bits: vec![0; 3],
+        fold_grinding_taper: vec![false; 3],
         ood_samples: vec![0; 3],
     }
 }
