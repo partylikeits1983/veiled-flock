@@ -51,11 +51,11 @@ A first build on a cold Lake/Mathlib cache can take 30+ minutes on an M-series
 MacBook. Incremental rebuilds are usually much faster.
 
 ```sh
-cd lean
-lake build VeiledFlock
-cd ..
-scripts/lean-axioms.sh
+make formal-proof
 ```
+
+This downloads the pinned Mathlib cache, builds the Lean proof with a progress
+bar, and audits the resulting theorems for non-standard axioms.
 
 ## Documentation
 
