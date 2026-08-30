@@ -36,7 +36,7 @@ impl fmt::Display for VeilError {
             Self::ChallengeReplayExhausted => {
                 write!(
                     f,
-                    "the verify replay asked for more challenges than the prove pass"
+                    "the verify replay did not consume all challenges produced by the prove pass"
                 )
             }
             Self::MaskCountMismatch { expected, actual } => {
