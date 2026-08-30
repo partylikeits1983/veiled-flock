@@ -47,7 +47,7 @@ P*J*Q_H/2^256
 + P*Q_P*Q_H/2^256
 + (Q_H + P*Q_P)^2/2^257
 + 4*P*(P-1)/2^257
-+ P*((63/64)^8192 + 16*(31/32)^4096).
++ P*((31/32)^4096 + 16*(31/32)^4096).
 ```
 
 The terms respectively cover challenge prequeries, hidden initial-Merkle
@@ -115,7 +115,7 @@ Fiat--Shamir sampling matches production block semantics: two `F128` values
 share one 256-bit output where applicable, unused halves remain uniform, and
 nonzero or not-zero-or-one challenges use exact rejection sampling. Outer
 blinding grinding uses the canonical first-success nonce and accepts only the
-first 8192 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
+first 4096 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
 the ledger conservatively reserves sixteen grind sites although the registered
 profiles use at most three live fold-grinding sites.
 The public prove and verify methods instantiate the pinned SHA-256 transcript

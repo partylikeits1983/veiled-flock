@@ -1,4 +1,4 @@
-//! Minimal end-to-end CLI for succinct experimental VEIL-FLOCK.
+//! Minimal end-to-end CLI for succinct VEIL-FLOCK.
 
 use std::{env, fs, io::Read, process::ExitCode, time::Instant};
 
@@ -13,7 +13,7 @@ const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
 type Bundle = VeilFlockProofBundle;
 
 const USAGE: &str = "\
-veiled_flock — experimental VEIL argument for 64-byte BLAKE3 preimages
+veiled_flock — succinct VEIL argument for 64-byte BLAKE3 preimages
 
 Usage:
   veiled_flock prove  --message FILE --out FILE
@@ -37,7 +37,7 @@ fn main() -> ExitCode {
 
 fn run() -> Result<(), String> {
     flock_prover::init_perf_thread_pool();
-    eprintln!("EXPERIMENTAL: not independently audited; do not use for production secrets");
+    eprintln!("UNAUDITED: not independently audited; do not use for production secrets");
     let mut args = env::args().skip(1);
     match args.next().as_deref() {
         Some("prove") => {

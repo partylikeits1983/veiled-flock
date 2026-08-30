@@ -92,10 +92,10 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [([u8; 32], usize, usize); 5] = [
     ),
 ];
 /// ZK doubles the committed message dimension, so the largest supported outer
-/// blinding grind is six bits. An 8192-trial fail-closed cap charges at most
-/// `(63/64)^8192 < 2^-186`.
-pub const MAX_BLIND_GRINDING_BITS: u32 = 6;
-pub const MAX_BLIND_GRIND_TRIALS: u64 = 8192;
+/// blinding grind is five bits. A 4096-trial fail-closed cap charges at most
+/// `(31/32)^4096 < 2^-187`.
+pub const MAX_BLIND_GRINDING_BITS: u32 = 5;
+pub const MAX_BLIND_GRIND_TRIALS: u64 = 4096;
 /// Every Ligerito query/fold grind is bounded for the same reason. Across the
 /// supported ZK shapes the largest live fold grind is five bits, whose
 /// 4096-trial tail is below `2^-187`.

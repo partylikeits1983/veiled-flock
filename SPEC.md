@@ -127,9 +127,9 @@ hashing, VEIL, and grinding. `F128` decoding is bijective. `F*` and
 one 256-bit output MUST be sampled/programmed jointly; unused bytes MUST remain
 uniform.
 
-The active outer grind is the canonical first nonce satisfying a two-bit
-predicate, limited to 4096 trials. Proving and simulation MUST fail closed if
-no nonce succeeds.
+The active outer blind grind is the canonical first nonce satisfying the
+shape's bounded predicate, at most five bits, limited to 4096 trials. Proving
+and simulation MUST fail closed if no nonce succeeds.
 
 ## 9. Simulator
 
