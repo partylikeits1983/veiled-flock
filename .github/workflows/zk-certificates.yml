@@ -1,5 +1,5 @@
 # Full executable Rust ZK certificate suite. It runs weekly and on demand; the
-# per-PR workflow separately keeps the ordinary Rust checks mandatory.
+# ordinary Rust checks remain mandatory in the main CI workflow.
 
 name: ZK certificates
 

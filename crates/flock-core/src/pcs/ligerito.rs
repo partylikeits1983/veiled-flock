@@ -161,6 +161,17 @@ pub const UDR_PROXIMITY_LOSS: f64 = 0.0;
 /// Soundness (in bits) the query phase must close on its own at every level
 /// (the "100 bits from queries always" policy).
 const UDR_TARGET_BITS: f64 = 100.0;
+const ZERO_PROBABILITY: f64 = 0.0;
+const BINARY_PROBABILITY_BASE: f64 = 2.0;
+const MIN_EFFECTIVE_FOLD_COUNT: usize = 1;
+const ROUNDED_DIAGNOSTIC_HALF_ULP_BITS: f64 = 0.05;
+const FULL_RELATIVE_DISTANCE: f64 = 1.0;
+const UDR_MAX_RADIUS_DISTANCE_DIVISOR: f64 = 2.0;
+const UDR_FINITE_LENGTH_BACKOFF: f64 = 3.0;
+const UDR_MIN_RADIUS_DISTANCE_DIVISOR: f64 = 3.0;
+const UDR_DISTANCE_FLOOR_FACTOR: f64 = 3.0;
+const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
+const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
 
 /// Number of queries for 100-bit soundness in the **unique-decoding regime**
 /// at rate `2^(-log_inv_rate)`: `γ = δ/2 = (1−ρ)/2`, per-query soundness
@@ -718,9 +729,11 @@ fn paper_per_query_bits(log_inv_rate: usize, eta: f64) -> f64 {
 /// theorem-mandated minimum and shrinks with the codeword length.
 fn udr_gamma(log_inv_rate: usize, log_msg_cols: usize, proximity_loss: f64) -> f64 {
     let rho = (-(log_inv_rate as f64)).exp2();
-    let delta = 1.0 - rho;
+    let delta = FULL_RELATIVE_DISTANCE - rho;
     let n = ((log_msg_cols + log_inv_rate) as f64).exp2();
-    delta / 2.0 - 3.0 / (delta * n) - proximity_loss
+    delta / UDR_MAX_RADIUS_DISTANCE_DIVISOR
+        - UDR_FINITE_LENGTH_BACKOFF / (delta * n)
+        - proximity_loss
 }
 
 /// Per-query log₂(1/(1−γ)) under the UDR regime at the maximal radius
@@ -884,6 +897,37 @@ impl LigeritoLevelConfig {
     }
 }
 
+fn validate_udr_theorem_range(
+    level_index: usize,
+    level: &LigeritoLevelConfig,
+) -> Result<(), String> {
+    let rho = (-(level.log_inv_rate as f64)).exp2();
+    let delta = FULL_RELATIVE_DISTANCE - rho;
+    let n = ((level.log_msg_cols + level.log_inv_rate) as f64).exp2();
+    let eps = level
+        .proximity_loss
+        .expect("UDR proximity loss was checked above");
+    let gamma = udr_gamma(level.log_inv_rate, level.log_msg_cols, eps);
+    let theorem_ceiling =
+        delta / UDR_MAX_RADIUS_DISTANCE_DIVISOR - UDR_FINITE_LENGTH_BACKOFF / (delta * n);
+    let size_floor = UDR_DISTANCE_FLOOR_FACTOR * UDR_DISTANCE_FLOOR_RADICAND.sqrt() / n.sqrt();
+
+    // BCHKS25 Cor. 1.4 is used only in its proved finite-length interval:
+    // delta/3 <= gamma <= delta/2 - 3/(delta*N), with
+    // delta >= 3*sqrt(2)/sqrt(N).
+    if delta < size_floor
+        || gamma < delta / UDR_MIN_RADIUS_DISTANCE_DIVISOR
+        || gamma > theorem_ceiling
+        || gamma <= STRICT_POSITIVE_RADIUS_FLOOR
+    {
+        return Err(format!(
+            "L{level_index}: UDR theorem range fails: delta={delta}, gamma={gamma}, \
+             ceiling={theorem_ceiling}, size_floor={size_floor}"
+        ));
+    }
+    Ok(())
+}
+
 impl LigeritoSecurityConfig {
     /// Additive whole-opening bound over every registered proximity fold,
     /// query phase, and OOD event. This is intentionally separate from the
@@ -891,20 +935,22 @@ impl LigeritoSecurityConfig {
     /// security claim must use this union bound.
     pub fn aggregate_soundness_bound(&self) -> Result<AggregateSoundnessBound, String> {
         self.validate()?;
-        let mut proximity_probability = 0.0;
-        let mut query_probability = 0.0;
-        let mut ood_probability = 0.0;
+        let mut proximity_probability = ZERO_PROBABILITY;
+        let mut query_probability = ZERO_PROBABILITY;
+        let mut ood_probability = ZERO_PROBABILITY;
         for level in &self.levels {
             let (pg_bits, query_bits) = level.paper_predicted_bits();
-            let fold_count = level.log_num_interleaved.max(1) as f64;
-            proximity_probability +=
-                fold_count * 2f64.powf(-(pg_bits + level.fold_grinding_bits as f64));
-            query_probability += 2f64.powf(-(query_bits + level.grinding_bits as f64));
+            let fold_count = level.log_num_interleaved.max(MIN_EFFECTIVE_FOLD_COUNT) as f64;
+            proximity_probability += fold_count
+                * BINARY_PROBABILITY_BASE.powf(-(pg_bits + level.fold_grinding_bits as f64));
+            query_probability +=
+                BINARY_PROBABILITY_BASE.powf(-(query_bits + level.grinding_bits as f64));
             if let Some(ood_bits) = level.expected_eps_ood_bits {
                 // Stored diagnostics are rounded to one decimal place. Back
                 // off by half a unit in the last place for a conservative
                 // aggregate bound.
-                ood_probability += 2f64.powf(-(ood_bits - 0.05));
+                ood_probability +=
+                    BINARY_PROBABILITY_BASE.powf(-(ood_bits - ROUNDED_DIAGNOSTIC_HALF_ULP_BITS));
             }
         }
         Ok(AggregateSoundnessBound {
@@ -983,7 +1029,9 @@ impl LigeritoSecurityConfig {
                 (SoundnessRegime::Udr, None) => {
                     return Err(format!("L{i}: regime=udr but proximity_loss is missing"));
                 }
-                (SoundnessRegime::Udr, Some(eps)) if !eps.is_finite() || eps < 0.0 => {
+                (SoundnessRegime::Udr, Some(eps))
+                    if !eps.is_finite() || eps < UDR_PROXIMITY_LOSS =>
+                {
                     return Err(format!(
                         "L{i}: proximity_loss must be finite and ≥ 0, got {eps}"
                     ));
@@ -994,30 +1042,8 @@ impl LigeritoSecurityConfig {
                 _ => {}
             }
 
-            // BCHKS25 Cor. 1.4 is used only in its proved finite-length
-            // interval: delta/3 <= gamma <= delta/2 - 3/(delta*N), with
-            // delta >= 3*sqrt(2)/sqrt(N). The formula supplies the upper
-            // bound; validate every remaining precondition explicitly.
             if lv.regime == SoundnessRegime::Udr {
-                let rho = (-(lv.log_inv_rate as f64)).exp2();
-                let delta = 1.0 - rho;
-                let n = ((lv.log_msg_cols + lv.log_inv_rate) as f64).exp2();
-                let eps = lv
-                    .proximity_loss
-                    .expect("UDR proximity loss was checked above");
-                let gamma = udr_gamma(lv.log_inv_rate, lv.log_msg_cols, eps);
-                let theorem_ceiling = delta / 2.0 - 3.0 / (delta * n);
-                let size_floor = 3.0 * 2.0f64.sqrt() / n.sqrt();
-                if delta < size_floor
-                    || gamma < delta / 3.0
-                    || gamma > theorem_ceiling
-                    || gamma <= 0.0
-                {
-                    return Err(format!(
-                        "L{i}: UDR theorem range fails: delta={delta}, gamma={gamma}, \
-                         ceiling={theorem_ceiling}, size_floor={size_floor}"
-                    ));
-                }
+                validate_udr_theorem_range(i, lv)?;
             }
 
             // OOD samples match regime: UDR has no list, so no OOD; under
@@ -5009,6 +5035,10 @@ fn recursive_prover_inner<Ch: Challenger>(
 
 /// Verify all opened rows against one root via a single octopus multi-proof.
 /// `queries` must be sorted ascending and aligned with `opened_rows`.
+fn f128_row_bytes(row: &[F128]) -> &[u8] {
+    unsafe { core::slice::from_raw_parts(row.as_ptr() as *const u8, core::mem::size_of_val(row)) }
+}
+
 fn verify_level_opens(
     root: &Hash,
     block_len: usize,
@@ -5026,15 +5056,7 @@ fn verify_level_opens(
     }
     let leaf_hashes = opened_rows
         .iter()
-        .map(|row| {
-            let bytes: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    row.as_ptr() as *const u8,
-                    row.len() * core::mem::size_of::<F128>(),
-                )
-            };
-            merkle::hash_leaf(bytes)
-        })
+        .map(|row| merkle::hash_leaf(f128_row_bytes(row)))
         .collect::<Vec<_>>();
     merkle::verify_merkle_multi_proof(root, block_len, queries, &leaf_hashes, multi_proof)
 }
@@ -5059,19 +5081,68 @@ fn verify_level_opens_with_ro(
         if row.len() != expected_num_interleaved {
             return false;
         }
-        let bytes: &[u8] = unsafe {
-            core::slice::from_raw_parts(
-                row.as_ptr() as *const u8,
-                row.len() * core::mem::size_of::<F128>(),
-            )
-        };
-        leaf_payloads.push(bytes);
+        leaf_payloads.push(f128_row_bytes(row));
     }
     merkle::verify_merkle_multi_proof_framed(
         root,
         block_len,
         queries,
         &leaf_payloads,
+        multi_proof,
+        ro,
+        channel,
+        tree_depth,
+    )
+}
+
+fn salted_opening_payloads(
+    opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
+    expected_num_interleaved: usize,
+) -> Option<Vec<Vec<u8>>> {
+    if leaf_salts.len() != opened_rows.len() {
+        return None;
+    }
+    let mut payloads = Vec::with_capacity(opened_rows.len());
+    for (row, salt) in opened_rows.iter().zip(leaf_salts) {
+        if row.len() != expected_num_interleaved {
+            return None;
+        }
+        let row_bytes = f128_row_bytes(row);
+        let mut payload = Vec::with_capacity(salt.len() + row_bytes.len());
+        payload.extend_from_slice(salt);
+        payload.extend_from_slice(row_bytes);
+        payloads.push(payload);
+    }
+    Some(payloads)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_salted_level_opens_with_ro(
+    root: &Hash,
+    block_len: usize,
+    queries: &[usize],
+    opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
+    expected_num_interleaved: usize,
+    multi_proof: &[Hash],
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> bool {
+    if queries.len() != opened_rows.len() {
+        return false;
+    }
+    let Some(payloads) = salted_opening_payloads(opened_rows, leaf_salts, expected_num_interleaved)
+    else {
+        return false;
+    };
+    let refs = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    merkle::verify_merkle_multi_proof_framed(
+        root,
+        block_len,
+        queries,
+        &refs,
         multi_proof,
         ro,
         channel,
@@ -5092,52 +5163,29 @@ fn verify_level_opens_maybe_ro(
     tree_depth: u8,
 ) -> bool {
     match ro_context {
-        Some((ro, channel)) => {
-            if leaf_salts.is_empty() {
-                verify_level_opens_with_ro(
-                    root,
-                    block_len,
-                    queries,
-                    opened_rows,
-                    expected_num_interleaved,
-                    multi_proof,
-                    ro,
-                    channel,
-                    tree_depth,
-                )
-            } else {
-                if leaf_salts.len() != opened_rows.len() {
-                    return false;
-                }
-                let mut payloads = Vec::with_capacity(opened_rows.len());
-                for (row, salt) in opened_rows.iter().zip(leaf_salts) {
-                    if row.len() != expected_num_interleaved {
-                        return false;
-                    }
-                    let row_bytes: &[u8] = unsafe {
-                        core::slice::from_raw_parts(
-                            row.as_ptr() as *const u8,
-                            row.len() * core::mem::size_of::<F128>(),
-                        )
-                    };
-                    let mut payload = Vec::with_capacity(32 + row_bytes.len());
-                    payload.extend_from_slice(salt);
-                    payload.extend_from_slice(row_bytes);
-                    payloads.push(payload);
-                }
-                let refs = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
-                merkle::verify_merkle_multi_proof_framed(
-                    root,
-                    block_len,
-                    queries,
-                    &refs,
-                    multi_proof,
-                    ro,
-                    channel,
-                    tree_depth,
-                )
-            }
-        }
+        Some((ro, channel)) if leaf_salts.is_empty() => verify_level_opens_with_ro(
+            root,
+            block_len,
+            queries,
+            opened_rows,
+            expected_num_interleaved,
+            multi_proof,
+            ro,
+            channel,
+            tree_depth,
+        ),
+        Some((ro, channel)) => verify_salted_level_opens_with_ro(
+            root,
+            block_len,
+            queries,
+            opened_rows,
+            leaf_salts,
+            expected_num_interleaved,
+            multi_proof,
+            ro,
+            channel,
+            tree_depth,
+        ),
         None => {
             leaf_salts.is_empty()
                 && verify_level_opens(

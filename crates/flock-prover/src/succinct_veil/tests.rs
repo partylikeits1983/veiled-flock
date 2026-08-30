@@ -55,6 +55,7 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
         (512, 23, 756),
         (1024, 24, 758),
         (2048, 25, 760),
+        (4096, 26, 762),
     ] {
         let setup = Blake3PreimageZkSetup::new(blocks);
         assert_eq!(setup.r1cs.m, m);

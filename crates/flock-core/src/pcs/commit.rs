@@ -135,9 +135,7 @@ pub struct Commitment {
 pub struct ProverData {
     pub codeword: Vec<F128>,
     pub merkle_tree: Vec<Hash>,
-    /// ZK mode only: one independent salt for every initial L0 leaf. Opened
-    /// salts travel with the L0 multi-proof; recursive commitments are made
-    /// only after the witness-independent fold and therefore remain unsalted.
+    /// ZK mode only: one salt per initial commitment leaf.
     pub initial_leaf_salts: Vec<[u8; 32]>,
     /// zk mode only: the uniform low-half mask block of the committed message
     /// `message′ = [zk_mask ‖ z_packed]` (length `2^{m−7}`; empty otherwise).

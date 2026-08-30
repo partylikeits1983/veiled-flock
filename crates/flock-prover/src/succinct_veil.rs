@@ -43,8 +43,8 @@ const PUBLIC_DIRECT_CLAIM_COUNT: usize = 1;
 const RING_WIDTH: usize = 1 << pcs::LOG_PACKING;
 /// Exact circuit digests, dimensions, and independent-mask counts accepted by
 /// the full-ZK entry point. These are the pinned 64-byte BLAKE3-preimage
-/// circuits for 256, 512, 1024, and 2048 slots respectively.
-const SUPPORTED_BLAKE3_R1CS_SHAPES: [([u8; 32], usize, usize); 4] = [
+/// circuits for 256, 512, 1024, 2048, and 4096 slots respectively.
+const SUPPORTED_BLAKE3_R1CS_SHAPES: [([u8; 32], usize, usize); 5] = [
     (
         [
             0x33, 0xcb, 0x2a, 0x40, 0x4f, 0x1b, 0x19, 0x77, 0x5e, 0x0c, 0x38, 0x11, 0x89, 0xd1,
@@ -81,16 +81,25 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [([u8; 32], usize, usize); 4] = [
         25,
         760,
     ),
+    (
+        [
+            0xf9, 0x53, 0x24, 0x34, 0x6b, 0xc7, 0xcb, 0xe3, 0xc6, 0xef, 0x85, 0x8f, 0x83, 0x57,
+            0xf8, 0x91, 0x95, 0x75, 0x04, 0x80, 0x76, 0xb5, 0xb7, 0x5f, 0x44, 0x7a, 0x6c, 0xa0,
+            0xf6, 0x2e, 0x0d, 0x74,
+        ],
+        26,
+        762,
+    ),
 ];
 /// ZK doubles the committed message dimension, so the largest supported outer
-/// blinding grind is five bits. A 4096-trial fail-closed cap charges at most
-/// `(31/32)^4096 < 2^-187`.
-pub const MAX_BLIND_GRINDING_BITS: u32 = 5;
-pub const MAX_BLIND_GRIND_TRIALS: u64 = 4096;
+/// blinding grind is six bits. An 8192-trial fail-closed cap charges at most
+/// `(63/64)^8192 < 2^-186`.
+pub const MAX_BLIND_GRINDING_BITS: u32 = 6;
+pub const MAX_BLIND_GRIND_TRIALS: u64 = 8192;
 /// Every Ligerito query/fold grind is bounded for the same reason. Across the
-/// supported ZK shapes the largest live fold grind is four bits, whose
-/// 4096-trial tail is below `2^-381`.
-pub const MAX_LIGERITO_GRINDING_BITS: usize = 4;
+/// supported ZK shapes the largest live fold grind is five bits, whose
+/// 4096-trial tail is below `2^-187`.
+pub const MAX_LIGERITO_GRINDING_BITS: usize = 5;
 pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 4096;
 pub const MAX_LIGERITO_GRIND_SITES: u64 = 16;
 

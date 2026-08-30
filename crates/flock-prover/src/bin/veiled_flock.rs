@@ -20,7 +20,7 @@ Usage:
   veiled_flock verify --in FILE
   veiled_flock demo
 
-The message file must contain 1..=2048 concatenated 64-byte messages. The
+The message file must contain 1..=4096 concatenated 64-byte messages. The
 proof bundle contains their public BLAKE3 digests and the VEIL proof, but never
 the messages.
 ";

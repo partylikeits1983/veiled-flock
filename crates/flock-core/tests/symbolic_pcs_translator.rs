@@ -5,8 +5,8 @@ use flock_core::linalg::F128Mat;
 use flock_core::pcs::commit::PcsParams;
 use flock_core::pcs::ligerito::{LigeritoProfile, ProverConfig, prover_config_for};
 use flock_core::pcs::symbolic_opening::{
-    certify_l0_query_rank, encode_zk_linear, l0_entropy_bound, translate_joint_view_for_queries,
-    translate_mask_for_queries,
+    PcsMaskTranslationError, certify_l0_query_rank, encode_zk_linear, l0_entropy_bound,
+    translate_joint_view_for_queries, translate_mask_for_queries,
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
@@ -154,13 +154,15 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
                 .all(|value| *value == F128::ZERO)
         );
     }
-    assert!(translate_mask_for_queries(&params, F128::ZERO, &queries, &delta).is_none());
+    assert_eq!(
+        translate_mask_for_queries(&params, F128::ZERO, &queries, &delta),
+        Err(PcsMaskTranslationError::ZeroChallenge)
+    );
     let mut non_public_basis = basis.clone();
     non_public_basis[0] += F128::ONE;
-    assert!(
-        translate_joint_view_for_queries(&params, c, &queries, &delta, &[&non_public_basis])
-            .is_none(),
-        "a witness-private direct functional must fail closed"
+    assert_eq!(
+        translate_joint_view_for_queries(&params, c, &queries, &delta, &[&non_public_basis]),
+        Err(PcsMaskTranslationError::PublicFunctionalNotInKernel),
     );
 }
 

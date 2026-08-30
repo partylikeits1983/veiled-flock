@@ -69,6 +69,8 @@ use super::pack::LOG_PACKING;
 use crate::pcs::tensor_algebra::TensorAlgebra;
 use rayon::prelude::*;
 
+const F128_LIMB_BITS: usize = u64::BITS as usize;
+
 /// Per-block padding descriptor in F_{2^128} units. Computed once from a bit-
 /// level [`PaddingSpec`] and reused across the fold kernels: any chunk whose
 /// index modulo `chunks_per_block` is ≥ `useful_chunks_per_block` is fully
@@ -1375,26 +1377,32 @@ pub fn scale_s_hat_v(s: &[F128], scalar: F128) -> Vec<F128> {
     assert_eq!(s.len(), 1usize << LOG_PACKING);
     let mut out = vec![F128::ZERO; 1usize << LOG_PACKING];
     for (input_bit, value) in s.iter().enumerate() {
-        let basis = if input_bit < 64 {
-            F128::new(1u64 << input_bit, 0)
-        } else {
-            F128::new(0, 1u64 << (input_bit - 64))
-        };
-        let product = scalar * basis;
-        let mut lo = product.lo;
-        while lo != 0 {
-            let output_bit = lo.trailing_zeros() as usize;
-            out[output_bit] += *value;
-            lo &= lo - 1;
-        }
-        let mut hi = product.hi;
-        while hi != 0 {
-            let output_bit = hi.trailing_zeros() as usize;
-            out[64 + output_bit] += *value;
-            hi &= hi - 1;
-        }
+        accumulate_scaled_basis(&mut out, input_bit, *value, scalar);
     }
     out
+}
+
+fn f128_basis(input_bit: usize) -> F128 {
+    assert!(input_bit < 1usize << LOG_PACKING);
+    if input_bit < F128_LIMB_BITS {
+        F128::new(1u64 << input_bit, 0)
+    } else {
+        F128::new(0, 1u64 << (input_bit - F128_LIMB_BITS))
+    }
+}
+
+fn accumulate_scaled_basis(out: &mut [F128], input_bit: usize, value: F128, scalar: F128) {
+    let product = scalar * f128_basis(input_bit);
+    accumulate_limb_bits(out, product.lo, 0, value);
+    accumulate_limb_bits(out, product.hi, F128_LIMB_BITS, value);
+}
+
+fn accumulate_limb_bits(out: &mut [F128], mut limb: u64, output_offset: usize, value: F128) {
+    while limb != 0 {
+        let output_bit = output_offset + limb.trailing_zeros() as usize;
+        out[output_bit] += value;
+        limb &= limb - 1;
+    }
 }
 
 /// Compute the verifier's claim check: `Σ_i weights[i] · s_hat_v[i]`.

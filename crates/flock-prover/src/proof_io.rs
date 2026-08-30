@@ -87,6 +87,9 @@ pub const MAX_VEIL_FLOCK_BUNDLE_BYTES: u64 = 1024 * 1024;
 /// Header size = 5-byte magic + 1-byte flavor.
 const HEADER_LEN: usize = 6;
 
+#[cfg(feature = "veil")]
+const MAX_VEIL_FLOCK_PAYLOAD_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES - (HEADER_LEN as u64);
+
 /// Errors from `from_bytes` / `read_from_file`.
 #[derive(Debug)]
 pub enum DeserializeError {
@@ -176,7 +179,7 @@ impl VeilFlockProofBundle {
     fn options() -> impl Options {
         bincode::DefaultOptions::new()
             .with_fixint_encoding()
-            .with_limit(MAX_VEIL_FLOCK_BUNDLE_BYTES)
+            .with_limit(MAX_VEIL_FLOCK_PAYLOAD_BYTES)
             .reject_trailing_bytes()
     }
 
@@ -495,5 +498,33 @@ mod tests {
     fn rejects_truncated() {
         let res = R1csProofBundleLigerito::from_bytes(&[0u8; 3]);
         assert!(matches!(res, Err(DeserializeError::Truncated)));
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn veil_bincode_limit_leaves_room_for_header() {
+        use bincode::Options;
+
+        assert_eq!(
+            MAX_VEIL_FLOCK_PAYLOAD_BYTES + HEADER_LEN as u64,
+            MAX_VEIL_FLOCK_BUNDLE_BYTES
+        );
+        let vec_len_prefix = core::mem::size_of::<u64>() as u64;
+        let max_vec_len = (MAX_VEIL_FLOCK_PAYLOAD_BYTES - vec_len_prefix) as usize;
+        let payload = VeilFlockProofBundle::options()
+            .serialize(&vec![0u8; max_vec_len])
+            .expect("payload at adjusted bincode limit");
+        assert_eq!(payload.len() as u64, MAX_VEIL_FLOCK_PAYLOAD_BYTES);
+
+        let mut bundle_bytes = Vec::with_capacity(HEADER_LEN + payload.len());
+        write_header(&mut bundle_bytes, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE);
+        bundle_bytes.extend_from_slice(&payload);
+        assert_eq!(bundle_bytes.len() as u64, MAX_VEIL_FLOCK_BUNDLE_BYTES);
+
+        assert!(
+            VeilFlockProofBundle::options()
+                .serialize(&vec![0u8; max_vec_len + 1])
+                .is_err()
+        );
     }
 }

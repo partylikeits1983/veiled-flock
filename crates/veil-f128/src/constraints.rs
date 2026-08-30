@@ -410,6 +410,36 @@ impl ConstraintSoundnessBound {
     }
 }
 
+const FIELD_SIZE_LOG2: i32 = 128;
+const NONZERO_CHALLENGE_DENOMINATOR_LOG2: i32 = 127;
+const BINARY_FIELD_BASE: f64 = 2.0;
+const FULL_RELATIVE_DISTANCE: f64 = 1.0;
+const BINARY_FOLD_BAD_SCALAR_OFFSET: f64 = 1.0;
+const UNIQUE_DECODING_RADIUS_DENOMINATOR: f64 = 2.0;
+const UNIQUE_DECODING_BACKOFF: f64 = 3.0;
+const UNIQUE_DECODING_MIN_RADIUS_DIVISOR: f64 = 3.0;
+const UNIQUE_DECODING_SIZE_FLOOR_FACTOR: f64 = 3.0;
+const UNIQUE_DECODING_SIZE_FLOOR_RADICAND: f64 = 2.0;
+const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
+const HADAMARD_OPERAND_BINARY_FOLDS: f64 = 3.0;
+const HADAMARD_PRODUCT_DIMENSION_FACTOR: usize = 2;
+const HADAMARD_LINK_LINEAR_CONSTRAINTS: usize = 3;
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct ConstraintSoundnessGeometry {
+    linear_code_length: usize,
+    linear_dimension: usize,
+    linear_gamma: f64,
+    hadamard_code_length: usize,
+    hadamard_dimension: usize,
+    hadamard_gamma: f64,
+    product_dimension: usize,
+    product_gamma: f64,
+    query_count: usize,
+    hadamard_multiplications: usize,
+    combined_constraints: usize,
+}
+
 /// Certify the exact finite-length RS geometry and additive VEIL binding error
 /// of `circuit` under `parameters`.
 ///
@@ -425,6 +455,48 @@ pub fn certify_constraint_soundness(
     parameters: ConstraintParameters,
 ) -> Result<ConstraintSoundnessBound, ConstraintError> {
     let parameters = parameters.validate()?;
+    let geometry = constraint_soundness_geometry(circuit, parameters)?;
+    let bound = constraint_soundness_from_geometry(geometry);
+    if !bound.bits().is_finite() || bound.bits() < SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS {
+        return Err(ConstraintError::InsufficientSoundness);
+    }
+    Ok(bound)
+}
+
+fn constraint_soundness_geometry(
+    circuit: &ArithmeticCircuit,
+    parameters: ConstraintParameters,
+) -> Result<ConstraintSoundnessGeometry, ConstraintError> {
+    validate_certified_circuit_shape(circuit)?;
+    let padded = padded_circuit(circuit);
+    let linear_dimension = checked_dimension(padded.num_variables, parameters.linear_padding)?;
+    let hadamard_dimension =
+        checked_dimension(padded.multiplications.len(), parameters.hadamard_padding)?;
+    let linear_code_length = checked_code_length(linear_dimension, parameters.inverse_rate)?;
+    let hadamard_code_length = checked_code_length(hadamard_dimension, parameters.inverse_rate)?;
+    let product_dimension = checked_hadamard_product_dimension(hadamard_dimension)?;
+    let query_count = parameters.linear_padding;
+    if parameters.hadamard_padding != query_count {
+        // The current theorem/ledger intentionally fixes one common query
+        // budget. A future asymmetric profile needs its own explicit ledger.
+        return Err(ConstraintError::InvalidParameters);
+    }
+    Ok(ConstraintSoundnessGeometry {
+        linear_code_length,
+        linear_dimension,
+        linear_gamma: unique_decoding_radius(linear_code_length, linear_dimension)?,
+        hadamard_code_length,
+        hadamard_dimension,
+        hadamard_gamma: unique_decoding_radius(hadamard_code_length, hadamard_dimension)?,
+        product_dimension,
+        product_gamma: unique_decoding_radius(hadamard_code_length, product_dimension)?,
+        query_count,
+        hadamard_multiplications: padded.multiplications.len(),
+        combined_constraints: padded.linear_constraints.len() + HADAMARD_LINK_LINEAR_CONSTRAINTS,
+    })
+}
+
+fn validate_certified_circuit_shape(circuit: &ArithmeticCircuit) -> Result<(), ConstraintError> {
     if circuit.num_variables != circuit.num_inputs
         || circuit
             .multiplications
@@ -433,81 +505,94 @@ pub fn certify_constraint_soundness(
     {
         return Err(ConstraintError::MalformedCircuit);
     }
-    let padded = padded_circuit(circuit);
-    let linear_dimension = padded
-        .num_variables
-        .checked_add(parameters.linear_padding)
-        .ok_or(ConstraintError::InvalidParameters)?;
-    let hadamard_dimension = padded
-        .multiplications
-        .len()
-        .checked_add(parameters.hadamard_padding)
-        .ok_or(ConstraintError::InvalidParameters)?;
-    let linear_code_length = linear_dimension
-        .next_power_of_two()
-        .checked_mul(parameters.inverse_rate)
-        .ok_or(ConstraintError::InvalidParameters)?;
-    let hadamard_code_length = hadamard_dimension
-        .next_power_of_two()
-        .checked_mul(parameters.inverse_rate)
-        .ok_or(ConstraintError::InvalidParameters)?;
-    let product_dimension = 2 * hadamard_dimension.next_power_of_two() - 1;
-    let linear_gamma = unique_decoding_radius(linear_code_length, linear_dimension)?;
-    let hadamard_gamma = unique_decoding_radius(hadamard_code_length, hadamard_dimension)?;
-    let product_gamma = unique_decoding_radius(hadamard_code_length, product_dimension)?;
-    let query_count = parameters.linear_padding;
-    if parameters.hadamard_padding != query_count {
-        // The current theorem/ledger intentionally fixes one common query
-        // budget. A future asymmetric profile needs its own explicit ledger.
-        return Err(ConstraintError::InvalidParameters);
-    }
+    Ok(())
+}
 
-    let nonzero_denominator = 2f64.powi(127);
-    let field_size = 2f64.powi(128);
-    let binary_pg =
-        |gamma: f64, length: usize| (gamma * length as f64 + 1.0).floor() / nonzero_denominator;
-    let linear_proximity_probability = binary_pg(linear_gamma, linear_code_length);
+fn checked_dimension(size: usize, padding: usize) -> Result<usize, ConstraintError> {
+    size.checked_add(padding)
+        .ok_or(ConstraintError::InvalidParameters)
+}
+
+fn checked_code_length(dimension: usize, inverse_rate: usize) -> Result<usize, ConstraintError> {
+    dimension
+        .next_power_of_two()
+        .checked_mul(inverse_rate)
+        .ok_or(ConstraintError::InvalidParameters)
+}
+
+fn checked_hadamard_product_dimension(hadamard_dimension: usize) -> Result<usize, ConstraintError> {
+    hadamard_dimension
+        .next_power_of_two()
+        .checked_mul(HADAMARD_PRODUCT_DIMENSION_FACTOR)
+        .and_then(|length| length.checked_sub(1))
+        .ok_or(ConstraintError::InvalidParameters)
+}
+
+fn constraint_soundness_from_geometry(
+    geometry: ConstraintSoundnessGeometry,
+) -> ConstraintSoundnessBound {
+    let linear_proximity_probability =
+        binary_proximity_probability(geometry.linear_gamma, geometry.linear_code_length);
     // Four operand rows are Horner-folded by one non-zero scalar. A union
     // over its three binary folds is valid without assuming independence.
-    let hadamard_operand_proximity_probability =
-        3.0 * binary_pg(hadamard_gamma, hadamard_code_length);
-    let hadamard_product_proximity_probability = binary_pg(product_gamma, hadamard_code_length);
+    let hadamard_operand_proximity_probability = HADAMARD_OPERAND_BINARY_FOLDS
+        * binary_proximity_probability(geometry.hadamard_gamma, geometry.hadamard_code_length);
+    let hadamard_product_proximity_probability =
+        binary_proximity_probability(geometry.product_gamma, geometry.hadamard_code_length);
 
-    let hadamard_multiplications = padded.multiplications.len();
+    let field_size = field_size();
     let hadamard_reduction_probability =
-        hadamard_multiplications.saturating_sub(1) as f64 / field_size;
+        geometry.hadamard_multiplications.saturating_sub(1) as f64 / field_size;
     // The shared F\{0,1} challenge links all three Hadamard rows. If any row
     // is false, acceptance requires one non-zero polynomial of this degree to
     // vanish; no extra factor of three is needed.
-    let hadamard_link_probability =
-        hadamard_multiplications.saturating_sub(1) as f64 / nonzero_denominator;
-    // padded_circuit adds one constraint and Hadamard linkage adds three.
-    let combined_constraints = padded.linear_constraints.len() + 3;
-    let constraint_batch_probability = combined_constraints.saturating_sub(1) as f64 / field_size;
+    let hadamard_link_probability = geometry.hadamard_multiplications.saturating_sub(1) as f64
+        / nonzero_challenge_denominator();
+    let constraint_batch_probability =
+        geometry.combined_constraints.saturating_sub(1) as f64 / field_size;
 
-    let bound = ConstraintSoundnessBound {
-        linear_code_length,
-        linear_dimension,
-        linear_gamma,
-        hadamard_code_length,
-        hadamard_dimension,
-        hadamard_gamma,
-        product_dimension,
-        product_gamma,
-        query_count,
+    ConstraintSoundnessBound {
+        linear_code_length: geometry.linear_code_length,
+        linear_dimension: geometry.linear_dimension,
+        linear_gamma: geometry.linear_gamma,
+        hadamard_code_length: geometry.hadamard_code_length,
+        hadamard_dimension: geometry.hadamard_dimension,
+        hadamard_gamma: geometry.hadamard_gamma,
+        product_dimension: geometry.product_dimension,
+        product_gamma: geometry.product_gamma,
+        query_count: geometry.query_count,
         linear_proximity_probability,
-        linear_query_probability: (1.0 - linear_gamma).powi(query_count as i32),
+        linear_query_probability: missed_query_probability(
+            geometry.linear_gamma,
+            geometry.query_count,
+        ),
         hadamard_operand_proximity_probability,
         hadamard_product_proximity_probability,
-        hadamard_product_query_probability: (1.0 - product_gamma).powi(query_count as i32),
+        hadamard_product_query_probability: missed_query_probability(
+            geometry.product_gamma,
+            geometry.query_count,
+        ),
         hadamard_reduction_probability,
         hadamard_link_probability,
         constraint_batch_probability,
-    };
-    if !bound.bits().is_finite() || bound.bits() < SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS {
-        return Err(ConstraintError::InsufficientSoundness);
     }
-    Ok(bound)
+}
+
+fn binary_proximity_probability(gamma: f64, length: usize) -> f64 {
+    (gamma * length as f64 + BINARY_FOLD_BAD_SCALAR_OFFSET).floor()
+        / nonzero_challenge_denominator()
+}
+
+fn missed_query_probability(gamma: f64, query_count: usize) -> f64 {
+    (FULL_RELATIVE_DISTANCE - gamma).powi(query_count as i32)
+}
+
+fn nonzero_challenge_denominator() -> f64 {
+    BINARY_FIELD_BASE.powi(NONZERO_CHALLENGE_DENOMINATOR_LOG2)
+}
+
+fn field_size() -> f64 {
+    BINARY_FIELD_BASE.powi(FIELD_SIZE_LOG2)
 }
 
 fn unique_decoding_radius(code_length: usize, dimension: usize) -> Result<f64, ConstraintError> {
@@ -515,10 +600,14 @@ fn unique_decoding_radius(code_length: usize, dimension: usize) -> Result<f64, C
         return Err(ConstraintError::InvalidParameters);
     }
     let n = code_length as f64;
-    let delta = 1.0 - dimension as f64 / n;
-    let gamma = delta / 2.0 - 3.0 / (delta * n);
-    let size_floor = 3.0 * 2.0f64.sqrt() / n.sqrt();
-    if delta < size_floor || gamma < delta / 3.0 || gamma <= 0.0 {
+    let delta = FULL_RELATIVE_DISTANCE - dimension as f64 / n;
+    let gamma = delta / UNIQUE_DECODING_RADIUS_DENOMINATOR - UNIQUE_DECODING_BACKOFF / (delta * n);
+    let size_floor =
+        UNIQUE_DECODING_SIZE_FLOOR_FACTOR * UNIQUE_DECODING_SIZE_FLOOR_RADICAND.sqrt() / n.sqrt();
+    if delta < size_floor
+        || gamma < delta / UNIQUE_DECODING_MIN_RADIUS_DIVISOR
+        || gamma <= STRICT_POSITIVE_RADIUS_FLOOR
+    {
         return Err(ConstraintError::InsufficientSoundness);
     }
     Ok(gamma)

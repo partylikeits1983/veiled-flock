@@ -72,7 +72,7 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the registered full-ZK circuit and PCS
 /// certificates. Smaller batches are padded to the next power-of-two shape,
 /// with a 256-slot production floor.
-pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 2048;
+pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -1287,9 +1287,9 @@ mod tests {
     #[test]
     fn succinct_simulator_query_cap_covers_every_registered_shape() {
         let oracle = crate::sim_oracle::shared_oracle();
-        // These are the smallest public batches selecting the four registered
-        // 256/512/1024/2048-slot circuits.
-        for n_blocks in [1usize, 257, 513, 1025] {
+        // These are the smallest public batches selecting every registered
+        // 256/512/1024/2048/4096-slot circuit.
+        for n_blocks in [1usize, 257, 513, 1025, 2049] {
             let setup = Blake3PreimageZkSetup::new(n_blocks);
             let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
             let before = oracle
