@@ -19,11 +19,10 @@
 //!   pass. Runs on the mask counter, on the verifier, and (via the prover's
 //!   replay `ReadingCtx`) on the prover.
 
-use std::time::Instant;
-
 use veil_examples::{
-    BitPcs, F128, MaskSampler, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
-    ZkVerifierCtx, bit_mle_eval, compute_mask_length, sample_quirky_point,
+    BitPcs, F128, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng, ZkVerifierCtx,
+    bit_mle_eval, compute_mask_length, random_packed_bits, run_example, sample_quirky_point,
+    sample_quirky_point_sending,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-mle-eval";
@@ -42,22 +41,8 @@ fn mle_eval_prove<C: SendingCtx>(ctx: &mut C, packed: Vec<F128>) {
     let witness = packed.clone();
     ctx.commit_bits(packed)
         .expect("failed to commit the witness");
-    let point = sample_quirky_point_sending(ctx);
+    let point = sample_quirky_point_sending(ctx, M, K_LOG).expect("addressable point");
     ctx.send_value(bit_mle_eval(&witness, &point));
-}
-
-/// The prover samples the point through its challenger with the same
-/// scalar squeezes the verify body issues through `ReadingCtx::sample`.
-fn sample_quirky_point_sending<C: SendingCtx>(ctx: &mut C) -> veil_examples::QuirkyPoint {
-    let mut scalars = |count: usize| (0..count).map(|_| ctx.sample_f128()).collect::<Vec<_>>();
-    let z_skip = scalars(1)[0];
-    let x_inner_rest = scalars(K_LOG - flock_core::zerocheck::K_SKIP);
-    let x_outer = scalars(M - K_LOG);
-    veil_examples::QuirkyPoint {
-        z_skip,
-        x_inner_rest,
-        x_outer,
-    }
 }
 
 /// Unified read+constrain pass. Every read returns an error on a malformed
@@ -73,12 +58,6 @@ fn mle_eval_verify<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
 // ============================================================================
 // Driver
 // ============================================================================
-
-fn random_packed_bits(rng: &mut ZkRng, pcs: &BitPcs) -> Vec<F128> {
-    let mut packed = vec![F128::ZERO; pcs.packed_len()];
-    rng.fill_f128(&mut packed);
-    packed
-}
 
 fn prove(pcs: &BitPcs, packed: Vec<F128>, rng: ZkRng) -> Result<(ZkProof, usize), VeilError> {
     let mask_length = compute_mask_length(Some(pcs), mle_eval_verify)?;
@@ -100,23 +79,7 @@ fn main() {
     let pcs = BitPcs::new(M).expect("registered hiding PCS shape");
     let packed = random_packed_bits(&mut rng.fork(b"veil-examples-mle-data"), &pcs);
     eprintln!("Committed witness: 2^{M} bits, PCS m = {}", pcs.m());
-
-    eprintln!("\n=== ZK BACKEND ===");
-    let now = Instant::now();
-    let (proof, mask_length) = prove(&pcs, packed, rng).expect("zk prove failed");
-    eprintln!("Mask length: {mask_length}");
-    eprintln!("Prover time: {:?}", now.elapsed());
-    eprintln!(
-        "Proof size: {} bytes",
-        bincode::serialize(&proof)
-            .expect("serializable proof")
-            .len()
-    );
-
-    let now = Instant::now();
-    verify(&pcs, proof).expect("zk verification failed");
-    eprintln!("Verifier time: {:?}", now.elapsed());
-    eprintln!("ZK backend: PASSED");
+    run_example(|| prove(&pcs, packed, rng), |proof| verify(&pcs, proof));
 }
 
 #[cfg(test)]

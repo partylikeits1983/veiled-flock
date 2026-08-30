@@ -19,13 +19,14 @@
 //!   `ReadingCtx`, so it runs on the mask counter, on the verifier, and on
 //!   the prover replay.
 
-use std::time::Instant;
-
-use flock_core::{pcs::pack_witness, zerocheck::PaddingSpec};
+use flock_core::{
+    pcs::{pack_witness, unpack_witness},
+    zerocheck::PaddingSpec,
+};
 use veil_examples::{
-    BitPcs, F128, MaskSampler, QuirkyPoint, ReadingCtx, SendingCtx, VeilError, ZkProof,
-    ZkProverCtx, ZkRng, ZkVerifierCtx, bits_to_bytes, compute_mask_length, zerocheck_prove,
-    zerocheck_verify,
+    BitPcs, F128, QuirkyPoint, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
+    ZkVerifierCtx, bits_to_bytes, compute_mask_length, random_packed_bits, run_example,
+    zerocheck_prove, zerocheck_verify,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-zerocheck";
@@ -45,6 +46,14 @@ impl BitVector {
             packed: pack_witness(bits, M),
         }
     }
+}
+
+/// Random `a`, `b`, and `c = a AND b`.
+fn random_instance(rng: &mut ZkRng, pcs: &BitPcs) -> (Vec<bool>, Vec<bool>, Vec<bool>) {
+    let a = unpack_witness(&random_packed_bits(rng, pcs), M);
+    let b = unpack_witness(&random_packed_bits(rng, pcs), M);
+    let c = a.iter().zip(&b).map(|(x, y)| *x && *y).collect();
+    (a, b, c)
 }
 
 // ============================================================================
@@ -92,15 +101,6 @@ fn zerocheck_verify_all<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
 // Driver
 // ============================================================================
 
-fn random_bits(rng: &mut ZkRng) -> Vec<bool> {
-    let mut words = vec![0u64; (1usize << M) / 64];
-    rng.fill_u64s(&mut words);
-    words
-        .iter()
-        .flat_map(|word| (0..64).map(move |bit| (word >> bit) & 1 == 1))
-        .collect()
-}
-
 fn prove(
     pcs: &BitPcs,
     a: &BitVector,
@@ -125,34 +125,11 @@ fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
 fn main() {
     flock_core::init_perf_thread_pool();
     let mut rng = ZkRng::from_entropy();
-    eprintln!("Generating random bit vectors (2^{M} bits)...");
-    let mut data_rng = rng.fork(b"veil-examples-zerocheck-data");
-    let a_bits = random_bits(&mut data_rng);
-    let b_bits = random_bits(&mut data_rng);
-    let c_bits: Vec<bool> = a_bits.iter().zip(&b_bits).map(|(x, y)| *x && *y).collect();
-    let (a, b, c) = (
-        BitVector::new(&a_bits),
-        BitVector::new(&b_bits),
-        BitVector::new(&c_bits),
-    );
     let pcs = BitPcs::new(M).expect("registered hiding PCS shape");
-
-    eprintln!("\n=== ZK BACKEND ===");
-    let now = Instant::now();
-    let (proof, mask_length) = prove(&pcs, &a, &b, &c, rng).expect("zk prove failed");
-    eprintln!("Mask length: {mask_length}");
-    eprintln!("Prover time: {:?}", now.elapsed());
-    eprintln!(
-        "Proof size: {} bytes",
-        bincode::serialize(&proof)
-            .expect("serializable proof")
-            .len()
-    );
-
-    let now = Instant::now();
-    verify(&pcs, proof).expect("zk verification failed");
-    eprintln!("Verifier time: {:?}", now.elapsed());
-    eprintln!("ZK backend: PASSED");
+    eprintln!("Generating random bit vectors (2^{M} bits)...");
+    let (a, b, c) = random_instance(&mut rng.fork(b"veil-examples-zerocheck-data"), &pcs);
+    let (a, b, c) = (BitVector::new(&a), BitVector::new(&b), BitVector::new(&c));
+    run_example(|| prove(&pcs, &a, &b, &c, rng), |proof| verify(&pcs, proof));
 }
 
 #[cfg(test)]
@@ -165,11 +142,9 @@ mod tests {
 
     fn fixture(seed: u8) -> (BitPcs, Vec<bool>, Vec<bool>, Vec<bool>, ZkRng) {
         let mut rng = ZkRng::from_seed([seed; 32]);
-        let mut data_rng = rng.fork(b"test-data");
-        let a = random_bits(&mut data_rng);
-        let b = random_bits(&mut data_rng);
-        let c = a.iter().zip(&b).map(|(x, y)| *x && *y).collect();
-        (BitPcs::new(M).unwrap(), a, b, c, rng)
+        let pcs = BitPcs::new(M).unwrap();
+        let (a, b, c) = random_instance(&mut rng.fork(b"test-data"), &pcs);
+        (pcs, a, b, c, rng)
     }
 
     /// Zerocheck masks: two round-one vectors, `M - K_SKIP` round pairs, two

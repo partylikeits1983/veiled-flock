@@ -24,8 +24,6 @@
 //!   production shifted verifier circuit for this R1CS. Runs on the mask
 //!   counter, on the verifier, and on the prover replay.
 
-use std::time::Instant;
-
 use flock_core::{
     lincheck::{LincheckCircuit, pack_z_lincheck},
     pcs::pack_witness,
@@ -35,7 +33,7 @@ use flock_core::{
 use veil_examples::{
     BitPcs, MaskSampler, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
     ZkVerifierCtx, bits_to_bytes, check_block_shape, compute_mask_length, lincheck_prove,
-    lincheck_verify, zerocheck_prove, zerocheck_verify,
+    lincheck_verify, run_example, zerocheck_prove, zerocheck_verify,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-root";
@@ -52,26 +50,29 @@ const MODULUS: u16 = 0x11b;
 // ============================================================================
 
 /// `x^k mod MODULUS` as a byte, for `k < 16`.
-fn reduction_table() -> [u8; 16] {
+const REDUCTION: [u8; 16] = reduction_table();
+
+const fn reduction_table() -> [u8; 16] {
     let mut table = [0u8; 16];
     let mut value: u16 = 1;
-    for entry in &mut table {
-        *entry = value as u8;
+    let mut index = 0;
+    while index < table.len() {
+        table[index] = value as u8;
         value <<= 1;
         if value & 0x100 != 0 {
             value ^= MODULUS;
         }
+        index += 1;
     }
     table
 }
 
 fn gf8_mul(a: u8, b: u8) -> u8 {
-    let table = reduction_table();
     let mut acc = 0u8;
     for i in 0..8 {
         for j in 0..8 {
             if (a >> i) & 1 == 1 && (b >> j) & 1 == 1 {
-                acc ^= table[i + j];
+                acc ^= REDUCTION[i + j];
             }
         }
     }
@@ -152,9 +153,7 @@ impl Layout {
 
 /// Build the R1CS for `p(root) = 0`. Row `w` defines wire `w` as
 /// `(A_w z) * (B_w z)`; rows past `useful_bits` are empty and pin zero.
-fn build_r1cs(coeffs: &[u8]) -> BlockR1cs {
-    let layout = Layout::new(DEGREE);
-    let table = reduction_table();
+fn build_r1cs(layout: &Layout, coeffs: &[u8]) -> BlockR1cs {
     let k = 1usize << K_LOG;
     assert!(layout.useful_bits <= k, "block too small for the relation");
     let mut a_rows: Vec<Vec<usize>> = vec![Vec::new(); k];
@@ -185,7 +184,7 @@ fn build_r1cs(coeffs: &[u8]) -> BlockR1cs {
         for (bit, &wire) in acc.iter().enumerate() {
             let mut terms: Vec<usize> = (0..8)
                 .flat_map(|i| (0..8).map(move |j| (i, j)))
-                .filter(|&(i, j)| (table[i + j] >> bit) & 1 == 1)
+                .filter(|&(i, j)| (REDUCTION[i + j] >> bit) & 1 == 1)
                 .map(|(i, j)| products[8 * i + j])
                 .collect();
             if (coefficient >> bit) & 1 == 1 {
@@ -241,9 +240,7 @@ fn build_r1cs(coeffs: &[u8]) -> BlockR1cs {
 }
 
 /// One block of the witness for `root`; every wire follows its R1CS row.
-fn block_witness(coeffs: &[u8], root: u8) -> Vec<bool> {
-    let layout = Layout::new(DEGREE);
-    let table = reduction_table();
+fn block_witness(layout: &Layout, coeffs: &[u8], root: u8) -> Vec<bool> {
     let mut z = vec![false; 1usize << K_LOG];
     z[layout.const_wire] = true;
     for (bit, &wire) in layout.root.iter().enumerate() {
@@ -261,7 +258,7 @@ fn block_witness(coeffs: &[u8], root: u8) -> Vec<bool> {
         for i in 0..8 {
             for j in 0..8 {
                 if z[products[8 * i + j]] {
-                    next ^= table[i + j];
+                    next ^= REDUCTION[i + j];
                 }
             }
         }
@@ -369,8 +366,9 @@ fn main() {
     );
     eprintln!("Public polynomial over GF(2^8), degree {DEGREE}");
 
-    let r1cs = build_r1cs(&coeffs);
-    let z = full_witness(&block_witness(&coeffs, secret_root));
+    let layout = Layout::new(DEGREE);
+    let r1cs = build_r1cs(&layout, &coeffs);
+    let z = full_witness(&block_witness(&layout, &coeffs, secret_root));
     assert!(r1cs.satisfies(&z), "witness should satisfy the R1CS");
     eprintln!(
         "R1CS: 2^{K_LOG}-bit blocks, {} useful wires, 2^{} instances",
@@ -378,23 +376,10 @@ fn main() {
         M - K_LOG
     );
     let pcs = BitPcs::new(M).expect("registered hiding PCS shape");
-
-    eprintln!("\n=== ZK BACKEND ===");
-    let now = Instant::now();
-    let (proof, mask_length) = prove(&pcs, &r1cs, &z, rng).expect("zk prove failed");
-    eprintln!("Mask length: {mask_length}");
-    eprintln!("Prover time: {:?}", now.elapsed());
-    eprintln!(
-        "Proof size: {} bytes",
-        bincode::serialize(&proof)
-            .expect("serializable proof")
-            .len()
+    run_example(
+        || prove(&pcs, &r1cs, &z, rng),
+        |proof| verify(&pcs, &r1cs, proof),
     );
-
-    let now = Instant::now();
-    verify(&pcs, &r1cs, proof).expect("zk verification failed");
-    eprintln!("Verifier time: {:?}", now.elapsed());
-    eprintln!("ZK backend: PASSED");
 }
 
 #[cfg(test)]
@@ -406,11 +391,15 @@ mod tests {
 
     const ROOT: u8 = 0x53;
 
+    fn witness_for(root: u8) -> Vec<bool> {
+        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
+        full_witness(&block_witness(&Layout::new(DEGREE), &coeffs, root))
+    }
+
     fn fixture() -> (BitPcs, BlockR1cs, Vec<bool>) {
         let coeffs = make_polynomial_with_root(ROOT, DEGREE);
-        let r1cs = build_r1cs(&coeffs);
-        let z = full_witness(&block_witness(&coeffs, ROOT));
-        (BitPcs::new(M).unwrap(), r1cs, z)
+        let r1cs = build_r1cs(&Layout::new(DEGREE), &coeffs);
+        (BitPcs::new(M).unwrap(), r1cs, witness_for(ROOT))
     }
 
     /// Zerocheck, lincheck, and two ring claims.
@@ -439,9 +428,7 @@ mod tests {
     fn witness_satisfies_the_r1cs_and_wrong_root_does_not() {
         let (_, r1cs, z) = fixture();
         assert!(r1cs.satisfies(&z));
-        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
-        let bad = full_witness(&block_witness(&coeffs, ROOT ^ 1));
-        assert!(!r1cs.satisfies(&bad));
+        assert!(!r1cs.satisfies(&witness_for(ROOT ^ 1)));
     }
 
     #[test]
@@ -466,8 +453,7 @@ mod tests {
     #[test]
     fn wrong_root_is_not_provable() {
         let (pcs, r1cs, _) = fixture();
-        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
-        let bad = full_witness(&block_witness(&coeffs, ROOT ^ 1));
+        let bad = witness_for(ROOT ^ 1);
         let error = prove(&pcs, &r1cs, &bad, ZkRng::from_seed([2; 32])).unwrap_err();
         assert_eq!(
             error,
@@ -508,7 +494,10 @@ mod tests {
     fn wrong_statement_is_rejected() {
         let (pcs, r1cs, z) = fixture();
         let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([4; 32])).unwrap();
-        let other = build_r1cs(&make_polynomial_with_root(ROOT ^ 1, DEGREE));
+        let other = build_r1cs(
+            &Layout::new(DEGREE),
+            &make_polynomial_with_root(ROOT ^ 1, DEGREE),
+        );
         assert!(verify(&pcs, &other, proof).is_err());
     }
 }

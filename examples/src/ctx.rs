@@ -67,6 +67,27 @@ fn unmask(masked: F128, index: usize) -> Expr {
     Expr::constant(masked).add(&Expr::variable(index))
 }
 
+/// Unmask consecutive transcript values whose first mask variable is `start`.
+fn unmask_slice(masked: &[F128], start: usize) -> Vec<Expr> {
+    masked
+        .iter()
+        .enumerate()
+        .map(|(offset, value)| unmask(*value, start + offset))
+        .collect()
+}
+
+/// The configured PCS, checked against the witness size a body asks for.
+fn check_oracle_shape(pcs: Option<&BitPcs>, m: usize) -> Result<&BitPcs, VeilError> {
+    let pcs = pcs.ok_or(VeilError::ClaimWithoutOracle)?;
+    if pcs.m() != m {
+        return Err(VeilError::OracleShape {
+            expected: pcs.m(),
+            actual: m,
+        });
+    }
+    Ok(pcs)
+}
+
 // ============================================================================
 // Traits
 // ============================================================================
@@ -183,24 +204,39 @@ fn scale_ring_expressions(expressions: &[Expr], scalar: F128) -> Vec<Expr> {
     out
 }
 
-/// Link one claim to its blinded slices: `q_i = w_i + (c * b)_i` for every
-/// slice, and `value = <weights, w>`. Returns the public claim value the PCS
-/// opens on the blinded vector.
-fn link_ring_claim(
+/// The masked ring slices of one claim as affine expressions.
+struct RingLink {
+    witness: Vec<Expr>,
+    blind: Vec<Expr>,
+}
+
+/// Link every claim to its blinded slices: `q_i = w_i + (c * b)_i` for every
+/// slice, and `value = <weights, w>`. Both roles emit exactly these
+/// constraints, so the shifted circuits agree.
+fn link_ring_claims(
     builder: &mut CircuitBuilder,
-    claim: &ClaimRecord,
-    witness: &[Expr],
-    blind: &[Expr],
-    blinded: &[F128],
+    claims: &[ClaimRecord],
+    links: &[RingLink],
+    blinded_slices: &[Vec<F128>],
     challenge: F128,
-) -> F128 {
-    let scaled_blind = scale_ring_expressions(blind, challenge);
-    for ((q, w), b) in blinded.iter().zip(witness).zip(&scaled_blind) {
-        builder.assert_zero(&Expr::constant(*q).add(w).add(b));
+) {
+    for ((claim, link), blinded) in claims.iter().zip(links).zip(blinded_slices) {
+        let scaled_blind = scale_ring_expressions(&link.blind, challenge);
+        for ((q, w), b) in blinded.iter().zip(&link.witness).zip(&scaled_blind) {
+            builder.assert_zero(&Expr::constant(*q).add(w).add(b));
+        }
+        let weights = claim_weights(&claim.point);
+        builder.assert_zero(
+            &claim
+                .value
+                .add(&linear_combination(&link.witness, &weights)),
+        );
     }
-    let weights = claim_weights(&claim.point);
-    builder.assert_zero(&claim.value.add(&linear_combination(witness, &weights)));
-    claim_check(&weights, blinded)
+}
+
+/// The public value the PCS opens for one claim on the blinded vector.
+fn opened_value(claim: &ClaimRecord, blinded: &[F128]) -> F128 {
+    claim_check(&claim_weights(&claim.point), blinded)
 }
 
 /// Commitment indices that carry at least one claim, ascending.
@@ -209,6 +245,13 @@ fn oracles_with_claims(claims: &[ClaimRecord]) -> Vec<usize> {
     ids.sort_unstable();
     ids.dedup();
     ids
+}
+
+/// Claim indices that open `oracle_index`, in registration order.
+fn claims_of(claims: &[ClaimRecord], oracle_index: usize) -> Vec<usize> {
+    (0..claims.len())
+        .filter(|&index| claims[index].oracle.0 == oracle_index)
+        .collect()
 }
 
 /// One terminal transcript branch per opened commitment. Every branch forks
@@ -241,7 +284,7 @@ fn sample_nonce(rng: &mut ZkRng) -> [u8; 32] {
 pub struct MaskCounter {
     count: usize,
     oracles: usize,
-    m: Option<usize>,
+    pcs: Option<BitPcs>,
     challenger: FsChallenger,
 }
 
@@ -250,7 +293,7 @@ impl MaskCounter {
         Self {
             count: 0,
             oracles: 0,
-            m: pcs.map(BitPcs::m),
+            pcs: pcs.cloned(),
             challenger: FsChallenger::new(b"veil-examples-mask-counter"),
         }
     }
@@ -289,13 +332,7 @@ impl ReadingCtx for MaskCounter {
     }
 
     fn read_oracle(&mut self, m: usize) -> Result<OracleId, VeilError> {
-        let expected = self.m.ok_or(VeilError::ClaimWithoutOracle)?;
-        if expected != m {
-            return Err(VeilError::OracleShape {
-                expected,
-                actual: m,
-            });
-        }
+        check_oracle_shape(self.pcs.as_ref(), m)?;
         let id = OracleId(self.oracles);
         self.oracles += 1;
         Ok(id)
@@ -488,8 +525,8 @@ impl ZkProverCtx {
         let expected_masks = self.sent.len() + 2 * RING_WIDTH * self.claims.len();
         if expected_masks != self.masks.len() {
             return Err(VeilError::MaskCountMismatch {
-                expected: self.masks.len(),
-                actual: expected_masks,
+                expected: expected_masks,
+                actual: self.masks.len(),
             });
         }
         if self
@@ -502,46 +539,31 @@ impl ZkProverCtx {
 
         let mut blind_grind_nonce = 0u64;
         let mut blinded_slices = Vec::with_capacity(self.claims.len());
-        let mut pcs_values = Vec::with_capacity(self.claims.len());
         let mut challenge = None;
         if !self.claims.is_empty() {
             let pcs = self.pcs.as_ref().ok_or(VeilError::ClaimWithoutOracle)?;
             let bits = pcs.blind_grinding_bits()?;
             let mut witness_slices = Vec::with_capacity(self.claims.len());
             let mut blind_slices = Vec::with_capacity(self.claims.len());
-            let mut witness_exprs = Vec::with_capacity(self.claims.len());
-            let mut blind_exprs = Vec::with_capacity(self.claims.len());
+            let mut links = Vec::with_capacity(self.claims.len());
             self.challenger.observe_label(RING_MASK_LABEL);
             for index in 0..self.claims.len() {
-                let (oracle, point) = {
-                    let claim = &self.claims[index];
-                    (claim.oracle.0, claim.point.clone())
-                };
                 let (witness, blind) = {
-                    let committed = &self.oracles[oracle];
+                    let claim = &self.claims[index];
+                    let committed = &self.oracles[claim.oracle.0];
                     let g_top = &committed.prover_data.zk_blind[committed.packed.len()..];
                     (
-                        ring_slices(&committed.packed, &point),
-                        ring_slices(g_top, &point),
+                        ring_slices(&committed.packed, &claim.point),
+                        ring_slices(g_top, &claim.point),
                     )
                 };
                 let start = self.sent.len();
                 let masked_witness = self.mask_and_send(&witness);
                 let masked_blind = self.mask_and_send(&blind);
-                witness_exprs.push(
-                    masked_witness
-                        .iter()
-                        .enumerate()
-                        .map(|(i, value)| unmask(*value, start + i))
-                        .collect::<Vec<_>>(),
-                );
-                blind_exprs.push(
-                    masked_blind
-                        .iter()
-                        .enumerate()
-                        .map(|(i, value)| unmask(*value, start + RING_WIDTH + i))
-                        .collect::<Vec<_>>(),
-                );
+                links.push(RingLink {
+                    witness: unmask_slice(&masked_witness, start),
+                    blind: unmask_slice(&masked_blind, start + RING_WIDTH),
+                });
                 witness_slices.push(witness);
                 blind_slices.push(blind);
             }
@@ -561,16 +583,7 @@ impl ZkProverCtx {
                 self.challenger.observe_f128_slice(&blinded);
                 blinded_slices.push(blinded);
             }
-            for (index, claim) in self.claims.iter().enumerate() {
-                pcs_values.push(link_ring_claim(
-                    &mut self.builder,
-                    claim,
-                    &witness_exprs[index],
-                    &blind_exprs[index],
-                    &blinded_slices[index],
-                    c,
-                ));
-            }
+            link_ring_claims(&mut self.builder, &self.claims, &links, &blinded_slices, c);
             challenge = Some(c);
         }
 
@@ -597,19 +610,15 @@ impl ZkProverCtx {
                     .zip(g_top)
                     .map(|(z, g)| *z + c * *g)
                     .collect();
-                let x_fulls: Vec<Vec<F128>> = self
-                    .claims
+                let selected = claims_of(&self.claims, oracle_index);
+                let x_fulls: Vec<Vec<F128>> = selected
                     .iter()
-                    .filter(|claim| claim.oracle.0 == oracle_index)
-                    .map(|claim| x_full(&claim.point))
+                    .map(|&index| x_full(&self.claims[index].point))
                     .collect();
                 let x_refs: Vec<&[F128]> = x_fulls.iter().map(Vec::as_slice).collect();
-                let precomputed: Vec<Option<&[F128]>> = self
-                    .claims
+                let precomputed: Vec<Option<&[F128]>> = selected
                     .iter()
-                    .zip(&blinded_slices)
-                    .filter(|(claim, _)| claim.oracle.0 == oracle_index)
-                    .map(|(_, slice)| Some(slice.as_slice()))
+                    .map(|&index| Some(blinded_slices[index].as_slice()))
                     .collect();
                 let opening = pcs::open_batch_mixed_ligerito_preblinded_ro(
                     PreblindedOpening {
@@ -633,7 +642,6 @@ impl ZkProverCtx {
                 pcs_openings.push(opening);
             }
         }
-        drop(pcs_values);
 
         let veil = prove_constraints_from_commitment(
             &circuit,
@@ -733,11 +741,7 @@ impl SendingCtx for ZkProverCtx {
     fn send_values(&mut self, values: &[F128]) -> Vec<Expr> {
         let start = self.sent.len();
         let masked = self.mask_and_send(values);
-        masked
-            .into_iter()
-            .enumerate()
-            .map(|(offset, value)| unmask(value, start + offset))
-            .collect()
+        unmask_slice(&masked, start)
     }
 
     fn commit_bits(&mut self, packed: Vec<F128>) -> Result<OracleId, VeilError> {
@@ -780,19 +784,11 @@ impl ReadingCtx for ZkProverCtx {
             return Err(VeilError::TranscriptExhausted);
         }
         self.read_cursor = end;
-        Ok((start..end)
-            .map(|index| unmask(self.sent[index], index))
-            .collect())
+        Ok(unmask_slice(&self.sent[start..end], start))
     }
 
     fn read_oracle(&mut self, m: usize) -> Result<OracleId, VeilError> {
-        let pcs = self.pcs.as_ref().ok_or(VeilError::ClaimWithoutOracle)?;
-        if pcs.m() != m {
-            return Err(VeilError::OracleShape {
-                expected: pcs.m(),
-                actual: m,
-            });
-        }
+        check_oracle_shape(self.pcs.as_ref(), m)?;
         if self.oracle_cursor >= self.oracles.len() {
             return Err(VeilError::OracleExhausted);
         }
@@ -932,7 +928,6 @@ impl ZkVerifierCtx {
         }
 
         let mut challenge = None;
-        let mut pcs_values = Vec::with_capacity(self.claims.len());
         if self.claims.is_empty() {
             if self.proof.blind_grind_nonce != 0 {
                 return Err(VeilError::ProofShape("grind nonce without claims"));
@@ -944,25 +939,11 @@ impl ZkVerifierCtx {
                 pcs.check_point(&claim.point)?;
             }
             self.challenger.observe_label(RING_MASK_LABEL);
-            let mut witness_exprs = Vec::with_capacity(self.claims.len());
-            let mut blind_exprs = Vec::with_capacity(self.claims.len());
+            let mut links = Vec::with_capacity(self.claims.len());
             for _ in 0..self.claims.len() {
-                let (start, witness) = self.read_masked(RING_WIDTH)?;
-                let (blind_start, blind) = self.read_masked(RING_WIDTH)?;
-                witness_exprs.push(
-                    witness
-                        .iter()
-                        .enumerate()
-                        .map(|(i, value)| unmask(*value, start + i))
-                        .collect::<Vec<_>>(),
-                );
-                blind_exprs.push(
-                    blind
-                        .iter()
-                        .enumerate()
-                        .map(|(i, value)| unmask(*value, blind_start + i))
-                        .collect::<Vec<_>>(),
-                );
+                let witness = self.read_next(RING_WIDTH)?;
+                let blind = self.read_next(RING_WIDTH)?;
+                links.push(RingLink { witness, blind });
             }
             if !self
                 .challenger
@@ -976,16 +957,13 @@ impl ZkVerifierCtx {
             for slice in &self.proof.blinded_slices {
                 self.challenger.observe_f128_slice(slice);
             }
-            for (index, claim) in self.claims.iter().enumerate() {
-                pcs_values.push(link_ring_claim(
-                    &mut self.builder,
-                    claim,
-                    &witness_exprs[index],
-                    &blind_exprs[index],
-                    &self.proof.blinded_slices[index],
-                    c,
-                ));
-            }
+            link_ring_claims(
+                &mut self.builder,
+                &self.claims,
+                &links,
+                &self.proof.blinded_slices,
+                c,
+            );
             challenge = Some(c);
         }
 
@@ -1007,9 +985,7 @@ impl ZkVerifierCtx {
                     return Err(VeilError::GrindingLimitExceeded);
                 }
                 let commitment = &proof.commitments[oracle_index];
-                let selected: Vec<usize> = (0..self.claims.len())
-                    .filter(|&index| self.claims[index].oracle.0 == oracle_index)
-                    .collect();
+                let selected = claims_of(&self.claims, oracle_index);
                 if opening.ring_switches.len() != selected.len()
                     || selected
                         .iter()
@@ -1018,7 +994,10 @@ impl ZkVerifierCtx {
                 {
                     return Err(VeilError::ProofShape("opened ring slices"));
                 }
-                let values: Vec<F128> = selected.iter().map(|&i| pcs_values[i]).collect();
+                let values: Vec<F128> = selected
+                    .iter()
+                    .map(|&i| opened_value(&self.claims[i], &proof.blinded_slices[i]))
+                    .collect();
                 let z_skips: Vec<F128> = selected
                     .iter()
                     .map(|&i| self.claims[i].point.z_skip)
@@ -1084,21 +1063,11 @@ impl ConstraintCtx for ZkVerifierCtx {
 impl ReadingCtx for ZkVerifierCtx {
     fn read_next(&mut self, count: usize) -> Result<Vec<Expr>, VeilError> {
         let (start, masked) = self.read_masked(count)?;
-        Ok(masked
-            .iter()
-            .enumerate()
-            .map(|(offset, value)| unmask(*value, start + offset))
-            .collect())
+        Ok(unmask_slice(&masked, start))
     }
 
     fn read_oracle(&mut self, m: usize) -> Result<OracleId, VeilError> {
-        let pcs = self.pcs.as_ref().ok_or(VeilError::ClaimWithoutOracle)?;
-        if pcs.m() != m {
-            return Err(VeilError::OracleShape {
-                expected: pcs.m(),
-                actual: m,
-            });
-        }
+        let pcs = check_oracle_shape(self.pcs.as_ref(), m)?;
         let index = self.oracle_cursor;
         let commitment = self
             .proof
@@ -1137,18 +1106,12 @@ impl ReadingCtx for ZkVerifierCtx {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::flock::sample_quirky_point;
-    use crate::pcs::bit_mle_eval;
+    use crate::flock::{sample_quirky_point, sample_quirky_point_sending};
+    use crate::pcs::{bit_mle_eval, random_packed_bits};
 
     const M: usize = 22;
     const K_LOG: usize = 6;
     const DOMAIN: &[u8] = b"veil-examples-ctx-test";
-
-    fn packed_bits(rng: &mut ZkRng, pcs: &BitPcs) -> Vec<F128> {
-        let mut packed = vec![F128::ZERO; pcs.packed_len()];
-        rng.fill_f128(&mut packed);
-        packed
-    }
 
     /// Three committed witnesses; `a` and `b` claimed at one point, `c` at
     /// another. Exercises the three-oracle opening order and the per-oracle
@@ -1166,21 +1129,13 @@ mod tests {
         Ok(())
     }
 
-    fn quirky_point_sending(ctx: &mut ZkProverCtx) -> QuirkyPoint {
-        let z_skip = ctx.sample_f128();
-        let x_outer = (0..M - K_LOG).map(|_| ctx.sample_f128()).collect();
-        QuirkyPoint {
-            z_skip,
-            x_inner_rest: Vec::new(),
-            x_outer,
-        }
-    }
-
     fn prove(seed: u8) -> (BitPcs, ZkProof) {
         let pcs = BitPcs::new(M).unwrap();
         let mut rng = ZkRng::from_seed([seed; 32]);
         let mut data_rng = rng.fork(b"data");
-        let tables: Vec<Vec<F128>> = (0..3).map(|_| packed_bits(&mut data_rng, &pcs)).collect();
+        let tables: Vec<Vec<F128>> = (0..3)
+            .map(|_| random_packed_bits(&mut data_rng, &pcs))
+            .collect();
         let mask_length = compute_mask_length(Some(&pcs), body).unwrap();
         assert_eq!(mask_length, 3 + 3 * 2 * RING_WIDTH);
         let mut pctx =
@@ -1188,8 +1143,8 @@ mod tests {
         for table in &tables {
             pctx.commit_bits(table.clone()).unwrap();
         }
-        let shared = quirky_point_sending(&mut pctx);
-        let other = quirky_point_sending(&mut pctx);
+        let shared = sample_quirky_point_sending(&mut pctx, M, K_LOG).unwrap();
+        let other = sample_quirky_point_sending(&mut pctx, M, K_LOG).unwrap();
         pctx.send_values(&[
             bit_mle_eval(&tables[0], &shared),
             bit_mle_eval(&tables[1], &shared),

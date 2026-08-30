@@ -204,24 +204,43 @@ pub fn lincheck_verify<C: ReadingCtx>(
     })
 }
 
-/// Sample a fresh quirky point for `2^m` bits split as `k_log` inner and
-/// `m - k_log` outer bits, the shape `BlockR1cs` uses.
-pub fn sample_quirky_point<C: ReadingCtx>(
-    ctx: &mut C,
+/// The one squeeze order of a quirky point for `2^m` bits split as `k_log`
+/// inner and `m - k_log` outer bits: `z_skip`, then the inner-rest
+/// coordinates, then the outer coordinates, one scalar squeeze each.
+fn quirky_point_from(
+    mut sample: impl FnMut() -> F128,
     m: usize,
     k_log: usize,
 ) -> Result<QuirkyPoint, VeilError> {
     if k_log < K_SKIP || m < k_log {
         return Err(VeilError::ProofShape("quirky point shape"));
     }
-    let z_skip = ctx.sample();
-    let x_inner_rest = ctx.sample_point(k_log - K_SKIP);
-    let x_outer = ctx.sample_point(m - k_log);
+    let z_skip = sample();
+    let x_inner_rest = (0..k_log - K_SKIP).map(|_| sample()).collect();
+    let x_outer = (0..m - k_log).map(|_| sample()).collect();
     Ok(QuirkyPoint {
         z_skip,
         x_inner_rest,
         x_outer,
     })
+}
+
+/// Sample a fresh quirky point on a reading context.
+pub fn sample_quirky_point<C: ReadingCtx>(
+    ctx: &mut C,
+    m: usize,
+    k_log: usize,
+) -> Result<QuirkyPoint, VeilError> {
+    quirky_point_from(|| ctx.sample(), m, k_log)
+}
+
+/// Sample the same quirky point on the prover, through its challenger.
+pub fn sample_quirky_point_sending<C: SendingCtx>(
+    ctx: &mut C,
+    m: usize,
+    k_log: usize,
+) -> Result<QuirkyPoint, VeilError> {
+    quirky_point_from(|| ctx.sample_f128(), m, k_log)
 }
 
 #[cfg(test)]

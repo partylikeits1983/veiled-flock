@@ -26,6 +26,7 @@ mod error;
 mod flock;
 mod pcs;
 mod proof;
+mod report;
 
 pub use ctx::{
     ConstraintCtx, Expr, MaskCounter, OracleId, ReadingCtx, SendingCtx, ZkProverCtx, ZkVerifierCtx,
@@ -34,13 +35,15 @@ pub use ctx::{
 pub use error::VeilError;
 pub use flock::{
     LincheckOutput, ZerocheckOutput, check_block_shape, lincheck_prove, lincheck_verify,
-    sample_quirky_point, zerocheck_prove, zerocheck_verify,
+    sample_quirky_point, sample_quirky_point_sending, zerocheck_prove, zerocheck_verify,
 };
 pub use flock_core::challenger::Challenger;
 pub use flock_core::field::F128;
 pub use flock_core::lincheck::QuirkyPoint;
 pub use flock_core::zk::{MaskSampler, ZkRng};
 pub use pcs::{
-    BitPcs, RING_WIDTH, bit_mle_eval, bits_to_bytes, claim_weights, ring_slices, x_full,
+    BitPcs, RING_WIDTH, bit_mle_eval, bits_to_bytes, claim_weights, random_packed_bits,
+    ring_slices, x_full,
 };
 pub use proof::ZkProof;
+pub use report::run_example;

@@ -15,6 +15,7 @@ use flock_core::{
         },
         ring_switch::{build_claim_weights, claim_check, s_hat_v_at_point},
     },
+    zk::MaskSampler,
 };
 
 use crate::error::VeilError;
@@ -205,6 +206,13 @@ pub fn ring_slices(packed: &[F128], point: &QuirkyPoint) -> Vec<F128> {
 /// point. This is the value a FLOCK claim asserts.
 pub fn bit_mle_eval(packed: &[F128], point: &QuirkyPoint) -> F128 {
     claim_check(&claim_weights(point), &ring_slices(packed, point))
+}
+
+/// A uniformly random packed bit witness of the PCS's size.
+pub fn random_packed_bits<R: MaskSampler + ?Sized>(rng: &mut R, pcs: &BitPcs) -> Vec<F128> {
+    let mut packed = vec![F128::ZERO; pcs.packed_len()];
+    rng.fill_f128(&mut packed);
+    packed
 }
 
 /// LSB-first bit packing of a Boolean vector into bytes, the layout the
