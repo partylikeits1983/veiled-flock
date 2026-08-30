@@ -33,8 +33,8 @@ pub use ctx::{
 };
 pub use error::VeilError;
 pub use flock::{
-    LincheckOutput, ZerocheckOutput, lincheck_prove, lincheck_verify, sample_quirky_point,
-    zerocheck_prove, zerocheck_verify,
+    LincheckOutput, ZerocheckOutput, check_block_shape, lincheck_prove, lincheck_verify,
+    sample_quirky_point, zerocheck_prove, zerocheck_verify,
 };
 pub use flock_core::challenger::Challenger;
 pub use flock_core::field::F128;

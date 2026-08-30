@@ -32,9 +32,17 @@ use crate::proof::ZkProof;
 /// Affine expression in the private mask variables.
 pub type Expr = LinearCombination;
 
-/// Handle of a committed bit witness: its index in commitment order.
+/// Handle of a committed bit witness: its index in commitment order. Only
+/// `read_oracle` constructs one, so a handle always names a commitment the
+/// same context has read; `prove` and `verify` bound-check it anyway.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct OracleId(pub usize);
+pub struct OracleId(usize);
+
+impl OracleId {
+    pub fn index(self) -> usize {
+        self.0
+    }
+}
 
 const STATEMENT_LABEL: &[u8] = b"veil-examples-statement";
 const MASK_ROOT_LABEL: &[u8] = b"veil-examples-mask-root";
@@ -254,10 +262,13 @@ impl MaskCounter {
 
 /// Run the unified verify body on a counting context and return the number
 /// of masks the prover must commit.
-pub fn compute_mask_length(pcs: Option<&BitPcs>, verify: impl FnOnce(&mut MaskCounter)) -> usize {
+pub fn compute_mask_length(
+    pcs: Option<&BitPcs>,
+    verify: impl FnOnce(&mut MaskCounter) -> Result<(), VeilError>,
+) -> Result<usize, VeilError> {
     let mut counter = MaskCounter::new(pcs);
-    verify(&mut counter);
-    counter.count()
+    verify(&mut counter)?;
+    Ok(counter.count())
 }
 
 impl ConstraintCtx for MaskCounter {
@@ -480,6 +491,13 @@ impl ZkProverCtx {
                 expected: self.masks.len(),
                 actual: expected_masks,
             });
+        }
+        if self
+            .claims
+            .iter()
+            .any(|claim| claim.oracle.0 >= self.oracles.len())
+        {
+            return Err(VeilError::OracleExhausted);
         }
 
         let mut blind_grind_nonce = 0u64;
@@ -829,6 +847,38 @@ impl ZkVerifierCtx {
         if proof.commitments.len() != proof.oracle_nonces.len() {
             return Err(VeilError::ProofShape("oracle nonce count"));
         }
+        match &pcs {
+            Some(pcs) => {
+                if proof
+                    .commitments
+                    .iter()
+                    .any(|commitment| commitment.params != *pcs.params())
+                {
+                    return Err(VeilError::PcsParamsMismatch);
+                }
+            }
+            None => {
+                if !proof.commitments.is_empty() || !proof.pcs_openings.is_empty() {
+                    return Err(VeilError::ClaimWithoutOracle);
+                }
+            }
+        }
+        if proof.pcs_openings.len() > proof.commitments.len() {
+            return Err(VeilError::ProofShape("opening count"));
+        }
+        if proof
+            .blinded_slices
+            .iter()
+            .any(|slice| slice.len() != RING_WIDTH)
+        {
+            return Err(VeilError::ProofShape("ring slice width"));
+        }
+        if proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
+            return Err(VeilError::InvalidGrindNonce);
+        }
+        if proof.veil.parameters != ConstraintParameters::succinct_flock_secure() {
+            return Err(VeilError::ProofShape("VEIL parameters"));
+        }
         let mut challenger = FsChallenger::new(domain);
         observe_statement(
             &mut challenger,
@@ -868,13 +918,15 @@ impl ZkVerifierCtx {
         if self.proof.masked_transcript.len() != expected_len {
             return Err(VeilError::TranscriptNotConsumed);
         }
+        if self
+            .claims
+            .iter()
+            .any(|claim| claim.oracle.0 >= self.proof.commitments.len())
+        {
+            return Err(VeilError::OracleExhausted);
+        }
         if self.proof.blinded_slices.len() != self.claims.len()
             || self.proof.pcs_openings.len() != oracles_with_claims(&self.claims).len()
-            || self
-                .proof
-                .blinded_slices
-                .iter()
-                .any(|slice| slice.len() != RING_WIDTH)
         {
             return Err(VeilError::ProofShape("ring claim count"));
         }
@@ -912,10 +964,9 @@ impl ZkVerifierCtx {
                         .collect::<Vec<_>>(),
                 );
             }
-            if self.proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
-                || !self
-                    .challenger
-                    .verify_pow(self.proof.blind_grind_nonce, bits)
+            if !self
+                .challenger
+                .verify_pow(self.proof.blind_grind_nonce, bits)
             {
                 return Err(VeilError::InvalidGrindNonce);
             }
@@ -940,9 +991,6 @@ impl ZkVerifierCtx {
 
         let circuit = self.builder.finish();
         let proof = &self.proof;
-        if proof.veil.parameters != ConstraintParameters::succinct_flock_secure() {
-            return Err(VeilError::ProofShape("VEIL parameters"));
-        }
         certify_constraint_soundness(&circuit, proof.veil.parameters)?;
 
         let mut veil_challenger = self.challenger.clone();
@@ -959,9 +1007,6 @@ impl ZkVerifierCtx {
                     return Err(VeilError::GrindingLimitExceeded);
                 }
                 let commitment = &proof.commitments[oracle_index];
-                if commitment.params != *pcs.params() {
-                    return Err(VeilError::PcsParamsMismatch);
-                }
                 let selected: Vec<usize> = (0..self.claims.len())
                     .filter(|&index| self.claims[index].oracle.0 == oracle_index)
                     .collect();
@@ -1086,5 +1131,238 @@ impl ReadingCtx for ZkVerifierCtx {
 
     fn sample_eq_point(&mut self, m: usize) -> Result<Vec<F128>, VeilError> {
         Ok(zerocheck::sample_eq_point(m, &mut self.challenger))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flock::sample_quirky_point;
+    use crate::pcs::bit_mle_eval;
+
+    const M: usize = 22;
+    const K_LOG: usize = 6;
+    const DOMAIN: &[u8] = b"veil-examples-ctx-test";
+
+    fn packed_bits(rng: &mut ZkRng, pcs: &BitPcs) -> Vec<F128> {
+        let mut packed = vec![F128::ZERO; pcs.packed_len()];
+        rng.fill_f128(&mut packed);
+        packed
+    }
+
+    /// Three committed witnesses; `a` and `b` claimed at one point, `c` at
+    /// another. Exercises the three-oracle opening order and the per-oracle
+    /// forks.
+    fn body<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
+        let a = ctx.read_oracle(M)?;
+        let b = ctx.read_oracle(M)?;
+        let c = ctx.read_oracle(M)?;
+        let shared = sample_quirky_point(ctx, M, K_LOG)?;
+        let other = sample_quirky_point(ctx, M, K_LOG)?;
+        let evals = ctx.read_next(3)?;
+        ctx.assert_bit_mle_eval(a, shared.clone(), evals[0].clone());
+        ctx.assert_bit_mle_eval(b, shared, evals[1].clone());
+        ctx.assert_bit_mle_eval(c, other, evals[2].clone());
+        Ok(())
+    }
+
+    fn quirky_point_sending(ctx: &mut ZkProverCtx) -> QuirkyPoint {
+        let z_skip = ctx.sample_f128();
+        let x_outer = (0..M - K_LOG).map(|_| ctx.sample_f128()).collect();
+        QuirkyPoint {
+            z_skip,
+            x_inner_rest: Vec::new(),
+            x_outer,
+        }
+    }
+
+    fn prove(seed: u8) -> (BitPcs, ZkProof) {
+        let pcs = BitPcs::new(M).unwrap();
+        let mut rng = ZkRng::from_seed([seed; 32]);
+        let mut data_rng = rng.fork(b"data");
+        let tables: Vec<Vec<F128>> = (0..3).map(|_| packed_bits(&mut data_rng, &pcs)).collect();
+        let mask_length = compute_mask_length(Some(&pcs), body).unwrap();
+        assert_eq!(mask_length, 3 + 3 * 2 * RING_WIDTH);
+        let mut pctx =
+            ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng).unwrap();
+        for table in &tables {
+            pctx.commit_bits(table.clone()).unwrap();
+        }
+        let shared = quirky_point_sending(&mut pctx);
+        let other = quirky_point_sending(&mut pctx);
+        pctx.send_values(&[
+            bit_mle_eval(&tables[0], &shared),
+            bit_mle_eval(&tables[1], &shared),
+            bit_mle_eval(&tables[2], &other),
+        ]);
+        body(&mut pctx).unwrap();
+        (pcs, pctx.prove().unwrap())
+    }
+
+    fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
+        let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
+        body(&mut vctx)?;
+        vctx.verify()
+    }
+
+    #[test]
+    fn three_oracle_roundtrip() {
+        let (pcs, proof) = prove(1);
+        assert_eq!(proof.commitments.len(), 3);
+        assert_eq!(proof.pcs_openings.len(), 3);
+        assert_eq!(proof.blinded_slices.len(), 3);
+        verify(&pcs, proof).unwrap();
+    }
+
+    #[test]
+    fn shape_guards_return_exact_errors() {
+        let (pcs, proof) = prove(2);
+
+        let mut nonce = proof.clone();
+        nonce.blind_grind_nonce += 1;
+        assert_eq!(
+            verify(&pcs, nonce).unwrap_err(),
+            VeilError::InvalidGrindNonce
+        );
+
+        let mut huge_nonce = proof.clone();
+        huge_nonce.blind_grind_nonce = MAX_BLIND_GRIND_TRIALS;
+        assert_eq!(
+            verify(&pcs, huge_nonce).unwrap_err(),
+            VeilError::InvalidGrindNonce
+        );
+
+        let mut short = proof.clone();
+        short.masked_transcript.truncate(2);
+        assert_eq!(
+            verify(&pcs, short).unwrap_err(),
+            VeilError::TranscriptExhausted
+        );
+
+        let mut partial = proof.clone();
+        partial.masked_transcript.truncate(3 + RING_WIDTH);
+        assert_eq!(
+            verify(&pcs, partial).unwrap_err(),
+            VeilError::TranscriptNotConsumed
+        );
+
+        let mut extra_slice = proof.clone();
+        extra_slice
+            .blinded_slices
+            .push(vec![F128::ZERO; RING_WIDTH]);
+        assert_eq!(
+            verify(&pcs, extra_slice).unwrap_err(),
+            VeilError::ProofShape("ring claim count")
+        );
+
+        let mut narrow_slice = proof.clone();
+        narrow_slice.blinded_slices[0].pop();
+        assert_eq!(
+            verify(&pcs, narrow_slice).unwrap_err(),
+            VeilError::ProofShape("ring slice width")
+        );
+
+        let mut parameters = proof.clone();
+        parameters.veil.parameters.inverse_rate = 4;
+        assert_eq!(
+            verify(&pcs, parameters).unwrap_err(),
+            VeilError::ProofShape("VEIL parameters")
+        );
+
+        let mut swapped = proof.clone();
+        swapped.pcs_openings.swap(0, 2);
+        assert_eq!(
+            verify(&pcs, swapped).unwrap_err(),
+            VeilError::ProofShape("opened ring slices")
+        );
+
+        let mut ring = proof.clone();
+        ring.pcs_openings[1].ring_switches[0].s_hat_v[5] += F128::ONE;
+        assert_eq!(
+            verify(&pcs, ring).unwrap_err(),
+            VeilError::ProofShape("opened ring slices")
+        );
+
+        let mut fewer_openings = proof.clone();
+        fewer_openings.pcs_openings.pop();
+        assert_eq!(
+            verify(&pcs, fewer_openings).unwrap_err(),
+            VeilError::ProofShape("ring claim count")
+        );
+
+        let mut grind = proof.clone();
+        grind.pcs_openings[0].ligerito.fold_grinding_nonces[0] = MAX_LIGERITO_GRIND_TRIALS;
+        assert_eq!(
+            verify(&pcs, grind).unwrap_err(),
+            VeilError::GrindingLimitExceeded
+        );
+
+        let mut params = proof.clone();
+        params.commitments[1].params.zk = false;
+        assert_eq!(
+            verify(&pcs, params).unwrap_err(),
+            VeilError::PcsParamsMismatch
+        );
+
+        let mut no_oracle = proof.clone();
+        no_oracle.commitments.clear();
+        no_oracle.oracle_nonces.clear();
+        no_oracle.pcs_openings.clear();
+        assert_eq!(
+            verify(&pcs, no_oracle).unwrap_err(),
+            VeilError::OracleExhausted
+        );
+
+        let mut nonces = proof;
+        nonces.oracle_nonces.pop();
+        assert_eq!(
+            verify(&pcs, nonces).unwrap_err(),
+            VeilError::ProofShape("oracle nonce count")
+        );
+    }
+
+    #[test]
+    fn value_mutations_are_rejected_by_the_constraints() {
+        let (pcs, proof) = prove(3);
+
+        // A mutated masked message changes every later challenge. The
+        // two-bit blind grind rejects the stale nonce with probability 3/4;
+        // otherwise the PCS opening rejects the changed challenge `c`.
+        let rejected =
+            |error: VeilError| matches!(error, VeilError::InvalidGrindNonce | VeilError::Pcs(_));
+        let mut eval = proof.clone();
+        eval.masked_transcript[1] += F128::ONE;
+        assert!(rejected(verify(&pcs, eval).unwrap_err()));
+
+        let mut mask = proof.clone();
+        mask.masked_transcript[3 + 7] += F128::ONE;
+        assert!(rejected(verify(&pcs, mask).unwrap_err()));
+
+        let mut blinded = proof;
+        blinded.blinded_slices[2][9] += F128::ONE;
+        assert!(verify(&pcs, blinded).is_err());
+    }
+
+    #[test]
+    fn out_of_range_oracle_handle_is_an_error() {
+        let (pcs, proof) = prove(4);
+        let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs)).unwrap();
+        let a = vctx.read_oracle(M).unwrap();
+        vctx.read_oracle(M).unwrap();
+        vctx.read_oracle(M).unwrap();
+        let shared = sample_quirky_point(&mut vctx, M, K_LOG).unwrap();
+        let other = sample_quirky_point(&mut vctx, M, K_LOG).unwrap();
+        let evals = vctx.read_next(3).unwrap();
+        vctx.assert_bit_mle_eval(a, shared.clone(), evals[0].clone());
+        vctx.assert_bit_mle_eval(OracleId(7), shared, evals[1].clone());
+        vctx.assert_bit_mle_eval(a, other, evals[2].clone());
+        assert_eq!(vctx.verify().unwrap_err(), VeilError::OracleExhausted);
+    }
+
+    #[test]
+    fn verifier_without_pcs_rejects_commitments() {
+        let (_, proof) = prove(5);
+        let error = ZkVerifierCtx::init(DOMAIN, proof, None).err();
+        assert_eq!(error, Some(VeilError::ClaimWithoutOracle));
     }
 }

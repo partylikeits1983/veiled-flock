@@ -20,10 +20,13 @@ use flock_core::{
 use crate::error::VeilError;
 
 /// The production composition pins these bounds in
-/// `flock-prover/src/succinct_veil.rs`. They are copied here because the
-/// examples do not depend on that crate.
-pub(crate) const MAX_BLIND_GRINDING_BITS: u32 = 5;
-pub(crate) const MAX_BLIND_GRIND_TRIALS: u64 = 4096;
+/// `flock-prover/src/succinct_veil.rs` (`MAX_BLIND_GRINDING_BITS`,
+/// `MAX_BLIND_GRIND_TRIALS`, `MAX_LIGERITO_GRINDING_BITS`,
+/// `MAX_LIGERITO_GRIND_TRIALS`, `MAX_LIGERITO_GRIND_SITES`). They are copied
+/// with the same values because the examples do not depend on that crate.
+pub(crate) const MAX_BLIND_GRINDING_BITS: u32 = 6;
+pub(crate) const MAX_BLIND_GRIND_TRIALS: u64 = 8192;
+pub(crate) const MAX_LIGERITO_GRINDING_BITS: usize = 5;
 pub(crate) const MAX_LIGERITO_GRIND_TRIALS: u64 = 4096;
 pub(crate) const MAX_LIGERITO_GRIND_SITES: u64 = 16;
 
@@ -43,7 +46,13 @@ pub struct BitPcs {
 impl BitPcs {
     /// The committed ZK message is `[mask || z]`, so the Ligerito config is
     /// loaded for `params.log_msg_len() = m - 6`; `m = 22` therefore uses the
-    /// embedded `m23_secure` config. The registry floor is `m = 21`.
+    /// embedded `m23_secure` config. Every registered config must also pass
+    /// the production batch-opening certificate: the L0 query count must not
+    /// exceed the mask symbols per lane, no query-phase grinding, bounded
+    /// fold grinding, and a blind grind of 1 to `MAX_BLIND_GRINDING_BITS`
+    /// bits. `m = 21` loads `m22_secure`, which opens 298 L0 positions
+    /// against a 256-symbol mask lane and is rejected; `m = 22` is the
+    /// smallest accepted shape.
     pub fn new(m: usize) -> Result<Self, VeilError> {
         if m < LOG_PACKING + LOG_BATCH_SIZE {
             return Err(VeilError::Ligerito(format!(
@@ -69,6 +78,18 @@ impl BitPcs {
             verifier_config,
         };
         pcs.blind_grinding_bits()?;
+        validate_batch_opening(
+            &pcs.params,
+            &pcs.prover_config.queries,
+            &pcs.prover_config.grinding_bits,
+            &pcs.prover_config.fold_grinding_bits,
+        )?;
+        validate_batch_opening(
+            &pcs.params,
+            &pcs.verifier_config.queries,
+            &pcs.verifier_config.grinding_bits,
+            &pcs.verifier_config.fold_grinding_bits,
+        )?;
         Ok(pcs)
     }
 
@@ -125,6 +146,41 @@ impl BitPcs {
     }
 }
 
+/// Port of the production `validate_batch_opening` in
+/// `flock-prover/src/succinct_veil.rs`. The L0 query count must fit in the
+/// mask symbols of one lane, so the low mask block of the hiding commitment
+/// covers every opened position; query-phase grinding is not allowed; fold
+/// grinding is bounded per site and in the number of sites; and the blind
+/// grind derived from the first fold site is in range.
+fn validate_batch_opening(
+    params: &PcsParams,
+    queries: &[usize],
+    grinding_bits: &[usize],
+    fold_grinding_bits: &[usize],
+) -> Result<(), VeilError> {
+    let Some(&opened_positions) = queries.first() else {
+        return Err(VeilError::ProofShape("missing L0 query budget"));
+    };
+    let mask_symbols_per_lane = (1usize << params.witness_log_msg_len()) / params.num_ntts();
+    if opened_positions > mask_symbols_per_lane {
+        return Err(VeilError::ProofShape("L0 hiding query budget"));
+    }
+    let positive_fold_sites = fold_grinding_bits.iter().filter(|bits| **bits > 0).count();
+    if grinding_bits.iter().any(|bits| *bits != 0)
+        || fold_grinding_bits
+            .iter()
+            .any(|bits| *bits > MAX_LIGERITO_GRINDING_BITS)
+        || positive_fold_sites > MAX_LIGERITO_GRIND_SITES as usize
+    {
+        return Err(VeilError::ProofShape("bounded grinding schedule"));
+    }
+    let blind_grinding_bits = fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
+    if opened_positions == 0 || !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_grinding_bits) {
+        return Err(VeilError::ProofShape("batch opening certificate"));
+    }
+    Ok(())
+}
+
 /// The ring-switch suffix of a quirky point: inner-rest then outer
 /// coordinates. Its first entry pairs with `z_skip` in the claim weights.
 pub fn x_full(point: &QuirkyPoint) -> Vec<F128> {
@@ -165,4 +221,48 @@ pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
                 .fold(0u8, |byte, (r, &bit)| byte | (u8::from(bit) << r))
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn registry_floor_is_rejected_by_the_hiding_budget() {
+        assert_eq!(
+            BitPcs::new(21).unwrap_err(),
+            VeilError::ProofShape("L0 hiding query budget")
+        );
+        assert!(BitPcs::new(12).is_err());
+        let pcs = BitPcs::new(22).unwrap();
+        assert_eq!(pcs.blind_grinding_bits().unwrap(), 2);
+        assert_eq!(pcs.packed_len(), 1 << 15);
+    }
+
+    #[test]
+    fn batch_opening_certificate_rejects_bad_schedules() {
+        let pcs = BitPcs::new(22).unwrap();
+        let queries = pcs.prover_config.queries.clone();
+        let folds = pcs.prover_config.fold_grinding_bits.clone();
+        let zeros = vec![0usize; queries.len()];
+        assert!(validate_batch_opening(&pcs.params, &queries, &zeros, &folds).is_ok());
+        let mut grind = zeros.clone();
+        grind[0] = 1;
+        assert_eq!(
+            validate_batch_opening(&pcs.params, &queries, &grind, &folds).unwrap_err(),
+            VeilError::ProofShape("bounded grinding schedule")
+        );
+        let mut deep = folds.clone();
+        deep[0] = MAX_LIGERITO_GRINDING_BITS + 1;
+        assert_eq!(
+            validate_batch_opening(&pcs.params, &queries, &zeros, &deep).unwrap_err(),
+            VeilError::ProofShape("bounded grinding schedule")
+        );
+        let mut empty = queries.clone();
+        empty[0] = 0;
+        assert_eq!(
+            validate_batch_opening(&pcs.params, &empty, &zeros, &folds).unwrap_err(),
+            VeilError::ProofShape("batch opening certificate")
+        );
+    }
 }

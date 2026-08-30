@@ -23,8 +23,9 @@ use std::time::Instant;
 
 use flock_core::{pcs::pack_witness, zerocheck::PaddingSpec};
 use veil_examples::{
-    BitPcs, F128, MaskSampler, QuirkyPoint, ReadingCtx, SendingCtx, ZkProof, ZkProverCtx, ZkRng,
-    ZkVerifierCtx, bits_to_bytes, compute_mask_length, zerocheck_prove, zerocheck_verify,
+    BitPcs, F128, MaskSampler, QuirkyPoint, ReadingCtx, SendingCtx, VeilError, ZkProof,
+    ZkProverCtx, ZkRng, ZkVerifierCtx, bits_to_bytes, compute_mask_length, zerocheck_prove,
+    zerocheck_verify,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-zerocheck";
@@ -71,18 +72,20 @@ fn quirky(z_skip: F128, rest: &[F128]) -> QuirkyPoint {
     }
 }
 
-/// Unified read+constrain pass.
-fn zerocheck_verify_all<C: ReadingCtx>(ctx: &mut C) {
-    let a_oracle = ctx.read_oracle(M).expect("transcript holds a");
-    let b_oracle = ctx.read_oracle(M).expect("transcript holds b");
-    let c_oracle = ctx.read_oracle(M).expect("transcript holds c");
+/// Unified read+constrain pass. Every read returns an error on a malformed
+/// proof, so the verifier never panics on untrusted input.
+fn zerocheck_verify_all<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
+    let a_oracle = ctx.read_oracle(M)?;
+    let b_oracle = ctx.read_oracle(M)?;
+    let c_oracle = ctx.read_oracle(M)?;
 
-    let out = zerocheck_verify(M, ctx).expect("zerocheck verify failed");
+    let out = zerocheck_verify(M, ctx)?;
 
     let ab_point = quirky(out.z, &out.mlv_challenges);
     ctx.assert_bit_mle_eval(a_oracle, ab_point.clone(), out.a_eval);
     ctx.assert_bit_mle_eval(b_oracle, ab_point, out.b_eval);
     ctx.assert_bit_mle_eval(c_oracle, quirky(out.z, &out.r_rest), out.c_eval);
+    Ok(())
 }
 
 // ============================================================================
@@ -104,18 +107,18 @@ fn prove(
     b: &BitVector,
     c: &BitVector,
     rng: ZkRng,
-) -> Result<(ZkProof, usize), veil_examples::VeilError> {
-    let mask_length = compute_mask_length(Some(pcs), zerocheck_verify_all);
+) -> Result<(ZkProof, usize), VeilError> {
+    let mask_length = compute_mask_length(Some(pcs), zerocheck_verify_all)?;
     let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
     zerocheck_prove_all(&mut pctx, a, b, c);
     // The prover replays the SAME verify body to build the constraints.
-    zerocheck_verify_all(&mut pctx);
+    zerocheck_verify_all(&mut pctx)?;
     Ok((pctx.prove()?, mask_length))
 }
 
-fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), veil_examples::VeilError> {
+fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
     let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-    zerocheck_verify_all(&mut vctx);
+    zerocheck_verify_all(&mut vctx)?;
     vctx.verify()
 }
 
@@ -155,7 +158,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use flock_core::zerocheck::K_SKIP;
-    use veil_examples::{RING_WIDTH, VeilError};
+    use veil_examples::RING_WIDTH;
     use veil_f128::ConstraintError;
 
     use super::*;
@@ -179,7 +182,7 @@ mod tests {
     fn mask_count_matches_the_transcript() {
         let (pcs, ..) = fixture(1);
         assert_eq!(
-            compute_mask_length(Some(&pcs), zerocheck_verify_all),
+            compute_mask_length(Some(&pcs), zerocheck_verify_all).unwrap(),
             expected_masks()
         );
     }

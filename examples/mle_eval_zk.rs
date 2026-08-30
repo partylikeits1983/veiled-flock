@@ -22,8 +22,8 @@
 use std::time::Instant;
 
 use veil_examples::{
-    BitPcs, F128, MaskSampler, ReadingCtx, SendingCtx, ZkProof, ZkProverCtx, ZkRng, ZkVerifierCtx,
-    bit_mle_eval, compute_mask_length, sample_quirky_point,
+    BitPcs, F128, MaskSampler, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
+    ZkVerifierCtx, bit_mle_eval, compute_mask_length, sample_quirky_point,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-mle-eval";
@@ -60,12 +60,14 @@ fn sample_quirky_point_sending<C: SendingCtx>(ctx: &mut C) -> veil_examples::Qui
     }
 }
 
-/// Unified read+constrain pass.
-fn mle_eval_verify<C: ReadingCtx>(ctx: &mut C) {
-    let oracle = ctx.read_oracle(M).expect("transcript holds the oracle");
-    let point = sample_quirky_point(ctx, M, K_LOG);
-    let claimed_eval = ctx.read_one().expect("transcript holds the evaluation");
+/// Unified read+constrain pass. Every read returns an error on a malformed
+/// proof, so the verifier never panics on untrusted input.
+fn mle_eval_verify<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
+    let oracle = ctx.read_oracle(M)?;
+    let point = sample_quirky_point(ctx, M, K_LOG)?;
+    let claimed_eval = ctx.read_one()?;
     ctx.assert_bit_mle_eval(oracle, point, claimed_eval);
+    Ok(())
 }
 
 // ============================================================================
@@ -78,21 +80,17 @@ fn random_packed_bits(rng: &mut ZkRng, pcs: &BitPcs) -> Vec<F128> {
     packed
 }
 
-fn prove(
-    pcs: &BitPcs,
-    packed: Vec<F128>,
-    rng: ZkRng,
-) -> Result<(ZkProof, usize), veil_examples::VeilError> {
-    let mask_length = compute_mask_length(Some(pcs), mle_eval_verify);
+fn prove(pcs: &BitPcs, packed: Vec<F128>, rng: ZkRng) -> Result<(ZkProof, usize), VeilError> {
+    let mask_length = compute_mask_length(Some(pcs), mle_eval_verify)?;
     let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
     mle_eval_prove(&mut pctx, packed);
-    mle_eval_verify(&mut pctx);
+    mle_eval_verify(&mut pctx)?;
     Ok((pctx.prove()?, mask_length))
 }
 
-fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), veil_examples::VeilError> {
+fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
     let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-    mle_eval_verify(&mut vctx);
+    mle_eval_verify(&mut vctx)?;
     vctx.verify()
 }
 
@@ -138,7 +136,7 @@ mod tests {
     fn mask_count_matches_the_transcript() {
         let (pcs, _, _) = fixture(1);
         assert_eq!(
-            compute_mask_length(Some(&pcs), mle_eval_verify),
+            compute_mask_length(Some(&pcs), mle_eval_verify).unwrap(),
             1 + 2 * RING_WIDTH
         );
         assert_eq!(pcs.blind_grinding_bits().unwrap(), 2);
@@ -171,8 +169,25 @@ mod tests {
         bad_blinded.blinded_slices[0][0] += F128::ONE;
         assert!(verify(&pcs, bad_blinded).is_err());
 
-        let mut bad_root = proof;
+        let mut bad_root = proof.clone();
         bad_root.commitments[0].root[0] ^= 1;
         assert!(verify(&pcs, bad_root).is_err());
+
+        // A proof without commitments is an error, not a panic.
+        let mut no_oracle = proof.clone();
+        no_oracle.commitments.clear();
+        no_oracle.oracle_nonces.clear();
+        no_oracle.pcs_openings.clear();
+        assert_eq!(
+            verify(&pcs, no_oracle).unwrap_err(),
+            VeilError::OracleExhausted
+        );
+
+        let mut short = proof;
+        short.masked_transcript.truncate(1);
+        assert_eq!(
+            verify(&pcs, short).unwrap_err(),
+            VeilError::TranscriptNotConsumed
+        );
     }
 }

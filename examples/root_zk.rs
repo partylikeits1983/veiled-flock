@@ -33,9 +33,9 @@ use flock_core::{
     zerocheck::K_SKIP,
 };
 use veil_examples::{
-    BitPcs, MaskSampler, ReadingCtx, SendingCtx, ZkProof, ZkProverCtx, ZkRng, ZkVerifierCtx,
-    bits_to_bytes, compute_mask_length, lincheck_prove, lincheck_verify, zerocheck_prove,
-    zerocheck_verify,
+    BitPcs, MaskSampler, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
+    ZkVerifierCtx, bits_to_bytes, check_block_shape, compute_mask_length, lincheck_prove,
+    lincheck_verify, zerocheck_prove, zerocheck_verify,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-root";
@@ -311,21 +311,24 @@ fn root_prove<C: SendingCtx>(ctx: &mut C, r1cs: &BlockR1cs, z: &[bool]) {
 }
 
 /// Unified read+constrain pass: the shifted FLOCK verifier for this R1CS.
-fn root_verify<C: ReadingCtx>(r1cs: &BlockR1cs, ctx: &mut C) {
-    let oracle = ctx.read_oracle(M).expect("transcript holds the witness");
+/// Every read returns an error on a malformed proof, so the verifier never
+/// panics on untrusted input.
+fn root_verify<C: ReadingCtx>(r1cs: &BlockR1cs, ctx: &mut C) -> Result<(), VeilError> {
+    check_block_shape(r1cs)?;
+    let oracle = ctx.read_oracle(M)?;
     ctx.absorb_label(b"veil-examples-root-statement");
     ctx.absorb_bytes(&r1cs.statement_digest());
 
-    let zc = zerocheck_verify(M, ctx).expect("zerocheck verify failed");
+    let zc = zerocheck_verify(M, ctx)?;
     let x_ab = r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
     let circuit: &dyn LincheckCircuit = r1cs.csc_lincheck_circuit();
-    let lc = lincheck_verify(r1cs, circuit, &x_ab, zc.a_eval, zc.b_eval, ctx)
-        .expect("lincheck verify failed");
+    let lc = lincheck_verify(r1cs, circuit, &x_ab, zc.a_eval, zc.b_eval, ctx)?;
 
     let ab_point = r1cs.ab_claim_point(lc.r_inner_skip, &lc.r_inner_rest, &x_ab.x_outer);
     let c_point = r1cs.c_claim_point(zc.z, &zc.r_rest);
     ctx.assert_bit_mle_eval(oracle, ab_point, lc.w);
     ctx.assert_bit_mle_eval(oracle, c_point, zc.c_eval);
+    Ok(())
 }
 
 // ============================================================================
@@ -337,18 +340,18 @@ fn prove(
     r1cs: &BlockR1cs,
     z: &[bool],
     rng: ZkRng,
-) -> Result<(ZkProof, usize), veil_examples::VeilError> {
-    let mask_length = compute_mask_length(Some(pcs), |ctx| root_verify(r1cs, ctx));
+) -> Result<(ZkProof, usize), VeilError> {
+    let mask_length = compute_mask_length(Some(pcs), |ctx| root_verify(r1cs, ctx))?;
     let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
     root_prove(&mut pctx, r1cs, z);
     // The prover replays the SAME verify body to build the constraints.
-    root_verify(r1cs, &mut pctx);
+    root_verify(r1cs, &mut pctx)?;
     Ok((pctx.prove()?, mask_length))
 }
 
-fn verify(pcs: &BitPcs, r1cs: &BlockR1cs, proof: ZkProof) -> Result<(), veil_examples::VeilError> {
+fn verify(pcs: &BitPcs, r1cs: &BlockR1cs, proof: ZkProof) -> Result<(), VeilError> {
     let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-    root_verify(r1cs, &mut vctx);
+    root_verify(r1cs, &mut vctx)?;
     vctx.verify()
 }
 
@@ -396,7 +399,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use veil_examples::{F128, RING_WIDTH, VeilError};
+    use veil_examples::{F128, RING_WIDTH};
     use veil_f128::ConstraintError;
 
     use super::*;
@@ -445,7 +448,7 @@ mod tests {
     fn mask_count_matches_the_transcript() {
         let (pcs, r1cs, _) = fixture();
         assert_eq!(
-            compute_mask_length(Some(&pcs), |ctx| root_verify(&r1cs, ctx)),
+            compute_mask_length(Some(&pcs), |ctx| root_verify(&r1cs, ctx)).unwrap(),
             expected_masks()
         );
     }
@@ -489,6 +492,16 @@ mod tests {
         let mut bad_slice = proof;
         bad_slice.blinded_slices[0][0] += F128::ONE;
         assert!(verify(&pcs, &r1cs, bad_slice).is_err());
+    }
+
+    #[test]
+    fn malformed_block_shape_is_an_error() {
+        let (pcs, mut r1cs, _) = fixture();
+        r1cs.k_skip = K_LOG + 1;
+        assert_eq!(
+            compute_mask_length(Some(&pcs), |ctx| root_verify(&r1cs, ctx)).unwrap_err(),
+            VeilError::ProofShape("block shape")
+        );
     }
 
     #[test]

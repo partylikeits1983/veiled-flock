@@ -111,6 +111,20 @@ pub fn zerocheck_verify<C: ReadingCtx>(
     })
 }
 
+/// Reject a block shape that the FLOCK layers cannot address. Call it before
+/// any `BlockR1cs` point helper, which assert on the shape instead of
+/// returning an error.
+pub fn check_block_shape(r1cs: &BlockR1cs) -> Result<(), VeilError> {
+    if r1cs.k_skip != K_SKIP
+        || r1cs.k_log < r1cs.k_skip
+        || r1cs.m < r1cs.k_log
+        || r1cs.m < K_SKIP + N_INNER
+    {
+        return Err(VeilError::ProofShape("block shape"));
+    }
+    Ok(())
+}
+
 /// Run the native FLOCK lincheck prover through the masking context.
 /// `z_lincheck` is the lincheck packing of the Boolean witness
 /// (`flock_core::lincheck::pack_z_lincheck`).
@@ -144,8 +158,14 @@ pub fn lincheck_verify<C: ReadingCtx>(
     v_b: Expr,
     ctx: &mut C,
 ) -> Result<LincheckOutput, VeilError> {
+    check_block_shape(r1cs)?;
     if circuit.n_cols() != r1cs.k() {
         return Err(VeilError::ProofShape("lincheck circuit width"));
+    }
+    if x_ab.x_inner_rest.len() != r1cs.k_log - r1cs.k_skip
+        || x_ab.x_outer.len() != r1cs.m - r1cs.k_log
+    {
+        return Err(VeilError::ProofShape("lincheck point shape"));
     }
     ctx.absorb_label(b"flock-lincheck");
     let alpha = ctx.sample();
@@ -186,13 +206,42 @@ pub fn lincheck_verify<C: ReadingCtx>(
 
 /// Sample a fresh quirky point for `2^m` bits split as `k_log` inner and
 /// `m - k_log` outer bits, the shape `BlockR1cs` uses.
-pub fn sample_quirky_point<C: ReadingCtx>(ctx: &mut C, m: usize, k_log: usize) -> QuirkyPoint {
+pub fn sample_quirky_point<C: ReadingCtx>(
+    ctx: &mut C,
+    m: usize,
+    k_log: usize,
+) -> Result<QuirkyPoint, VeilError> {
+    if k_log < K_SKIP || m < k_log {
+        return Err(VeilError::ProofShape("quirky point shape"));
+    }
     let z_skip = ctx.sample();
     let x_inner_rest = ctx.sample_point(k_log - K_SKIP);
     let x_outer = ctx.sample_point(m - k_log);
-    QuirkyPoint {
+    Ok(QuirkyPoint {
         z_skip,
         x_inner_rest,
         x_outer,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ctx::MaskCounter;
+
+    #[test]
+    fn quirky_point_shape_is_guarded() {
+        let mut counter = MaskCounter::new(None);
+        assert_eq!(
+            sample_quirky_point(&mut counter, 22, 5).unwrap_err(),
+            VeilError::ProofShape("quirky point shape")
+        );
+        assert_eq!(
+            sample_quirky_point(&mut counter, 5, 6).unwrap_err(),
+            VeilError::ProofShape("quirky point shape")
+        );
+        let point = sample_quirky_point(&mut counter, 22, 6).unwrap();
+        assert!(point.x_inner_rest.is_empty());
+        assert_eq!(point.x_outer.len(), 16);
     }
 }
