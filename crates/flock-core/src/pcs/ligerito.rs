@@ -7963,8 +7963,8 @@ mod fold_grind_taper_tests {
 
     /// Ligerito configs that a registered full-ZK shape can load. `PcsParams`
     /// adds one to the committed message dimension in zk mode, so the R1CS
-    /// shapes m22..m26 reach Ligerito m23..m27.
-    const FULL_ZK_LIGERITO_CONFIGS: std::ops::RangeInclusive<usize> = 23..=27;
+    /// shapes m22..m25 reach Ligerito m23..m26.
+    const FULL_ZK_LIGERITO_CONFIGS: std::ops::RangeInclusive<usize> = 23..=26;
 
     /// Pinned aggregate PCS bits. These are a value pin, not a taper test:
     /// the ledger formula is unchanged, so they also hold before this fix.

@@ -12,7 +12,9 @@ const MAX_MESSAGES: usize = MAX_ZK_PREIMAGE_BLOCKS;
 const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
 type Bundle = VeilFlockProofBundle;
 
-const USAGE: &str = "\
+fn usage() -> String {
+    format!(
+        "\
 veiled_flock — succinct VEIL argument for 64-byte BLAKE3 preimages
 
 Usage:
@@ -20,16 +22,19 @@ Usage:
   veiled_flock verify --in FILE
   veiled_flock demo
 
-The message file must contain 1..=4096 concatenated 64-byte messages. The
+The message file must contain 1..={MAX_MESSAGES} concatenated 64-byte messages. The
 proof bundle contains their public BLAKE3 digests and the VEIL proof, but never
 the messages.
-";
+"
+    )
+}
 
 fn main() -> ExitCode {
     match run() {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("error: {error}\n\n{USAGE}");
+            let usage = usage();
+            eprintln!("error: {error}\n\n{usage}");
             ExitCode::FAILURE
         }
     }
@@ -84,7 +89,8 @@ fn run() -> Result<(), String> {
             Ok(())
         }
         Some("help" | "--help" | "-h") => {
-            print!("{USAGE}");
+            let usage = usage();
+            print!("{usage}");
             Ok(())
         }
         Some(command) => Err(format!("unknown command '{command}'")),

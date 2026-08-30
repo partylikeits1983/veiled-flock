@@ -72,7 +72,7 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the registered full-ZK circuit and PCS
 /// certificates. Smaller batches are padded to the next power-of-two shape,
 /// with a 256-slot production floor.
-pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
+pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 2048;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -980,17 +980,17 @@ mod tests {
 
     /// The largest full-ZK shape that `validate_batch_opening` accepts today.
     /// `PcsParams` adds one to the committed message dimension in zk mode, so
-    /// 2048 blocks (R1CS m25) loads the Ligerito m26 config.
+    /// the current 2048-block cap (R1CS m25) loads the Ligerito m26 config.
     ///
-    /// 4096 blocks would load Ligerito m27, whose `fold_grinding_bits[0] = 5`
-    /// makes the outer blind grind 6 bits — above `MAX_BLIND_GRINDING_BITS`.
-    /// That shape is rejected on this branch and on its base.
+    /// 4096 blocks are above the public batch cap; that shape would load
+    /// Ligerito m27, whose `fold_grinding_bits[0] = 5` makes the outer blind
+    /// grind 6 bits, above `MAX_BLIND_GRINDING_BITS`.
     #[cfg(feature = "veil")]
     #[test]
     fn largest_supported_zk_shape_grinds_every_udr_fold_round() {
-        let blocks = 2048;
+        let blocks = MAX_ZK_PREIMAGE_BLOCKS;
         let setup = Blake3PreimageZkSetup::new(blocks);
-        let messages = msgs_of(0x2048_5EED, blocks);
+        let messages = msgs_of(0x5EED, blocks);
         let digests = Blake3PreimageSetup::digests_of(&messages);
         let (proof, commitment) = setup.prove(&messages, &digests).expect("prove m26 shape");
         setup
@@ -1002,6 +1002,13 @@ mod tests {
             proof.pcs_open.ligerito.fold_grinding_nonces.len()
                 <= crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as usize
         );
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    #[should_panic(expected = "n_blocks must be in 1..=")]
+    fn zk_setup_rejects_batches_above_current_certificate_ceiling() {
+        let _ = Blake3PreimageZkSetup::new(MAX_ZK_PREIMAGE_BLOCKS + 1);
     }
 
     #[cfg(feature = "veil")]
@@ -1318,8 +1325,8 @@ mod tests {
     fn succinct_simulator_query_cap_covers_every_registered_shape() {
         let oracle = crate::sim_oracle::shared_oracle();
         // These are the smallest public batches selecting every registered
-        // 256/512/1024/2048/4096-slot circuit.
-        for n_blocks in [1usize, 257, 513, 1025, 2049] {
+        // 256/512/1024/2048-slot circuit.
+        for n_blocks in [1usize, 257, 513, 1025] {
             let setup = Blake3PreimageZkSetup::new(n_blocks);
             let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
             let before = oracle

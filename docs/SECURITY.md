@@ -14,7 +14,7 @@ it to protect production secrets.
 
 | Property | Scope |
 |---|---|
-| Relation | Ordered batch of 1–4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
+| Relation | Ordered batch of 1–2048 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048-slot shape |
 | Completeness | Honest proofs verify |
 | Zero knowledge | Targeted for adaptive classical pROM; formal theorem tracked separately |
 | Algebraic privacy | Perfect, conditioned on the public statement and accepted challenge history |
@@ -80,7 +80,7 @@ for every production code path:
 4. At the 256-slot floor, the 242 FLOCK transcript coordinates and 512 ring
    coordinates consume 754 independent field one-time pads. Each circuit-size
    doubling adds two sumcheck coordinates and two independent pads, reaching
-   762 pads at 4096 slots. Proving and verification check the exact mask cursor
+   760 pads at 2048 slots. Proving and verification check the exact mask cursor
    and circuit inventory; the generic Lean one-time-pad lemma remains to be
    connected to this layout.
 5. The exact F2-linear ring-switch matrix is checked against production field
