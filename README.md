@@ -68,6 +68,7 @@ random-oracle surface checks.
 - [Transcript](docs/TRANSCRIPT.md)
 - [Security scope](docs/SECURITY.md)
 - [Upstream source pins](docs/SOURCES.md)
+- [Full-ZK examples of FLOCK's protocols](examples/README.md)
 
 ## License
 

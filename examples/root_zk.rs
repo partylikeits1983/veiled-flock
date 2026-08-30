@@ -1,0 +1,501 @@
+//! Example: zero-knowledge proof of knowledge of a root of a public
+//! polynomial over `GF(2^8)`, as a complete FLOCK argument.
+//!
+//! The relation is a Boolean R1CS with `C = I`, the circuit convention of
+//! this repository. One block holds one instance:
+//!
+//! - wire 0 is the constant one, pinned by the lincheck;
+//! - wires 1..=8 hold the secret root;
+//! - each Horner step `acc = acc * root + coefficient` spends 64 product
+//!   rows (`t_ij = acc_i * root_j`) and 8 reduction rows (linear XOR through
+//!   the constant wire, with the public coefficient bits folded in);
+//! - an OR chain reduces the final accumulator to one bit, and the row of the
+//!   constant wire forces that bit to zero, so `p(root) = 0`.
+//!
+//! The batch tiles `2^(M - K_LOG)` copies of the block. The proof is the full
+//! FLOCK pipeline under VEIL: hiding commitment of the packed witness, masked
+//! zerocheck with univariate skip, masked lincheck, and two ring-switched
+//! openings (`ab` and `c`) with masked slices.
+//!
+//! Two functions encode the protocol:
+//!
+//! - `root_prove`: prover-only — commit + native zerocheck + native lincheck.
+//! - `root_verify`: reads-and-constrains in one pass; a port of the
+//!   production shifted verifier circuit for this R1CS. Runs on the mask
+//!   counter, on the verifier, and on the prover replay.
+
+use std::time::Instant;
+
+use flock_core::{
+    lincheck::{LincheckCircuit, pack_z_lincheck},
+    pcs::pack_witness,
+    r1cs::{BlockR1cs, SparseBinaryMatrix, WitnessLayout},
+    zerocheck::K_SKIP,
+};
+use veil_examples::{
+    BitPcs, MaskSampler, ReadingCtx, SendingCtx, ZkProof, ZkProverCtx, ZkRng, ZkVerifierCtx,
+    bits_to_bytes, compute_mask_length, lincheck_prove, lincheck_verify, zerocheck_prove,
+    zerocheck_verify,
+};
+
+const DOMAIN: &[u8] = b"veil-examples-root";
+/// `2^22` witness bits: the production floor of the hiding PCS.
+const M: usize = 22;
+/// One instance per `2^K_LOG`-bit block.
+const K_LOG: usize = 12;
+const DEGREE: usize = 50;
+/// `x^8 + x^4 + x^3 + x + 1`, the AES field polynomial.
+const MODULUS: u16 = 0x11b;
+
+// ============================================================================
+// GF(2^8) helpers
+// ============================================================================
+
+/// `x^k mod MODULUS` as a byte, for `k < 16`.
+fn reduction_table() -> [u8; 16] {
+    let mut table = [0u8; 16];
+    let mut value: u16 = 1;
+    for entry in &mut table {
+        *entry = value as u8;
+        value <<= 1;
+        if value & 0x100 != 0 {
+            value ^= MODULUS;
+        }
+    }
+    table
+}
+
+fn gf8_mul(a: u8, b: u8) -> u8 {
+    let table = reduction_table();
+    let mut acc = 0u8;
+    for i in 0..8 {
+        for j in 0..8 {
+            if (a >> i) & 1 == 1 && (b >> j) & 1 == 1 {
+                acc ^= table[i + j];
+            }
+        }
+    }
+    acc
+}
+
+fn horner(coeffs: &[u8], x: u8) -> u8 {
+    coeffs.iter().rev().fold(0u8, |acc, &c| gf8_mul(acc, x) ^ c)
+}
+
+/// `p(x) = (x + root) * q(x)` with `q(x) = 1 + x + ... + x^(degree-1)`.
+fn make_polynomial_with_root(root: u8, degree: usize) -> Vec<u8> {
+    let mut result = vec![0u8; degree + 1];
+    for i in 0..degree {
+        result[i] ^= root;
+        result[i + 1] ^= 1;
+    }
+    result
+}
+
+// ============================================================================
+// The root relation as a block R1CS with C = I
+// ============================================================================
+
+/// Wire indices of one block.
+struct Layout {
+    const_wire: usize,
+    root: [usize; 8],
+    /// Per step: 64 product wires, then 8 accumulator wires.
+    steps: Vec<([usize; 64], [usize; 8])>,
+    /// OR chain: `(product, or)` pairs, `or = x + y + product`.
+    ors: Vec<(usize, usize)>,
+    useful_bits: usize,
+}
+
+impl Layout {
+    fn new(degree: usize) -> Self {
+        let mut next = 0usize;
+        let mut alloc = || {
+            let wire = next;
+            next += 1;
+            wire
+        };
+        let const_wire = alloc();
+        let root = std::array::from_fn(|_| alloc());
+        let steps = (0..degree)
+            .map(|_| {
+                let products = std::array::from_fn(|_| alloc());
+                let acc = std::array::from_fn(|_| alloc());
+                (products, acc)
+            })
+            .collect();
+        let ors = (0..7).map(|_| (alloc(), alloc())).collect();
+        Self {
+            const_wire,
+            root,
+            steps,
+            ors,
+            useful_bits: next,
+        }
+    }
+
+    /// The accumulator bits before step `step`: public constant bits of the
+    /// leading coefficient for step 0, otherwise the previous step's wires.
+    fn acc_before(&self, step: usize) -> Option<[usize; 8]> {
+        (step > 0).then(|| self.steps[step - 1].1)
+    }
+
+    /// The final accumulator wires and the OR chain output.
+    fn final_acc(&self) -> [usize; 8] {
+        self.steps[self.steps.len() - 1].1
+    }
+
+    fn nonzero_flag(&self) -> usize {
+        self.ors[self.ors.len() - 1].1
+    }
+}
+
+/// Build the R1CS for `p(root) = 0`. Row `w` defines wire `w` as
+/// `(A_w z) * (B_w z)`; rows past `useful_bits` are empty and pin zero.
+fn build_r1cs(coeffs: &[u8]) -> BlockR1cs {
+    let layout = Layout::new(DEGREE);
+    let table = reduction_table();
+    let k = 1usize << K_LOG;
+    assert!(layout.useful_bits <= k, "block too small for the relation");
+    let mut a_rows: Vec<Vec<usize>> = vec![Vec::new(); k];
+    let mut b_rows: Vec<Vec<usize>> = vec![Vec::new(); k];
+    let one = layout.const_wire;
+
+    // Free wires: the root bits are `u * 1 = u`.
+    for &wire in &layout.root {
+        a_rows[wire] = vec![wire];
+        b_rows[wire] = vec![one];
+    }
+
+    for (step, (products, acc)) in layout.steps.iter().enumerate() {
+        let coefficient = coeffs[DEGREE - 1 - step];
+        let leading = coeffs[DEGREE];
+        for i in 0..8 {
+            for j in 0..8 {
+                let wire = products[8 * i + j];
+                let acc_bit: Vec<usize> = match layout.acc_before(step) {
+                    Some(previous) => vec![previous[i]],
+                    None if (leading >> i) & 1 == 1 => vec![one],
+                    None => Vec::new(),
+                };
+                a_rows[wire] = acc_bit;
+                b_rows[wire] = vec![layout.root[j]];
+            }
+        }
+        for (bit, &wire) in acc.iter().enumerate() {
+            let mut terms: Vec<usize> = (0..8)
+                .flat_map(|i| (0..8).map(move |j| (i, j)))
+                .filter(|&(i, j)| (table[i + j] >> bit) & 1 == 1)
+                .map(|(i, j)| products[8 * i + j])
+                .collect();
+            if (coefficient >> bit) & 1 == 1 {
+                terms.push(one);
+            }
+            a_rows[wire] = terms;
+            b_rows[wire] = vec![one];
+        }
+    }
+
+    // OR chain over the final accumulator: or = x + y + x*y.
+    let final_acc = layout.final_acc();
+    let mut running = final_acc[0];
+    for (index, &(product, or)) in layout.ors.iter().enumerate() {
+        let other = final_acc[index + 1];
+        a_rows[product] = vec![running];
+        b_rows[product] = vec![other];
+        a_rows[or] = vec![running, other, product];
+        b_rows[or] = vec![one];
+        running = or;
+    }
+
+    // The constant wire: `1 = (1 + nonzero) * 1` forces `nonzero = 0`.
+    a_rows[one] = vec![one, layout.nonzero_flag()];
+    b_rows[one] = vec![one];
+
+    BlockR1cs {
+        m: M,
+        k_log: K_LOG,
+        k_skip: K_SKIP,
+        useful_bits: layout.useful_bits,
+        a_0: SparseBinaryMatrix {
+            num_rows: k,
+            num_cols: k,
+            rows: a_rows,
+        },
+        b_0: SparseBinaryMatrix {
+            num_rows: k,
+            num_cols: k,
+            rows: b_rows,
+        },
+        c_0: SparseBinaryMatrix {
+            num_rows: k,
+            num_cols: k,
+            rows: (0..k).map(|i| vec![i]).collect(),
+        },
+        layout: WitnessLayout::RowMajor,
+        const_pin: Some(one),
+        zk: None,
+        digest_cache: std::sync::OnceLock::new(),
+        csc_cache: std::sync::OnceLock::new(),
+    }
+}
+
+/// One block of the witness for `root`; every wire follows its R1CS row.
+fn block_witness(coeffs: &[u8], root: u8) -> Vec<bool> {
+    let layout = Layout::new(DEGREE);
+    let table = reduction_table();
+    let mut z = vec![false; 1usize << K_LOG];
+    z[layout.const_wire] = true;
+    for (bit, &wire) in layout.root.iter().enumerate() {
+        z[wire] = (root >> bit) & 1 == 1;
+    }
+    let mut acc = coeffs[DEGREE];
+    for (step, (products, acc_wires)) in layout.steps.iter().enumerate() {
+        let coefficient = coeffs[DEGREE - 1 - step];
+        for i in 0..8 {
+            for j in 0..8 {
+                z[products[8 * i + j]] = (acc >> i) & 1 == 1 && (root >> j) & 1 == 1;
+            }
+        }
+        let mut next = coefficient;
+        for i in 0..8 {
+            for j in 0..8 {
+                if z[products[8 * i + j]] {
+                    next ^= table[i + j];
+                }
+            }
+        }
+        for (bit, &wire) in acc_wires.iter().enumerate() {
+            z[wire] = (next >> bit) & 1 == 1;
+        }
+        acc = next;
+    }
+    let final_acc = layout.final_acc();
+    let mut running = z[final_acc[0]];
+    for (index, &(product, or)) in layout.ors.iter().enumerate() {
+        let other = z[final_acc[index + 1]];
+        z[product] = running && other;
+        z[or] = running ^ other ^ z[product];
+        running = z[or];
+    }
+    z
+}
+
+/// Tile the block over the batch.
+fn full_witness(block: &[bool]) -> Vec<bool> {
+    block.repeat(1usize << (M - K_LOG))
+}
+
+// ============================================================================
+// Generic protocol code
+// ============================================================================
+
+/// Prover-only entry point: commit the packed witness, then run the native
+/// FLOCK zerocheck and lincheck provers through the masking context.
+fn root_prove<C: SendingCtx>(ctx: &mut C, r1cs: &BlockR1cs, z: &[bool]) {
+    let z_packed = pack_witness(z, M);
+    ctx.commit_bits(z_packed)
+        .expect("failed to commit the witness");
+    ctx.observe_label(b"veil-examples-root-statement");
+    ctx.observe_bytes(&r1cs.statement_digest());
+
+    let a = bits_to_bytes(&r1cs.apply_a(z));
+    let b = bits_to_bytes(&r1cs.apply_b(z));
+    let c = bits_to_bytes(z);
+    let claim =
+        zerocheck_prove(ctx, &a, &b, &c, M, &r1cs.padding_spec()).expect("zerocheck prover failed");
+
+    let x_ab = r1cs.x_ab_from_mlv(claim.z, &claim.mlv_challenges);
+    let z_lincheck = pack_z_lincheck(z, M, K_LOG);
+    lincheck_prove(ctx, r1cs, r1cs.csc_lincheck_circuit(), &z_lincheck, &x_ab);
+}
+
+/// Unified read+constrain pass: the shifted FLOCK verifier for this R1CS.
+fn root_verify<C: ReadingCtx>(r1cs: &BlockR1cs, ctx: &mut C) {
+    let oracle = ctx.read_oracle(M).expect("transcript holds the witness");
+    ctx.absorb_label(b"veil-examples-root-statement");
+    ctx.absorb_bytes(&r1cs.statement_digest());
+
+    let zc = zerocheck_verify(M, ctx).expect("zerocheck verify failed");
+    let x_ab = r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
+    let circuit: &dyn LincheckCircuit = r1cs.csc_lincheck_circuit();
+    let lc = lincheck_verify(r1cs, circuit, &x_ab, zc.a_eval, zc.b_eval, ctx)
+        .expect("lincheck verify failed");
+
+    let ab_point = r1cs.ab_claim_point(lc.r_inner_skip, &lc.r_inner_rest, &x_ab.x_outer);
+    let c_point = r1cs.c_claim_point(zc.z, &zc.r_rest);
+    ctx.assert_bit_mle_eval(oracle, ab_point, lc.w);
+    ctx.assert_bit_mle_eval(oracle, c_point, zc.c_eval);
+}
+
+// ============================================================================
+// Driver
+// ============================================================================
+
+fn prove(
+    pcs: &BitPcs,
+    r1cs: &BlockR1cs,
+    z: &[bool],
+    rng: ZkRng,
+) -> Result<(ZkProof, usize), veil_examples::VeilError> {
+    let mask_length = compute_mask_length(Some(pcs), |ctx| root_verify(r1cs, ctx));
+    let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
+    root_prove(&mut pctx, r1cs, z);
+    // The prover replays the SAME verify body to build the constraints.
+    root_verify(r1cs, &mut pctx);
+    Ok((pctx.prove()?, mask_length))
+}
+
+fn verify(pcs: &BitPcs, r1cs: &BlockR1cs, proof: ZkProof) -> Result<(), veil_examples::VeilError> {
+    let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
+    root_verify(r1cs, &mut vctx);
+    vctx.verify()
+}
+
+fn main() {
+    flock_core::init_perf_thread_pool();
+    let mut rng = ZkRng::from_entropy();
+    let mut secret = [0u64; 1];
+    rng.fill_u64s(&mut secret);
+    let secret_root = secret[0] as u8;
+    let coeffs = make_polynomial_with_root(secret_root, DEGREE);
+    assert_eq!(
+        horner(&coeffs, secret_root),
+        0,
+        "polynomial should vanish at root"
+    );
+    eprintln!("Public polynomial over GF(2^8), degree {DEGREE}");
+
+    let r1cs = build_r1cs(&coeffs);
+    let z = full_witness(&block_witness(&coeffs, secret_root));
+    assert!(r1cs.satisfies(&z), "witness should satisfy the R1CS");
+    eprintln!(
+        "R1CS: 2^{K_LOG}-bit blocks, {} useful wires, 2^{} instances",
+        r1cs.useful_bits,
+        M - K_LOG
+    );
+    let pcs = BitPcs::new(M).expect("registered hiding PCS shape");
+
+    eprintln!("\n=== ZK BACKEND ===");
+    let now = Instant::now();
+    let (proof, mask_length) = prove(&pcs, &r1cs, &z, rng).expect("zk prove failed");
+    eprintln!("Mask length: {mask_length}");
+    eprintln!("Prover time: {:?}", now.elapsed());
+    eprintln!(
+        "Proof size: {} bytes",
+        bincode::serialize(&proof)
+            .expect("serializable proof")
+            .len()
+    );
+
+    let now = Instant::now();
+    verify(&pcs, &r1cs, proof).expect("zk verification failed");
+    eprintln!("Verifier time: {:?}", now.elapsed());
+    eprintln!("ZK backend: PASSED");
+}
+
+#[cfg(test)]
+mod tests {
+    use veil_examples::{F128, RING_WIDTH, VeilError};
+    use veil_f128::ConstraintError;
+
+    use super::*;
+
+    const ROOT: u8 = 0x53;
+
+    fn fixture() -> (BitPcs, BlockR1cs, Vec<bool>) {
+        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
+        let r1cs = build_r1cs(&coeffs);
+        let z = full_witness(&block_witness(&coeffs, ROOT));
+        (BitPcs::new(M).unwrap(), r1cs, z)
+    }
+
+    /// Zerocheck, lincheck, and two ring claims.
+    fn expected_masks() -> usize {
+        2 * (1 << K_SKIP)
+            + 2 * (M - K_SKIP)
+            + 2
+            + 2 * (K_LOG - K_SKIP)
+            + (1 << K_SKIP)
+            + 2 * 2 * RING_WIDTH
+    }
+
+    #[test]
+    fn gf8_arithmetic_is_consistent() {
+        for root in [0u8, 1, 2, 0x53, 0xff] {
+            let coeffs = make_polynomial_with_root(root, DEGREE);
+            assert_eq!(horner(&coeffs, root), 0, "root {root:#x}");
+        }
+        // Commutativity and the AES identity 0x53 * 0xca = 1.
+        assert_eq!(gf8_mul(0x53, 0xca), 1);
+        assert_eq!(gf8_mul(0x57, 0x83), gf8_mul(0x83, 0x57));
+        assert_eq!(gf8_mul(0x57, 0x83), 0xc1);
+    }
+
+    #[test]
+    fn witness_satisfies_the_r1cs_and_wrong_root_does_not() {
+        let (_, r1cs, z) = fixture();
+        assert!(r1cs.satisfies(&z));
+        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
+        let bad = full_witness(&block_witness(&coeffs, ROOT ^ 1));
+        assert!(!r1cs.satisfies(&bad));
+    }
+
+    #[test]
+    fn mask_count_matches_the_transcript() {
+        let (pcs, r1cs, _) = fixture();
+        assert_eq!(
+            compute_mask_length(Some(&pcs), |ctx| root_verify(&r1cs, ctx)),
+            expected_masks()
+        );
+    }
+
+    #[test]
+    fn root_proof_roundtrip() {
+        let (pcs, r1cs, z) = fixture();
+        let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([1; 32])).unwrap();
+        assert_eq!(proof.masked_transcript.len(), expected_masks());
+        assert_eq!(proof.commitments.len(), 1);
+        assert_eq!(proof.pcs_openings.len(), 1);
+        verify(&pcs, &r1cs, proof).unwrap();
+    }
+
+    #[test]
+    fn wrong_root_is_not_provable() {
+        let (pcs, r1cs, _) = fixture();
+        let coeffs = make_polynomial_with_root(ROOT, DEGREE);
+        let bad = full_witness(&block_witness(&coeffs, ROOT ^ 1));
+        let error = prove(&pcs, &r1cs, &bad, ZkRng::from_seed([2; 32])).unwrap_err();
+        assert_eq!(
+            error,
+            VeilError::Constraint(ConstraintError::UnsatisfiedCircuit)
+        );
+    }
+
+    #[test]
+    fn mutations_are_rejected() {
+        let (pcs, r1cs, z) = fixture();
+        let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([3; 32])).unwrap();
+
+        let mut bad_zerocheck = proof.clone();
+        bad_zerocheck.masked_transcript[0] += F128::ONE;
+        assert!(verify(&pcs, &r1cs, bad_zerocheck).is_err());
+
+        let mut bad_lincheck = proof.clone();
+        let lincheck_start = 2 * (1 << K_SKIP) + 2 * (M - K_SKIP) + 2;
+        bad_lincheck.masked_transcript[lincheck_start] += F128::ONE;
+        assert!(verify(&pcs, &r1cs, bad_lincheck).is_err());
+
+        let mut bad_slice = proof;
+        bad_slice.blinded_slices[0][0] += F128::ONE;
+        assert!(verify(&pcs, &r1cs, bad_slice).is_err());
+    }
+
+    #[test]
+    fn wrong_statement_is_rejected() {
+        let (pcs, r1cs, z) = fixture();
+        let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([4; 32])).unwrap();
+        let other = build_r1cs(&make_polynomial_with_root(ROOT ^ 1, DEGREE));
+        assert!(verify(&pcs, &other, proof).is_err());
+    }
+}
