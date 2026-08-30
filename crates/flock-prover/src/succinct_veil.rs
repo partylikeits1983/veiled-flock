@@ -49,9 +49,8 @@ struct SupportedBlake3R1csShape {
     mask_count: usize,
 }
 
-/// Exact circuit digests, dimensions, and independent-mask counts accepted by
-/// the full-ZK entry point. These are the pinned 64-byte BLAKE3-preimage
-/// circuits for 256, 512, 1024, and 2048 slots respectively.
+/// Pinned BLAKE3-preimage circuit digests and mask counts accepted by full ZK.
+/// Entries correspond to 256, 512, 1024, and 2048 slots.
 const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 4] = [
     SupportedBlake3R1csShape {
         digest: [
@@ -90,9 +89,8 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 4] = [
         mask_count: 760,
     },
 ];
-/// ZK doubles the committed message dimension, so the largest supported outer
-/// blinding grind is five bits. A 4096-trial fail-closed cap charges at most
-/// `(31/32)^4096 < 2^-187`.
+/// ZK doubles the committed dimension, so supported outer blinding is <=5 bits.
+/// A 4096-trial fail-closed cap charges at most `(31/32)^4096 < 2^-187`.
 pub const MAX_BLIND_GRINDING_BITS: u32 = 5;
 pub const MAX_BLIND_GRIND_TRIALS: u64 = 4096;
 /// Every Ligerito query/fold grind is bounded for the same reason. The cap
@@ -762,9 +760,8 @@ fn validate_l0_hiding_budget(
     Ok(())
 }
 
-/// Fold rounds per Ligerito level: L0 folds `initial_k` times, and level
-/// `i + 1` folds `recursive_ks[i]` times. The prover grinds once per round of
-/// a level that carries a positive fold grind.
+/// Fold rounds per Ligerito level: L0 uses `initial_k`, later levels use `recursive_ks`.
+/// The prover grinds once per round of a level with positive fold grind.
 fn fold_rounds_of(initial_k: usize, recursive_ks: &[usize]) -> Vec<usize> {
     std::iter::once(initial_k)
         .chain(recursive_ks.iter().copied())
@@ -779,11 +776,8 @@ fn validate_batch_opening(
     fold_rounds: &[usize],
 ) -> Result<(), SuccinctVeilError> {
     validate_l0_hiding_budget(pcs_params, queries)?;
-    // Count grind sites the way the proof does: one nonce per fold ROUND of a
-    // level that carries a positive grind, not one per level. UDR levels grind
-    // flat, so a level contributes all of its rounds. `ligerito_grinding_is_bounded`
-    // applies the same cap to the emitted nonce vector, so both gates must
-    // bound the same quantity.
+    // Count one site per positive-grind fold round, not one per level.
+    // This matches `ligerito_grinding_is_bounded` on emitted nonces.
     let positive_fold_sites: usize = fold_grinding_bits
         .iter()
         .zip(fold_rounds)

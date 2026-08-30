@@ -127,19 +127,8 @@ pub struct ProverConfig {
     /// proximity-gap term, which lives on the fold challenges. Length =
     /// recursive_steps + 1.
     pub fold_grinding_bits: Vec<usize>,
-    /// Per-level fold-grind taper flag (L0, ..., L_r). Length =
-    /// recursive_steps + 1.
-    ///
-    /// `true` charges fold round `j` only `fold_grinding_bits − j` bits. That
-    /// discount applies ONLY in the Johnson regime, where the App. C.3
-    /// `mca-commutes` row-union factor `2^{ℓ−1−j}` already makes round `j`
-    /// exactly `j` bits better than the worst round that
-    /// `expected_eps_pg_bits` reports.
-    ///
-    /// `false` charges every fold round the full `fold_grinding_bits`. The
-    /// unique-decoding regime needs this: its list has size 1, so no row-union
-    /// factor exists and every round carries the same proximity error. Flat
-    /// grinding is always the conservative choice.
+    /// Per-level fold-grind taper flag; length = recursive_steps + 1.
+    /// Johnson levels taper by round; UDR levels grind full width.
     pub fold_grinding_taper: Vec<bool>,
     /// Per-commit-level out-of-domain samples (L0, ..., L_r), taken right
     /// after the level's Merkle root enters the transcript. `[0]` must be 0:
@@ -193,13 +182,8 @@ const UDR_DISTANCE_FLOOR_FACTOR: f64 = 3.0;
 const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
 const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
 
-/// PoW bits ground before fold round `j` of level `lvl`. The prover and both
-/// verifiers share this function so their transcripts cannot drift.
-///
-/// A Johnson level tapers by one bit per round: the App. C.3 `mca-commutes`
-/// row-union factor already makes round `j` that much stronger. A UDR level
-/// grinds the full width in every round, because its list has size 1 and no
-/// row-union factor exists. See [`ProverConfig::fold_grinding_taper`].
+/// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
+/// Johnson levels taper by round; UDR levels use the full level width.
 fn fold_round_grind_bits(
     fold_grinding_bits: &[usize],
     fold_grinding_taper: &[bool],
@@ -219,13 +203,8 @@ fn fold_round_grind_bits(
     }
 }
 
-/// PoW bits that a challenge derived from L0's fold grind carries: one bit
-/// more than L0's registered fold grind.
-///
-/// Two challenges use this width, and both the prover and the verifier read it
-/// here: the hiding L0 combination challenge `c` (`pcs::open_zk` and
-/// `pcs::verify`) and the outer blind challenge
-/// (`flock_prover::succinct_veil`).
+/// PoW bits shared by hiding L0 `c` and outer blind challenges.
+/// This is one bit more than L0's registered fold grind.
 pub fn l0_derived_grind_bits(fold_grinding_bits: &[usize]) -> u32 {
     fold_grinding_bits.first().copied().unwrap_or(0) as u32 + L0_DERIVED_EXTRA_GRIND_BITS
 }
@@ -988,23 +967,8 @@ fn validate_udr_theorem_range(
 }
 
 impl LigeritoSecurityConfig {
-    /// Additive whole-opening bound over every registered proximity fold,
-    /// query phase, and OOD event. This is intentionally separate from the
-    /// historical per-round minimum diagnostic: callers making an aggregate
-    /// security claim must use this union bound.
-    ///
-    /// The proximity term charges `fold_count · 2^-(eps_pg + fold_grinding)`
-    /// per level, so it prices every fold round at the worst-round proximity
-    /// error and the full fold grind. Both regimes match that ledger:
-    ///
-    /// * UDR levels grind flat, so round `j` really does pay
-    ///   `eps_pg + fold_grinding_bits`.
-    /// * Johnson levels taper the grind by `j` bits, but the row-union factor
-    ///   makes round `j`'s error `eps_pg + j`, so the sum is unchanged.
-    ///
-    /// [`ProverConfig::fold_grinding_taper`] is what keeps the two in step.
-    /// A full-ZK opening adds one more L0 event; use
-    /// [`Self::aggregate_soundness_bound_zk_l0`] for that.
+    /// Additive whole-opening bound over registered proximity, query, and OOD events.
+    /// Fold rounds are charged at worst-round proximity; taper flags align regimes.
     pub fn aggregate_soundness_bound(&self) -> Result<AggregateSoundnessBound, String> {
         self.validate()?;
         let mut proximity_probability = ZERO_PROBABILITY;
@@ -1032,19 +996,8 @@ impl LigeritoSecurityConfig {
         })
     }
 
-    /// Additive whole-opening bound for a **hiding (full-ZK)** opening.
-    ///
-    /// The zk L0 commitment carries wide leaves `[f' lanes ‖ g lanes]` and the
-    /// recursion runs on `F = f' + c·g`. That combination is one extra L0
-    /// proximity event on top of the folds
-    /// [`Self::aggregate_soundness_bound`] already charges. The prover and the
-    /// verifier guard `c` with `fold_grinding_bits[0] + 1` bits of PoW (see
-    /// `pcs::open_zk` and `pcs::verify`), so the event costs
-    /// `2^-(eps_pg(L0) + fold_grinding_bits[0] + 1)`.
-    ///
-    /// Returns an error when L0 is a Johnson level: there the `c` round is the
-    /// widest fold, so the row-union accounting differs and this term does not
-    /// hold. Every registered full-ZK config is UDR.
+    /// Additive bound for hiding full-ZK openings, including the extra L0 `c` event.
+    /// Fails closed for Johnson L0, where the row-union accounting differs.
     pub fn aggregate_soundness_bound_zk_l0(&self) -> Result<AggregateSoundnessBound, String> {
         let mut bound = self.aggregate_soundness_bound()?;
         let l0 = self
@@ -1052,9 +1005,8 @@ impl LigeritoSecurityConfig {
             .first()
             .ok_or_else(|| "empty levels".to_string())?;
         if matches!(l0.regime, SoundnessRegime::JohnsonOod) {
-            // The `c` round combines the widest word at L0, so a Johnson
-            // level's row-union accounting differs and this term would not be
-            // justified. Fail closed rather than report an unproved bound.
+            // Johnson L0 makes `c` the widest fold, so this bound is unproved.
+            // Fail closed instead of reporting it.
             return Err("zk L0 bound covers the unique-decoding regime only".to_string());
         }
         let (pg_bits, _) = l0.paper_predicted_bits();
@@ -1600,9 +1552,8 @@ impl LigeritoSecurityConfig {
         let grinding_bits: Vec<usize> = self.levels.iter().map(|lv| lv.grinding_bits).collect();
         let fold_grinding_bits: Vec<usize> =
             self.levels.iter().map(|lv| lv.fold_grinding_bits).collect();
-        // Only the Johnson regime uses the per-round taper: its row-union
-        // factor already returns one bit per fold round. UDR levels grind
-        // flat, because their proximity error is the same in every round.
+        // Johnson levels taper one bit per round; UDR levels grind full width.
+        // The flag is duplicated into prover and verifier configs.
         let fold_grinding_taper: Vec<bool> = self
             .levels
             .iter()
@@ -3477,15 +3428,8 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 
     let mut r_lane_fold = Vec::with_capacity(initial_k);
     for j in 0..initial_k {
-        // Fold-challenge grinding: the L0 proximity-gap bad event lives on
-        // each of these lane-fold challenges, so each one is individually
-        // PoW-guarded (a cheating prover re-rolls a fold challenge by
-        // varying the preceding sumcheck message; the grind prices every
-        // such attempt). A Johnson level tapers per round: round j folds a
-        // 2^{ℓ-j}-row word whose MCA error carries the factor 2^{ℓ-1-j}
-        // (App. C.3 Lemma `mca-commutes`), so it needs (fold_bits − j) bits.
-        // A UDR level has no row-union factor, so every round carries the
-        // same proximity error and grinds the full `fold_grinding_bits`.
+        // Each L0 fold challenge is PoW-guarded because it carries proximity risk.
+        // Johnson levels taper by round; UDR levels grind full width.
         let bits = fold_round_bits(0, j);
         if bits > 0 {
             fold_grinding_nonces.push(challenger.grind_pow(bits));
@@ -7339,10 +7283,8 @@ mod tests {
         assert!(succ_ok, "succinct verifier must accept");
     }
 
-    /// Build a matching (ProverConfig, VerifierConfig) pair with explicit
-    /// OOD samples and fold-challenge grinding, for the OOD-path tests below.
-    /// Shape: L0 (initial_k) → r recursive levels of `k`; small query counts
-    /// and grind bits keep the test fast while still exercising every path.
+    /// Build matching test configs with explicit OOD samples and fold grinding.
+    /// Small query counts keep the path fast while exercising every feature.
     fn ood_test_configs(
         log_n: usize,
         initial_k: usize,
@@ -7394,11 +7336,8 @@ mod tests {
         (p, v)
     }
 
-    /// End-to-end OOD binding + fold-challenge grinding: a JohnsonOod-shaped
-    /// config (explicit OOD samples at L1/L2, a few fold-grind bits at every
-    /// level) round-trips through BOTH the dense and succinct verifiers, and
-    /// tampering with either an OOD value or a fold-grinding nonce makes both
-    /// reject. Exercises every new prover/verifier code path.
+    /// JohnsonOod OOD/fold-grind path round-trips through both verifiers.
+    /// Tampering with either an OOD value or fold nonce makes both reject.
     #[test]
     fn ligerito_ood_and_fold_grinding_roundtrip_and_tamper() {
         let log_n = 12;
@@ -7499,10 +7438,8 @@ mod tests {
         );
     }
 
-    /// A real embedded profile config (m=22 fast = JohnsonOod) drives a full
-    /// prover→verifier round-trip through the basis opening path. This is the
-    /// production shape: OOD samples and fold grinding come straight from the
-    /// derived TOML, not a hand-built config.
+    /// A real m22 Fast profile drives the basis opening path end to end.
+    /// OOD samples and fold grinding come from the embedded TOML.
     #[test]
     fn ligerito_fast_profile_m22_roundtrip() {
         let m = 22usize;
@@ -7961,15 +7898,12 @@ mod fold_grind_taper_tests {
         assert_eq!(prove_and_verify(true), initial_k - 1);
     }
 
-    /// Ligerito configs that a registered full-ZK shape can load. `PcsParams`
-    /// adds one to the committed message dimension in zk mode, so the R1CS
-    /// shapes m22..m25 reach Ligerito m23..m26.
+    /// Ligerito configs reachable from accepted full-ZK R1CS shapes.
+    /// ZK commits one extra message dimension: R1CS m22..m25 -> PCS m23..m26.
     const FULL_ZK_LIGERITO_CONFIGS: std::ops::RangeInclusive<usize> = 23..=26;
 
-    /// Pinned aggregate PCS bits. These are a value pin, not a taper test:
-    /// the ledger formula is unchanged, so they also hold before this fix.
-    /// They exist so a later change to the formula or to a TOML cannot move
-    /// the advertised numbers unnoticed.
+    /// Pinned aggregate PCS bits; this is a value pin, not a taper test.
+    /// It catches formula or TOML drift in the advertised numbers.
     #[test]
     fn secure_aggregate_bits_are_pinned() {
         let expected = [
@@ -7990,9 +7924,8 @@ mod fold_grind_taper_tests {
         }
     }
 
-    /// The ledger charges `fold_count` proximity events per level. Under flat
-    /// UDR grinding the protocol emits exactly one ground nonce per event, so
-    /// the two counts must agree. This is what the taper broke.
+    /// Under flat UDR grinding, emitted fold nonces must match charged events.
+    /// This is the invariant the taper broke.
     #[test]
     fn secure_nonce_count_matches_the_ledger_fold_count() {
         for m in FULL_ZK_LIGERITO_CONFIGS {

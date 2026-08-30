@@ -978,13 +978,8 @@ mod tests {
             .collect()
     }
 
-    /// The largest full-ZK shape that `validate_batch_opening` accepts today.
-    /// `PcsParams` adds one to the committed message dimension in zk mode, so
-    /// the current 2048-block cap (R1CS m25) loads the Ligerito m26 config.
-    ///
-    /// 4096 blocks are above the public batch cap; that shape would load
-    /// Ligerito m27, whose `fold_grinding_bits[0] = 5` makes the outer blind
-    /// grind 6 bits, above `MAX_BLIND_GRINDING_BITS`.
+    /// Exercises the current largest ZK shape accepted by batch opening.
+    /// The rejected 4096 path would require a 6-bit outer blind grind.
     #[cfg(feature = "veil")]
     #[test]
     fn largest_supported_zk_shape_grinds_every_udr_fold_round() {

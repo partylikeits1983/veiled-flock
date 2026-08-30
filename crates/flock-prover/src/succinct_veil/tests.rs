@@ -132,9 +132,8 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
         ),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
     ));
-    // The grind-site cap counts fold ROUNDS, not levels. Three levels that
-    // each grind six rounds are 18 sites, above the cap of 16, even though
-    // the level count is only three.
+    // The grind-site cap counts fold rounds, not levels.
+    // Three six-round levels are 18 sites, above the cap of 16.
     assert!(matches!(
         validate_batch_opening(&params, &[512], &[0, 0, 0], &[1, 1, 1], &[6, 6, 6]),
         Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"))
