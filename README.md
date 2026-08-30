@@ -47,6 +47,7 @@ to 2048 messages and use registered 256/512/1024/2048-slot circuit shapes.
 - [Transcript](docs/TRANSCRIPT.md)
 - [Security scope](docs/SECURITY.md)
 - [Upstream source pins](docs/SOURCES.md)
+- [Full-ZK examples of FLOCK's protocols](examples/README.md)
 
 ## License
 
