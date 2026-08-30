@@ -133,7 +133,7 @@ fn main() {
 mod tests {
     use flock_core::zerocheck::K_SKIP;
     use veil_examples::{
-        RING_WIDTH, ZkVerifierCtx, assert_no_unmasked_f128_values, bit_mle_eval,
+        RING_WIDTH, ZkVerifierCtx, assurance::assert_no_unmasked_f128_values, bit_mle_eval,
         compute_mask_length, ring_slices,
     };
     use veil_f128::ConstraintError;
@@ -188,9 +188,9 @@ mod tests {
         );
         let (simulated, _) = prove(&pcs, &sa, &sb, &sc, ZkRng::from_seed([0x62; 32])).unwrap();
 
-        verify(&pcs, proof.clone()).unwrap();
-        verify(&pcs, simulated.clone()).unwrap();
-        assert_ne!(proof.masked_transcript, simulated.masked_transcript);
+        assert_ne!(&proof.masked_transcript, &simulated.masked_transcript);
+        verify(&pcs, proof).unwrap();
+        verify(&pcs, simulated).unwrap();
     }
 
     #[test]
@@ -199,7 +199,7 @@ mod tests {
         let (a, b, c) = (BitVector::new(&a), BitVector::new(&b), BitVector::new(&c));
         let (proof, _) = prove(&pcs, &a, &b, &c, rng).unwrap();
 
-        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs.clone())).unwrap();
+        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs)).unwrap();
         replay.read_oracle(M).unwrap();
         replay.read_oracle(M).unwrap();
         replay.read_oracle(M).unwrap();

@@ -29,7 +29,7 @@ pub(crate) const MAX_BLIND_GRINDING_BITS: u32 = 6;
 pub(crate) const MAX_BLIND_GRIND_TRIALS: u64 = 8192;
 pub(crate) const MAX_LIGERITO_GRINDING_BITS: usize = 5;
 pub(crate) const MAX_LIGERITO_GRIND_TRIALS: u64 = 4096;
-pub(crate) const MAX_LIGERITO_GRIND_SITES: u64 = 16;
+pub(crate) const MAX_LIGERITO_GRIND_SITES: usize = 16;
 
 const LOG_BATCH_SIZE: usize = 6;
 
@@ -95,42 +95,37 @@ impl BitPcs {
     }
 
     /// Log of the number of committed bits.
-    pub fn m(&self) -> usize {
+    #[must_use]
+    pub const fn m(&self) -> usize {
         self.params.m
     }
 
     /// Number of `F128` words in a packed witness.
-    pub fn packed_len(&self) -> usize {
+    #[must_use]
+    pub const fn packed_len(&self) -> usize {
         1usize << (self.params.m - LOG_PACKING)
     }
 
-    pub fn params(&self) -> &PcsParams {
+    #[must_use]
+    pub const fn params(&self) -> &PcsParams {
         &self.params
     }
 
-    pub(crate) fn prover_config(&self) -> &ProverConfig {
+    pub(crate) const fn prover_config(&self) -> &ProverConfig {
         &self.prover_config
     }
 
-    pub(crate) fn verifier_config(&self) -> &VerifierConfig {
+    pub(crate) const fn verifier_config(&self) -> &VerifierConfig {
         &self.verifier_config
     }
 
     /// Bits of the bounded grind that prices the blinding challenge: one
     /// more than the first Ligerito fold grind, as in production.
     pub fn blind_grinding_bits(&self) -> Result<u32, VeilError> {
-        let bits = self
-            .prover_config
-            .fold_grinding_bits
-            .first()
-            .copied()
-            .unwrap_or(0) as u32
-            + 1;
-        if (1..=MAX_BLIND_GRINDING_BITS).contains(&bits) {
-            Ok(bits)
-        } else {
-            Err(VeilError::ProofShape("blind grinding bits"))
-        }
+        fold_blind_grinding_bits(
+            &self.prover_config.fold_grinding_bits,
+            "blind grinding bits",
+        )
     }
 
     /// Check that a quirky point addresses `2^m` bits.
@@ -171,19 +166,36 @@ fn validate_batch_opening(
         || fold_grinding_bits
             .iter()
             .any(|bits| *bits > MAX_LIGERITO_GRINDING_BITS)
-        || positive_fold_sites > MAX_LIGERITO_GRIND_SITES as usize
+        || positive_fold_sites > MAX_LIGERITO_GRIND_SITES
     {
         return Err(VeilError::ProofShape("bounded grinding schedule"));
     }
-    let blind_grinding_bits = fold_grinding_bits.first().copied().unwrap_or(0) as u32 + 1;
-    if opened_positions == 0 || !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_grinding_bits) {
+    if opened_positions == 0 {
         return Err(VeilError::ProofShape("batch opening certificate"));
     }
+    fold_blind_grinding_bits(fold_grinding_bits, "batch opening certificate")?;
     Ok(())
+}
+
+fn fold_blind_grinding_bits(
+    fold_grinding_bits: &[usize],
+    error: &'static str,
+) -> Result<u32, VeilError> {
+    let first_fold_grind = fold_grinding_bits.first().copied().unwrap_or(0);
+    let bits = u32::try_from(first_fold_grind)
+        .ok()
+        .and_then(|bits| bits.checked_add(1))
+        .ok_or(VeilError::ProofShape(error))?;
+    if (1..=MAX_BLIND_GRINDING_BITS).contains(&bits) {
+        Ok(bits)
+    } else {
+        Err(VeilError::ProofShape(error))
+    }
 }
 
 /// The ring-switch suffix of a quirky point: inner-rest then outer
 /// coordinates. Its first entry pairs with `z_skip` in the claim weights.
+#[must_use]
 pub fn x_full(point: &QuirkyPoint) -> Vec<F128> {
     let mut full = Vec::with_capacity(point.x_inner_rest.len() + point.x_outer.len());
     full.extend_from_slice(&point.x_inner_rest);
@@ -192,23 +204,31 @@ pub fn x_full(point: &QuirkyPoint) -> Vec<F128> {
 }
 
 /// Public weights that fold a slice vector into the claimed evaluation.
+#[must_use]
 pub fn claim_weights(point: &QuirkyPoint) -> Vec<F128> {
     let full = x_full(point);
-    build_claim_weights(point.z_skip, full[0])
+    let first = full
+        .first()
+        .copied()
+        .expect("quirky point has at least one ring coordinate");
+    build_claim_weights(point.z_skip, first)
 }
 
 /// Ring-switch slice evaluations of a packed vector at a quirky point.
+#[must_use]
 pub fn ring_slices(packed: &[F128], point: &QuirkyPoint) -> Vec<F128> {
     s_hat_v_at_point(packed, &x_full(point))
 }
 
 /// Evaluate the multilinear extension of a packed bit witness at a quirky
 /// point. This is the value a FLOCK claim asserts.
+#[must_use]
 pub fn bit_mle_eval(packed: &[F128], point: &QuirkyPoint) -> F128 {
     claim_check(&claim_weights(point), &ring_slices(packed, point))
 }
 
 /// A uniformly random packed bit witness of the PCS's size.
+#[must_use]
 pub fn random_packed_bits<R: MaskSampler + ?Sized>(rng: &mut R, pcs: &BitPcs) -> Vec<F128> {
     let mut packed = vec![F128::ZERO; pcs.packed_len()];
     rng.fill_f128(&mut packed);
@@ -217,10 +237,11 @@ pub fn random_packed_bits<R: MaskSampler + ?Sized>(rng: &mut R, pcs: &BitPcs) ->
 
 /// LSB-first bit packing of a Boolean vector into bytes, the layout the
 /// native zerocheck prover consumes.
+#[must_use]
 pub fn bits_to_bytes(bits: &[bool]) -> Vec<u8> {
-    assert!(bits.len().is_multiple_of(8));
-    bits.as_chunks::<8>()
-        .0
+    let (chunks, remainder) = bits.as_chunks::<8>();
+    assert!(remainder.is_empty(), "bit length must be byte-aligned");
+    chunks
         .iter()
         .map(|chunk| {
             chunk
@@ -266,7 +287,7 @@ mod tests {
             validate_batch_opening(&pcs.params, &queries, &zeros, &deep).unwrap_err(),
             VeilError::ProofShape("bounded grinding schedule")
         );
-        let mut empty = queries.clone();
+        let mut empty = queries;
         empty[0] = 0;
         assert_eq!(
             validate_batch_opening(&pcs.params, &empty, &zeros, &folds).unwrap_err(),

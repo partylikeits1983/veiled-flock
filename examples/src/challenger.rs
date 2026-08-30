@@ -73,7 +73,7 @@ pub(crate) fn ligerito_grinding_is_bounded(proof: &LigeritoProof) -> bool {
         .iter()
         .chain(&proof.fold_grinding_nonces)
         .all(|nonce| *nonce < MAX_LIGERITO_GRIND_TRIALS)
-        && proof.fold_grinding_nonces.len() <= MAX_LIGERITO_GRIND_SITES as usize
+        && proof.fold_grinding_nonces.len() <= MAX_LIGERITO_GRIND_SITES
 }
 
 /// Fail-closed cap for rejection-sampled field challenges, the value the

@@ -124,7 +124,8 @@ fn public_polynomial() -> Vec<u8> {
 fn choose_public_root<R: MaskSampler + ?Sized>(rng: &mut R) -> u8 {
     let mut word = [0u64; 1];
     rng.fill_u64s(&mut word);
-    PUBLIC_ROOTS[word[0] as usize % PUBLIC_ROOTS.len()]
+    let index = usize::from(word[0].to_le_bytes()[0]) % PUBLIC_ROOTS.len();
+    PUBLIC_ROOTS[index]
 }
 
 fn randomizer_bits<R: MaskSampler + ?Sized>(rng: &mut R, count: usize) -> Vec<bool> {
@@ -457,7 +458,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use veil_examples::{
-        F128, RING_WIDTH, ZkVerifierCtx, assert_no_unmasked_f128_values, bit_mle_eval,
+        F128, RING_WIDTH, ZkVerifierCtx, assurance::assert_no_unmasked_f128_values, bit_mle_eval,
         compute_mask_length, ring_slices,
     };
     use veil_f128::ConstraintError;
@@ -484,8 +485,7 @@ mod tests {
     }
 
     fn first_non_root(coeffs: &[u8]) -> u8 {
-        (0u16..=u8::MAX as u16)
-            .map(|value| value as u8)
+        (u8::MIN..=u8::MAX)
             .find(|&root| horner(coeffs, root) != 0)
             .expect("not every field element is a root")
     }
@@ -507,8 +507,7 @@ mod tests {
         assert_eq!(coeffs[DEGREE], 1);
         let mut public_roots = PUBLIC_ROOTS.to_vec();
         public_roots.sort_unstable();
-        let actual_roots = (0u16..=u8::MAX as u16)
-            .map(|value| value as u8)
+        let actual_roots = (u8::MIN..=u8::MAX)
             .filter(|&root| horner(&coeffs, root) == 0)
             .collect::<Vec<_>>();
         assert_eq!(actual_roots, public_roots);
@@ -548,9 +547,9 @@ mod tests {
         let pcs = BitPcs::new(M).unwrap();
         let (proof_a, _) = prove(&pcs, &r1cs, &a, ZkRng::from_seed([0xA6; 32])).unwrap();
         let (proof_b, _) = prove(&pcs, &r1cs, &b, ZkRng::from_seed([0xA7; 32])).unwrap();
-        verify(&pcs, &r1cs, proof_a.clone()).unwrap();
-        verify(&pcs, &r1cs, proof_b.clone()).unwrap();
-        assert_ne!(proof_a.masked_transcript, proof_b.masked_transcript);
+        assert_ne!(&proof_a.masked_transcript, &proof_b.masked_transcript);
+        verify(&pcs, &r1cs, proof_a).unwrap();
+        verify(&pcs, &r1cs, proof_b).unwrap();
     }
 
     #[test]
@@ -597,28 +596,17 @@ mod tests {
         let (pcs, r1cs, z) = fixture();
         let (proof, _) = prove(&pcs, &r1cs, &z, ZkRng::from_seed([0xA8; 32])).unwrap();
 
-        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs.clone())).unwrap();
+        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs)).unwrap();
         replay.read_oracle(M).unwrap();
         replay.absorb_label(b"veil-examples-root-statement");
         replay.absorb_bytes(&r1cs.statement_digest());
         let zc = zerocheck_verify(M, &mut replay).unwrap();
-        let z_skip = zc.z;
-        let mlv_challenges = zc.mlv_challenges.clone();
-        let r_rest = zc.r_rest.clone();
+        let x_ab = r1cs.x_ab_from_mlv(zc.z, &zc.mlv_challenges);
+        let c_point = r1cs.c_claim_point(zc.z, &zc.r_rest);
         let circuit: &dyn LincheckCircuit = r1cs.csc_lincheck_circuit();
-        let lc = lincheck_verify(
-            &r1cs,
-            circuit,
-            &r1cs.x_ab_from_mlv(z_skip, &mlv_challenges),
-            zc.a_eval,
-            zc.b_eval,
-            &mut replay,
-        )
-        .unwrap();
+        let lc = lincheck_verify(&r1cs, circuit, &x_ab, zc.a_eval, zc.b_eval, &mut replay).unwrap();
 
-        let x_ab = r1cs.x_ab_from_mlv(z_skip, &mlv_challenges);
         let ab_point = r1cs.ab_claim_point(lc.r_inner_skip, &lc.r_inner_rest, &x_ab.x_outer);
-        let c_point = r1cs.c_claim_point(z_skip, &r_rest);
         let packed = pack_witness(&z, M);
         let mut sensitive = vec![
             bit_mle_eval(&packed, &ab_point),

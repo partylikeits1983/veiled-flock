@@ -38,11 +38,10 @@ const K_LOG: usize = 6;
 /// Prover-only entry point: commit the packed bits, sample the opening
 /// point, and send the evaluation on the transcript.
 fn mle_eval_prove<C: SendingCtx>(ctx: &mut C, packed: Vec<F128>) {
-    let witness = packed.clone();
-    ctx.commit_bits(packed)
+    ctx.commit_bits(packed.clone())
         .expect("failed to commit the witness");
     let point = sample_quirky_point_sending(ctx, M, K_LOG).expect("addressable point");
-    ctx.send_value(bit_mle_eval(&witness, &point));
+    ctx.send_value(bit_mle_eval(&packed, &point));
 }
 
 /// Unified read+constrain pass. Every read returns an error on a malformed
@@ -82,7 +81,8 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use veil_examples::{
-        RING_WIDTH, ZkVerifierCtx, assert_no_unmasked_f128_values, compute_mask_length, ring_slices,
+        RING_WIDTH, ZkVerifierCtx, assurance::assert_no_unmasked_f128_values, compute_mask_length,
+        ring_slices,
     };
 
     use super::*;
@@ -123,16 +123,16 @@ mod tests {
             &pcs,
         );
         let (simulated, _) = prove(&pcs, simulated_packed, ZkRng::from_seed([0x52; 32])).unwrap();
-        verify(&pcs, proof.clone()).unwrap();
-        verify(&pcs, simulated.clone()).unwrap();
-        assert_ne!(proof.masked_transcript, simulated.masked_transcript);
+        assert_ne!(&proof.masked_transcript, &simulated.masked_transcript);
+        verify(&pcs, proof).unwrap();
+        verify(&pcs, simulated).unwrap();
     }
 
     #[test]
     fn proof_surface_omits_unmasked_eval_and_slices() {
         let (pcs, packed, rng) = fixture(9);
         let (proof, _) = prove(&pcs, packed.clone(), rng).unwrap();
-        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs.clone())).unwrap();
+        let mut replay = ZkVerifierCtx::init(DOMAIN, proof.clone(), Some(pcs)).unwrap();
         replay.read_oracle(M).unwrap();
         let point = sample_quirky_point(&mut replay, M, K_LOG).unwrap();
         let mut sensitive = vec![bit_mle_eval(&packed, &point)];

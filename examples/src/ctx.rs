@@ -269,7 +269,9 @@ fn sample_nonce(rng: &mut ZkRng) -> [u8; 32] {
     let mut words = [0u64; 4];
     rng.fill_u64s(&mut words);
     let mut nonce = [0u8; 32];
-    for (chunk, word) in nonce.as_chunks_mut::<8>().0.iter_mut().zip(words) {
+    let (chunks, remainder) = nonce.as_chunks_mut::<8>();
+    debug_assert!(remainder.is_empty());
+    for (chunk, word) in chunks.iter_mut().zip(words) {
         chunk.copy_from_slice(&word.to_le_bytes());
     }
     nonce
@@ -1200,7 +1202,7 @@ mod tests {
             .collect();
         let mask_length = compute_mask_length(Some(&pcs), body).unwrap();
         let mut pctx =
-            ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng).unwrap();
+            ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs), rng).unwrap();
         for table in &tables {
             pctx.commit_bits(table.clone()).unwrap();
         }
