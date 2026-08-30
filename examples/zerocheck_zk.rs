@@ -24,9 +24,9 @@ use flock_core::{
     zerocheck::PaddingSpec,
 };
 use veil_examples::{
-    BitPcs, F128, QuirkyPoint, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
-    ZkVerifierCtx, bits_to_bytes, compute_mask_length, random_packed_bits, run_example,
-    zerocheck_prove, zerocheck_verify,
+    BitPcs, F128, QuirkyPoint, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkRng, bits_to_bytes,
+    initialize_prover_for, random_packed_bits, run_example, verify_with_body, zerocheck_prove,
+    zerocheck_verify,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-zerocheck";
@@ -108,8 +108,7 @@ fn prove(
     c: &BitVector,
     rng: ZkRng,
 ) -> Result<(ZkProof, usize), VeilError> {
-    let mask_length = compute_mask_length(Some(pcs), zerocheck_verify_all)?;
-    let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
+    let (mut pctx, mask_length) = initialize_prover_for(DOMAIN, pcs, rng, zerocheck_verify_all)?;
     zerocheck_prove_all(&mut pctx, a, b, c);
     // The prover replays the SAME verify body to build the constraints.
     zerocheck_verify_all(&mut pctx)?;
@@ -117,9 +116,7 @@ fn prove(
 }
 
 fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
-    let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-    zerocheck_verify_all(&mut vctx)?;
-    vctx.verify()
+    verify_with_body(DOMAIN, pcs, proof, zerocheck_verify_all)
 }
 
 fn main() {
@@ -135,7 +132,7 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use flock_core::zerocheck::K_SKIP;
-    use veil_examples::RING_WIDTH;
+    use veil_examples::{RING_WIDTH, compute_mask_length};
     use veil_f128::ConstraintError;
 
     use super::*;

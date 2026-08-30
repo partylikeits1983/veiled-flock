@@ -31,9 +31,9 @@ use flock_core::{
     zerocheck::K_SKIP,
 };
 use veil_examples::{
-    BitPcs, MaskSampler, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng,
-    ZkVerifierCtx, bits_to_bytes, check_block_shape, compute_mask_length, lincheck_prove,
-    lincheck_verify, run_example, zerocheck_prove, zerocheck_verify,
+    BitPcs, MaskSampler, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkRng, bits_to_bytes,
+    check_block_shape, initialize_prover_for, lincheck_prove, lincheck_verify, run_example,
+    verify_with_body, zerocheck_prove, zerocheck_verify,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-root";
@@ -338,8 +338,8 @@ fn prove(
     z: &[bool],
     rng: ZkRng,
 ) -> Result<(ZkProof, usize), VeilError> {
-    let mask_length = compute_mask_length(Some(pcs), |ctx| root_verify(r1cs, ctx))?;
-    let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
+    let (mut pctx, mask_length) =
+        initialize_prover_for(DOMAIN, pcs, rng, |ctx| root_verify(r1cs, ctx))?;
     root_prove(&mut pctx, r1cs, z);
     // The prover replays the SAME verify body to build the constraints.
     root_verify(r1cs, &mut pctx)?;
@@ -347,9 +347,7 @@ fn prove(
 }
 
 fn verify(pcs: &BitPcs, r1cs: &BlockR1cs, proof: ZkProof) -> Result<(), VeilError> {
-    let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-    root_verify(r1cs, &mut vctx)?;
-    vctx.verify()
+    verify_with_body(DOMAIN, pcs, proof, |ctx| root_verify(r1cs, ctx))
 }
 
 fn main() {
@@ -384,7 +382,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use veil_examples::{F128, RING_WIDTH};
+    use veil_examples::{F128, RING_WIDTH, compute_mask_length};
     use veil_f128::ConstraintError;
 
     use super::*;

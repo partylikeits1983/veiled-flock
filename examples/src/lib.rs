@@ -30,7 +30,7 @@ mod report;
 
 pub use ctx::{
     ConstraintCtx, Expr, MaskCounter, OracleId, ReadingCtx, SendingCtx, ZkProverCtx, ZkVerifierCtx,
-    compute_mask_length, linear_combination,
+    compute_mask_length, initialize_prover_for, linear_combination, verify_with_body,
 };
 pub use error::VeilError;
 pub use flock::{

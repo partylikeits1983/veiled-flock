@@ -20,9 +20,9 @@
 //!   replay `ReadingCtx`) on the prover.
 
 use veil_examples::{
-    BitPcs, F128, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkProverCtx, ZkRng, ZkVerifierCtx,
-    bit_mle_eval, compute_mask_length, random_packed_bits, run_example, sample_quirky_point,
-    sample_quirky_point_sending,
+    BitPcs, F128, ReadingCtx, SendingCtx, VeilError, ZkProof, ZkRng, bit_mle_eval,
+    initialize_prover_for, random_packed_bits, run_example, sample_quirky_point,
+    sample_quirky_point_sending, verify_with_body,
 };
 
 const DOMAIN: &[u8] = b"veil-examples-mle-eval";
@@ -60,17 +60,14 @@ fn mle_eval_verify<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
 // ============================================================================
 
 fn prove(pcs: &BitPcs, packed: Vec<F128>, rng: ZkRng) -> Result<(ZkProof, usize), VeilError> {
-    let mask_length = compute_mask_length(Some(pcs), mle_eval_verify)?;
-    let mut pctx = ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng)?;
+    let (mut pctx, mask_length) = initialize_prover_for(DOMAIN, pcs, rng, mle_eval_verify)?;
     mle_eval_prove(&mut pctx, packed);
     mle_eval_verify(&mut pctx)?;
     Ok((pctx.prove()?, mask_length))
 }
 
 fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
-    let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-    mle_eval_verify(&mut vctx)?;
-    vctx.verify()
+    verify_with_body(DOMAIN, pcs, proof, mle_eval_verify)
 }
 
 fn main() {
@@ -84,7 +81,7 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use veil_examples::RING_WIDTH;
+    use veil_examples::{RING_WIDTH, compute_mask_length};
 
     use super::*;
 

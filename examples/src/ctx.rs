@@ -314,6 +314,32 @@ pub fn compute_mask_length(
     Ok(counter.count())
 }
 
+/// Compute the mask count for a verify body and initialize a prover with exactly
+/// that many committed masks.
+pub fn initialize_prover_for(
+    domain: &[u8],
+    pcs: &BitPcs,
+    rng: ZkRng,
+    verify: impl FnOnce(&mut MaskCounter) -> Result<(), VeilError>,
+) -> Result<(ZkProverCtx, usize), VeilError> {
+    let mask_length = compute_mask_length(Some(pcs), verify)?;
+    let prover = ZkProverCtx::initialize_with_rng(domain, mask_length, Some(pcs.clone()), rng)?;
+    Ok((prover, mask_length))
+}
+
+/// Run a verify body inside a fresh verifier context, then discharge the
+/// deferred PCS and VEIL checks.
+pub fn verify_with_body(
+    domain: &[u8],
+    pcs: &BitPcs,
+    proof: ZkProof,
+    verify: impl FnOnce(&mut ZkVerifierCtx) -> Result<(), VeilError>,
+) -> Result<(), VeilError> {
+    let mut verifier = ZkVerifierCtx::init(domain, proof, Some(pcs.clone()))?;
+    verify(&mut verifier)?;
+    verifier.verify()
+}
+
 impl ConstraintCtx for MaskCounter {
     fn assert_zero(&mut self, _expr: Expr) {}
 
@@ -1113,9 +1139,8 @@ mod tests {
     const K_LOG: usize = 6;
     const DOMAIN: &[u8] = b"veil-examples-ctx-test";
 
-    /// Three committed witnesses; `a` and `b` claimed at one point, `c` at
-    /// another. Exercises the three-oracle opening order and the per-oracle
-    /// forks.
+    /// Three committed witnesses; `a` and `b` share one point, `c` another.
+    /// Exercises the three-oracle opening order and per-oracle forks.
     fn body<C: ReadingCtx>(ctx: &mut C) -> Result<(), VeilError> {
         let a = ctx.read_oracle(M)?;
         let b = ctx.read_oracle(M)?;
@@ -1136,10 +1161,8 @@ mod tests {
         let tables: Vec<Vec<F128>> = (0..3)
             .map(|_| random_packed_bits(&mut data_rng, &pcs))
             .collect();
-        let mask_length = compute_mask_length(Some(&pcs), body).unwrap();
+        let (mut pctx, mask_length) = initialize_prover_for(DOMAIN, &pcs, rng, body).unwrap();
         assert_eq!(mask_length, 3 + 3 * 2 * RING_WIDTH);
-        let mut pctx =
-            ZkProverCtx::initialize_with_rng(DOMAIN, mask_length, Some(pcs.clone()), rng).unwrap();
         for table in &tables {
             pctx.commit_bits(table.clone()).unwrap();
         }
@@ -1155,9 +1178,7 @@ mod tests {
     }
 
     fn verify(pcs: &BitPcs, proof: ZkProof) -> Result<(), VeilError> {
-        let mut vctx = ZkVerifierCtx::init(DOMAIN, proof, Some(pcs.clone()))?;
-        body(&mut vctx)?;
-        vctx.verify()
+        verify_with_body(DOMAIN, pcs, proof, body)
     }
 
     #[test]

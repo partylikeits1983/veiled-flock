@@ -9,7 +9,8 @@
 use flock_core::{
     field::F128,
     lincheck::{self, LincheckCircuit, QuirkyPoint},
-    r1cs::BlockR1cs,
+    pcs::LOG_PACKING,
+    r1cs::{BlockR1cs, WitnessLayout},
     zerocheck::{self, K_SKIP, N_INNER, PaddingSpec, multilinear},
 };
 
@@ -111,14 +112,16 @@ pub fn zerocheck_verify<C: ReadingCtx>(
     })
 }
 
-/// Reject a block shape that the FLOCK layers cannot address. Call it before
-/// any `BlockR1cs` point helper, which assert on the shape instead of
-/// returning an error.
+/// Reject a block shape that the FLOCK layers cannot address.
+/// Call before `BlockR1cs` point helpers, which assert on shape.
 pub fn check_block_shape(r1cs: &BlockR1cs) -> Result<(), VeilError> {
+    let batch_major_needs_packing_bit =
+        matches!(r1cs.layout, WitnessLayout::BatchMajor) && r1cs.k_log < LOG_PACKING;
     if r1cs.k_skip != K_SKIP
         || r1cs.k_log < r1cs.k_skip
         || r1cs.m < r1cs.k_log
         || r1cs.m < K_SKIP + N_INNER
+        || batch_major_needs_packing_bit
     {
         return Err(VeilError::ProofShape("block shape"));
     }
@@ -247,6 +250,33 @@ pub fn sample_quirky_point_sending<C: SendingCtx>(
 mod tests {
     use super::*;
     use crate::ctx::MaskCounter;
+    use flock_core::r1cs::SparseBinaryMatrix;
+
+    fn empty_matrix(k: usize) -> SparseBinaryMatrix {
+        SparseBinaryMatrix {
+            num_rows: k,
+            num_cols: k,
+            rows: vec![Vec::new(); k],
+        }
+    }
+
+    fn empty_block_r1cs(m: usize, k_log: usize, layout: WitnessLayout) -> BlockR1cs {
+        let k = 1usize << k_log;
+        BlockR1cs {
+            m,
+            k_log,
+            k_skip: K_SKIP,
+            useful_bits: k,
+            a_0: empty_matrix(k),
+            b_0: empty_matrix(k),
+            c_0: empty_matrix(k),
+            layout,
+            const_pin: None,
+            zk: None,
+            digest_cache: std::sync::OnceLock::new(),
+            csc_cache: std::sync::OnceLock::new(),
+        }
+    }
 
     #[test]
     fn quirky_point_shape_is_guarded() {
@@ -262,5 +292,18 @@ mod tests {
         let point = sample_quirky_point(&mut counter, 22, 6).unwrap();
         assert!(point.x_inner_rest.is_empty());
         assert_eq!(point.x_outer.len(), 16);
+    }
+
+    #[test]
+    fn block_shape_rejects_unaddressable_batch_major_layout() {
+        let r1cs = empty_block_r1cs(K_SKIP + N_INNER, K_SKIP, WitnessLayout::BatchMajor);
+        assert_eq!(
+            check_block_shape(&r1cs).unwrap_err(),
+            VeilError::ProofShape("block shape")
+        );
+
+        let addressable =
+            empty_block_r1cs(K_SKIP + N_INNER, LOG_PACKING, WitnessLayout::BatchMajor);
+        assert!(check_block_shape(&addressable).is_ok());
     }
 }
