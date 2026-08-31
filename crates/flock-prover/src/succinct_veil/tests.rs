@@ -21,7 +21,7 @@ fn succinct_shape_rejects_nonidentity_c() {
 
 #[test]
 fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
-    let setup = Blake3PreimageZkSetup::new(2);
+    let setup = Blake3PreimageZkSetup::new(2).expect("valid zk setup");
     assert!(super::supported_mask_count(&setup.r1cs).is_some());
     validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
     let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
@@ -64,7 +64,7 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
     {
         let blocks = 1usize << (FIRST_REGISTERED_BLOCK_LOG + index);
         let m = FIRST_REGISTERED_R1CS_M + index;
-        let setup = Blake3PreimageZkSetup::new(blocks);
+        let setup = Blake3PreimageZkSetup::new(blocks).expect("valid zk setup");
         assert_eq!(setup.r1cs.m, m);
         assert_eq!(shape.r1cs_m, m);
         assert_eq!(
