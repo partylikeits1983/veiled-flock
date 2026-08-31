@@ -198,10 +198,13 @@ noncomputable def uniformExpectedCost {Input Output : Type}
     [Fintype Input] (algorithm : CostedAlgorithm Input Output) : ℚ :=
   (∑ input : Input, (algorithm.cost input : ℚ)) / Fintype.card Input
 
-/-- A non-vacuous efficiency certificate for the complete simulator: the
-semantic run is fixed, every path is costed, the uniform expectation is
-bounded, adaptive query history is bounded in the actual output, and the
-bound is polynomial. -/
+/-- Accounting certificate for the complete simulator in the declared
+algebraic/pROM cost model.
+
+The `run` field is tied to the simulator and the adaptive query history is
+bounded on the actual output. The machine-cost half records the stage-cost
+function supplied by the model; Lean does not derive that cost by evaluating the
+body of `run`. -/
 structure SimulatorEfficiencyCertificate {Input Output : Type}
     [Fintype Input] (algorithm : CostedAlgorithm Input Output)
     (simulator : Input → Output)
@@ -254,8 +257,9 @@ abbrev SimulatorOutput := ProductionView
   shape (ProductionRest shape)
     (ProductionMaxPointLength shape maxStartLength)
 
-/-- The exact witness-free production simulator equipped with its concrete
-stage cost.  The type of `run` has no witness argument. -/
+/-- The exact witness-free production simulator equipped with the stage cost
+declared by the production pROM accounting model. The type of `run` has no
+witness argument. -/
 noncomputable def costedProductionSimulator :
     CostedAlgorithm
       (SimulatorInput (AdversaryCoins := AdversaryCoins) shape maxStartLength)
@@ -275,8 +279,8 @@ omit [Fintype AdversaryCoins] [Nonempty AdversaryCoins] in
       productionSimulatedExperiment shape maxStartLength fallback r1csDigest
         causalSecret completion weights context adversary statement tape := rfl
 
-/-- Deterministic worst-case cost immediately bounds expected cost over the
-same uniform operational tape used by the ZK theorem. -/
+/-- The declared deterministic worst-case stage cost immediately bounds expected
+cost over the same uniform operational tape used by the ZK theorem. -/
 theorem costedProductionSimulator_expectedCost_le :
     uniformExpectedCost
         (costedProductionSimulator shape maxStartLength fallback r1csDigest
@@ -287,10 +291,10 @@ theorem costedProductionSimulator_expectedCost_le :
   classical
   simp [uniformExpectedCost, costedProductionSimulator]
 
-/-- Complete simulator efficiency theorem in the explicit algebraic/pROM
-cost model.  Bounded rejection and first-success grinding are charged at
-their full public caps, so the result is deterministic polynomial time and,
-a fortiori, expected polynomial time. -/
+/-- Complete simulator accounting theorem in the explicit algebraic/pROM cost
+model. Bounded rejection and first-success grinding are charged at their full
+public caps in `productionSimulatorCost`; this is a polynomial bound for the
+declared model cost, not a Lean evaluator-derived step count for `run`. -/
 theorem productionSimulator_expected_polytime :
     SimulatorEfficiencyCertificate
       (costedProductionSimulator shape maxStartLength fallback r1csDigest
@@ -324,10 +328,11 @@ end Efficiency
 
 /-! ## The security predicate and concrete production theorem -/
 
-/-- Statistical zero knowledge for uniform finite-tape experiments.  The
-simulator's type is structurally witness-free.  The predicate quantifies over
-every statement, valid witness, and admissible adversary and also requires a
-concrete efficiency certificate for that same simulator/adversary pair.
+/-- Statistical zero knowledge for uniform finite-tape experiments. The
+simulator's type is structurally witness-free. The predicate quantifies over
+every statement, valid witness, and admissible adversary and also carries the
+declared simulator accounting certificate for that same simulator/adversary
+pair.
 
 The production instantiation below supplies complete adaptive classical-pROM
 views; this definition neither models quantum oracle access nor an
@@ -440,7 +445,7 @@ noncomputable def productionSimulatorFamily
   productionSimulatedExperiment shape maxStartLength fallback r1csDigest
     causalSecret completion weights context adversary statement
 
-/-- Concrete efficiency property supplied to the ZK definition. -/
+/-- Declared simulator accounting property supplied to the ZK definition. -/
 def productionSimulatorEfficient
     (statement : ProductionStatement shape)
     (adversary : FormalProductionAdversary
@@ -457,10 +462,10 @@ def productionSimulatorEfficient
     (productionSimulatorCost shape)
     (fun view ↦ view.oracleView.queries.length)
 
-/-- Final formal-protocol statistical-ZK theorem.  It proves the actual
-`StatisticalZeroKnowledge` predicate for the complete adaptive adversary
-view, the concrete witness-free simulator, and the reviewed `2^-126`
-classical programmable-random-oracle envelope. -/
+/-- Final formal-protocol statistical-ZK theorem. It proves the actual
+`StatisticalZeroKnowledge` predicate for the complete adaptive adversary view,
+the concrete witness-free simulator, the declared simulator accounting model,
+and the reviewed `2^-126` classical programmable-random-oracle envelope. -/
 theorem veil_flock_statistical_zk_126 :
     StatisticalZeroKnowledge
       (Tape := ProductionLedgerTape shape maxStartLength AdversaryCoins)

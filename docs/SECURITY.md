@@ -35,10 +35,12 @@ real adaptive adversary view within `2^-126` statistical distance of a
 witness-free simulated view in the finite classical pROM model.
 
 The companion theorem
-`VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime`
-certifies the witness-free simulator under an explicit algebraic/pROM machine
-cost model. These are theorems about the Lean production model; they are not a
-mechanized proof that every Rust execution matches that model.
+`VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime` records
+the witness-free simulator's declared algebraic/pROM stage-cost accounting and
+the concrete oracle-query bound. The Lean model does not derive that machine
+cost by evaluating the simulator body. These are theorems about the Lean
+production model; they are not a mechanized proof that every Rust execution
+matches that model.
 
 For `P` proofs, `J` programmed points per proof, and the implementation cap
 `Q_P` on protocol oracle calls per proof, the executable conservative bound is

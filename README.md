@@ -20,6 +20,9 @@ statistically zero knowledge: every valid statement and witness has a real
 adaptive adversary view within `< 2^-126` statistical distance of a
 witness-free simulated view. The main endpoint is
 `VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126`.
+Its simulator-cost theorem records the declared algebraic/pROM stage-cost
+accounting and oracle-query bound; Lean does not derive that machine cost by
+evaluating the simulator body.
 
 The Rust implementation is kept aligned with that model, but the repository
 does not yet contain a mechanized Rust-to-Lean correspondence proof for every
