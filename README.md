@@ -1,11 +1,7 @@
 # zk-FLOCK
 
-VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for batched
-64-byte BLAKE3 preimage statements, with a Lean proof of statistical zero
-knowledge for its formal production protocol model.
-
-The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
-digest in an ordered batch:
+VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for ordered batches
+of 64-byte BLAKE3 preimages.
 
 ```text
 public:   ordered BLAKE3 digests y[0..b)
@@ -13,28 +9,30 @@ private:  64-byte messages x[0..b)
 claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 ```
 
-## Security status
+| Hashes | FLOCK prove | FLOCK verify | FLOCK bundle | Full-ZK prove | Full-ZK verify | Full-ZK bundle | Bundle size overhead vs. FLOCK |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 64 | 5.402 ms | 12.705 ms | 274,676 B | 21.898 ms | 15.549 ms | 803,764 B | 192.6% |
+| 128 | 6.086 ms | 13.121 ms | 283,604 B | 21.832 ms | 15.189 ms | 805,556 B | 184.0% |
+| 256 | 7.685 ms | 13.192 ms | 377,764 B | 21.804 ms | 14.940 ms | 809,364 B | 114.3% |
+| 512 | 10.003 ms | 13.578 ms | 385,148 B | 26.817 ms | 16.263 ms | 828,412 B | 115.1% |
+| 1,024 | 10.280 ms | 14.698 ms | 398,724 B | 39.577 ms | 16.389 ms | 880,364 B | 120.8% |
+| 2,048 | 14.888 ms | 14.599 ms | 433,492 B | 78.313 ms | 17.229 ms | 929,468 B | 114.4% |
+| 4,096 | 23.771 ms | 17.193 ms | 452,004 B | 134.793 ms | 19.671 ms | 1,017,308 B | 125.1% |
 
-The Lean development proves that the formal production protocol model is
-statistically zero knowledge: every valid statement and witness has a real
-adaptive adversary view within `< 2^-126` statistical distance of a
-witness-free simulated view. The main endpoint is
-`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126`.
+Release-mode medians of five runs after one warm-up on an AMD Ryzen 7 7840HS
+(8 cores/16 threads), Linux x86-64, Rust 1.98.0. Setup, test-vector and digest
+construction, serialization, and compilation are excluded; the public prove
+APIs' witness checks are included. Both protocols use the Secure Ligerito
+profile. Full-ZK pads the 64- and 128-hash batches to its minimum registered
+256-slot shape, and its bundle includes the public digest list; the non-ZK
+FLOCK bundle does not.
 
-The Rust implementation is kept aligned with that model, but the repository
-does not yet contain a mechanized Rust-to-Lean correspondence proof for every
-executable path. This is also not an independent audit, a concrete
-SHA-256-as-random-oracle theorem, a QROM theorem, an argument-of-knowledge
-theorem, or a side-channel audit. See [SECURITY.md](docs/SECURITY.md).
+Reproduce the benchmark with:
 
-## Supported Surface
-
-- Full-ZK BLAKE3-preimage proving, verifying, and witness-free simulation via
-  `Blake3PreimageZkSetup::{new, prove, verify, simulate}`.
-- Registered 256/512/1024/2048/4096-slot circuit shapes for batches of 1-4096
-  concatenated 64-byte messages.
-- Fresh OS-sampled prover/simulator coins, typed transcript framing, tree
-  nonces, leaf salts, and the reviewed random-oracle path.
+```sh
+cargo run --locked --release -p flock-prover --features veil \
+  --example preimage_scaling -- 5
+```
 
 ## Usage
 
@@ -57,23 +55,13 @@ to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
 ## Verification
 
 ```sh
-cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
-```
-
-`scripts/zk-certify.sh` runs the executable Rust certificate suite and
-random-oracle surface checks.
-
-### Lean formal proof
-
-A cold Lake/Mathlib build can take 30 minutes or more. Incremental builds are
-usually much faster.
-
-```sh
+make test
 make formal-proof
 ```
 
-This downloads the pinned Mathlib cache, builds all Lean proof libraries with
-a progress bar, and audits the main theorem chain for non-standard axioms.
+`make formal-proof` builds the Lean proof libraries and audits the main theorem
+chain for non-standard axioms. See [SECURITY.md](docs/SECURITY.md) for the
+precise theorem and implementation scope.
 
 ## Documentation
 
