@@ -48,7 +48,7 @@ def ligeritoWidth : ℕ := maxLigeritoSites * ligeritoSiteWidth
 zerocheck, rejection, position, and grinding schedule. -/
 def productionSamplingSlots : ℕ := ligeritoOffset + ligeritoWidth
 
-theorem productionSamplingSlots_eq : productionSamplingSlots = 135209 := by
+theorem productionSamplingSlots_eq : productionSamplingSlots = 139305 := by
   decide
 
 theorem productionSamplingSlots_le_protocol_cap :

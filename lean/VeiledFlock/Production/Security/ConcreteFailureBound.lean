@@ -93,40 +93,35 @@ private theorem binomial_tail_le_pow
 
 theorem blindAbort_lt_two_pow_neg_180_kernel :
     blindAbortProbability < 1 / (2 : ℚ) ^ 180 := by
+  have hblock : (63 / 64 : ℚ) ^ 45 < 1 / 2 := by norm_num
+  have hpow : (((63 / 64 : ℚ) ^ 45) ^ 182) < (1 / 2 : ℚ) ^ 182 :=
+    pow_lt_pow_left₀ hblock (by positivity) (by norm_num)
+  have htail : (63 / 64 : ℚ) ^ 2 ≤ 1 :=
+    pow_le_one₀ (by positivity) (by norm_num)
+  unfold blindAbortProbability maxBlindTrials
+  rw [show 8192 = 45 * 182 + 2 by norm_num, pow_add, pow_mul]
+  calc
+    ((63 / 64 : ℚ) ^ 45) ^ 182 * (63 / 64 : ℚ) ^ 2 ≤
+        (1 / 2 : ℚ) ^ 182 * 1 :=
+      mul_le_mul (le_of_lt hpow) htail (by positivity) (by positivity)
+    _ < 1 / (2 : ℚ) ^ 180 := by norm_num [div_pow]
+
+theorem ligeritoAbort_lt_two_pow_neg_180_kernel :
+    ligeritoAbortProbability < 1 / (2 : ℚ) ^ 180 := by
   have hblock : (31 / 32 : ℚ) ^ 22 < 1 / 2 := by norm_num
   have hpow : (((31 / 32 : ℚ) ^ 22) ^ 186) < (1 / 2 : ℚ) ^ 186 :=
     pow_lt_pow_left₀ hblock (by positivity) (by norm_num)
   have htail : (31 / 32 : ℚ) ^ 4 ≤ 1 :=
     pow_le_one₀ (by positivity) (by norm_num)
-  unfold blindAbortProbability maxBlindTrials
+  unfold ligeritoAbortProbability maxLigeritoTrials
   rw [show 4096 = 22 * 186 + 4 by norm_num, pow_add, pow_mul]
   calc
     ((31 / 32 : ℚ) ^ 22) ^ 186 * (31 / 32 : ℚ) ^ 4 ≤
         (1 / 2 : ℚ) ^ 186 * 1 :=
       mul_le_mul (le_of_lt hpow) htail (by positivity) (by positivity)
-    _ < 1 / (2 : ℚ) ^ 180 := by norm_num [div_pow]
-
-theorem ligeritoAbort_lt_two_pow_neg_360_kernel :
-    ligeritoAbortProbability < 1 / (2 : ℚ) ^ 360 := by
-  have hblock : (15 / 16 : ℚ) ^ 11 < 1 / 2 := by norm_num
-  have hpow : (((15 / 16 : ℚ) ^ 11) ^ 372) < (1 / 2 : ℚ) ^ 372 :=
-    pow_lt_pow_left₀ hblock (by positivity) (by norm_num)
-  have htail : (15 / 16 : ℚ) ^ 4 ≤ 1 :=
-    pow_le_one₀ (by positivity) (by norm_num)
-  unfold ligeritoAbortProbability maxLigeritoTrials
-  rw [show 4096 = 11 * 372 + 4 by norm_num, pow_add, pow_mul]
-  calc
-    ((15 / 16 : ℚ) ^ 11) ^ 372 * (15 / 16 : ℚ) ^ 4 ≤
-        (1 / 2 : ℚ) ^ 372 * 1 :=
-      mul_le_mul (le_of_lt hpow) htail (by positivity) (by positivity)
-    _ < 1 / (2 : ℚ) ^ 360 := by
+    _ < 1 / (2 : ℚ) ^ 180 := by
       rw [div_pow]
       norm_num only [one_pow, one_div]
-      simpa using
-        (inv_lt_inv₀ (show 0 < (2 : ℚ) ^ 372 by positivity)
-          (show 0 < (2 : ℚ) ^ 360 by positivity)).2
-          (pow_lt_pow_right₀ (a := (2 : ℚ)) (m := 360) (n := 372)
-            (by norm_num) (by norm_num))
 
 private theorem two_pow_inverse_mono
     {large small : ℕ} (h : small < large) :
@@ -223,8 +218,7 @@ theorem badBound_le_two_pow_neg_180 (shape : BatchShape)
   | linearPositions => exact linear_abort_le_180
   | hadamardPositions => exact hadamard_abort_le_180
   | ligeritoGrinding site =>
-      exact (le_of_lt ligeritoAbort_lt_two_pow_neg_360_kernel).trans
-        (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 360)))
+      exact le_of_lt ligeritoAbort_lt_two_pow_neg_180_kernel
 
 theorem samplingAbortBound_le_two_pow_neg_170 (shape : BatchShape) :
     samplingAbortBound shape ≤ 1 / (2 : ℚ) ^ 170 := by
