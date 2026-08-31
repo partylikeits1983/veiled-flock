@@ -14,20 +14,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const PRODUCTION_THEOREMS: &[&str] = &[
-    "VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126",
-    "VeiledFlock.ProductionFormalZK.veil_flock_statistical_distance_lt_two_pow_neg_126",
-    "VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime",
-    "VeiledFlock.ProductionStatisticalZK.veil_flock_statistical_zk_126_of_good_coupling",
-    "VeiledFlock.ConcreteSecurityBound.reviewed_zkBound_lt_two_pow_neg_126",
-    "VeiledFlock.Grinding.blindAbort_lt_two_pow_neg_186",
-    "VeiledFlock.Grinding.ligeritoAbort_lt_two_pow_neg_187",
-    "VeiledFlock.ProductionStatisticalDistance.real_eq_simulated_after_coinEquiv_of_globalGood",
-    "VeiledFlock.ProductionOperationalGood.globalGood_implies_productionGood",
-    "VeiledFlock.ProductionOperationalTape.productionDecode_measure_preserving",
-];
-
 const ALLOWED_AXIOMS: &[&str] = &["propext", "Classical.choice", "Quot.sound"];
+const PRODUCTION_AUDIT_FILE: &str = "VeiledFlock/Production/Security/FormalZKAxiomAudit.lean";
+const MAIN_THEOREM: &str = "VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126";
 const DEFAULT_BAR_WIDTH: usize = 36;
 
 type AnyError = Box<dyn Error + Send + Sync>;
@@ -341,7 +330,20 @@ fn audited_theorems(lean_dir: &Path) -> Result<BTreeSet<String>> {
             }
         }
     }
-    names.extend(PRODUCTION_THEOREMS.iter().map(|name| (*name).to_owned()));
+    let mut production_count = 0;
+    for line in fs::read_to_string(lean_dir.join(PRODUCTION_AUDIT_FILE))?.lines() {
+        if let Some(declaration) = line.trim().strip_prefix("#print axioms ")
+            && let Some(name) = declaration.split_whitespace().next()
+        {
+            names.insert(name.to_owned());
+            production_count += 1;
+        }
+    }
+    if production_count == 0 || !names.contains(MAIN_THEOREM) {
+        return Err(invalid_input(format!(
+            "{PRODUCTION_AUDIT_FILE} must audit the main FormalZK theorem"
+        )));
+    }
     Ok(names)
 }
 

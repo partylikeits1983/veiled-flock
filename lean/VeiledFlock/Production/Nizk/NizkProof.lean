@@ -289,11 +289,42 @@ structure VeilFlockProof (shape : BatchShape) where
   pcsOpen : BatchOpeningProofLigerito
   veil : ConstraintProof
 
+/-- The exact preblinded PCS mode and recursive vector shape selected for the
+registered production batch shape. -/
+def VeilFlockProof.PassesProductionModeChecks {shape : BatchShape}
+    (proof : VeilFlockProof shape) : Prop :=
+  proof.pcsOpen.PassesProductionModeChecks (ligeritoRecursiveSteps shape)
+
+theorem VeilFlockProof.PassesProductionModeChecks.zkBlind_eq_none
+    {shape : BatchShape} {proof : VeilFlockProof shape}
+    (hvalid : proof.PassesProductionModeChecks) :
+    proof.pcsOpen.zkBlind = none := by
+  exact hvalid.preblinded
+
+theorem VeilFlockProof.PassesProductionModeChecks.recursive_roots_length
+    {shape : BatchShape} {proof : VeilFlockProof shape}
+    (hvalid : proof.PassesProductionModeChecks) :
+    proof.pcsOpen.ligerito.recursiveRoots.length =
+      ligeritoRecursiveSteps shape := by
+  exact hvalid.canonicalRecursiveShape.recursiveRoots_length
+
+theorem VeilFlockProof.PassesProductionModeChecks.recursive_proofs_length
+    {shape : BatchShape} {proof : VeilFlockProof shape}
+    (hvalid : proof.PassesProductionModeChecks) :
+    proof.pcsOpen.ligerito.recursiveProofs.length =
+      ligeritoRecursiveSteps shape - 1 := by
+  exact hvalid.canonicalRecursiveShape.recursiveProofs_length
+
 /-- The canonical public bundle verified by the production entry point. -/
 structure VeilFlockProofBundle (shape : BatchShape) where
   digests : List Hash256
   commitment : Commitment
   proof : VeilFlockProof shape
+
+/-- Canonical production PCS checks lifted to the public proof bundle. -/
+def VeilFlockProofBundle.PassesProductionModeChecks {shape : BatchShape}
+    (bundle : VeilFlockProofBundle shape) : Prop :=
+  bundle.proof.PassesProductionModeChecks
 
 /-- Public input to the formal experiment.  The registered R1CS is selected by
 `shape`; the digest batch is the public statement carried by the bundle. -/

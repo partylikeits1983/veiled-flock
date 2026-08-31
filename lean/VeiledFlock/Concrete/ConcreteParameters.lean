@@ -93,6 +93,19 @@ def outerL0QueryCount : BatchShape → ℕ
   | .slots2048 => 290
   | .slots4096 => 290
 
+/-- `recursive_steps` in the Secure Ligerito profile selected by the
+corresponding ZK-wide commitment (`m23_secure` through `m27_secure`). -/
+def ligeritoRecursiveSteps : BatchShape → ℕ
+  | .slots256 => 2
+  | .slots512 => 2
+  | .slots1024 => 3
+  | .slots2048 => 3
+  | .slots4096 => 3
+
+theorem ligeritoRecursiveSteps_positive (shape : BatchShape) :
+    0 < ligeritoRecursiveSteps shape := by
+  cases shape <;> decide
+
 /-- Per-lane committed message dimension after adjoining the low random half. -/
 def outerMessagePositions (shape : BatchShape) : ℕ :=
   2 * outerMaskSymbolsPerLane shape
