@@ -4,12 +4,15 @@ use std::{env, fs, io::Read, process::ExitCode, time::Instant};
 
 use flock_prover::{
     proof_io::{MAX_VEIL_FLOCK_BUNDLE_BYTES, VeilFlockProofBundle},
-    r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE_BLOCKS, MESSAGE_BYTES},
+    r1cs_hashes::blake3_preimage::{
+        Blake3PreimageZkSetup, DIGEST_BYTES, MAX_ZK_PREIMAGE_BLOCKS, MESSAGE_BYTES,
+    },
 };
 
 const MAX_MESSAGES: usize = MAX_ZK_PREIMAGE_BLOCKS;
 // Bound file reads and decoder allocation for untrusted proof bundles.
 const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
+const MAX_DIGEST_FILE_BYTES: u64 = (MAX_MESSAGES * (DIGEST_BYTES * 2 + 1)) as u64;
 type Bundle = VeilFlockProofBundle;
 
 fn usage() -> String {
@@ -19,12 +22,13 @@ veiled_flock — succinct VEIL argument for 64-byte BLAKE3 preimages
 
 Usage:
   veiled_flock prove  --message FILE --out FILE
-  veiled_flock verify --in FILE
+  veiled_flock verify --in FILE --digests FILE
   veiled_flock demo
 
 The message file must contain 1..={MAX_MESSAGES} concatenated 64-byte messages. The
 proof bundle contains their public BLAKE3 digests and the VEIL proof, but never
-the messages.
+the messages. The digest file must contain the expected public BLAKE3 digest list,
+one 64-character hex digest per line.
 "
     )
 }
@@ -68,10 +72,14 @@ fn run() -> Result<(), String> {
         Some("verify") => {
             let parsed = parse_paths(args)?;
             let input = parsed.input.ok_or("verify: --in is required")?;
+            let digest_path = parsed.digests.ok_or("verify: --digests is required")?;
             let bytes = read_bundle(&input)?;
             let bundle = decode_bundle(&bytes)?;
+            let expected_digests = read_digests(&digest_path)?;
+            verify_expected_digests(&bundle.digests, &expected_digests)?;
             verify(&bundle)?;
             eprintln!("verified {input} ({} bytes)", bytes.len());
+            print_digests(&bundle.digests);
             Ok(())
         }
         Some("demo") => {
@@ -157,11 +165,100 @@ fn decode_bundle(bytes: &[u8]) -> Result<Bundle, String> {
     Bundle::from_bytes(bytes).map_err(|error| format!("cannot decode proof bundle: {error}"))
 }
 
+fn read_digests(path: &str) -> Result<Vec<[u8; DIGEST_BYTES]>, String> {
+    let file =
+        fs::File::open(path).map_err(|error| format!("cannot read digest file {path}: {error}"))?;
+    let mut bytes = Vec::new();
+    file.take(MAX_DIGEST_FILE_BYTES + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("cannot read digest file {path}: {error}"))?;
+    if bytes.len() as u64 > MAX_DIGEST_FILE_BYTES {
+        return Err(format!(
+            "digest file exceeds the {MAX_DIGEST_FILE_BYTES}-byte limit"
+        ));
+    }
+    let text = std::str::from_utf8(&bytes)
+        .map_err(|error| format!("digest file {path} is not UTF-8: {error}"))?;
+    parse_digests_text(text)
+}
+
+fn parse_digests_text(text: &str) -> Result<Vec<[u8; DIGEST_BYTES]>, String> {
+    let mut digests = Vec::new();
+    for (index, token) in text.split_whitespace().enumerate() {
+        if token.len() != DIGEST_BYTES * 2 {
+            return Err(format!(
+                "digest {} must be {} hex characters, got {}",
+                index,
+                DIGEST_BYTES * 2,
+                token.len()
+            ));
+        }
+        let mut digest = [0u8; DIGEST_BYTES];
+        for byte_index in 0..DIGEST_BYTES {
+            let start = byte_index * 2;
+            digest[byte_index] = parse_hex_byte(&token[start..start + 2])
+                .map_err(|error| format!("digest {index}: {error}"))?;
+        }
+        digests.push(digest);
+    }
+    if digests.is_empty() || digests.len() > MAX_MESSAGES {
+        return Err(format!(
+            "digest file must contain 1..={MAX_MESSAGES} digests"
+        ));
+    }
+    Ok(digests)
+}
+
+fn parse_hex_byte(hex: &str) -> Result<u8, String> {
+    u8::from_str_radix(hex, 16).map_err(|_| format!("invalid hex byte '{hex}'"))
+}
+
+fn verify_expected_digests(
+    bundle_digests: &[[u8; DIGEST_BYTES]],
+    expected_digests: &[[u8; DIGEST_BYTES]],
+) -> Result<(), String> {
+    if bundle_digests.len() != expected_digests.len() {
+        return Err(format!(
+            "bundle digest list does not match expected digest file: bundle has {}, expected {}",
+            bundle_digests.len(),
+            expected_digests.len()
+        ));
+    }
+    for (index, (bundle_digest, expected_digest)) in
+        bundle_digests.iter().zip(expected_digests).enumerate()
+    {
+        if bundle_digest != expected_digest {
+            return Err(format!(
+                "bundle digest {index} does not match expected digest file"
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn print_digests(digests: &[[u8; DIGEST_BYTES]]) {
+    eprintln!("verified digests:");
+    for digest in digests {
+        eprintln!("{}", digest_hex(digest));
+    }
+}
+
+fn digest_hex(digest: &[u8; DIGEST_BYTES]) -> String {
+    use std::fmt::Write as _;
+
+    let mut out = String::with_capacity(DIGEST_BYTES * 2);
+    for byte in digest {
+        write!(&mut out, "{byte:02x}").expect("write to string");
+    }
+    out
+}
+
 #[derive(Default)]
 struct Paths {
     message: Option<String>,
     output: Option<String>,
     input: Option<String>,
+    digests: Option<String>,
 }
 
 fn parse_paths(mut args: impl Iterator<Item = String>) -> Result<Paths, String> {
@@ -174,6 +271,7 @@ fn parse_paths(mut args: impl Iterator<Item = String>) -> Result<Paths, String> 
             "--message" => paths.message = Some(value),
             "--out" => paths.output = Some(value),
             "--in" => paths.input = Some(value),
+            "--digests" => paths.digests = Some(value),
             _ => return Err(format!("unknown flag '{flag}'")),
         }
     }
