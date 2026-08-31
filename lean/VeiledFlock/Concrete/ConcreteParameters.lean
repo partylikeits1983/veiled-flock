@@ -93,6 +93,78 @@ def outerL0QueryCount : BatchShape → ℕ
   | .slots2048 => 290
   | .slots4096 => 290
 
+/-- One level of the exact embedded Rust Secure-profile ladder.  The Rust
+`k_recursive` and `log_num_interleaved` fields agree at every registered
+level, so `foldWidth` records both values. -/
+structure RegisteredLigeritoLevel where
+  logInvRate : ℕ
+  logMessageColumns : ℕ
+  foldWidth : ℕ
+  queryCount : ℕ
+  queryGrindingBits : ℕ
+  foldGrindingBits : ℕ
+  foldGrindingTaper : Bool
+  outOfDomainSamples : ℕ
+  deriving DecidableEq
+
+/-- Constructor for the unique-decoding levels used by all five production
+Secure profiles.  Query-phase grinding, tapering, and OOD sampling are all
+disabled in these profiles. -/
+def secureUdrLevel (logInvRate logMessageColumns foldWidth queryCount
+    foldGrindingBits : ℕ) : RegisteredLigeritoLevel where
+  logInvRate := logInvRate
+  logMessageColumns := logMessageColumns
+  foldWidth := foldWidth
+  queryCount := queryCount
+  queryGrindingBits := 0
+  foldGrindingBits := foldGrindingBits
+  foldGrindingTaper := false
+  outOfDomainSamples := 0
+
+/-- Complete per-level tables loaded by Rust from `m23_secure.toml` through
+`m27_secure.toml`.  Recording the entire ladder makes changes below L0 visible
+to the Lean review even though only L0 openings require fresh hiding entropy. -/
+def registeredLigeritoLevels : BatchShape → List RegisteredLigeritoLevel
+  | .slots256 =>
+      [secureUdrLevel 1 10 6 294 1,
+        secureUdrLevel 2 7 3 182 0,
+        secureUdrLevel 4 4 3 137 0]
+  | .slots512 =>
+      [secureUdrLevel 1 11 6 292 2,
+        secureUdrLevel 2 8 3 180 1,
+        secureUdrLevel 3 5 3 151 0]
+  | .slots1024 =>
+      [secureUdrLevel 1 12 6 291 3,
+        secureUdrLevel 2 9 3 179 2,
+        secureUdrLevel 3 6 3 148 0,
+        secureUdrLevel 5 3 3 131 0]
+  | .slots2048 =>
+      [secureUdrLevel 1 13 6 290 4,
+        secureUdrLevel 2 10 3 178 3,
+        secureUdrLevel 3 7 3 147 1,
+        secureUdrLevel 4 4 3 137 0]
+  | .slots4096 =>
+      [secureUdrLevel 1 14 6 290 5,
+        secureUdrLevel 2 11 3 178 4,
+        secureUdrLevel 3 8 3 146 2,
+        secureUdrLevel 4 5 3 134 0]
+
+/-- Exact clear final-block dimension (`final_block.yr_log_n`) of the
+registered Secure profile. -/
+def ligeritoFinalLogSize : BatchShape → ℕ
+  | .slots256 => 4
+  | .slots512 => 5
+  | .slots1024 => 3
+  | .slots2048 => 4
+  | .slots4096 => 5
+
+/-- Flatten the live per-fold grinds directly from the registered Rust level
+table.  Zero-width levels emit no nonce. -/
+def registeredLigeritoProfileFoldSchedule (shape : BatchShape) : List ℕ :=
+  (registeredLigeritoLevels shape).flatMap fun level ↦
+    if level.foldGrindingBits = 0 then []
+    else List.replicate level.foldWidth level.foldGrindingBits
+
 /-- `recursive_steps` in the Secure Ligerito profile selected by the
 corresponding ZK-wide commitment (`m23_secure` through `m27_secure`). -/
 def ligeritoRecursiveSteps : BatchShape → ℕ
@@ -104,6 +176,29 @@ def ligeritoRecursiveSteps : BatchShape → ℕ
 
 theorem ligeritoRecursiveSteps_positive (shape : BatchShape) :
     0 < ligeritoRecursiveSteps shape := by
+  cases shape <;> decide
+
+/-- Closed cross-check of the complete Rust Secure-profile table: there is one
+L0 level plus `recursive_steps` recursive levels, the first query count is the
+hiding budget used by Lean, L0 has six folds and every recursive level has
+three, the final message size agrees with the last level, and all registered
+levels use the non-tapered UDR mode with no query grinding or OOD samples. -/
+theorem registered_ligeritoLevels_consistent (shape : BatchShape) :
+    (registeredLigeritoLevels shape).length =
+        ligeritoRecursiveSteps shape + 1 ∧
+      ((registeredLigeritoLevels shape).map
+          RegisteredLigeritoLevel.queryCount).head? =
+        some (outerL0QueryCount shape) ∧
+      (registeredLigeritoLevels shape).map
+          RegisteredLigeritoLevel.foldWidth =
+        6 :: List.replicate (ligeritoRecursiveSteps shape) 3 ∧
+      ((registeredLigeritoLevels shape).map
+          RegisteredLigeritoLevel.logMessageColumns).getLast? =
+        some (ligeritoFinalLogSize shape) ∧
+      (∀ level ∈ registeredLigeritoLevels shape,
+        level.queryGrindingBits = 0 ∧
+          level.foldGrindingTaper = false ∧
+          level.outOfDomainSamples = 0) := by
   cases shape <;> decide
 
 /-- Largest per-fold grind in the selected Secure profile.  These are the
@@ -165,6 +260,13 @@ theorem registered_ligeritoFoldGrindingSchedules :
     ligeritoFoldGrindingSchedule .slots4096 =
       [5, 5, 5, 5, 5, 5, 4, 4, 4, 2, 2, 2] := by
   decide
+
+/-- The independently reviewable per-level Rust table produces exactly the
+flattened schedule executed by the formal production sampler. -/
+theorem registered_ligeritoLevels_fold_schedule (shape : BatchShape) :
+    registeredLigeritoProfileFoldSchedule shape =
+      ligeritoFoldGrindingSchedule shape := by
+  cases shape <;> decide
 
 theorem ligeritoPositiveFoldGrindingSites_positive (shape : BatchShape) :
     0 < ligeritoPositiveFoldGrindingSites shape := by

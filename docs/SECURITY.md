@@ -126,6 +126,19 @@ at most twelve fold-grind nonces. In slot order, the exact 256/512/1024/2048/
 `6×4 + 3×3 + 3×1`, and `6×5 + 3×4 + 3×2` bits; the corresponding
 preblinded L0 grinds use 2/3/4/5/6 bits.
 
+Lean also pins the complete embedded Secure-profile ladders, not only their
+L0 hiding budgets.  Each tuple below is
+`(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`;
+query-phase grinding, tapering, and OOD sampling are zero throughout.
+
+| Slots | Rust profile | Levels | Final `yr_log_n` |
+|---:|---|---|---:|
+| 256 | `m23_secure.toml` | `(1,10,6,294,1); (2,7,3,182,0); (4,4,3,137,0)` | 4 |
+| 512 | `m24_secure.toml` | `(1,11,6,292,2); (2,8,3,180,1); (3,5,3,151,0)` | 5 |
+| 1024 | `m25_secure.toml` | `(1,12,6,291,3); (2,9,3,179,2); (3,6,3,148,0); (5,3,3,131,0)` | 3 |
+| 2048 | `m26_secure.toml` | `(1,13,6,290,4); (2,10,3,178,3); (3,7,3,147,1); (4,4,3,137,0)` | 4 |
+| 4096 | `m27_secure.toml` | `(1,14,6,290,5); (2,11,3,178,4); (3,8,3,146,2); (4,5,3,134,0)` | 5 |
+
 The Secure profile is in the unique-decoding regime, where the fold-challenge
 grind is flat: every fold round of a level grinds the full
 `fold_grinding_bits`. The Johnson profiles taper the grind by one bit per fold
