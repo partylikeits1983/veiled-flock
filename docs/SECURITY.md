@@ -63,11 +63,11 @@ reuse is not an exposed operation. The public prover and simulator draw every
 coin directly from the OS random source; caller-selected deterministic seeds
 are not accepted by the public full-ZK API.
 
-## Algebraic privacy obligations
+## Algebraic privacy chain
 
-The production code enforces the following runtime checks. A separate formal
-model and Rust-to-model correspondence proof must discharge the privacy chain
-for every production code path:
+The Lean model discharges the following privacy chain, while the production
+code enforces matching runtime checks. A mechanized Rust-to-model
+correspondence proof remains future work:
 
 1. The outer blinded additive-RS encoder is linear, restricts to ordinary
    FLOCK when its padding is zero, and has a query budget no larger than its
@@ -75,15 +75,14 @@ for every production code path:
 2. The structural RS argument says every opened initial coordinate projection
    has full padding rank. Repeated
    query positions are canonicalized and count once.
-3. The nonzero VEIL fold coefficient is intended to make the folded Ligerito
-   input uniform. Algebraic translation tests jointly cover the fold, initial
-   opened columns, and public direct functionals.
+3. The nonzero VEIL fold coefficient makes the folded Ligerito input uniform in
+   the formal model. Rust algebraic translation tests jointly cover the fold,
+   initial opened columns, and public direct functionals.
 4. At the 256-slot floor, the 242 FLOCK transcript coordinates and 512 ring
    coordinates consume 754 independent field one-time pads. Each circuit-size
    doubling adds two sumcheck coordinates and two independent pads, reaching
-   762 pads at 4096 slots. Proving and verification check the exact mask cursor
-   and circuit inventory; the generic Lean one-time-pad lemma remains to be
-   connected to this layout.
+   762 pads at 4096 slots. The Lean `MaskLayout` and `ExactMaskTape` modules and
+   the Rust prover/verifier all check this exact cursor and circuit inventory.
 5. The exact F2-linear ring-switch matrix is checked against production field
    multiplication on all 128 basis vectors.
 6. The live nonlinear multiplication is proved by VEIL Hadamard. Operand and

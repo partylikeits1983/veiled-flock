@@ -184,6 +184,57 @@ structure LigeritoProof where
   oodValues : List GhashField
   foldGrindingNonces : List Word64
 
+/-! ## Canonical recursive-opening domains
+
+The production verifier makes the Merkle leaf domain explicit.  Only the
+initial witness-dependent ZK opening is salted; every recursive opening is in
+the unsalted domain.  These predicates mirror the fail-closed Rust checks at
+the wire-model boundary.  They are not an extra hypothesis of the statistical
+ZK theorem: the honest protocol distribution is unchanged, and recursive
+Ligerito begins after the witness-independent uniform-fold boundary.
+-/
+
+/-- Salt-domain choice passed to Rust `verify_level_opens_maybe_ro`. -/
+inductive LevelOpenSaltDomain
+  | unsalted
+  | salted
+  deriving DecidableEq
+
+/-- Exact leaf-salt shape accepted for one recursive-opening payload. -/
+def RecursiveProof.matchesSaltDomain (proof : RecursiveProof) :
+    LevelOpenSaltDomain → Prop
+  | .unsalted => proof.leafSalts = []
+  | .salted => proof.leafSalts.length = proof.openedRows.length
+
+/-- Canonical recursive Ligerito shape enforced before verification.  For
+`recursiveSteps = r`, Rust requires exactly `r` recursive roots and `r - 1`
+recursive opening proofs.  All recursive openings are unsalted independently
+of the initial L0 domain. -/
+structure LigeritoProof.IsCanonical (proof : LigeritoProof)
+    (recursiveSteps : ℕ) (initialDomain : LevelOpenSaltDomain) : Prop where
+  recursiveSteps_pos : 0 < recursiveSteps
+  recursiveRoots_length : proof.recursiveRoots.length = recursiveSteps
+  recursiveProofs_length : proof.recursiveProofs.length = recursiveSteps - 1
+  initial_matches : proof.initialProof.matchesSaltDomain initialDomain
+  recursive_unsalted : ∀ recursiveProof ∈ proof.recursiveProofs,
+    recursiveProof.matchesSaltDomain .unsalted
+
+theorem LigeritoProof.IsCanonical.recursive_leafSalts_empty
+    {proof : LigeritoProof} {recursiveSteps : ℕ}
+    {initialDomain : LevelOpenSaltDomain}
+    (hcanonical : proof.IsCanonical recursiveSteps initialDomain)
+    {recursiveProof : RecursiveProof}
+    (hmem : recursiveProof ∈ proof.recursiveProofs) :
+    recursiveProof.leafSalts = [] := by
+  exact hcanonical.recursive_unsalted recursiveProof hmem
+
+theorem LigeritoProof.IsCanonical.initial_salt_count
+    {proof : LigeritoProof} {recursiveSteps : ℕ}
+    (hcanonical : proof.IsCanonical recursiveSteps .salted) :
+    proof.initialProof.leafSalts.length =
+      proof.initialProof.openedRows.length := by
+  exact hcanonical.initial_matches
+
 /-- Rust ring-switch opening. -/
 structure RingSwitchProof where
   sHatV : Fin ringWidth → GhashField
