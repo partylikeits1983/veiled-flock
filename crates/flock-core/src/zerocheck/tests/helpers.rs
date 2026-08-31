@@ -20,6 +20,14 @@ impl Challenger for ScriptedEqChallenger {
             _ => panic!("unexpected vector challenge request"),
         }
     }
+
+    fn grind_pow(&mut self, _bits: u32) -> u64 {
+        panic!("scripted equality challenger must not grind proof-of-work")
+    }
+
+    fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+        panic!("scripted equality challenger must not verify proof-of-work")
+    }
 }
 
 /// SplitMix64 PRNG, deterministic.

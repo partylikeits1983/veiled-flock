@@ -410,6 +410,14 @@ impl Challenger for ReplayChallenger<'_> {
         *self.cursor += 1;
         value
     }
+
+    fn grind_pow(&mut self, _bits: u32) -> u64 {
+        panic!("replay challenger must not grind proof-of-work")
+    }
+
+    fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+        panic!("replay challenger must not verify proof-of-work")
+    }
 }
 
 /// Prover context. The prove pass populates the transcript through the
