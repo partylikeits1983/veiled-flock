@@ -202,6 +202,7 @@ fn audit(root: &Path) -> Result<()> {
         "lean-axioms: OK — {} theorems depend only on propext / Classical.choice / Quot.sound",
         names.len()
     );
+    io::stdout().flush()?;
     Ok(())
 }
 
