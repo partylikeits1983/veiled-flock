@@ -1025,17 +1025,16 @@ fn rebuild_pairs(
     path: &str,
     values: Vec<F128>,
 ) -> Result<Vec<(F128, F128)>, TranscriptSchemaError> {
-    if values.len() % 2 != 0 {
+    if !values.len().is_multiple_of(2) {
         return Err(TranscriptSchemaError::WrongLength {
             path: path.to_string(),
             expected: values.len() + 1,
             got: values.len(),
         });
     }
-    Ok(values
-        .chunks_exact(2)
-        .map(|chunk| (chunk[0], chunk[1]))
-        .collect())
+    let (pairs, remainder) = values.as_chunks::<2>();
+    debug_assert!(remainder.is_empty());
+    Ok(pairs.iter().map(|[left, right]| (*left, *right)).collect())
 }
 
 fn rebuild_sumcheck_messages(
