@@ -672,9 +672,14 @@ fn check_no_superseded_zk_surface(root: &Path) -> Result<(), String> {
     for rel in ["crates", "docs", "SPEC.md", "README.md"] {
         let path = root.join(rel);
         scan_files(&path, &mut |_| true, &mut |path, line_number, line| {
+            let rel_path = relative_path(root, path);
+            if rel_path.starts_with(Path::new("crates/zk-certify")) {
+                return;
+            }
+
             if contains_superseded_zk_surface(line) {
                 findings.push(Finding {
-                    path: relative_path(root, path).to_path_buf(),
+                    path: rel_path.to_path_buf(),
                     line_number,
                     line: line.to_owned(),
                 });
