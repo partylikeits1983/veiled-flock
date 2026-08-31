@@ -34,9 +34,14 @@ example, the main theorem is still named
 `VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126`.
 
 ```sh
-cd lean
-lake exe cache get
-lake build
-cd ..
-scripts/lean-axioms.sh
+make formal-proof
+```
+
+The `formal-proof` Rust workspace tool fetches the pinned Mathlib cache, builds
+both Lean libraries, and fails closed if the audited theorem chain uses axioms
+outside `propext`, `Classical.choice`, and `Quot.sound`. To repeat only the
+axiom audit after a successful build, run:
+
+```sh
+cargo run --locked --release -p formal-proof -- audit
 ```

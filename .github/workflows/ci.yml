@@ -43,4 +43,4 @@ jobs:
           use-mathlib-cache: true
 
       - name: Audit theorem axioms
-        run: scripts/lean-axioms.sh
+        run: cargo run --locked --release -p formal-proof -- audit
