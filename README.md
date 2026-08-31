@@ -24,14 +24,14 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 Measured on an AMD Ryzen 7 7840HS.
 
 The [VEIL paper](https://eprint.iacr.org/2026/683) reports 12% proof-size
-overhead for a `2^29`-element trace over a 31-bit prime base field, so it is not
-directly comparable to these small `GF(2^128)` proof files. The 128-versus-31-bit
-field width contributes (the issue is element width, not binary versus prime by
-itself), but it is not the whole gap. This one-packed-witness PCS has little
-opportunity to amortize VEIL's additions: ZK commits `[mask || witness]` and a
-same-size blinder `g`, doubling both the message dimension and initial Merkle
-leaf width, then adds VEIL constraint and ring-linkage proofs. The serialized
-Full-ZK format also carries the public digest list.
+overhead for a much larger `2^29`-element trace over a 31-bit prime field. These
+benchmarks use smaller instances over `GF(2^128)`, so the results are not
+directly comparable. Wider field elements increase serialized size, but they
+are not the only source of overhead. The ZK PCS doubles the committed message
+dimension with `[mask || witness]` and doubles the initial Merkle leaf width
+with a same-length blinding vector `g`. The smaller instances also provide less
+opportunity to amortize these costs. Separate VEIL constraint and ring-linkage
+proofs, plus the public digest list, add more bytes.
 
 Reproduce the benchmark with:
 
