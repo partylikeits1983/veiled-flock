@@ -118,6 +118,13 @@ theorem squeezeSliceTag_length (length : ℕ) :
 def scalarPoint (absorbedBeforeSqueeze : List Byte) : List Byte :=
   absorbedBeforeSqueeze ++ squeezeScalarTag ++ counterZero
 
+/-- Exact query point used to derive a proof-of-work state digest.
+
+Rust's `FsChallenger::pow_state_digest` finalizes a clone of the live SHA-256
+state without first absorbing a squeeze tag or counter.  In the random-oracle
+model, that is the raw absorbed transcript itself. -/
+def powStatePoint (absorbed : List Byte) : List Byte := absorbed
+
 /-- Exact live transcript after the scalar challenge has been returned and
 reabsorbed. -/
 def afterScalar (absorbedBeforeSqueeze : List Byte)
@@ -129,6 +136,16 @@ theorem scalarPoint_length (absorbedBeforeSqueeze : List Byte) :
   (scalarPoint absorbedBeforeSqueeze).length =
       absorbedBeforeSqueeze.length + 10 := by
   simp [scalarPoint, counterZero]
+
+@[simp]
+theorem powStatePoint_length (absorbed : List Byte) :
+    (powStatePoint absorbed).length = absorbed.length := by
+  rfl
+
+theorem powStatePoint_isFiatShamir {absorbed : List Byte}
+    (hfiat : isFiatShamirPoint absorbed) :
+    isFiatShamirPoint (powStatePoint absorbed) := by
+  simpa [powStatePoint] using hfiat
 
 @[simp]
 theorem afterScalar_length (absorbedBeforeSqueeze : List Byte)

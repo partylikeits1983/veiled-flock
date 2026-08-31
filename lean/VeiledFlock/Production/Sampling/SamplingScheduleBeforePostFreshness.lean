@@ -65,7 +65,7 @@ theorem before_zerocheck_query_length_lt_post_fiat_query_length
     completion witness coins left
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       left left.isLt.le) leftPoint hleftUpper hleft
-  have hrightLength := rawQuery_afterZerocheck_fiat_length_eq shape causalSecret
+  have hrightLength := rawQuery_afterZerocheck_fiat_length_ge shape causalSecret
     completion witness coins right
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       right right.isLt.le) rightPoint hrightLower hrightFiat hright

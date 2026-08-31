@@ -45,7 +45,7 @@ theorem runBlindGrinding_of_not_globalBad
         answers blindStateOffset blindStateOffset_le_slots).status = .live) :
     ∃ nonce,
       grindPowBounded (blindGrindingGood shape) oracle
-          (oracle (scalarPoint transcript)) maxBlindTrials = some nonce ∧
+          (oracle (powStatePoint transcript)) maxBlindTrials = some nonce ∧
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers blindChallengeOffset blindChallengeOffset_le_slots).transcript =
           afterGrind transcript nonce := by
@@ -121,15 +121,16 @@ theorem runBlindGrinding_of_not_globalBad
                 grindAnswers, blindChallengeOffset_eq_grinding_end] using hrawPrefix
         _ = _ := by simpa only [withState] using hprefixLoop
     exact congrArg Control.transcript hcontrol
-  have hstateAnswer : oracle (scalarPoint transcript) = state := by
+  have hstateAnswer : oracle (powStatePoint transcript) = state := by
     let site : Fin productionSamplingSlots := blindStateTapeSite
     have hquery : rawQuery shape causalSecret completion witness coins site before =
-        some (scalarPoint before.transcript) := by
+        some (powStatePoint before.transcript) := by
       simpa only [site, blindStateTapeSite] using rawQuery_blindState shape
         causalSecret completion witness coins before hstatus
     calc
-      oracle (scalarPoint transcript) = oracle (scalarPoint before.transcript) := by
-        exact congrArg oracle (congrArg scalarPoint htranscript.symm)
+      oracle (powStatePoint transcript) =
+          oracle (powStatePoint before.transcript) := by
+        exact congrArg oracle (congrArg powStatePoint htranscript.symm)
       _ = answers site := (hagrees site _ hquery).symm
       _ = state := by rfl
   have hiter' :

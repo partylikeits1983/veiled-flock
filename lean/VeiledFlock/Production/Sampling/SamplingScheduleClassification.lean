@@ -434,7 +434,7 @@ theorem rawQuery_classified
   by_cases hblindState : round < blindGrindingOffset
   · simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState] at hquery
     subst point
-    exact fiat_isSamplingBytes (scalarPoint_isFiatShamir hfiat)
+    exact fiat_isSamplingBytes (powStatePoint_isFiatShamir hfiat)
   by_cases hblindGrind : round < blindChallengeOffset
   · by_cases hdone : control.stageDone
     · simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState,
@@ -518,7 +518,7 @@ theorem rawQuery_classified
         hlinearPositions, hlinearRho, hhadamardPositions, hhadamardRho,
         hproduct, hligerito, offset, within, hstate] at hquery
       subst point
-      exact fiat_isSamplingBytes (scalarPoint_isFiatShamir hfiat)
+      exact fiat_isSamplingBytes (powStatePoint_isFiatShamir hfiat)
     by_cases hdone : control.stageDone
     · simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState,
         hblindGrind, hblind, halpha, houterChallenge, houterPositions,

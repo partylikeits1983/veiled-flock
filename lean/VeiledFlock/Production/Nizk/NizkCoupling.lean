@@ -2235,12 +2235,12 @@ theorem grindLigeritoSites_oracle_congr
   induction remaining generalizing site transcript with
   | zero => rfl
   | succ remaining ih =>
-      have hstate : rightOracle (scalarPoint transcript) =
-          leftOracle (scalarPoint transcript) :=
-        hscalar _ (scalarPoint_isFiatShamir hfiat)
+      have hstate : rightOracle (powStatePoint transcript) =
+          leftOracle (powStatePoint transcript) :=
+        hscalar _ (powStatePoint_isFiatShamir hfiat)
       have hgrind := grindPowBounded_oracle_congr
         (ligeritoGrindingGood shape site)
-        leftOracle rightOracle (leftOracle (scalarPoint transcript))
+        leftOracle rightOracle (leftOracle (powStatePoint transcript))
         maxLigeritoTrials (fun candidate _ => hpow _ _)
       let continueRight : Option Word64 →
           Option (List Word64 × List Byte)
@@ -2265,14 +2265,14 @@ theorem grindLigeritoSites_oracle_congr
             continueRight
               (grindPowBounded
                 (ligeritoGrindingGood shape site)
-                rightOracle (rightOracle (scalarPoint transcript))
+                rightOracle (rightOracle (powStatePoint transcript))
                 maxLigeritoTrials) := by
               simp only [grindLigeritoSites, continueRight]
               congr 3
         _ = continueRight
               (grindPowBounded
                 (ligeritoGrindingGood shape site)
-                leftOracle (leftOracle (scalarPoint transcript))
+                leftOracle (leftOracle (powStatePoint transcript))
                 maxLigeritoTrials) := by
               apply congrArg continueRight
               rw [hstate]
@@ -2280,11 +2280,11 @@ theorem grindLigeritoSites_oracle_congr
         _ = continueLeft
               (grindPowBounded
                 (ligeritoGrindingGood shape site)
-                leftOracle (leftOracle (scalarPoint transcript))
+                leftOracle (leftOracle (powStatePoint transcript))
                 maxLigeritoTrials) := by
               generalize hresult : grindPowBounded
                 (ligeritoGrindingGood shape site)
-                leftOracle (leftOracle (scalarPoint transcript))
+                leftOracle (leftOracle (powStatePoint transcript))
                 maxLigeritoTrials = result
               cases result with
               | none => rfl
@@ -2312,13 +2312,13 @@ theorem sampleProductionTailRaw_oracle_congr
     sampleProductionTailRaw shape rightOracle transcript =
       sampleProductionTailRaw shape leftOracle transcript := by
   simp only [sampleProductionTailRaw]
-  have hstate : rightOracle (scalarPoint transcript) =
-      leftOracle (scalarPoint transcript) :=
-    hscalar _ (scalarPoint_isFiatShamir hfiat)
+  have hstate : rightOracle (powStatePoint transcript) =
+      leftOracle (powStatePoint transcript) :=
+    hscalar _ (powStatePoint_isFiatShamir hfiat)
   rw [hstate]
   rw [grindPowBounded_oracle_congr (blindGrindingGood shape)
     leftOracle rightOracle
-    (leftOracle (scalarPoint transcript)) maxBlindTrials
+    (leftOracle (powStatePoint transcript)) maxBlindTrials
     (fun candidate _ => hpow _ _)]
   split
   · rfl

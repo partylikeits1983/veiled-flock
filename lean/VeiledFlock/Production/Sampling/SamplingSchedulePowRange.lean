@@ -82,7 +82,7 @@ theorem rawQuery_nonFiat_range
   by_cases hblindState : round.val < blindGrindingOffset
   · simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState] at hquery
     subst point
-    exact False.elim (hnotFiat (scalarPoint_isFiatShamir hcontrolFiat))
+    exact False.elim (hnotFiat (powStatePoint_isFiatShamir hcontrolFiat))
   by_cases hblindGrind : round.val < blindChallengeOffset
   · exact Or.inl ⟨by omega, hblindGrind⟩
   by_cases hblind : round.val < multiplicationAlphaOffset
@@ -153,7 +153,7 @@ theorem rawQuery_nonFiat_range
       hlinearPositions, hlinearRho, hhadamardPositions, hhadamardRho, hproduct,
       within, hstate] at hquery
     subst point
-    exact False.elim (hnotFiat (scalarPoint_isFiatShamir hcontrolFiat))
+    exact False.elim (hnotFiat (powStatePoint_isFiatShamir hcontrolFiat))
   · exact Or.inr ⟨by omega, hstate⟩
 
 end VeiledFlock.ProductionSamplingSchedulePowRange

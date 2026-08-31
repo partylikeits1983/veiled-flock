@@ -163,7 +163,7 @@ theorem rawQuery_zerocheck_length_eq
 
 set_option maxRecDepth 30000 in
 set_option maxHeartbeats 1000000 in
-theorem rawQuery_afterZerocheck_fiat_length_eq
+theorem rawQuery_afterZerocheck_fiat_length_bounds
     {W : Type*} (shape : BatchShape)
     (causalSecret : ProductionCausalSecret (W := W) shape)
     (completion : Completion OracleBlock (programmedPoints shape))
@@ -173,7 +173,8 @@ theorem rawQuery_afterZerocheck_fiat_length_eq
     (hfiat : isFiatShamirPoint point)
     (hquery : rawQuery shape causalSecret completion witness coins round
       control = some point) :
-    point.length = control.transcript.length + 10 := by
+    control.transcript.length ≤ point.length ∧
+      point.length ≤ control.transcript.length + 10 := by
   classical
   have hskipBound : equalitySkipBlocks ≤ blindStateOffset := by decide
   have hzeroBound : zerocheckOffset ≤ blindStateOffset := by decide
@@ -292,6 +293,34 @@ theorem rawQuery_afterZerocheck_fiat_length_eq
       hblindGrind, hblind, halpha, houterChallenge, houterPositions,
       hlinearPositions, hlinearRho, hhadamardPositions, hhadamardRho,
       hproduct, hligerito] at hquery
+
+theorem rawQuery_afterZerocheck_fiat_length_le
+    {W : Type*} (shape : BatchShape)
+    (causalSecret : ProductionCausalSecret (W := W) shape)
+    (completion : Completion OracleBlock (programmedPoints shape))
+    (witness : W) (coins : ProductionCoins shape) (round : ℕ)
+    (control : Control shape) (point : List Byte)
+    (hround : blindStateOffset ≤ round)
+    (hfiat : isFiatShamirPoint point)
+    (hquery : rawQuery shape causalSecret completion witness coins round
+      control = some point) :
+    point.length ≤ control.transcript.length + 10 :=
+  (rawQuery_afterZerocheck_fiat_length_bounds shape causalSecret completion
+    witness coins round control point hround hfiat hquery).2
+
+theorem rawQuery_afterZerocheck_fiat_length_ge
+    {W : Type*} (shape : BatchShape)
+    (causalSecret : ProductionCausalSecret (W := W) shape)
+    (completion : Completion OracleBlock (programmedPoints shape))
+    (witness : W) (coins : ProductionCoins shape) (round : ℕ)
+    (control : Control shape) (point : List Byte)
+    (hround : blindStateOffset ≤ round)
+    (hfiat : isFiatShamirPoint point)
+    (hquery : rawQuery shape causalSecret completion witness coins round
+      control = some point) :
+    control.transcript.length ≤ point.length :=
+  (rawQuery_afterZerocheck_fiat_length_bounds shape causalSecret completion
+    witness coins round control point hround hfiat hquery).1
 
 theorem zerocheck_query_length_strict
     {W : Type*} (shape : BatchShape)

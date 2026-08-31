@@ -196,10 +196,11 @@ theorem sampleProductionTail_some_of_raw_agreement
     prelude answers blindStateOffset (by decide)
   let blindSite : Fin productionSamplingSlots := ⟨blindStateOffset, by decide⟩
   have hblindQuery : rawQuery shape causalSecret completion witness coins
-      blindSite blindStart = some (scalarPoint blindStart.transcript) := by
+      blindSite blindStart = some (powStatePoint blindStart.transcript) := by
     simpa only [blindSite, blindStart] using rawQuery_blindState shape
       causalSecret completion witness coins blindStart hblindStart
-  have hblindStateAnswer : oracle (scalarPoint transcript) = answers blindSite := by
+  have hblindStateAnswer : oracle (powStatePoint transcript) =
+      answers blindSite := by
     rw [← htranscript]
     exact (hagrees blindSite _ hblindQuery).symm
   have hblindSucc := rawControlUntil_succ shape causalSecret completion witness
@@ -238,7 +239,7 @@ theorem sampleProductionTail_some_of_raw_agreement
       (answers blindSite) maxBlindTrials = some blindNonce := by
     simpa only [grindPowBounded] using hblindNonce
   have hblindPow' : grindPowBounded (blindGrindingGood shape) oracle
-      (oracle (scalarPoint transcript)) maxBlindTrials = some blindNonce := by
+      (oracle (powStatePoint transcript)) maxBlindTrials = some blindNonce := by
     rw [hblindStateAnswer]
     exact hblindPow
 

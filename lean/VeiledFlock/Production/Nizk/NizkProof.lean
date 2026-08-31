@@ -328,9 +328,20 @@ def VeilFlockProofBundle.PassesProductionModeChecks {shape : BatchShape}
   bundle.proof.PassesProductionModeChecks
 
 /-- Public input to the formal experiment.  The registered R1CS is selected by
-`shape`; the digest batch is the public statement carried by the bundle. -/
+`shape`; `digests` contains the real (unpadded) batch, `paddingDigest` is the
+public constant used for every remaining circuit slot, and `bindingDigest` is
+the 32-byte digest absorbed by Rust's `absorb_statement` before the R1CS
+transcript begins.
+
+The Rust construction fixes `paddingDigest` to `BLAKE3(0^512)` and computes
+`bindingDigest` with `DigestStatement::public_digest`.  Those concrete BLAKE3
+computations are Rust-to-Lean refinement obligations; keeping their values as
+public fields makes the cryptographic experiment cover the Rust instance
+without pretending that Lean implements BLAKE3 here. -/
 structure ProductionStatement (_shape : BatchShape) where
   digests : List Hash256
+  paddingDigest : Hash256
+  bindingDigest : Hash256
 
 /-! ## Complete proof object of the formal production protocol
 
@@ -353,11 +364,13 @@ abbrev ProductionAlgebraicProof (shape : BatchShape) (Rest : Type*) :=
     (Opened := VeiledFlock.ProductionOuterCodeDomains.OpenedRows shape)
     (Rest := Rest) (rounds := expectedMasks shape) shape
 
-/-- Every successful output of the formal production protocol.  Rejection or
-grinding failure is represented by `none` at the enclosing experiment level.
-The three roots are computed by `productionMerkleRoot`; every challenge and
-sampling transcript is retained so joint, rather than marginal, behavior is
-observable. -/
+/-- Every successful output of the formal production privacy experiment.
+Rejection or grinding failure is represented by `none` at the enclosing
+experiment level.  The three witness-dependent roots are computed by
+`productionMerkleRoot`; challenges and the modeled sampling ledger are retained
+so joint, rather than marginal, behavior is observable.  After the uniform-fold
+boundary the Ligerito portion is a witness-independent privacy projection, not
+the complete serialized Rust proof. -/
 structure FormalVeilFlockProof (shape : BatchShape) (Rest : Type*) where
   proofNonce : Nonce256
   treeNonces : InitialTreeNonces
@@ -378,6 +391,8 @@ structure FormalVeilFlockProof (shape : BatchShape) (Rest : Type*) where
   hadamardPositions : Finset (Fin hadamardCodeLength)
   blindGrindingNonce : Word64
   ligeritoGrindingNonces : List Word64
+  /-- Final transcript of the formal sampling ledger; not the byte-for-byte
+  final Rust transcript after all downstream Ligerito messages. -/
   finalTranscript : List Byte
 
 end VeiledFlock.ProductionNizkProof

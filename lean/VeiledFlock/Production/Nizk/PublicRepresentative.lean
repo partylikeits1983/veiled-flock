@@ -43,13 +43,18 @@ noncomputable def digestHalf (digest : Hash256) (half : Fin 2) : GhashField :=
   encodeGhashFieldEquiv.symm fun byte =>
     digest ⟨half.val * 16 + byte.val, by omega⟩
 
-/-- Public value assigned to one digest coordinate.  `getD` makes the
-constructor total; production statement validity separately requires exactly
-`instanceCount shape` digests. -/
+/-- Digest carried by one physical circuit slot.  Real slots use the ordered
+public batch and every remaining slot uses Rust's public constant padding
+digest. -/
+def paddedDigest {shape : BatchShape}
+    (statement : ProductionStatement shape) (slot : ℕ) : Hash256 :=
+  statement.digests.getD slot statement.paddingDigest
+
+/-- Public value assigned to one digest coordinate. -/
 noncomputable def publicValue (shape : BatchShape)
     (statement : ProductionStatement shape) (coordinate : PublicCoord shape) :
     GhashField :=
-  digestHalf (statement.digests.getD coordinate.1.val 0) coordinate.2
+  digestHalf (paddedDigest statement coordinate.1.val) coordinate.2
 
 /-- Exact location of Rust packed witness words 2 and 3 after splitting the
 low mask half into residual and active coordinates for the outer PCS proof. -/
@@ -147,9 +152,11 @@ theorem witness_projection_eq_publicRepresentative (shape : BatchShape)
         (publicRepresentative shape statement) := by
   rw [hvalid, publicRepresentative_projection]
 
-/-- Production statements carry exactly one digest per registered instance. -/
+/-- Rust accepts a nonempty real batch no larger than the selected registered
+shape and pads every remaining slot with `paddingDigest`. -/
 def StatementWellFormed (shape : BatchShape)
     (statement : ProductionStatement shape) : Prop :=
-  statement.digests.length = instanceCount shape
+  0 < statement.digests.length ∧
+    statement.digests.length ≤ instanceCount shape
 
 end VeiledFlock.ProductionPublicRepresentative

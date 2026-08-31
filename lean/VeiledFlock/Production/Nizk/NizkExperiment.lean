@@ -419,7 +419,9 @@ noncomputable def afterSimulatedZerocheck {W : Type*} (shape : BatchShape)
       (ProductionZerocheckSchedule.second shape transcript))
     (programmedPoints shape) answers
 
-/-- Successful rejection/grinding suffix needed to build the formal proof. -/
+/-- Successful rejection/grinding suffix needed to build the formal privacy
+proof.  `finalTranscript` is the transcript of the modeled sampling ledger;
+after the uniform-fold boundary it is not the complete Rust proof transcript. -/
 structure ProductionTail (shape : BatchShape) where
   rest : ProductionRest shape
   outerPositionSet : Finset (Fin (2 ^ (m shape - 11)))
@@ -429,10 +431,11 @@ structure ProductionTail (shape : BatchShape) where
   ligeritoGrindingNonces : List Word64
   finalTranscript : List Byte
 
-/-- The observable outputs of the exact rejection and grinding loops, before
-the deterministic proof certificates needed by `ProductionRest` are attached.
-Separating data from proof terms makes oracle transport state the actual joint
-distribution equality without depending on proof irrelevance artifacts. -/
+/-- The observable outputs of the modeled rejection and grinding ledger,
+before the deterministic proof certificates needed by `ProductionRest` are
+attached.  Separating data from proof terms makes oracle transport state the
+actual joint distribution equality without depending on proof irrelevance
+artifacts. -/
 structure ProductionTailRaw (shape : BatchShape) where
   outerSet : Finset (Fin (2 ^ (m shape - 11)))
   linearSetPow : Finset (Fin (2 ^ 13))
@@ -469,15 +472,16 @@ noncomputable instance (shape : BatchShape) (site : ℕ) :
   unfold ligeritoGrindingGood
   infer_instance
 
-/-- Execute `remaining` exact production first-success Ligerito grinding
-loops in transcript order, beginning at flattened fold site `site`.  This
-never chooses an arbitrary valid nonce. -/
+/-- Execute `remaining` first-success positive Ligerito fold-grinding sites in
+ledger order, beginning at flattened site `site`.  This deliberately abstracts
+the intervening witness-independent Ligerito transcript after the uniform-fold
+boundary and never chooses an arbitrary valid nonce. -/
 noncomputable def grindLigeritoSites (shape : BatchShape)
     (oracle : List Byte → OracleBlock) :
     ℕ → ℕ → List Byte → Option (List Word64 × List Byte)
   | _, 0, transcript => some ([], transcript)
   | site, remaining + 1, transcript =>
-      let state : Nonce256 := oracle (scalarPoint transcript)
+      let state : Nonce256 := oracle (powStatePoint transcript)
       match grindPowBounded
           (ligeritoGrindingGood shape site)
           oracle state maxLigeritoTrials with
@@ -489,12 +493,14 @@ noncomputable def grindLigeritoSites (shape : BatchShape)
           | some (nonces, finalTranscript) =>
               some (nonce :: nonces, finalTranscript)
 
-/-- Execute the exact production FS/rejection/grinding control flow and retain
-all jointly observable results.  No proof-only fields occur in this trace. -/
+/-- Execute the modeled FS/rejection/grinding privacy ledger and retain all
+jointly observable results used by the proof.  The outer/VEIL suffix is literal;
+the downstream Ligerito portion projects to positive fold-grinding sites.  No
+proof-only fields occur in this trace. -/
 noncomputable def sampleProductionTailRaw (shape : BatchShape)
     (oracle : List Byte → OracleBlock) (transcript : List Byte) :
     Option (ProductionTailRaw shape) :=
-  let grindState : Nonce256 := oracle (scalarPoint transcript)
+  let grindState : Nonce256 := oracle (powStatePoint transcript)
   match grindPowBounded (blindGrindingGood shape) oracle grindState
       maxBlindTrials with
   | none => none
@@ -552,9 +558,9 @@ noncomputable def sampleProductionTailRaw (shape : BatchShape)
                           ligeritoGrindingNonces := ligeritoGrindingNonces
                           finalTranscript := finalTranscript }
 
-/-- The exact bounded FS/rejection/grinding tail shared by the real prover
-and simulator.  Every accepted-set proof stored in `ProductionRest` is
-derived from the successful concrete sampler call immediately above it. -/
+/-- The bounded FS/rejection/grinding privacy ledger shared by the real prover
+and simulator.  Every accepted-set proof stored in `ProductionRest` is derived
+from the successful concrete sampler call immediately above it. -/
 noncomputable def sampleProductionTailOriginal (shape : BatchShape)
     (oracle : List Byte → OracleBlock)
     (equalityPoint : VeiledFlock.ProductionEqualitySampler.EqualitySample
@@ -562,7 +568,7 @@ noncomputable def sampleProductionTailOriginal (shape : BatchShape)
     (transcript : List Byte) :
     Option (ProductionTail shape) := by
   classical
-  let grindState : Nonce256 := oracle (scalarPoint transcript)
+  let grindState : Nonce256 := oracle (powStatePoint transcript)
   match hblindGrind : grindPowBounded
       (blindGrindingGood shape)
       oracle grindState maxBlindTrials with
@@ -794,9 +800,9 @@ noncomputable def finishProductionTailRaw (shape : BatchShape)
     else exact none
   else exact none
 
-/-- The exact bounded FS/rejection/grinding tail shared by the real prover and
-simulator, with deterministic proof certificates attached after the complete
-observable sampling trace has been fixed. -/
+/-- The bounded FS/rejection/grinding privacy ledger shared by the real prover
+and simulator, with deterministic proof certificates attached after the
+modeled observable sampling trace has been fixed. -/
 noncomputable def sampleProductionTail (shape : BatchShape)
     (oracle : List Byte → OracleBlock)
     (equalityPoint : VeiledFlock.ProductionEqualitySampler.EqualitySample
@@ -805,12 +811,14 @@ noncomputable def sampleProductionTail (shape : BatchShape)
   (sampleProductionTailRaw shape oracle transcript).bind
     (finishProductionTailRaw shape equalityPoint)
 
-/-- Canonical public serialization present in both experiments before any
-proof-dependent bytes.  Rust refinement of list-length framing is deliberately
-outside this cryptographic experiment milestone. -/
+/-- The fixed-width public statement binding present in both experiments
+before any proof-dependent bytes.  Rust computes this value with
+`DigestStatement::public_digest` and absorbs exactly these 32 bytes.  Proving
+that computation equal to `statement.bindingDigest` belongs to the separate
+Rust-to-Lean refinement boundary. -/
 def productionStatementDigest {shape : BatchShape}
     (statement : ProductionStatement shape) : List Byte :=
-  statement.digests.flatMap nonceBytes
+  nonceBytes statement.bindingDigest
 
 /-- All successful public control-flow data produced by the real protocol
 before the final proof record is assembled.  This is not extra randomness:
@@ -901,8 +909,9 @@ def assembleProductionProof (shape : BatchShape)
     finalTranscript := tail.finalTranscript
   }
 
-/-- Construct the full successful formal proof after the exact equality
-sampler and causal FLOCK schedule. -/
+/-- Construct the successful formal privacy proof after the exact equality
+sampler and causal FLOCK schedule.  The downstream Ligerito fields retain the
+privacy-ledger projection described by `grindLigeritoSites`. -/
 noncomputable def finishProductionProof
     {PublicCoord W : Type*} [Fintype PublicCoord]
     (shape : BatchShape)

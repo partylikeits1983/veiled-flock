@@ -113,12 +113,12 @@ theorem blind_state_fiat_query_length_strict
   have hmono := rawControlUntil_transcript_length_mono shape causalSecret
     completion witness coins prelude answers blindChallengeOffset right.val
     hrightAfter right.isLt.le
-  have hleftLength := rawQuery_afterZerocheck_fiat_length_eq shape causalSecret
+  have hleftLength := rawQuery_afterZerocheck_fiat_length_le shape causalSecret
     completion witness coins blindStateOffset
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       blindStateOffset blindStateOffset_le_slots)
     leftPoint (by rfl) hleftFiat hleft
-  have hrightLength := rawQuery_afterZerocheck_fiat_length_eq shape causalSecret
+  have hrightLength := rawQuery_afterZerocheck_fiat_length_ge shape causalSecret
     completion witness coins right
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       right right.isLt.le) rightPoint (by omega) hrightFiat hright

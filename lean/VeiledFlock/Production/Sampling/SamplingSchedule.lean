@@ -127,7 +127,7 @@ noncomputable def rawQuery
               (historyFromList control.zerocheckAnswers offset))
         else none
   else if _hblindState : round < blindGrindingOffset then
-    some (scalarPoint control.transcript)
+    some (powStatePoint control.transcript)
   else if _hblindGrind : round < blindChallengeOffset then
     let offset := round - blindGrindingOffset
     if control.stageDone then none
@@ -169,7 +169,7 @@ noncomputable def rawQuery
   else if _hligerito : round < productionSamplingSlots then
     let offset := round - ligeritoOffset
     let within := offset % ligeritoSiteWidth
-    if within = 0 then some (scalarPoint control.transcript)
+    if within = 0 then some (powStatePoint control.transcript)
     else if control.stageDone then none
     else control.powState.map fun state ↦
       encodePowPoint state (BitVec.ofNat 64 (within - 1))

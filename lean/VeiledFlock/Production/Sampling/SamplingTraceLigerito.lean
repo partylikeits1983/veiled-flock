@@ -64,7 +64,7 @@ theorem rawQuery_ligerito_start
     (hstatus : control.status = .live) :
     rawQuery shape causalSecret completion witness coins
         (ligeritoSiteStart site) control =
-      some (scalarPoint control.transcript) := by
+      some (powStatePoint control.transcript) := by
   have hlig : ligeritoSiteStart site < productionSamplingSlots := by
     unfold ligeritoSiteStart productionSamplingSlots ligeritoWidth
     have hwidth : 0 < ligeritoSiteWidth := by
@@ -474,12 +474,12 @@ theorem grindLigeritoSites_from_index_some
             omega
           omega⟩
       have hquery : rawQuery shape causalSecret completion witness coins
-          startRound current = some (scalarPoint current.transcript) := by
+          startRound current = some (powStatePoint current.transcript) := by
         simpa only [startRound] using rawQuery_ligerito_start shape causalSecret
           completion witness coins site current hstatus
-      have horacleCurrent : oracle (scalarPoint current.transcript) =
+      have horacleCurrent : oracle (powStatePoint current.transcript) =
           answers startRound := (hagrees startRound _ hquery).symm
-      have horacleTranscript : oracle (scalarPoint transcript) =
+      have horacleTranscript : oracle (powStatePoint transcript) =
           answers startRound := by
         rw [← hcurrentTranscript]
         exact horacleCurrent

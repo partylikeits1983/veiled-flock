@@ -184,7 +184,7 @@ theorem ligerito_state_fiat_query_length_strict
     completion witness coins prelude answers
     (ligeritoSiteStart site + ligeritoSiteWidth) right.val hrightAfter
     right.isLt.le
-  have hleftLength := rawQuery_afterZerocheck_fiat_length_eq shape causalSecret
+  have hleftLength := rawQuery_afterZerocheck_fiat_length_le shape causalSecret
     completion witness coins (ligeritoSiteStart site)
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       (ligeritoSiteStart site)
@@ -193,7 +193,7 @@ theorem ligerito_state_fiat_query_length_strict
       have : blindStateOffset ≤ ligeritoOffset := by decide
       unfold ligeritoSiteStart
       omega) hleftFiat hleft
-  have hrightLength := rawQuery_afterZerocheck_fiat_length_eq shape causalSecret
+  have hrightLength := rawQuery_afterZerocheck_fiat_length_ge shape causalSecret
     completion witness coins right
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       right right.isLt.le) rightPoint (by

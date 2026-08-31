@@ -186,9 +186,10 @@ theorem productionSimulatorCost_polynomiallyBounded (shape : BatchShape) :
   intro n
   rw [productionSimulatorCost_eq]
 
-/-- A semantic algorithm paired with a pathwise cost.  `run` below is the
-actual witness-free `productionSimulatedExperiment`, not an abstract
-simulator parameter. -/
+/-- A semantic algorithm paired with a declared pathwise cost.  `run` below is
+the actual witness-free `productionSimulatedExperiment`, not an abstract
+simulator parameter.  This structure does not itself derive `cost` from Lean
+evaluation steps or from Rust execution. -/
 structure CostedAlgorithm (Input Output : Type) where
   run : Input → Output
   cost : Input → ℕ
@@ -198,10 +199,10 @@ noncomputable def uniformExpectedCost {Input Output : Type}
     [Fintype Input] (algorithm : CostedAlgorithm Input Output) : ℚ :=
   (∑ input : Input, (algorithm.cost input : ℚ)) / Fintype.card Input
 
-/-- A non-vacuous efficiency certificate for the complete simulator: the
-semantic run is fixed, every path is costed, the uniform expectation is
-bounded, adaptive query history is bounded in the actual output, and the
-bound is polynomial. -/
+/-- An efficiency certificate in the declared algebraic/pROM cost model: the
+semantic run is fixed, every path is assigned a cost, the uniform expectation
+is bounded, adaptive query history is bounded in the actual output, and the
+bound is polynomial.  It is not an extracted evaluator/runtime theorem. -/
 structure SimulatorEfficiencyCertificate {Input Output : Type}
     [Fintype Input] (algorithm : CostedAlgorithm Input Output)
     (simulator : Input → Output)
@@ -287,10 +288,10 @@ theorem costedProductionSimulator_expectedCost_le :
   classical
   simp [uniformExpectedCost, costedProductionSimulator]
 
-/-- Complete simulator efficiency theorem in the explicit algebraic/pROM
-cost model.  Bounded rejection and first-success grinding are charged at
-their full public caps, so the result is deterministic polynomial time and,
-a fortiori, expected polynomial time. -/
+/-- Complete simulator efficiency theorem in the declared algebraic/pROM cost
+model.  Bounded rejection and first-success grinding are charged at their full
+public caps, giving a deterministic polynomial accounting bound and, a
+fortiori, an expected polynomial accounting bound. -/
 theorem productionSimulator_expected_polytime :
     SimulatorEfficiencyCertificate
       (costedProductionSimulator shape maxStartLength fallback r1csDigest
@@ -351,8 +352,12 @@ def StatisticalZeroKnowledge
         (realExperiment statement witness adversary)
         (simulator statement adversary) < epsilon
 
-/-- The formal production relation includes statement shape validity and the
-exact public projection of the committed packed witness. -/
+/-- The formal production privacy relation includes short-batch shape validity
+and the exact padded public projection of the committed packed witness.  It is
+deliberately a privacy super-relation: Rust additionally checks that every
+unpadded slot is a satisfying pinned BLAKE3-preimage witness and fixes the
+public padding/binding digests.  Restricting this theorem to that Rust subset
+preserves the statistical-distance conclusion. -/
 def veilFlockRelation (shape : BatchShape)
     (statement : ProductionStatement shape) (witness : Witness shape) : Prop :=
   StatementWellFormed shape statement ∧
