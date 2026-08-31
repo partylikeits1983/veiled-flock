@@ -106,10 +106,66 @@ def grindingAbortBound (proofs : ℕ) : ℚ :=
 
 theorem blindAbort_lt_two_pow_neg_186 :
     blindAbortProbability < 1 / (2 : ℚ) ^ 186 := by
-  native_decide
+  let slack : ℚ := 3151 / 3200
+  have hblock : (63 / 64 : ℚ) ^ 45 < slack / 2 := by
+    norm_num [slack]
+  have hpow : (((63 / 64 : ℚ) ^ 45) ^ 182) <
+      ((slack / 2) ^ 182) :=
+    pow_lt_pow_left₀ hblock (by positivity) (by norm_num)
+  have hslackBlock : slack ^ 30 < (101 / 160 : ℚ) := by
+    norm_num [slack]
+  have hslackPow : (slack ^ 30) ^ 6 < (101 / 160 : ℚ) ^ 6 :=
+    pow_lt_pow_left₀ hslackBlock (by positivity) (by norm_num)
+  have hslack : slack ^ 182 * (63 / 64 : ℚ) ^ 2 < 1 / 16 := by
+    rw [show 182 = 30 * 6 + 2 by norm_num, pow_add, pow_mul]
+    calc
+      ((slack ^ 30) ^ 6 * slack ^ 2) * (63 / 64 : ℚ) ^ 2 <
+          (((101 / 160 : ℚ) ^ 6 * slack ^ 2) *
+            (63 / 64 : ℚ) ^ 2) :=
+        mul_lt_mul_of_pos_right
+          (mul_lt_mul_of_pos_right hslackPow (by positivity)) (by positivity)
+      _ < 1 / 16 := by norm_num [slack]
+  unfold blindAbortProbability maxBlindTrials
+  rw [show 8192 = 45 * 182 + 2 by norm_num, pow_add, pow_mul]
+  calc
+    ((63 / 64 : ℚ) ^ 45) ^ 182 * (63 / 64 : ℚ) ^ 2 <
+        (slack / 2) ^ 182 * (63 / 64 : ℚ) ^ 2 :=
+      mul_lt_mul_of_pos_right hpow (by positivity)
+    _ = (1 / 2 : ℚ) ^ 182 *
+        (slack ^ 182 * (63 / 64 : ℚ) ^ 2) := by ring
+    _ < (1 / 2 : ℚ) ^ 182 * (1 / 16) :=
+      mul_lt_mul_of_pos_left hslack (by positivity)
+    _ = 1 / (2 : ℚ) ^ 186 := by norm_num [div_pow]
 
 theorem ligeritoAbort_lt_two_pow_neg_187 :
     ligeritoAbortProbability < 1 / (2 : ℚ) ^ 187 := by
-  native_decide
+  let slack : ℚ := 255 / 256
+  have hblock : (31 / 32 : ℚ) ^ 22 < slack / 2 := by
+    norm_num [slack]
+  have hpow : (((31 / 32 : ℚ) ^ 22) ^ 186) <
+      ((slack / 2) ^ 186) :=
+    pow_lt_pow_left₀ hblock (by positivity) (by norm_num)
+  have hslackBlock : slack ^ 31 < (8 / 9 : ℚ) := by
+    norm_num [slack]
+  have hslackPow : (slack ^ 31) ^ 6 < (8 / 9 : ℚ) ^ 6 :=
+    pow_lt_pow_left₀ hslackBlock (by positivity) (by norm_num)
+  have hslack : slack ^ 186 * (31 / 32 : ℚ) ^ 4 < 1 / 2 := by
+    rw [show 186 = 31 * 6 by norm_num, pow_mul]
+    calc
+      (slack ^ 31) ^ 6 * (31 / 32 : ℚ) ^ 4 <
+          (8 / 9 : ℚ) ^ 6 * (31 / 32 : ℚ) ^ 4 :=
+        mul_lt_mul_of_pos_right hslackPow (by positivity)
+      _ < 1 / 2 := by norm_num
+  unfold ligeritoAbortProbability maxLigeritoTrials
+  rw [show 4096 = 22 * 186 + 4 by norm_num, pow_add, pow_mul]
+  calc
+    ((31 / 32 : ℚ) ^ 22) ^ 186 * (31 / 32 : ℚ) ^ 4 <
+        (slack / 2) ^ 186 * (31 / 32 : ℚ) ^ 4 :=
+      mul_lt_mul_of_pos_right hpow (by positivity)
+    _ = (1 / 2 : ℚ) ^ 186 *
+        (slack ^ 186 * (31 / 32 : ℚ) ^ 4) := by ring
+    _ < (1 / 2 : ℚ) ^ 186 * (1 / 2) :=
+      mul_lt_mul_of_pos_left hslack (by positivity)
+    _ = 1 / (2 : ℚ) ^ 187 := by norm_num [div_pow]
 
 end VeiledFlock.Grinding
