@@ -4,7 +4,7 @@ import VeiledFlock.Production.Sampling.SamplingScheduleWholeZerocheck
 # Whole-prefix semantics of the production sampling schedule
 
 Small opaque bridge lemmas compose the already-proved per-stage semantics
-without expanding the 131112-coordinate schedule during kernel checking.
+without expanding the complete production schedule during kernel checking.
 -/
 
 namespace VeiledFlock.ProductionSamplingScheduleWhole
