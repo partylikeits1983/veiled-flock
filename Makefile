@@ -35,4 +35,4 @@ smoke-test:
 	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_public_only_simulator_is_accepted -- --exact
 
 formal-proof:
-	LAKE="$(LAKE)" scripts/formal-proof.sh
+	LAKE="$(LAKE)" $(CARGO) run --locked --release -p formal-proof -- verify

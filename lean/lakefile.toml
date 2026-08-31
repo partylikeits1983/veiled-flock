@@ -1,12 +1,13 @@
 name = "flockzk"
 version = "0.1.0"
 keywords = ["math"]
-defaultTargets = ["Flockzk"]
+defaultTargets = ["Flockzk", "VeiledFlock"]
 
 [leanOptions]
 pp.unicode.fun = true # pretty-prints `fun a ↦ b`
 relaxedAutoImplicit = false
 maxSynthPendingDepth = 3
+warningAsError = true
 
 [[require]]
 name = "mathlib"
@@ -15,3 +16,6 @@ rev = "v4.32.1"
 
 [[lean_lib]]
 name = "Flockzk"
+
+[[lean_lib]]
+name = "VeiledFlock"

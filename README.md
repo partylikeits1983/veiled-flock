@@ -1,7 +1,8 @@
 # zk-FLOCK
 
 VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for batched
-64-byte BLAKE3 preimage statements.
+64-byte BLAKE3 preimage statements, with a Lean proof of statistical zero
+knowledge for its formal production protocol model.
 
 The prover shows knowledge of one 64-byte BLAKE3 preimage for each public
 digest in an ordered batch:
@@ -14,16 +15,17 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 
 ## Security status
 
-The implementation contains the full-ZK Rust path, canonical proof bundle/CLI,
-and witness-free simulator. It targets statistical zero knowledge in the
-finite classical programmable-random-oracle model. The Lean theorem for the
-formal protocol model is maintained separately from this Rust implementation.
+The Lean development proves that the formal production protocol model is
+statistically zero knowledge: every valid statement and witness has a real
+adaptive adversary view within `< 2^-126` statistical distance of a
+witness-free simulated view. The main endpoint is
+`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126`.
 
-This is not an independent audit, a mechanized Rust-to-Lean correspondence
-proof, concrete SHA-256-as-random-oracle security, quantum random-oracle
-security, argument-of-knowledge extraction, or side-channel privacy. See
-[SECURITY.md](docs/SECURITY.md) for the exact boundary and operational
-caveats.
+The Rust implementation is kept aligned with that model, but the repository
+does not yet contain a mechanized Rust-to-Lean correspondence proof for every
+executable path. This is also not an independent audit, a concrete
+SHA-256-as-random-oracle theorem, a QROM theorem, an argument-of-knowledge
+theorem, or a side-channel audit. See [SECURITY.md](docs/SECURITY.md).
 
 ## Supported Surface
 
@@ -61,14 +63,17 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
 `scripts/zk-certify.sh` runs the executable Rust certificate suite and
 random-oracle surface checks.
 
-To build and audit the Lean formalization:
+### Lean formal proof
+
+A cold Lake/Mathlib build can take 30 minutes or more. Incremental builds are
+usually much faster.
 
 ```sh
 make formal-proof
 ```
 
-This downloads the pinned Mathlib cache, builds the `Flockzk` Lean proof
-library with a progress bar, and audits its theorems for non-standard axioms.
+This downloads the pinned Mathlib cache, builds all Lean proof libraries with
+a progress bar, and audits the main theorem chain for non-standard axioms.
 
 ## Documentation
 

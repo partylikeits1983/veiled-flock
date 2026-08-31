@@ -1,14 +1,13 @@
 # Security target and scope
 
-VEIL-FLOCK targets a zero-knowledge succinct argument for the pinned 64-byte
-BLAKE3-preimage relation in the classical programmable random-oracle model
-(pROM). The repository contains an executable witness-free simulator, algebraic
-translation tests, and concrete security ledgers. This Rust implementation
-does not include the separate Lean theorem for the formal production protocol
-model, an independent audit, or a full mechanized correspondence proof from
-every Rust code path to that model. Treat the implementation as a
-candidate construction, not as an audited zero-knowledge system, and do not use
-it to protect production secrets.
+VEIL-FLOCK contains a formally proved statistical-privacy model intended for
+the pinned 64-byte BLAKE3-preimage protocol in the classical programmable
+random-oracle model (pROM), together with a corresponding Rust implementation.
+The Lean relation is a privacy super-relation: it checks the padded public
+projection but leaves BLAKE3/R1CS satisfaction and the computation of public
+constants to the Rust refinement boundary. The repository does not yet contain
+a mechanized correspondence proof from executable Rust to that model. The
+implementation is unaudited; do not use it to protect production secrets.
 
 ## Target properties
 
@@ -16,7 +15,7 @@ it to protect production secrets.
 |---|---|
 | Relation | Ordered batch of 1-4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
 | Completeness | Honest proofs verify |
-| Zero knowledge | Targeted for adaptive classical pROM; formal theorem tracked separately |
+| Zero knowledge | Proved for the finite Lean production model with distance `< 2^-126`; Rust correspondence not proved |
 | Algebraic privacy | Perfect, conditioned on the public statement and accepted challenge history |
 | Noninteractive privacy loss | Random-oracle prequery, collision, nonce-collision, and bounded-grinding events |
 | Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Secure Ligerito |
@@ -26,21 +25,32 @@ it to protect production secrets.
 | Concrete SHA-256 theorem | Not claimed; SHA-256 instantiates the modeled oracle |
 
 Short batches are padded to a registered power-of-two shape before any
-Fiat--Shamir challenge. The Rust checks bind that padding rule; a later
-Lean/Rust correspondence proof should connect the padding adapter to the
-exact-shape formal theorem.
+Fiat--Shamir challenge. The Lean statement model now carries the unpadded
+digest list, the public constant padding digest, and the 32-byte transcript
+binding used by Rust, so the formal privacy theorem covers the same padded
+public fiber. A later Lean/Rust correspondence proof must still show that Rust
+computes those public constants and packed coordinates as modeled.
 
-## Target zero-knowledge argument
+## Lean formal theorem
 
-The intended formal statement is that every valid public statement and witness
-satisfying the pinned relation has a real adversary view within `2^-126`
-statistical distance of a witness-free simulated view. The adversary is
-classical and adaptive, all coins are finite, and the oracle is the modeled
-programmable random oracle. The companion efficiency claim is that the
-simulator is bounded by an explicit algebraic/pROM machine-cost model.
+`VeiledFlock.ProductionFormalZK.veil_flock_statistical_zk_126` proves that
+every statement and witness satisfying the formal padded-public-projection
+relation has a real adaptive adversary view within `2^-126` statistical
+distance of a witness-free simulated view in the finite classical pROM model.
+Because the formal relation is a super-relation, this conclusion restricts to
+the intended Rust BLAKE3 relation once the missing Rust-to-Lean refinement
+obligations are established.
 
-For `P` proofs, `J` programmed points per proof, and the implementation cap
-`Q_P` on protocol oracle calls per proof, the executable conservative bound is
+The companion theorem
+`VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime`
+certifies the witness-free simulator under a declared algebraic/pROM cost
+accounting. The Lean `CostedAlgorithm` pairs the semantic function with that
+cost; it does not derive the cost from evaluation semantics or certify Rust
+runtime. These are theorems about the Lean model, not a mechanized proof that
+every Rust execution matches it.
+
+For `P` proofs, `J` programmed points per proof, and the declared budget `Q_P`
+on protocol oracle calls per proof, the conservative accounting bound is
 
 ```text
 P*J*Q_H/2^256
@@ -55,18 +65,18 @@ inputs, oracle collisions, collisions in any of the four nonce domains (one
 Fiat--Shamir proof nonce plus three initial-tree nonces), and failure of the
 bounded outer or Ligerito grinds. `ClassicalPromZkBound` computes this sum.
 
-The target argument requires fresh independent proof nonces, witness-code padding,
+The proved model requires fresh independent proof nonces, witness-code padding,
 masking rows, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts
 for every proof. The API creates a fresh commitment for each proof; commitment
 reuse is not an exposed operation. The public prover and simulator draw every
 coin directly from the OS random source; caller-selected deterministic seeds
 are not accepted by the public full-ZK API.
 
-## Algebraic privacy obligations
+## Algebraic privacy chain
 
-The production code enforces the following runtime checks. A separate formal
-model and Rust-to-model correspondence proof must discharge the privacy chain
-for every production code path:
+The Lean model discharges the following privacy chain, while the production
+code enforces matching runtime checks. A mechanized Rust-to-model
+correspondence proof remains future work:
 
 1. The outer blinded additive-RS encoder is linear, restricts to ordinary
    FLOCK when its padding is zero, and has a query budget no larger than its
@@ -74,15 +84,14 @@ for every production code path:
 2. The structural RS argument says every opened initial coordinate projection
    has full padding rank. Repeated
    query positions are canonicalized and count once.
-3. The nonzero VEIL fold coefficient is intended to make the folded Ligerito
-   input uniform. Algebraic translation tests jointly cover the fold, initial
-   opened columns, and public direct functionals.
+3. The nonzero VEIL fold coefficient makes the folded Ligerito input uniform in
+   the formal model. Rust algebraic translation tests jointly cover the fold,
+   initial opened columns, and public direct functionals.
 4. At the 256-slot floor, the 242 FLOCK transcript coordinates and 512 ring
    coordinates consume 754 independent field one-time pads. Each circuit-size
    doubling adds two sumcheck coordinates and two independent pads, reaching
-   762 pads at 4096 slots. Proving and verification check the exact mask cursor
-   and circuit inventory; the generic Lean one-time-pad lemma remains to be
-   connected to this layout.
+   762 pads at 4096 slots. The Lean `MaskLayout` and `ExactMaskTape` modules and
+   the Rust prover/verifier all check this exact cursor and circuit inventory.
 5. The exact F2-linear ring-switch matrix is checked against production field
    multiplication on all 128 basis vectors.
 6. The live nonlinear multiplication is proved by VEIL Hadamard. Operand and
@@ -92,8 +101,9 @@ for every production code path:
    is fixed before batching challenges, claims are canonical, and the union of
    distinct initial queries stays within the padding budget.
 8. After the uniform-fold boundary, recursive Ligerito is ordinary
-   witness-independent post-processing. No recursive-round-specific privacy
-   assumption is needed.
+   witness-independent post-processing. Recursive openings use the canonical
+   unsalted Merkle domain; only the initial witness-dependent L0 opening carries
+   leaf salts. No recursive-round-specific privacy assumption is needed.
 
 The simulator samples honest-distribution challenges first, constructs the
 masked FLOCK transcript algebraically, and programs the exact SHA-256 squeeze
@@ -102,6 +112,15 @@ post-processing whose distribution is intended to be independent of the
 original witness. It never invokes an honest nonlinear prover on an
 unsatisfied assignment.
 
+The formal Fiat--Shamir trace is literal through the statement/prelude,
+zerocheck, and outer/VEIL sampling suffix. After the uniform-fold boundary it
+is a privacy-ledger projection: it retains the positive Ligerito fold-grind
+sites and their bounded-failure probability, but does not serialize every
+intervening Ligerito root, sumcheck message, ordinary challenge, or zero-bit
+grind. Those omitted operations are witness-independent post-processing in the
+privacy argument. Consequently, `FormalVeilFlockProof.finalTranscript` is a
+projected ledger transcript, not the byte-for-byte final Rust transcript.
+
 ## Merkle and transcript hashing
 
 All random-oracle inputs have injective typed framing. Leaf and internal-node
@@ -109,16 +128,42 @@ domains are disjoint. Each witness-dependent initial leaf contains a fresh
 256-bit salt. The outer witness, VEIL linear, and VEIL Hadamard trees each use
 an independently sampled 256-bit tree nonce and a distinct channel. All three
 tree nonces are transcript-bound before the first PIOP challenge. Recursive
-Ligerito trees are generated after the uniform-fold boundary.
+Ligerito trees are generated after the uniform-fold boundary and are verified
+only in the unsalted domain; the verifier rejects non-empty recursive salts and
+noncanonical recursive proof-vector lengths.
 
-Fiat--Shamir sampling matches production block semantics: two `F128` values
+Fiat--Shamir sampling in the modeled prefix and sampling suffix matches
+production block semantics: two `F128` values
 share one 256-bit output where applicable, unused halves remain uniform, and
 nonzero or not-zero-or-one challenges use exact rejection sampling. Outer
-blinding grinding uses the canonical first-success nonce and accepts only the
-first 8192 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
-the ledger conservatively reserves sixteen grind sites. At most three levels of
-a registered full-ZK shape carry a positive fold grind, and such a shape emits
-at most twelve fold-grind nonces.
+blinding grinding in the formal experiment uses the canonical first-success
+nonce and fails after 8192 attempts. Each modeled positive Ligerito fold grind
+fails after 4096 attempts; the ledger conservatively reserves sixteen grind
+sites. At most three levels of a registered full-ZK shape carry a positive fold
+grind, and such a shape emits at most twelve positive fold-grind nonces. In slot
+order, the exact 256/512/1024/2048/4096 schedules are `6×1`,
+`6×2 + 3×1`, `6×3 + 3×2`, `6×4 + 3×3 + 3×1`, and
+`6×5 + 3×4 + 3×2` bits; the corresponding preblinded L0 grinds use
+2/3/4/5/6 bits.
+
+The Rust prover and simulator currently check returned grind nonces against
+these caps, but their underlying search and rejection loops are not themselves
+bounded. The executable must enforce both the per-loop caps and the cumulative
+oracle-call budget during execution before those quantities can be treated as
+deterministic implementation bounds.
+
+Lean also pins the complete embedded Secure-profile ladders, not only their
+L0 hiding budgets.  Each tuple below is
+`(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`;
+query-phase grinding, tapering, and OOD sampling are zero throughout.
+
+| Slots | Rust profile | Levels | Final `yr_log_n` |
+|---:|---|---|---:|
+| 256 | `m23_secure.toml` | `(1,10,6,294,1); (2,7,3,182,0); (4,4,3,137,0)` | 4 |
+| 512 | `m24_secure.toml` | `(1,11,6,292,2); (2,8,3,180,1); (3,5,3,151,0)` | 5 |
+| 1024 | `m25_secure.toml` | `(1,12,6,291,3); (2,9,3,179,2); (3,6,3,148,0); (5,3,3,131,0)` | 3 |
+| 2048 | `m26_secure.toml` | `(1,13,6,290,4); (2,10,3,178,3); (3,7,3,147,1); (4,4,3,137,0)` | 4 |
+| 4096 | `m27_secure.toml` | `(1,14,6,290,5); (2,11,3,178,4); (3,8,3,146,2); (4,5,3,134,0)` | 5 |
 
 The Secure profile is in the unique-decoding regime, where the fold-challenge
 grind is flat: every fold round of a level grinds the full
