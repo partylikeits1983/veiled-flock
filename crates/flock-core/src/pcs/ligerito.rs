@@ -1609,7 +1609,9 @@ pub struct RecursiveProof {
     /// emitted in **sorted** query-position order so they align with the
     /// merkle multi-proof.
     pub opened_rows: Vec<Vec<F128>>,
-    /// Present only for the initial witness-dependent ZK commitment.
+    /// Present only for openings of the initial witness-dependent ZK
+    /// commitment. Recursive levels use the unsalted commitment domain and
+    /// verifiers reject non-empty salts there.
     pub leaf_salts: Vec<[u8; 32]>,
     /// Single octopus multi-proof shared across all queries at this level.
     pub merkle_proof: Vec<Hash>,
@@ -3891,6 +3893,9 @@ where
     if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
         return false;
     }
+    if !proof_has_expected_recursive_shape(proof, r) || !recursive_proof_salts_are_empty(proof) {
+        return false;
+    }
     if &proof.initial_root != expected_initial_root {
         return false;
     }
@@ -4022,6 +4027,11 @@ where
         t_sample_q += _t.elapsed();
     }
     let alpha_0 = challenger.sample_f128_vec(ceil_log2(num_queries_0));
+    let l0_salt_domain = if zk_l0.is_some() {
+        LevelOpenSaltDomain::Salted
+    } else {
+        LevelOpenSaltDomain::Unsalted
+    };
     if zk_l0.is_some() && proof.initial_proof.leaf_salts.len() != queries_0.len() {
         return false;
     }
@@ -4037,6 +4047,7 @@ where
         &proof.initial_proof.leaf_salts,
         num_interleaved_0 * l0_lane_mult,
         &proof.initial_proof.merkle_proof,
+        l0_salt_domain,
         ro_context,
         0,
     ) {
@@ -4196,6 +4207,7 @@ where
                 &[],
                 prev_num_interleaved,
                 &proof.final_proof.merkle_proof,
+                LevelOpenSaltDomain::Unsalted,
                 ro_context,
                 (i + 1) as u8,
             ) {
@@ -4407,6 +4419,7 @@ where
             &rp.leaf_salts,
             prev_num_interleaved,
             &rp.merkle_proof,
+            LevelOpenSaltDomain::Unsalted,
             ro_context,
             (i + 1) as u8,
         ) {
@@ -4472,6 +4485,9 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     let r = config.recursive_steps;
 
     if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
+        return false;
+    }
+    if !proof_has_expected_recursive_shape(proof, r) || !all_proof_salts_are_empty(proof) {
         return false;
     }
     if b_initial.len() != 1usize << log_n {
@@ -5232,6 +5248,12 @@ fn verify_salted_level_opens_with_ro(
     )
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LevelOpenSaltDomain {
+    Unsalted,
+    Salted,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn verify_level_opens_maybe_ro(
     root: &Hash,
@@ -5241,45 +5263,71 @@ fn verify_level_opens_maybe_ro(
     leaf_salts: &[[u8; 32]],
     expected_num_interleaved: usize,
     multi_proof: &[Hash],
+    salt_domain: LevelOpenSaltDomain,
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     tree_depth: u8,
 ) -> bool {
-    match ro_context {
-        Some((ro, channel)) if leaf_salts.is_empty() => verify_level_opens_with_ro(
-            root,
-            block_len,
-            queries,
-            opened_rows,
-            expected_num_interleaved,
-            multi_proof,
-            ro,
-            channel,
-            tree_depth,
-        ),
-        Some((ro, channel)) => verify_salted_level_opens_with_ro(
-            root,
-            block_len,
-            queries,
-            opened_rows,
-            leaf_salts,
-            expected_num_interleaved,
-            multi_proof,
-            ro,
-            channel,
-            tree_depth,
-        ),
-        None => {
-            leaf_salts.is_empty()
-                && verify_level_opens(
+    match salt_domain {
+        LevelOpenSaltDomain::Unsalted => {
+            if !leaf_salts.is_empty() {
+                return false;
+            }
+            match ro_context {
+                Some((ro, channel)) => verify_level_opens_with_ro(
                     root,
                     block_len,
                     queries,
                     opened_rows,
                     expected_num_interleaved,
                     multi_proof,
-                )
+                    ro,
+                    channel,
+                    tree_depth,
+                ),
+                None => verify_level_opens(
+                    root,
+                    block_len,
+                    queries,
+                    opened_rows,
+                    expected_num_interleaved,
+                    multi_proof,
+                ),
+            }
         }
+        LevelOpenSaltDomain::Salted => match ro_context {
+            Some((ro, channel)) => verify_salted_level_opens_with_ro(
+                root,
+                block_len,
+                queries,
+                opened_rows,
+                leaf_salts,
+                expected_num_interleaved,
+                multi_proof,
+                ro,
+                channel,
+                tree_depth,
+            ),
+            None => false,
+        },
     }
+}
+
+fn recursive_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
+    proof
+        .recursive_proofs
+        .iter()
+        .all(|rp| rp.leaf_salts.is_empty())
+}
+
+fn all_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
+    proof.initial_proof.leaf_salts.is_empty() && recursive_proof_salts_are_empty(proof)
+}
+
+fn proof_has_expected_recursive_shape(proof: &LigeritoProof, r: usize) -> bool {
+    let Some(expected_recursive_proofs) = r.checked_sub(1) else {
+        return false;
+    };
+    proof.recursive_roots.len() == r && proof.recursive_proofs.len() == expected_recursive_proofs
 }
 
 /// Verifier counterpart to [`recursive_prover`]. Supports arbitrary `R ≥ 1`.
@@ -5301,6 +5349,9 @@ pub fn recursive_verifier<Ch: Challenger>(
     if config.ood_samples.iter().any(|&s| s != 0)
         || config.fold_grinding_bits.iter().any(|&b| b != 0)
     {
+        return false;
+    }
+    if !proof_has_expected_recursive_shape(proof, r) || !all_proof_salts_are_empty(proof) {
         return false;
     }
 
@@ -7288,6 +7339,153 @@ mod tests {
             &mut v_ch2,
         );
         assert!(succ_ok, "succinct verifier must accept");
+    }
+
+    #[test]
+    fn verify_level_opens_maybe_ro_keeps_leaf_salts_domain_explicit() {
+        let ro = crate::ro::RoContext::plain();
+        let channel = crate::ro::RoChannel::Witness;
+        let tree_depth = 3;
+        let block_len = 4;
+        let expected_num_interleaved = 2;
+
+        let rows: Vec<Vec<F128>> = (0..block_len)
+            .map(|i| vec![F128::new(i as u64 + 1, 0), F128::new(0x100 + i as u64, 0)])
+            .collect();
+        let all_rows: Vec<F128> = rows.iter().flat_map(|row| row.iter().copied()).collect();
+        let all_row_bytes: &[u8] = unsafe {
+            core::slice::from_raw_parts(
+                all_rows.as_ptr() as *const u8,
+                all_rows.len() * core::mem::size_of::<F128>(),
+            )
+        };
+        let salts: Vec<[u8; 32]> = (0..block_len).map(|i| [0x30 + i as u8; 32]).collect();
+        let tree = merkle::merkle_tree_framed_salted(
+            all_row_bytes,
+            block_len,
+            &salts,
+            &ro,
+            channel,
+            tree_depth,
+        );
+        let root = tree[tree.len() - 1];
+
+        let queries = vec![0usize, 3usize];
+        let opened_rows: Vec<Vec<F128>> = queries.iter().map(|&q| rows[q].clone()).collect();
+        let opened_salts: Vec<[u8; 32]> = queries.iter().map(|&q| salts[q]).collect();
+        let proof = merkle_multi_proof_for(&tree, block_len, &queries);
+
+        assert!(
+            verify_level_opens_maybe_ro(
+                &root,
+                block_len,
+                &queries,
+                &opened_rows,
+                &opened_salts,
+                expected_num_interleaved,
+                &proof,
+                LevelOpenSaltDomain::Salted,
+                Some((&ro, channel)),
+                tree_depth,
+            ),
+            "salted openings remain valid for the explicit salted L0 domain"
+        );
+        assert!(
+            !verify_level_opens_maybe_ro(
+                &root,
+                block_len,
+                &queries,
+                &opened_rows,
+                &opened_salts,
+                expected_num_interleaved,
+                &proof,
+                LevelOpenSaltDomain::Unsalted,
+                Some((&ro, channel)),
+                tree_depth,
+            ),
+            "recursive/unsalted domains must not switch to salted verification"
+        );
+    }
+
+    #[test]
+    fn recursive_verifiers_reject_recursive_leaf_salts() {
+        let log_n = 12;
+        let initial_k = 3;
+        let ks = [2usize, 2usize];
+        let log_inv_rates = vec![1usize; ks.len() + 1];
+        let queries = vec![20usize; ks.len() + 1];
+
+        let mut rng = crate::challenger::RandomChallenger::new(0x5A17_D04A);
+        let poly: Vec<F128> = (0..(1usize << log_n)).map(|_| rng.sample_f128()).collect();
+        let z: Vec<F128> = (0..log_n).map(|_| rng.sample_f128()).collect();
+        let b = build_eq_table(&z);
+        let target: F128 = poly
+            .iter()
+            .zip(b.iter())
+            .map(|(&a, &c)| a * c)
+            .fold(F128::ZERO, |a, x| a + x);
+
+        let recursive_log_msg_cols =
+            vec![log_n - initial_k - ks[0], log_n - initial_k - ks[0] - ks[1]];
+        let cfg = ProverConfig {
+            log_inv_rates: log_inv_rates.clone(),
+            recursive_steps: ks.len(),
+            initial_log_msg_cols: log_n - initial_k,
+            initial_log_num_interleaved: initial_k,
+            initial_k,
+            recursive_log_msg_cols: recursive_log_msg_cols.clone(),
+            recursive_ks: ks.to_vec(),
+            queries: queries.clone(),
+            grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_taper: vec![false; log_inv_rates.len()],
+            ood_samples: vec![0; log_inv_rates.len()],
+        };
+        let v_cfg = VerifierConfig {
+            log_inv_rates: log_inv_rates.clone(),
+            recursive_steps: ks.len(),
+            initial_log_msg_cols: log_n - initial_k,
+            initial_log_num_interleaved: initial_k,
+            initial_k,
+            recursive_log_msg_cols,
+            recursive_ks: ks.to_vec(),
+            queries,
+            grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_taper: vec![false; log_inv_rates.len()],
+            ood_samples: vec![0; log_inv_rates.len()],
+        };
+
+        let log_msg_cols_0 = log_n - initial_k;
+        let ntt_0 = AdditiveNttF128::standard(log_msg_cols_0 + log_inv_rates[0]);
+        let wtns_0 = ligero_commit(&poly, log_msg_cols_0, initial_k, log_inv_rates[0], &ntt_0);
+        let initial_root = wtns_0.root();
+
+        let mut p_ch = crate::challenger::FsChallenger::new(b"recursive-salts");
+        let proof = recursive_prover_with_basis(
+            &cfg,
+            poly.clone(),
+            b.clone(),
+            target,
+            &wtns_0.mat,
+            &wtns_0.tree,
+            &mut p_ch,
+        );
+        assert_eq!(proof.recursive_proofs.len(), 1);
+
+        let dense_accepts = |proof: &LigeritoProof| {
+            let mut ch = crate::challenger::FsChallenger::new(b"recursive-salts");
+            recursive_verifier_with_basis(&v_cfg, proof, &b, target, &initial_root, &mut ch)
+        };
+        assert!(dense_accepts(&proof), "honest proof must verify");
+
+        let mut salted = proof;
+        salted.recursive_proofs[0].leaf_salts =
+            vec![[0xA5; 32]; salted.recursive_proofs[0].opened_rows.len()];
+        assert!(
+            !dense_accepts(&salted),
+            "recursive proof salts are non-canonical and must be rejected"
+        );
     }
 
     /// Build matching test configs with explicit OOD samples and fold grinding.
