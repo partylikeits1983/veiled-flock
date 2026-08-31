@@ -59,15 +59,20 @@ theorem grindAbortProbability_eq (bits trials : ℕ) :
   rw [abortProbability_eq, card_failedPrefixes]
   simp
 
-/-- Constants enforced by `succinct_veil.rs`. -/
-def maxBlindBits : ℕ := 5
-def maxBlindTrials : ℕ := 4096
-def maxLigeritoBits : ℕ := 4
+/-- Constants enforced by `succinct_veil.rs`.  The 4096-slot shape derives a
+six-bit L0 blinding grind and permits 8192 attempts. -/
+def maxBlindBits : ℕ := 6
+def maxBlindTrials : ℕ := 8192
+/-- Largest live Secure-profile fold grind.  Secure configurations use the
+unique-decoding regime, so every fold round uses this level's full width. -/
+def maxLigeritoBits : ℕ := 5
 def maxLigeritoTrials : ℕ := 4096
+/-- Conservative reservation of one site per positive-grind fold round, not
+one site per recursive level.  Registered shapes currently emit at most 12. -/
 def maxLigeritoSites : ℕ := 16
 
-def blindAbortProbability : ℚ := (31 / 32 : ℚ) ^ maxBlindTrials
-def ligeritoAbortProbability : ℚ := (15 / 16 : ℚ) ^ maxLigeritoTrials
+def blindAbortProbability : ℚ := (63 / 64 : ℚ) ^ maxBlindTrials
+def ligeritoAbortProbability : ℚ := (31 / 32 : ℚ) ^ maxLigeritoTrials
 
 theorem blindAbortProbability_eq :
     ((abortRuns (failedPrefixes maxBlindBits) maxBlindTrials).card : ℚ) /
@@ -76,9 +81,9 @@ theorem blindAbortProbability_eq :
       blindAbortProbability := by
   rw [grindAbortProbability_eq]
   change
-    (((((2 ^ 5 - 1 : ℕ) : ℚ) / (2 ^ 5 : ℕ)) ^ 4096)) =
-      (31 / 32 : ℚ) ^ 4096
-  congr 1 <;> norm_num
+    (((((2 ^ 6 - 1 : ℕ) : ℚ) / (2 ^ 6 : ℕ)) ^ 8192)) =
+      (63 / 64 : ℚ) ^ 8192
+  congr 1
 
 theorem ligeritoAbortProbability_eq :
     ((abortRuns (failedPrefixes maxLigeritoBits) maxLigeritoTrials).card : ℚ) /
@@ -87,9 +92,9 @@ theorem ligeritoAbortProbability_eq :
       ligeritoAbortProbability := by
   rw [grindAbortProbability_eq]
   change
-    (((((2 ^ 4 - 1 : ℕ) : ℚ) / (2 ^ 4 : ℕ)) ^ 4096)) =
-      (15 / 16 : ℚ) ^ 4096
-  congr 1 <;> norm_num
+    (((((2 ^ 5 - 1 : ℕ) : ℚ) / (2 ^ 5 : ℕ)) ^ 4096)) =
+      (31 / 32 : ℚ) ^ 4096
+  congr 1
 
 /-- Per-proof union bound charged by the executable security ledger. -/
 def perProofAbortBound : ℚ :=
@@ -99,12 +104,12 @@ def perProofAbortBound : ℚ :=
 def grindingAbortBound (proofs : ℕ) : ℚ :=
   proofs * perProofAbortBound
 
-theorem blindAbort_lt_two_pow_neg_187 :
-    blindAbortProbability < 1 / (2 : ℚ) ^ 187 := by
+theorem blindAbort_lt_two_pow_neg_186 :
+    blindAbortProbability < 1 / (2 : ℚ) ^ 186 := by
   native_decide
 
-theorem ligeritoAbort_lt_two_pow_neg_381 :
-    ligeritoAbortProbability < 1 / (2 : ℚ) ^ 381 := by
+theorem ligeritoAbort_lt_two_pow_neg_187 :
+    ligeritoAbortProbability < 1 / (2 : ℚ) ^ 187 := by
   native_decide
 
 end VeiledFlock.Grinding
