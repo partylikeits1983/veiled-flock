@@ -274,7 +274,7 @@ noncomputable def equalityAttemptsEquiv (trials : ℕ)
     Fin trials → (Fin maxEqualityPointOuterCoordinates → GhashField) :=
   (equalityAttemptsSplitEquiv trials runs).1
 
-/-- Exact equality-point abort set on the six counter blocks per attempt. -/
+/-- Exact equality-point abort set on the seven counter blocks per attempt. -/
 noncomputable def equalityBlockAbortRuns (trials : ℕ) :
     Finset (Fin trials → (Fin 7 → OracleBlock)) :=
   liftBad (equalityAttemptsSplitEquiv trials)
