@@ -47,6 +47,8 @@ noncomputable def coinEquiv {sites : ℕ}
       (rightSchedule (stateEquiv coins)) (hleft coins) (hright coins))).trans
     (Equiv.prodCongr stateEquiv (Equiv.refl _))
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_state {sites : ℕ}
     (stateEquiv : StateCoins ≃ StateCoins)
     (fixedPoints : StateCoins → Prior → Point)
@@ -75,6 +77,8 @@ theorem coinEquiv_state {sites : ℕ}
   change stateEquiv (fiber coins).1 = stateEquiv coins.1
   rw [hstate]
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_oracle {sites : ℕ}
     (stateEquiv : StateCoins ≃ StateCoins)
     (fixedPoints : StateCoins → Prior → Point)
@@ -104,6 +108,8 @@ theorem coinEquiv_oracle {sites : ℕ}
       (hleft stateCoins) (hright stateCoins)) coins
   exact congrArg Prod.fst hsplit
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_fixedAnswers {sites : ℕ}
     (stateEquiv : StateCoins ≃ StateCoins)
     (fixedPoints : StateCoins → Prior → Point)
@@ -131,6 +137,8 @@ theorem coinEquiv_fixedAnswers {sites : ℕ}
     (rightSchedule (stateEquiv coins.1)) (hleft coins.1) (hright coins.1)
     coins.2 prior
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_protocolAnswers {sites : ℕ}
     (stateEquiv : StateCoins ≃ StateCoins)
     (fixedPoints : StateCoins → Prior → Point)
@@ -168,6 +176,7 @@ noncomputable def machine {sites : ℕ}
     (fun prior => coins.2 (fixedPoints coins.1 prior))
     (run (schedule coins.1) coins.2 sites)
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
 /-- Pointwise equality of the complete algebraic, adversary-prefix, and
 protocol-answer view. -/
 theorem machine_transport {sites : ℕ}

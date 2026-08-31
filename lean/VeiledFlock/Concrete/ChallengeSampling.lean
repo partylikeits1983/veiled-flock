@@ -47,9 +47,9 @@ theorem notZeroOrOneAbortProbability_eq (trials : ℕ) :
 
 def rejectionTrials : ℕ := 4096
 
-/-- Largest sampled equality-point suffix among the four registered shapes:
-`25 - K_SKIP(6) - N_INNER(7) = 12`. -/
-def maxEqualityPointOuterCoordinates : ℕ := 12
+/-- Largest sampled equality-point suffix among the five registered shapes:
+`26 - K_SKIP(6) - N_INNER(7) = 13`. -/
+def maxEqualityPointOuterCoordinates : ℕ := 13
 
 /-- One whole-vector equality-point attempt fails if at least one outer
 coordinate equals the exceptional value one. -/

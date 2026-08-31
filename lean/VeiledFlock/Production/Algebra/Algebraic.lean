@@ -42,6 +42,7 @@ def emptyFlockSecret :
     History (F := F) (I := K) rounds → Rest → W → Fin 0 → F :=
   fun _ _ _ impossible => Fin.elim0 impossible
 
+omit [Fintype K] in
 /-- Exact witness independence for the production algebraic randomness
 inventory.  There is one causal transcript-mask tape, followed by VEIL
 padding, queried-code padding, and the PCS blinder. -/

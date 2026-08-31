@@ -143,7 +143,7 @@ noncomputable def replaceTreeOracle (oracle : List Byte → OracleBlock)
     leafLength depth hdepth leftSalts leftPayload
   let hright := productionLeafPoint_index_injective channel treeDepth treeNonce
     leafLength depth hdepth rightSalts rightPayload
-  let hcross := fun left right equality =>
+  let hcross := fun _left _right equality =>
     productionLeafPoint_cross_index channel treeDepth treeNonce leafLength
       depth hdepth leftSalts rightSalts leftPayload rightPayload equality
   PairedOracleReplacement.renameOracle leftPoint rightPoint hleft hright hcross

@@ -54,6 +54,7 @@ def closeSecret {sites : ℕ} (available : ℕ → ℕ)
     secret witness round history
       (fun site ↦ answers (Fin.castLE (havail round) site))
 
+omit [AddCommGroup F] in
 theorem closeSecret_eq_of_prefix {sites round : ℕ}
     (available : ℕ → ℕ) (havail : ∀ n, available n ≤ sites)
     (secret : CausalSecret (F := F) (I := I) (W := W)

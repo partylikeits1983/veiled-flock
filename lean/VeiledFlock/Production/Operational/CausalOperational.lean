@@ -158,6 +158,7 @@ noncomputable def productionAnswerEquiv
     hpositions (closedSecret shape causalSecret) challenge hchallenge
     baseMessage publicPositions weights context left right answers
 
+omit [Fintype Rest] [DecidableEq Rest] [Nonempty Rest] in
 /-- Projecting the complete production view equality onto its adaptive mask
 history gives the exact full transcript equality consumed by the causal byte
 transport. -/
@@ -226,6 +227,7 @@ theorem coinTranscript_productionAnswerEquiv
   have hhistory := congrArg (fun view ↦ view.2.1) hview
   exact congrArg (fun history site ↦ history site ()) hhistory.symm
 
+omit [DecidableEq Rest] in
 /-- Exact honest-to-Rust-shaped simulator identity with the literal mask
 cursor and causal challenger schedule.  The sole remaining transcript premise
 is equality of the absorbed prefix before the two round-one slices; every

@@ -234,7 +234,7 @@ theorem rawQuery_ligerito_pow_origin
       (BitVec.ofNat 64 (within - 1)) := by
     simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState, hblindGrind,
       hblind, halpha, houterChallenge, houterPositions, hlinearPositions,
-      hlinearRho, hhadamardPositions, hhadamardRho, hproduct, offset, within,
+      hlinearRho, hhadamardPositions, hhadamardRho, hproduct,
       hwithin, hpowState'] at hquery
     exact hquery.2.symm
   let origin : ProductionPowOrigin :=

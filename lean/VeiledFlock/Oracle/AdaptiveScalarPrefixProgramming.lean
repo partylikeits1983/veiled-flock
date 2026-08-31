@@ -86,6 +86,7 @@ noncomputable def scalarProgrammedOracle (sites : ℕ)
   simulatedOracle schedule hinjective
     ⟨(answerCoinEquiv sites coins.1).1, coins.2⟩
 
+omit [Fintype Point] in
 /-- The reached programmed block has the simulator-selected low scalar. -/
 theorem scalarProgrammedOracle_decodes (sites : ℕ)
     (schedule : Schedule (Point := Point) (Outcome := OracleBlock))
@@ -101,6 +102,7 @@ theorem scalarProgrammedOracle_decodes (sites : ℕ)
   rw [scalarProgrammedOracle, simulatedOracle_at]
   exact programmedBlock_decodes sites coins.1 site
 
+omit [Fintype Point] in
 /-- The reached programmed block preserves the high half of the original
 site block supplied in the scalar simulator coins. -/
 theorem scalarProgrammedOracle_preservesHighHalf (sites : ℕ)

@@ -37,12 +37,14 @@ noncomputable def splitOracle {sites : ℕ}
         (Equiv.ofInjective points hinjective)).symm
       (Equiv.refl _))
 
+omit [Fintype Point] in
 theorem splitOracle_programmed {sites : ℕ}
     (points : Fin sites → Point) (hinjective : Injective points)
     (oracle : Oracle (Point := Point) (Outcome := Outcome)) (site : Fin sites) :
     (splitOracle points hinjective oracle).1 site = oracle (points site) := by
   simp [splitOracle]
 
+omit [Fintype Point] in
 theorem splitOracle_unprogrammed {sites : ℕ}
     (points : Fin sites → Point) (hinjective : Injective points)
     (oracle : Oracle (Point := Point) (Outcome := Outcome)) (point : Unprogrammed points) :
@@ -59,6 +61,7 @@ noncomputable def program {sites : ℕ}
   (splitOracle points hinjective).symm
     (answers, (splitOracle points hinjective oracle).2)
 
+omit [Fintype Point] in
 theorem program_at {sites : ℕ}
     (points : Fin sites → Point) (hinjective : Injective points)
     (oracle : Oracle (Point := Point) (Outcome := Outcome))
@@ -70,6 +73,7 @@ theorem program_at {sites : ℕ}
     ((splitOracle points hinjective).apply_symm_apply
       (answers, (splitOracle points hinjective oracle).2))
 
+omit [Fintype Point] in
 theorem program_off {sites : ℕ}
     (points : Fin sites → Point) (hinjective : Injective points)
     (oracle : Oracle (Point := Point) (Outcome := Outcome))
@@ -85,6 +89,7 @@ theorem program_off {sites : ℕ}
     ((splitOracle points hinjective).apply_symm_apply
       (answers, (splitOracle points hinjective oracle).2))
 
+omit [Fintype Point] in
 /-- Programming with the answers already present in the table is the
 identity. -/
 theorem program_existing {sites : ℕ}
@@ -137,6 +142,7 @@ noncomputable def pointRename {Index : Type*} [Finite Index]
     (Equiv.ofInjective left hleft).symm.trans (Equiv.ofInjective right hright)
   exact Equiv.extendSubtype rangeEquiv
 
+omit [DecidableEq Point] in
 @[simp]
 theorem pointRename_apply {Index : Type*} [Finite Index]
     (left right : Index → Point)
@@ -193,6 +199,7 @@ noncomputable def renameOracle {Index : Type*} [Finite Index]
     funext point
     simp
 
+omit [DecidableEq Point] in
 @[simp]
 theorem renameOracle_at {Index : Type*} [Finite Index]
     (left right : Index → Point)
@@ -257,6 +264,8 @@ noncomputable def fiberwiseRenameOracle {Index : Type*} [Finite Index]
     (fun rest => renameOracle (left rest) (right rest)
       (hleft rest) (hright rest))
 
+omit [Nonempty Outcome] [Nonempty Rest] in
+omit [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Fintype Rest] [DecidableEq Rest] in
 theorem fiberwiseRenameOracle_rest {Index : Type*} [Finite Index]
     (left right : Rest → Index → Point)
     (hleft : ∀ rest, Injective (left rest))
@@ -269,6 +278,9 @@ theorem fiberwiseRenameOracle_rest {Index : Type*} [Finite Index]
       (hleft rest) (hright rest)) coins
   exact congrArg Prod.snd hsplit
 
+omit [Nonempty Outcome] [Nonempty Rest] in
+omit [Fintype Outcome] [DecidableEq Outcome] [Fintype Rest] [DecidableEq Rest] in
+omit [DecidableEq Point] in
 theorem fiberwiseRenameOracle_at {Index : Type*} [Finite Index]
     (left right : Rest → Index → Point)
     (hleft : ∀ rest, Injective (left rest))
@@ -289,6 +301,7 @@ theorem fiberwiseRenameOracle_at {Index : Type*} [Finite Index]
   exact renameOracle_at (left coins.1) (right coins.1)
     (hleft coins.1) (hright coins.1) coins.2 site
 
+omit [DecidableEq Outcome] [DecidableEq Rest] in
 /-- Exact replacement for point families depending on an arbitrary fixed
 public-state fiber.  This form can carry salted-leaf assignments and a
 canonicalized prior-query list together. -/

@@ -60,6 +60,7 @@ def MaskedRound.underlying (round : MaskedRound (F := F)) :
   gOne := recover round.maskedOne round.privateOne
   gInfinity := recover round.maskedInfinity round.privateInfinity
 
+omit [CharP F 2] in
 @[simp]
 theorem maskRound_parameters (round : ExecutedRound (F := F))
     (masks : F × F) :
@@ -80,6 +81,7 @@ def maskRounds : (rounds : List (ExecutedRound (F := F))) →
       maskRound round (masks 0) ::
         maskRounds rounds (fun index => masks index.succ)
 
+omit [CharP F 2] in
 @[simp]
 theorem maskRounds_length (rounds : List (ExecutedRound (F := F)))
     (masks : Fin rounds.length → F × F) :
@@ -90,6 +92,7 @@ theorem maskRounds_length (rounds : List (ExecutedRound (F := F)))
       simp only [maskRounds, List.length_cons]
       rw [ih]
 
+omit [CharP F 2] in
 @[simp]
 theorem maskRounds_parameters (rounds : List (ExecutedRound (F := F)))
     (masks : Fin rounds.length → F × F) :

@@ -38,6 +38,7 @@ variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Fintype Point] [DecidableEq Point]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [Fintype K] [DecidableEq K] [Fintype I] [DecidableEq I] [DecidableEq Pad] [Fintype Opened] [DecidableEq Opened] [DecidableEq Rest] in
 theorem simulator_exact
     (shape : BatchShape)
     (secret : Rest → Secret (F := GhashField) (I := K)
@@ -112,6 +113,7 @@ theorem simulator_exact
     hpadding functionals statement hpublicKernel layerSpec hspecStatement
     left right hpublic coins
 
+omit [Fintype K] [DecidableEq K] [Fintype I] [DecidableEq I] [DecidableEq Pad] [Fintype Opened] [DecidableEq Opened] [DecidableEq Rest] in
 /-- Byte-level specialization using the injective production query framing. -/
 theorem encoded_simulator_exact
     (shape : BatchShape)

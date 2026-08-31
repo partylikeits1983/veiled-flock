@@ -26,6 +26,7 @@ variable [Finite Prior]
 variable [Fintype Point] [DecidableEq Point]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Finite Prior] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Pairwise distinctness of the right-hand schedule, phrased at a fixed
 translated algebraic coin.  The inverse image may depend on the candidate
 answer vector; this is why the premise is indexed by both objects. -/
@@ -64,6 +65,7 @@ noncomputable def oracleEquiv {sites : ℕ}
     (right_injective_at answerEquiv fixedPoints rightSchedule hright
       (answerEquiv answers coins))
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem oracleEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (fixedPoints : Prior → Point)
@@ -86,6 +88,7 @@ theorem oracleEquiv_answers {sites : ℕ}
     (right_injective_at answerEquiv fixedPoints rightSchedule hright
       (answerEquiv answers coins)) oracle
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem oracleEquiv_protected {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (fixedPoints : Prior → Point)
@@ -202,6 +205,7 @@ noncomputable def coinEquiv {sites : ℕ}
           hright coins answers).symm oracle by rfl]
     simp
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (fixedPoints : Prior → Point)
@@ -230,6 +234,7 @@ theorem coinEquiv_answers {sites : ℕ}
   exact oracleEquiv_answers answerEquiv fixedPoints leftSchedule rightSchedule
     hleft hright input.1 (run (leftSchedule input.1) input.2 sites) input.2
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_protected {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (fixedPoints : Prior → Point)

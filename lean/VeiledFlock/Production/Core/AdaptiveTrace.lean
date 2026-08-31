@@ -35,6 +35,7 @@ variable [Fintype Point] [DecidableEq Point]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 variable {rounds : ℕ}
 
+omit [DecidableEq K] [DecidableEq J] [DecidableEq Rest] in
 /-- Exact public-input simulator for the full injective causal oracle trace.
 The schedule arguments are where the concrete implementation enumerates
 salted leaves, internal nodes, grinding, Fiat--Shamir squeezes, and all other

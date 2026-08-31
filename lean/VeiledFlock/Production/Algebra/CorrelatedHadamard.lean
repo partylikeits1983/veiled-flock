@@ -107,7 +107,7 @@ theorem actualDefect_restricts_to_zero
     multiplicationRestriction (actualDefect message padding) = 0 := by
   apply multiplicationRestriction_defect_eq_zero
   intro index
-  simp only [actualDefect, operandTriple]
+  simp only [ operandTriple]
   rw [operandPolynomial_eval_logical, operandPolynomial_eval_logical,
     operandPolynomial_eval_logical]
   exact hvalid index

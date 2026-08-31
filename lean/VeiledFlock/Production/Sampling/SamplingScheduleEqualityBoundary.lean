@@ -88,7 +88,7 @@ theorem rawControlUntil_equality_boundary_live_none
     (attempt : ℕ)
     (hbound : attempt ≤ firstEqualityAccepted shape answers hgood) :
     let result := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6)
+      prelude answers (equalityOffset + attempt * 7)
         (equalityBoundary_fits attempt
           (hbound.trans (firstEqualityAccepted_lt shape answers hgood).le))
     result.status = .live ∧
@@ -114,7 +114,7 @@ theorem rawControlUntil_equality_boundary_live_none
       have hlocal := equalityAttempt_live_none_of_rejected_before_cap shape
         attempt
         (rawControlUntil shape causalSecret completion witness coins prelude
-          answers (equalityOffset + attempt * 6)
+          answers (equalityOffset + attempt * 7)
             (equalityBoundary_fits attempt hattempt.le))
         (equalityAttemptAnswers answers ⟨attempt, hattempt⟩)
         hbefore.1 hbefore.2.1 hrejected (by

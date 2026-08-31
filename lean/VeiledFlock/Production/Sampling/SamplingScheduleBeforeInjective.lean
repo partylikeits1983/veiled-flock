@@ -116,7 +116,7 @@ theorem rawQuery_before_zerocheck_injective
     let rightAttempt := rightOffset / equalityAttemptBlocks
     let rightCounter := rightOffset % equalityAttemptBlocks
     have hrightRound :
-        right.val = equalityOffset + rightAttempt * 6 + rightCounter :=
+        right.val = equalityOffset + rightAttempt * 7 + rightCounter :=
       hrightMeta.1
     have hrightBound :
         rightAttempt ≤ firstEqualityAccepted shape answers hgood :=
@@ -131,7 +131,7 @@ theorem rawQuery_before_zerocheck_injective
         (rawControlUntil shape causalSecret completion witness coins prelude
           answers right right.isLt.le).transcript =
         (rawControlUntil shape causalSecret completion witness coins prelude
-          answers (equalityOffset + rightAttempt * 6)
+          answers (equalityOffset + rightAttempt * 7)
             (equalityBoundary_fits rightAttempt hrightCap)).transcript := by
       simpa only [← hrightRound] using hrightActive.2.2
     have hzeroStrict := rawControlUntil_equality_zero_transcript_strict shape
@@ -139,7 +139,7 @@ theorem rawQuery_before_zerocheck_injective
     have hboundaryMono :=
       VeiledFlock.ProductionSamplingScheduleFreshness.rawControlUntil_transcript_length_mono
         shape causalSecret completion witness coins prelude answers equalityOffset
-        (equalityOffset + rightAttempt * 6) (by omega)
+        (equalityOffset + rightAttempt * 7) (by omega)
         (equalityBoundary_fits rightAttempt hrightCap)
     rw [hleftControl.2] at hleftLength
     rw [hrightTranscript] at hrightLength
@@ -162,9 +162,9 @@ theorem rawQuery_before_zerocheck_injective
   let rightAttempt := rightOffset / equalityAttemptBlocks
   let rightCounter := rightOffset % equalityAttemptBlocks
   have hleftRound :
-      left.val = equalityOffset + leftAttempt * 6 + leftCounter := hleftMeta.1
+      left.val = equalityOffset + leftAttempt * 7 + leftCounter := hleftMeta.1
   have hrightRound :
-      right.val = equalityOffset + rightAttempt * 6 + rightCounter :=
+      right.val = equalityOffset + rightAttempt * 7 + rightCounter :=
     hrightMeta.1
   have hleftBound :
       leftAttempt ≤ firstEqualityAccepted shape answers hgood := hleftMeta.2.1
@@ -185,22 +185,22 @@ theorem rawQuery_before_zerocheck_injective
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers left left.isLt.le).transcript =
       (rawControlUntil shape causalSecret completion witness coins prelude
-        answers (equalityOffset + leftAttempt * 6)
+        answers (equalityOffset + leftAttempt * 7)
           (equalityBoundary_fits leftAttempt hleftCap)).transcript := by
     simpa only [← hleftRound] using hleftActive.2.2
   have hrightTranscript :
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers right right.isLt.le).transcript =
       (rawControlUntil shape causalSecret completion witness coins prelude
-        answers (equalityOffset + rightAttempt * 6)
+        answers (equalityOffset + rightAttempt * 7)
           (equalityBoundary_fits rightAttempt hrightCap)).transcript := by
     simpa only [← hrightRound] using hrightActive.2.2
   have hattemptOrder : leftAttempt ≤ rightAttempt := by
-    have hleftMod : leftCounter < 6 := by
+    have hleftMod : leftCounter < 7 := by
       dsimp only [leftCounter, leftOffset]
       norm_num [equalityAttemptBlocks]
       exact Nat.mod_lt _ (by decide)
-    have hrightMod : rightCounter < 6 := by
+    have hrightMod : rightCounter < 7 := by
       dsimp only [rightCounter, rightOffset]
       norm_num [equalityAttemptBlocks]
       exact Nat.mod_lt _ (by decide)

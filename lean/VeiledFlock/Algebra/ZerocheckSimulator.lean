@@ -123,6 +123,7 @@ theorem exists_solved_messages (running target rEq rho random : F)
   · exact ⟨solveOne running target rEq rho random, random,
       foldRound_solveOne running target rEq rho random h⟩
 
+omit [CharP F 2] in
 /-- A `(rho,rEq) = (0,0)` recursive round is an identity independently of
 both prover messages.  This is why the Rust simulator may leave an arbitrary
 suffix of such rounds after the last solved round. -/
@@ -149,11 +150,13 @@ def zeroMessages (parameters : List (F × F)) :
   parameters.map fun parameter =>
     { rEq := parameter.1, rho := parameter.2, gOne := 0, gInfinity := 0 }
 
+omit [CharP F 2] in
 @[simp]
 theorem zeroMessages_parameters (parameters : List (F × F)) :
     (zeroMessages parameters).map ExecutedRound.parameters = parameters := by
   simp [zeroMessages, ExecutedRound.parameters, Function.comp_def]
 
+omit [CharP F 2] in
 /-- Any all-identity suffix preserves the claim. -/
 theorem executeRounds_zeroMessages_of_identity (running : F)
     (parameters : List (F × F))

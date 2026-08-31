@@ -217,6 +217,7 @@ section Distribution
 variable [Fintype F] [DecidableEq F] [Fintype I]
 variable [Fintype (I → F)]
 
+omit [Fintype F] [DecidableEq F] [Fintype I] in
 /-- Perfect adaptive transcript privacy. -/
 theorem transcript_witness_independent
     (secret : Secret (F := F) (I := I) (W := W))
@@ -230,6 +231,7 @@ theorem transcript_witness_independent
   intro masks
   exact (run_witnessCoinEquiv secret left right rounds masks).symm
 
+omit [Fintype F] [DecidableEq F] [Fintype I] in
 /-- External state is carried through unchanged.  In particular, `Rest` may
 contain the entire random-oracle table and adversary coins, and `secret` may
 depend on it.  The resulting arbitrary full view remains witness independent. -/
@@ -253,8 +255,7 @@ theorem fullView_witness_independent
     (fun rest => witnessCoinEquiv (secret rest) left right rounds)
   apply VeiledFlock.Probability.uniform_map_eq_of_equiv equiv
   intro coins
-  simp only [equiv, split, VeiledFlock.Probability.fiberwiseEquiv_split_apply,
-    Equiv.refl_apply]
+  simp only [equiv, split]
   exact congrArg (continueWith coins.2)
     (run_witnessCoinEquiv (secret coins.2) left right rounds coins.1).symm
 

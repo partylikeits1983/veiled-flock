@@ -28,7 +28,7 @@ variable {K Direct PublicCoord W Rest : Type*}
 variable {rounds : ℕ}
 variable [Fintype PublicCoord]
 
-abbrev Public (shape : BatchShape) := PublicCoord → GhashField
+abbrev Public (_shape : BatchShape) := PublicCoord → GhashField
 
 /-- One accepted, nondegenerate production VEIL compiler context selected by
 the already-visible transcript and auxiliary tape. -/

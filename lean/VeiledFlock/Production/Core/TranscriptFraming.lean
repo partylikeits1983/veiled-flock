@@ -96,7 +96,7 @@ theorem observeScalarSlice_length {length : ℕ}
     (values : Fin length → GhashField) :
     (observeScalarSlice values).length = 10 + 16 * length := by
   simp [observeScalarSlice, fieldBytes, List.length_flatMap,
-    List.sum_ofFn, Fin.sum_const]
+    List.sum_ofFn]
   omega
 
 @[simp]

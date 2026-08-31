@@ -245,6 +245,7 @@ noncomputable def completeAdversaryHistory
           (baseMessage shape) (publicPositions shape) weights context witness
           tape.1 tape.2.1 trace)) tape.2.2 pre tape.2.1
 
+omit [Fintype AdversaryCoins] in
 theorem completeAdversaryHistory_length_le
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -335,6 +336,7 @@ noncomputable def completeMerklePointSet
     causalSecret completion weights context adversary statement witness tape).map
       (fun call => unboundBytes call.1)).toFinset
 
+omit [Fintype AdversaryCoins] in
 theorem completeMerklePointSet_card_le
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -413,6 +415,7 @@ noncomputable def dummyPostMerkleSaltAssignments
       causalSecret completion weights context adversary statement witness
       tape)).map (productionHiddenSaltsFinEquiv shape).symm.toEmbedding
 
+omit [Fintype AdversaryCoins] in
 theorem dummyPostMerkleSaltAssignments_probability_le
     [Nonempty AdversaryCoins]
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
@@ -553,6 +556,7 @@ theorem dummyPostMerkleExpandedSet_probability_le
       fallback r1csDigest causalSecret completion weights context adversary
       statement witness)
 
+omit [Fintype AdversaryCoins] in
 theorem mem_dummyPostMerkleSaltAssignments_iff
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -622,6 +626,7 @@ theorem mem_dummyPostMerkleSaltAssignments_iff
     simpa only [enumeratedHiddenLeafFramedPoint,
       Equiv.symm_apply_apply] using hpoint
 
+omit [Fintype AdversaryCoins] in
 theorem completeAdversaryHistory_eq_twoPhase_of_trace
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -789,6 +794,7 @@ noncomputable def dummyTransportPoint
       trace.tail.rest witness houter hlinear hhadamard)
     (expandedHiddenSaltSwap shape AdversaryCoins input.1)
 
+omit [Fintype AdversaryCoins] in
 theorem honestTransportPoint_framed
     (shape : BatchShape) (maxStartLength : ℕ)
     (causalSecret : ProductionCausalSecret (W := Witness shape) shape)
@@ -841,6 +847,7 @@ theorem honestTransportPoint_framed
           witness input.1.2.1) witness input.1.2.1 index, ?_⟩
       rfl
 
+omit [Fintype AdversaryCoins] in
 theorem dummyTransportPoint_framed
     (shape : BatchShape) (maxStartLength : ℕ)
     (causalSecret : ProductionCausalSecret (W := Witness shape) shape)
@@ -896,6 +903,7 @@ theorem dummyTransportPoint_framed
           witness coins) witness coins index, ?_⟩
       rfl
 
+omit [Fintype AdversaryCoins] in
 theorem postMerkleTransport_dummyPoint_eq_honestPoint
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -1002,6 +1010,7 @@ theorem dummyTransportHit_implies_mem_expandedSet
   rw [hpoint, hframed]
   rfl
 
+omit [Fintype AdversaryCoins] in
 theorem postMerkleTransport_dummy_of_trace
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -1045,6 +1054,7 @@ theorem postMerkleTransport_dummy_of_trace
       hhadamard hnodes input trace htrace]
   rfl
 
+omit [Fintype AdversaryCoins] in
 theorem postMerkleTransport_rest_of_trace
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -1090,6 +1100,7 @@ theorem postMerkleTransport_rest_of_trace
       hhadamard hnodes input trace htrace]
   constructor <;> rfl
 
+omit [Fintype AdversaryCoins] in
 theorem postMerkleTransport_saltIndependentCoins_of_trace
     (shape : BatchShape) (maxStartLength : ℕ) (fallback : OracleBlock)
     (r1csDigest : List Byte)
@@ -1351,7 +1362,7 @@ theorem badPostMerkle_implies_dummy_union
     (productionPreHistory adversary statement input.1.2.2 input.2) input.2
   simp only [PostMerkleFresh, AvoidsProductionMerkleTransport, couplingInput,
     adversaryRandomness, originalTape] at hnotFresh
-  push_neg at hnotFresh
+  push Not at hnotFresh
   rcases hnotFresh with ⟨call, hcall, hfailure⟩
   have hcases :
       (∃ index, unboundBytes call.1 = familyLeafPoint
@@ -1375,7 +1386,7 @@ theorem badPostMerkle_implies_dummy_union
           trace.answers trace.tail.rest witness) input.1.2.1 index
     · exact Or.inr (hfailure hleftSafe)
     · left
-      push_neg at hleftSafe
+      push Not at hleftSafe
       exact hleftSafe
   rcases hcases with hleft | hright
   · have hcompleteHit : QueryHistoryHits

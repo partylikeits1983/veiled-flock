@@ -23,6 +23,7 @@ def firstGood (bad : Finset A) {trials : ℕ}
     (run : Fin trials → A) : Option A :=
   firstGoodList bad (List.ofFn run)
 
+omit [Fintype A] in
 theorem firstGoodList_eq_some_not_mem (bad : Finset A)
     {values : List A} {value : A}
     (houtput : firstGoodList bad values = some value) : value ∉ bad := by
@@ -35,6 +36,7 @@ theorem firstGoodList_eq_some_not_mem (bad : Finset A)
       · simp only [firstGoodList, hhead, if_false, Option.some.injEq] at houtput
         simpa [houtput] using hhead
 
+omit [Fintype A] in
 /-- Every successful bounded rejection-sampling output satisfies the stated
 acceptance predicate. -/
 theorem firstGood_eq_some_not_mem (bad : Finset A) {trials : ℕ}
@@ -46,6 +48,7 @@ def mapRunEquiv {trials : ℕ} (equiv : A ≃ A) :
     (Fin trials → A) ≃ (Fin trials → A) :=
   Equiv.piCongrRight fun _ => equiv
 
+omit [Fintype A] in
 theorem firstGoodList_map (bad : Finset A) (equiv : A ≃ A)
     (hpreserve : ∀ value, value ∈ bad ↔ equiv value ∈ bad)
     (values : List A) :
@@ -62,6 +65,7 @@ theorem firstGoodList_map (bad : Finset A) (equiv : A ≃ A)
         rw [if_neg hmapped, if_neg hvalue]
         rfl
 
+omit [Fintype A] in
 theorem firstGood_mapRunEquiv (bad : Finset A) {trials : ℕ}
     (equiv : A ≃ A)
     (hpreserve : ∀ value, value ∈ bad ↔ equiv value ∈ bad)

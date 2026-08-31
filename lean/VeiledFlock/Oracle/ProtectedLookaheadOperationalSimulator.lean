@@ -74,6 +74,8 @@ noncomputable def programmedOracle (sites : ℕ) (fixedPoints : Prior → Point)
   (splitTable family (hright input.1 input.2.1)).symm
     (Sum.elim input.2.2.1 input.2.1, input.2.2.2)
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem programmedOracle_fixed (sites : ℕ) (fixedPoints : Prior → Point)
     (rightSchedule : AlgCoins → History (Outcome := Outcome) sites →
@@ -97,6 +99,8 @@ theorem programmedOracle_fixed (sites : ℕ) (fixedPoints : Prior → Point)
   rw [(splitTable family (hright input.1 input.2.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem programmedOracle_trace (sites : ℕ) (fixedPoints : Prior → Point)
     (rightSchedule : AlgCoins → History (Outcome := Outcome) sites →
@@ -121,6 +125,8 @@ theorem programmedOracle_trace (sites : ℕ) (fixedPoints : Prior → Point)
   rw [(splitTable family (hright input.1 input.2.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
+omit [Fintype Point] [DecidableEq Point] in
 theorem run_left_programmedOracle {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (fixedPoints : Prior → Point)
@@ -325,6 +331,7 @@ noncomputable def programmedMachine (sites : ℕ)
   let oracle := programmedOracle sites fixedPoints rightSchedule hright input
   continueWith (state input.1 input.2.1) input.2.2.1 oracle input.2.1
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Honest execution and the straightline look-ahead simulator have exactly
 equal full-view distributions while retaining the prior adversary view. -/
 theorem simulator_exact {sites : ℕ}

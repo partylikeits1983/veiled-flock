@@ -43,8 +43,8 @@ noncomputable def ringSliceRestriction (shape : BatchShape)
     Masks shape →ₗ[GhashField] Slice where
   toFun values coordinate :=
     values (ProductionMaskLayout.ringIndex shape claim channel coordinate)
-  map_add' left right := rfl
-  map_smul' scalar values := rfl
+  map_add' _left _right := rfl
+  map_smul' _scalar _values := rfl
 
 @[simp] theorem ringSliceRestriction_apply (shape : BatchShape)
     (claim : Claim) (channel : Channel) (values : Masks shape)

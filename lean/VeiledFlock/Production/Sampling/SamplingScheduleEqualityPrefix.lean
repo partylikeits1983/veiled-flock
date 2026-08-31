@@ -21,7 +21,7 @@ theorem equalityStep_before_last_fields
       control answer
     result.status = .live ∧ result.equalityPoint = none ∧
       result.transcript = control.transcript := by
-  have hcount := equalityBlockCount_le_six shape
+  have hcount := equalityBlockCount_le_seven shape
   have hcounterSix : counter < equalityAttemptBlocks := by
     norm_num [equalityAttemptBlocks] at hcount ⊢
     omega
@@ -40,7 +40,7 @@ theorem equalityStep_before_last_fields
   · subst counter
     have hpositive : 0 < equalityBlockCount shape := by omega
     have hnotOne : 1 ≠ equalityBlockCount shape := by omega
-    simp [equalityStep, hoff, hmod, hpositive, hnotOne, hnone, hstatus]
+    simp [equalityStep,   hpositive, hnotOne, hnone, hstatus]
   · simp [equalityStep, hoff, hmod, hactive, hnotLast, hnone, hstatus,
       hzero]
 
@@ -52,7 +52,7 @@ theorem equalityPrefix_control_fields
     (hstatus : control.status = .live)
     (hnone : control.equalityPoint = none) :
     let result := iterateFrom (equalityStep shape)
-      (equalityOffset + attempt * 6) counter control
+      (equalityOffset + attempt * 7) counter control
       answers
     result.status = .live ∧ result.equalityPoint = none ∧
       result.transcript = control.transcript := by

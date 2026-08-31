@@ -118,7 +118,7 @@ theorem rawQuery_scalarStage_active
         · subst trial
           simp
         · simp (disch := omega) only [if_pos, if_neg, hzero, false_or,
-            hdone, Bool.not_false]
+            hdone]
           simp only [if_true]
   | outerChallenge =>
       simp only [scalarStageStart]
@@ -262,7 +262,7 @@ theorem rawControlUntil_scalar_stable_of_done
             answers (scalarStageStart stage + (trial + (remaining + 1))) _ =
             rawControlUntil shape causalSecret completion witness coins prelude
               answers (scalarStageStart stage + ((trial + 1) + remaining)) _ := by
-                congr 1 <;> omega
+                congr 1; omega
         _ = next := htail
         _ = current := hnext
 

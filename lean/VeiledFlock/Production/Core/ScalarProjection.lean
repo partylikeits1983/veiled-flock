@@ -9,8 +9,9 @@ Every scalar squeeze reads the first 16 bytes of a fresh 32-byte random-oracle
 answer as a little-endian GHASH field element.  This module retains the unused
 16 bytes in explicit equivalences.  It thereby transfers the rejection and
 unique-position abort events from their compact field models to the literal
-oracle-block tapes consumed by Rust.  It also proves the six-block layout of a
-12-field equality-point attempt.
+oracle-block tapes consumed by Rust.  It also proves the seven-block layout of
+a maximum-width 13-field equality-point attempt, retaining the reserved
+fourteenth field as explicit unused randomness.
 -/
 
 namespace VeiledFlock.ProductionScalarProjection
@@ -191,23 +192,46 @@ noncomputable def blockFieldsEquiv :
     (encodeGhashFieldEquiv.symm.prodCongr encodeGhashFieldEquiv.symm) |>.trans
     (finTwoArrowEquiv GhashField).symm
 
-/-- Six blocks are exactly the 12 fields emitted by Rust's maximum equality
-suffix squeeze, in counter-major then half-major order. -/
-noncomputable def equalityAttemptEquiv :
-    (Fin 6 → OracleBlock) ≃
-      (Fin maxEqualityPointOuterCoordinates → GhashField) :=
-  (Equiv.piCongrRight fun _ : Fin 6 => blockFieldsEquiv).trans
-    (Equiv.curry (Fin 6) (Fin 2) GhashField).symm |>.trans
+/-- Split the maximum-width equality reservation into its 13 live fields and
+the unused high half of the seventh block. -/
+noncomputable def equalityAttemptSplitEquiv :
+    (Fin 7 → OracleBlock) ≃
+      ((Fin maxEqualityPointOuterCoordinates → GhashField) × GhashField) :=
+  (Equiv.piCongrRight fun _ : Fin 7 => blockFieldsEquiv).trans
+    (Equiv.curry (Fin 7) (Fin 2) GhashField).symm |>.trans
     (Equiv.arrowCongr
-      (finProdFinEquiv (m := 6) (n := 2))
+      (finProdFinEquiv (m := 7) (n := 2))
       (Equiv.refl GhashField)) |>.trans
     (Equiv.arrowCongr
-      (finCongr (by decide : 6 * 2 = maxEqualityPointOuterCoordinates))
-      (Equiv.refl GhashField))
+      (finCongr (by decide : 7 * 2 =
+        maxEqualityPointOuterCoordinates + 1))
+      (Equiv.refl GhashField)) |>.trans
+    ({
+      toFun := fun fields =>
+        (fun index => fields index.castSucc,
+          fields (Fin.last maxEqualityPointOuterCoordinates))
+      invFun := fun pair => Fin.lastCases pair.2 pair.1
+      left_inv := fun fields => by
+        funext index
+        refine Fin.lastCases ?_ (fun prior => ?_) index <;> simp
+      right_inv := fun pair => by
+        apply Prod.ext
+        · funext index
+          simp
+        · rfl
+    } :
+      (Fin (maxEqualityPointOuterCoordinates + 1) → GhashField) ≃
+        ((Fin maxEqualityPointOuterCoordinates → GhashField) × GhashField))
+
+/-- The 13 live equality fields parsed from a seven-block reservation. -/
+noncomputable def equalityAttemptEquiv
+    (blocks : Fin 7 → OracleBlock) :
+    Fin maxEqualityPointOuterCoordinates → GhashField :=
+  (equalityAttemptSplitEquiv blocks).1
 
 @[simp]
 theorem equalityAttemptEquiv_apply
-    (blocks : Fin 6 → OracleBlock)
+    (blocks : Fin 7 → OracleBlock)
     (index : Fin maxEqualityPointOuterCoordinates) :
     equalityAttemptEquiv blocks index =
       blockFieldsEquiv
@@ -218,40 +242,59 @@ theorem equalityAttemptEquiv_apply
         ⟨index.val % 2, Nat.mod_lt _ (by decide)⟩ := by
   rfl
 
-/-- Coordinatewise equality-attempt block layout. -/
-noncomputable def equalityAttemptsEquiv (trials : ℕ) :
-    (Fin trials → (Fin 6 → OracleBlock)) ≃
+/-- Split every equality attempt into its live coordinates and reserved field. -/
+noncomputable def equalityAttemptsSplitEquiv (trials : ℕ) :
+    (Fin trials → (Fin 7 → OracleBlock)) ≃
+      ((Fin trials →
+          (Fin maxEqualityPointOuterCoordinates → GhashField)) ×
+        (Fin trials → GhashField)) :=
+  (Equiv.piCongrRight
+      fun _ : Fin trials => equalityAttemptSplitEquiv).trans
+    ({
+      toFun := fun runs =>
+        (fun trial => (runs trial).1, fun trial => (runs trial).2)
+      invFun := fun runs trial => (runs.1 trial, runs.2 trial)
+      left_inv := fun runs => by
+        funext trial
+        exact Prod.eta (runs trial)
+      right_inv := fun runs => by
+        rcases runs with ⟨fields, reserved⟩
+        rfl
+    } :
       (Fin trials →
-        (Fin maxEqualityPointOuterCoordinates → GhashField)) :=
-  Equiv.piCongrRight fun _ : Fin trials => equalityAttemptEquiv
+          ((Fin maxEqualityPointOuterCoordinates → GhashField) ×
+            GhashField)) ≃
+        ((Fin trials →
+            (Fin maxEqualityPointOuterCoordinates → GhashField)) ×
+          (Fin trials → GhashField)))
+
+/-- Coordinatewise projection to the live equality-attempt fields. -/
+noncomputable def equalityAttemptsEquiv (trials : ℕ)
+    (runs : Fin trials → (Fin 7 → OracleBlock)) :
+    Fin trials → (Fin maxEqualityPointOuterCoordinates → GhashField) :=
+  (equalityAttemptsSplitEquiv trials runs).1
 
 /-- Exact equality-point abort set on the six counter blocks per attempt. -/
 noncomputable def equalityBlockAbortRuns (trials : ℕ) :
-    Finset (Fin trials → (Fin 6 → OracleBlock)) :=
-  Finset.univ.filter fun runs =>
-    equalityAttemptsEquiv trials runs ∈
-      abortRuns equalityPointVectorFailure trials
+    Finset (Fin trials → (Fin 7 → OracleBlock)) :=
+  liftBad (equalityAttemptsSplitEquiv trials)
+    (abortRuns equalityPointVectorFailure trials)
 
 theorem mem_equalityBlockAbortRuns_iff (trials : ℕ)
-    (runs : Fin trials → (Fin 6 → OracleBlock)) :
+    (runs : Fin trials → (Fin 7 → OracleBlock)) :
     runs ∈ equalityBlockAbortRuns trials ↔
       equalityAttemptsEquiv trials runs ∈
         abortRuns equalityPointVectorFailure trials := by
-  simp [equalityBlockAbortRuns]
-
-theorem card_equalityBlockAbortRuns (trials : ℕ) :
-    (equalityBlockAbortRuns trials).card =
-      (abortRuns equalityPointVectorFailure trials).card := by
-  refine Finset.card_equiv (equalityAttemptsEquiv trials) fun runs => ?_
-  simp [equalityBlockAbortRuns]
+  rw [equalityBlockAbortRuns, mem_liftBad_iff]
+  rfl
 
 theorem equalityBlockAbortProbability_le :
     ((equalityBlockAbortRuns rejectionTrials).card : ℚ) /
         Fintype.card
-          (Fin rejectionTrials → (Fin 6 → OracleBlock)) ≤
+          (Fin rejectionTrials → (Fin 7 → OracleBlock)) ≤
       equalityPointAbortBound := by
-  rw [card_equalityBlockAbortRuns]
-  rw [Fintype.card_congr (equalityAttemptsEquiv rejectionTrials)]
+  rw [equalityBlockAbortRuns,
+    liftBad_probability_eq (equalityAttemptsSplitEquiv rejectionTrials)]
   exact equalityPointAbortProbability_le
 
 end VeiledFlock.ProductionScalarProjection

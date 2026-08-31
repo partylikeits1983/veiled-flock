@@ -37,6 +37,7 @@ abbrev AlgCoins :=
 abbrev AlgView :=
   View (F := F) (I := I) (Padding := Padding) (J := J) × Aux
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 /-- Exact classical-pROM simulation of the joint FLOCK masks, VEIL
 multiplication padding, RS query padding, PCS blinder, and every scalar
 challenge programmed by the zerocheck simulator.  The deterministic
@@ -81,7 +82,7 @@ theorem scalarPromSimulator_exact
       fun coins =>
         (simulatedView c functional (functional (message witness)) coins.1,
           coins.2)
-    let algebraicCoinEquiv :
+    let _algebraicCoinEquiv :
         AlgCoins (F := F) (I := I) (Padding := Padding) (J := J) (Aux := Aux) ≃
           AlgCoins (F := F) (I := I) (Padding := Padding) (J := J) (Aux := Aux) :=
       Equiv.prodCongr

@@ -44,7 +44,7 @@ def pointFamily {hidden maxPointLength : ℕ}
   fun site => point rest site (salts site)
 
 def postHistory {hidden maxPointLength queries : ℕ}
-    (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
+    (_point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
     (proof : Rest → SaltTape (Salt := Salt) hidden →
       Oracle maxPointLength → Proof)
     (nextQuery : Rest → Proof → Fin queries →
@@ -96,6 +96,7 @@ noncomputable def postQueryPointSet {hidden maxPointLength queries : ℕ}
       maxPointLength) : Finset (BoundedBytes maxPointLength) :=
   ((postHistory point proof nextQuery coins).map Prod.fst).toFinset
 
+omit [Fintype Salt] [DecidableEq Salt] [Nonempty Salt] [Fintype Rest] [DecidableEq Rest] [Nonempty Rest] in
 theorem postQueryPointSet_card_le {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
     (proof : Rest → SaltTape (Salt := Salt) hidden →
@@ -118,6 +119,7 @@ theorem postQueryPointSet_card_le {hidden maxPointLength queries : ℕ}
         coins.2.2 (List.ofFn id) []
       simpa using hlength
 
+omit [Nonempty Salt] [Fintype Rest] [DecidableEq Rest] [Nonempty Rest] in
 theorem dummyHit_iff_mem_hiddenInputBadAssignments
     {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
@@ -210,6 +212,7 @@ noncomputable def saltOracleSwap {hidden maxPointLength : ℕ}
       (fun _ _ heq => hindexCross rest dummy actual _ _ heq)).left_inv oracle
 
 set_option maxHeartbeats 800000 in
+omit [Fintype Salt] [DecidableEq Salt] [Nonempty Salt] [Fintype Rest] [DecidableEq Rest] [Nonempty Rest] in
 /-- Pointwise identical-until-bad reduction.  A post-proof hit of the real
 hidden family implies that either the original query log hits the independent
 dummy family, or the transported query log hits the now-independent old salt
@@ -349,6 +352,7 @@ noncomputable def swappedDummyHitSet {hidden maxPointLength queries : ℕ}
     saltOracleSwap point hindexCross coins ∈
       dummyHitSet point proof nextQuery
 
+omit [DecidableEq Salt] [Nonempty Salt] [DecidableEq Rest] [Nonempty Rest] in
 theorem mem_postHitSet_iff {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
     (proof : Rest → SaltTape (Salt := Salt) hidden →
@@ -363,6 +367,7 @@ theorem mem_postHitSet_iff {hidden maxPointLength queries : ℕ}
   classical
   simp [postHitSet]
 
+omit [Nonempty Salt] [DecidableEq Rest] [Nonempty Rest] in
 theorem mem_dummyHitSet_iff {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
     (proof : Rest → SaltTape (Salt := Salt) hidden →
@@ -379,6 +384,7 @@ theorem mem_dummyHitSet_iff {hidden maxPointLength queries : ℕ}
   exact (dummyHit_iff_mem_hiddenInputBadAssignments point proof nextQuery
     coins).symm
 
+omit [Nonempty Salt] [Nonempty Rest] in
 theorem mem_liftedPostHitSet_iff {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
     (proof : Rest → SaltTape (Salt := Salt) hidden →
@@ -394,6 +400,7 @@ theorem mem_liftedPostHitSet_iff {hidden maxPointLength queries : ℕ}
   rw [liftedPostHitSet, VeiledFlock.Probability.mem_liftBad_iff]
   exact mem_postHitSet_iff point proof nextQuery coins.2
 
+omit [Nonempty Salt] [DecidableEq Rest] [Nonempty Rest] in
 theorem mem_swappedDummyHitSet_iff {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
     (proof : Rest → SaltTape (Salt := Salt) hidden →
@@ -414,6 +421,7 @@ theorem mem_swappedDummyHitSet_iff {hidden maxPointLength queries : ℕ}
   classical
   simp [swappedDummyHitSet, mem_dummyHitSet_iff]
 
+omit [DecidableEq Rest] in
 /-- Averaging the independent dummy salt over every fixed actual execution
 costs at most `hidden * queries / |Salt|`. -/
 theorem dummyHitSet_probability_le

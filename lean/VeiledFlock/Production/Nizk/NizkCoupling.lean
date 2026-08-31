@@ -2722,7 +2722,7 @@ structure ProductionGood
         (productionPreHistory adversary statement adversaryCoins input.2)
         input.2)
   programmingSucceeds :
-    let moved := productionMerkleCoinOracleEquivAt shape input.1
+    let _moved := productionMerkleCoinOracleEquivAt shape input.1
       causalSecret baseMessage publicPositions weights context witness
       (publicRepresentative statement) trace.answers trace.tail.rest houter
       hlinear hhadamard input

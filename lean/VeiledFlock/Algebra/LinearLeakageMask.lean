@@ -122,6 +122,7 @@ def columnCombination (weights : Column → F) :
     intro column _
     ring
 
+omit [Fintype Row] in
 /-- Column folding commutes with applying the same linear code map to every
 column. -/
 theorem columnCombination_columnwiseEquiv
@@ -140,6 +141,7 @@ theorem columnCombination_columnwiseEquiv
   rw [hsum, map_sum]
   simp
 
+omit [Fintype Row] in
 /-- If the witness change has zero weighted combination at the opened
 coordinates, translating the per-column padding leaves the revealed raw
 padding combination unchanged as well. -/
@@ -154,6 +156,7 @@ theorem columnCombination_inverse_eq_zero
   apply rowMask.injective
   simpa using hcomm.symm
 
+omit [Fintype Row] in
 /-- Production-shaped corollary: independently padded columns, their opened
 coordinates, and the revealed padding RLC are jointly witness independent
 whenever the same RLC of the secret opened columns is public/unchanged. -/

@@ -68,6 +68,8 @@ noncomputable def fullCoinEquiv
       hdisjoint flockSecret veilSecret querySecret message)
     (Equiv.refl Aux)
 
+omit [Fintype Aux] [Nonempty Aux] in
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype J] [Fintype (I → F)] [Fintype (Padding → F)] [Fintype (J → F)] in
 /-- Pointwise equality of the honest and simulated full state machines after
 the explicit algebraic coin reparameterization. -/
 theorem realMachine_transport
@@ -97,6 +99,7 @@ theorem realMachine_transport
     hqueries hdisjoint functional flockSecret veilSecret querySecret message
     witness coins.1
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 /-- Exact full-view distributional simulation through an arbitrary public
 continuation. -/
 theorem fullSimulator_exact

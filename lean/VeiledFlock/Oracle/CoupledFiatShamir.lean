@@ -68,6 +68,7 @@ def coinEquiv {sites : ℕ}
     change (answerEquiv answers coins, oracle) = (translated, oracle)
     rw [htranslated]
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 @[simp]
 theorem coinEquiv_oracle {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -79,6 +80,7 @@ theorem coinEquiv_oracle {sites : ℕ}
     (coinEquiv answerEquiv leftSchedule rightSchedule hschedule input).2 =
       input.2 := rfl
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_state {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (leftSchedule rightSchedule : AlgCoins →
@@ -89,6 +91,7 @@ theorem coinEquiv_state {sites : ℕ}
     (coinEquiv answerEquiv leftSchedule rightSchedule hschedule input).1 =
       answerEquiv (run (leftSchedule input.1) input.2 sites) input.1 := rfl
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (leftSchedule rightSchedule : AlgCoins →
@@ -118,6 +121,7 @@ def machine {sites : ℕ}
   let answers := run (schedule input.1) input.2 sites
   continueWith (state input.1 answers) input.2 answers
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Pointwise equality of the algebraic proof, every Fiat--Shamir answer, and
 the complete oracle table. -/
 theorem machine_transport {sites : ℕ}
@@ -193,6 +197,7 @@ with that proposal.  The following stronger-purpose formulation proves that
 this causal correspondence is sufficient for a joint coin equivalence.
 -/
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- If every translated causal point agrees along the honest proposed answer
 vector, running the translated schedule on the same oracle realizes exactly
 that vector. -/
@@ -243,6 +248,7 @@ theorem run_translated_eq {sites : ℕ}
           rfl
   simpa only [Fin.castLE_refl] using hround sites (le_refl sites)
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- The inverse translated schedule realizes its own proposed answer vector
 as well. -/
 theorem run_recovered_eq {sites : ℕ}
@@ -315,6 +321,7 @@ def traceCoinEquiv {sites : ℕ}
     rw [hrun]
     simp
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 @[simp]
 theorem traceCoinEquiv_oracle {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -327,6 +334,7 @@ theorem traceCoinEquiv_oracle {sites : ℕ}
     (traceCoinEquiv answerEquiv leftSchedule rightSchedule htrace input).2 =
       input.2 := rfl
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem traceCoinEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
     (leftSchedule rightSchedule : AlgCoins →

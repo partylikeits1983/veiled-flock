@@ -129,6 +129,7 @@ theorem oracle_tracePoint_run
   exact (run_castLE next oracle (Nat.succ_le_of_lt site.isLt)
     (Fin.last site)).symm
 
+omit [Fintype Point] [DecidableEq Point] in
 /-- A classical adaptive query transcript depends only on the oracle values at
 the points that the transcript actually reaches.  This is the causal
 noninterference fact needed when a simulator changes an oracle table after an
@@ -164,6 +165,7 @@ theorem run_eq_of_eq_on_trace
           exact congrFun hprevious prior
   exact hprefix rounds (le_refl rounds)
 
+omit [Fintype Point] [DecidableEq Point] in
 /-- Set-valued form of `run_eq_of_eq_on_trace`, convenient for freshness
 ledger events. -/
 theorem run_eq_of_agree_on_traceSet
@@ -203,6 +205,7 @@ noncomputable def simulatedOracle {sites : ℕ}
   (splitOracle (tracePoints next coins.1) (hinjective coins.1)).symm
     (coins.1, coins.2)
 
+omit [Fintype Point] in
 @[simp]
 theorem simulatedOracle_at {sites : ℕ}
     (next : Schedule (Point := Point) (Outcome := Outcome))
@@ -222,6 +225,7 @@ theorem simulatedOracle_at {sites : ℕ}
     (hinjective coins.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype Point] in
 @[simp]
 theorem simulatedOracle_off {sites : ℕ}
     (next : Schedule (Point := Point) (Outcome := Outcome))
@@ -242,6 +246,7 @@ theorem simulatedOracle_off {sites : ℕ}
     (hinjective coins.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype Point] in
 /-- Programming a causal, pairwise-distinct trace forces the whole adaptive
 run to equal the proposed answer vector. -/
 theorem run_simulatedOracle {sites : ℕ}
@@ -300,6 +305,7 @@ noncomputable def retargetSimulatorCoins {sites : ℕ}
         (tracePoints right answers) (hleft answers) (hright answers))
       (Equiv.refl Outcome)
 
+omit [DecidableEq Point] in
 @[simp]
 theorem retargetSimulatorCoins_answers {sites : ℕ}
     (left right : Schedule (Point := Point) (Outcome := Outcome))
@@ -310,6 +316,7 @@ theorem retargetSimulatorCoins_answers {sites : ℕ}
     (coins : SimulatorCoins (sites := sites) left) :
     (retargetSimulatorCoins left right hleft hright coins).1 = coins.1 := rfl
 
+omit [Fintype Point] in
 /-- Operational freshness lemma.  Before programming, an online simulator
 answers prior adversary queries from the off-trace table.  Installing the
 adaptive Fiat--Shamir answers later leaves that complete causal prior
@@ -467,6 +474,7 @@ variable {Rest View : Type*}
 variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [DecidableEq Rest] [DecidableEq Outcome] in
 /-- Retarget a causal oracle schedule separately in every fixed public-state
 fiber. -/
 theorem fiberwiseAdaptiveTraceReplacement_exact {sites : ℕ}
@@ -568,6 +576,7 @@ noncomputable def simulatorCoinsProductEquiv [Nonempty Outcome] {sites : ℕ}
       (Equiv.refl Outcome)).trans
     (Equiv.sigmaEquivProd _ _)
 
+omit [DecidableEq Point] in
 @[simp]
 theorem simulatorCoinsProductEquiv_fst [Nonempty Outcome] {sites : ℕ}
     (next : Schedule (Point := Point) (Outcome := Outcome))

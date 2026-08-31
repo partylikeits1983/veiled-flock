@@ -67,7 +67,7 @@ theorem slicePoint_isFiatShamir {transcript : List Byte}
     intro hempty
     rw [hempty] at hprefix
     simp [isFiatShamirPoint] at hprefix
-  simp [isFiatShamirPoint, slicePoint, hnonempty, hprefix]
+  simp [isFiatShamirPoint, slicePoint, hnonempty]
   simpa [isFiatShamirPoint] using hprefix
 
 theorem sampleSliceNext_isFiatShamir {transcript : List Byte}
@@ -78,7 +78,7 @@ theorem sampleSliceNext_isFiatShamir {transcript : List Byte}
     intro hempty
     rw [hempty] at hprefix
     simp [isFiatShamirPoint] at hprefix
-  simp [isFiatShamirPoint, sampleSliceNext, afterSlice, hnonempty, hprefix]
+  simp [isFiatShamirPoint, sampleSliceNext, afterSlice, hnonempty]
   simpa [isFiatShamirPoint] using hprefix
 
 /-- Every counter query in a vector squeeze is disjoint from every exact
@@ -144,7 +144,7 @@ theorem sampleSlice_pairedOracle_exact
       treeNonce leafLength depth hdepth leftSalts leftPayload
     let hright := productionLeafPoint_index_injective channel treeDepth
       treeNonce leafLength depth hdepth rightSalts rightPayload
-    let hcross := fun left right equality =>
+    let hcross := fun _left _right equality =>
       productionLeafPoint_cross_index channel treeDepth treeNonce leafLength
         depth hdepth leftSalts rightSalts leftPayload rightPayload equality
     sampleSlice
@@ -223,12 +223,12 @@ theorem sampleUntilAccepted_some_length_le
               finalTranscript.length := by
           simpa only using congrArg (fun pair => pair.2.length) hpair
         rw [← hlength, afterSlice_length]
-        simp only [Nat.succ_eq_add_one, Nat.add_mul, one_mul]
+        simp only [ Nat.add_mul, one_mul]
         omega
       · have htail := ih
           (afterSlice transcript (sampleSlice oracle transcript length)) hsome
         rw [afterSlice_length] at htail
-        simp only [Nat.succ_eq_add_one, Nat.add_mul, one_mul]
+        simp only [ Nat.add_mul, one_mul]
         omega
 
 /-- Every successful rejection trace retains its initial transcript as a
@@ -351,7 +351,7 @@ theorem sampleUntilAccepted_pairedOracle_exact
       treeNonce leafLength depth hdepth leftSalts leftPayload
     let hright := productionLeafPoint_index_injective channel treeDepth
       treeNonce leafLength depth hdepth rightSalts rightPayload
-    let hcross := fun left right equality =>
+    let hcross := fun _left _right equality =>
       productionLeafPoint_cross_index channel treeDepth treeNonce leafLength
         depth hdepth leftSalts rightSalts leftPayload rightPayload equality
     sampleUntilAccepted
@@ -401,10 +401,10 @@ theorem sampleUntilAccepted_renameOracle_off_exact
       leftPoint left = rightPoint right → left = right)
     (length trials : ℕ) (transcript : List Byte)
     (hfiat : isFiatShamirPoint transcript)
-    (hoffLeft : ∀ current (hcurrent : isFiatShamirPoint current)
+    (hoffLeft : ∀ current (_hcurrent : isFiatShamirPoint current)
       squeezeLength counter index,
       slicePoint current squeezeLength counter ≠ leftPoint index)
-    (hoffRight : ∀ current (hcurrent : isFiatShamirPoint current)
+    (hoffRight : ∀ current (_hcurrent : isFiatShamirPoint current)
       squeezeLength counter index,
       slicePoint current squeezeLength counter ≠ rightPoint index) :
     sampleUntilAccepted
@@ -576,7 +576,7 @@ theorem sampleEqualityPointPrefix_pairedOracle_exact
       treeNonce leafLength depth hdepth leftSalts leftPayload
     let hright := productionLeafPoint_index_injective channel treeDepth
       treeNonce leafLength depth hdepth rightSalts rightPayload
-    let hcross := fun left right equality =>
+    let hcross := fun _left _right equality =>
       productionLeafPoint_cross_index channel treeDepth treeNonce leafLength
         depth hdepth leftSalts rightSalts leftPayload rightPayload equality
     sampleEqualityPointPrefix
@@ -625,10 +625,10 @@ theorem sampleEqualityPointPrefix_renameOracle_off_exact
       leftPoint left = rightPoint right → left = right)
     (outerLength trials : ℕ) (transcript : List Byte)
     (hfiat : isFiatShamirPoint transcript)
-    (hoffLeft : ∀ current (hcurrent : isFiatShamirPoint current)
+    (hoffLeft : ∀ current (_hcurrent : isFiatShamirPoint current)
       squeezeLength counter index,
       slicePoint current squeezeLength counter ≠ leftPoint index)
-    (hoffRight : ∀ current (hcurrent : isFiatShamirPoint current)
+    (hoffRight : ∀ current (_hcurrent : isFiatShamirPoint current)
       squeezeLength counter index,
       slicePoint current squeezeLength counter ≠ rightPoint index) :
     sampleEqualityPointPrefix

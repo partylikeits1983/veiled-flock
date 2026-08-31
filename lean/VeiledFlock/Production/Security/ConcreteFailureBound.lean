@@ -58,6 +58,39 @@ private theorem binomial_tail_le
       rw [← pow_mul, hsplit, pow_add]
       field_simp
 
+/-- A sharper binomial tail bound for large domains, using
+`domain.choose target ≤ domain ^ target` and a power-of-two domain bound. -/
+private theorem binomial_tail_le_pow
+    (domain target trials rate logDomain remainder : ℕ)
+    (hdomain : domain ≤ 2 ^ logDomain)
+    (hrate : ((target : ℕ) : ℚ) / domain ≤
+      1 / (2 : ℚ) ^ rate)
+    (hsplit : rate * trials = logDomain * target + remainder) :
+    (domain.choose target : ℚ) *
+        (((target : ℕ) : ℚ) / domain) ^ trials ≤
+      1 / (2 : ℚ) ^ remainder := by
+  have hchooseNat : domain.choose target ≤ (2 ^ logDomain) ^ target :=
+    (Nat.choose_le_pow domain target).trans
+      (Nat.pow_le_pow_left hdomain target)
+  have hchoose : (domain.choose target : ℚ) ≤
+      (2 : ℚ) ^ (logDomain * target) := by
+    rw [← pow_mul] at hchooseNat
+    exact_mod_cast hchooseNat
+  have hpow : ((((target : ℕ) : ℚ) / domain) ^ trials) ≤
+      (1 / (2 : ℚ) ^ rate) ^ trials :=
+    pow_le_pow_left₀ (by positivity) hrate trials
+  calc
+    (domain.choose target : ℚ) *
+        (((target : ℕ) : ℚ) / domain) ^ trials ≤
+      (2 : ℚ) ^ (logDomain * target) *
+        (1 / (2 : ℚ) ^ rate) ^ trials :=
+          mul_le_mul hchoose hpow (by positivity) (by positivity)
+    _ = 1 / (2 : ℚ) ^ remainder := by
+      rw [div_pow]
+      norm_num only [one_pow]
+      rw [← pow_mul, hsplit, pow_add]
+      field_simp
+
 theorem blindAbort_lt_two_pow_neg_180_kernel :
     blindAbortProbability < 1 / (2 : ℚ) ^ 180 := by
   have hblock : (31 / 32 : ℚ) ^ 22 < 1 / 2 := by norm_num
@@ -107,7 +140,7 @@ private theorem equality_abort_le_180 :
   unfold equalityPointAbortBound
     VeiledFlock.ChallengeSampling.maxEqualityPointOuterCoordinates
     rejectionTrials
-  apply le_trans (geometric_tail_le (12 / (2 : ℚ) ^ 128) 4096 124
+  apply le_trans (geometric_tail_le (13 / (2 : ℚ) ^ 128) 4096 124
     (124 * 4096) (by positivity) (by norm_num) rfl)
   exact le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 124 * 4096))
 
@@ -164,6 +197,11 @@ private theorem outer_abort_le_180 (shape : BatchShape) :
       exact (binomial_tail_le 16384 290 4096 5 4096
         (by norm_num) (by norm_num)).trans
         (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 4096)))
+  | slots4096 =>
+      change (Nat.choose 32768 289 : ℚ) * (289 / 32768 : ℚ) ^ 4096 ≤ _
+      exact (binomial_tail_le_pow 32768 289 4096 6 15 20241
+        (by norm_num) (by norm_num) (by norm_num)).trans
+        (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 20241)))
 
 private theorem pow_collision_le_180 :
     (powStateCount.choose 2 : ℚ) / Fintype.card OracleBlock ≤
@@ -205,8 +243,8 @@ theorem samplingAbortBound_le_two_pow_neg_170 (shape : BatchShape) :
       rw [hcard]
       norm_num
 
-theorem hiddenLeafCount_le_two_pow_15 (shape : BatchShape) :
-    Fintype.card (ProductionHiddenLeafIndex shape) ≤ 2 ^ 15 := by
+theorem hiddenLeafCount_le_two_pow_16 (shape : BatchShape) :
+    Fintype.card (ProductionHiddenLeafIndex shape) ≤ 2 ^ 16 := by
   cases shape <;> norm_num [ProductionHiddenLeafIndex, m]
 
 set_option maxRecDepth 1000000 in
@@ -217,7 +255,7 @@ theorem operationalFailureBound_lt_two_pow_neg_126
       1 / (2 : ℚ) ^ 126 := by
   have hpre : preQueries ≤ 2 ^ 64 :=
     le_trans (Nat.le_add_right preQueries postQueries) hqueries
-  have hhidden := hiddenLeafCount_le_two_pow_15 shape
+  have hhidden := hiddenLeafCount_le_two_pow_16 shape
   have hpoints := programmedPoints_le_max shape
   have hpoints32 : programmedPoints shape ≤ 2 ^ 5 :=
     hpoints.trans (by norm_num [maxProgrammedPoints])

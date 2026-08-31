@@ -27,7 +27,7 @@ theorem rawControlUntil_after_first_equality_live_some
     (answers : SamplingAnswerTape) (hgood : answers ∉ globalBad shape) :
     let first := firstEqualityAccepted shape answers hgood
     let result := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + (first + 1) * 6)
+      prelude answers (equalityOffset + (first + 1) * 7)
         (equalityBoundary_fits (first + 1) (by
           exact (firstEqualityAccepted_lt shape answers hgood)))
     result.status = .live ∧ result.equalityPoint.isSome = true := by
@@ -41,7 +41,7 @@ theorem rawControlUntil_after_first_equality_live_some
     ⟨_, haccepts⟩
   have hlocal := equalityAttempt_live_some_of_accepted shape first
     (rawControlUntil shape causalSecret completion witness coins prelude answers
-      (equalityOffset + first * 6)
+      (equalityOffset + first * 7)
         (equalityBoundary_fits first hfirst.le))
     (equalityAttemptAnswers answers ⟨first, hfirst⟩)
     hbefore.1 hbefore.2.1 hbefore.2.2 haccepts
@@ -62,12 +62,12 @@ theorem rawControlUntil_equality_boundary_after_first_eq
       rejectionTrials) :
     rawControlUntil shape causalSecret completion witness coins prelude answers
         (equalityOffset +
-          (firstEqualityAccepted shape answers hgood + 1 + extra) * 6)
+          (firstEqualityAccepted shape answers hgood + 1 + extra) * 7)
         (equalityBoundary_fits
           (firstEqualityAccepted shape answers hgood + 1 + extra) hcap) =
       rawControlUntil shape causalSecret completion witness coins prelude answers
         (equalityOffset +
-          (firstEqualityAccepted shape answers hgood + 1) * 6)
+          (firstEqualityAccepted shape answers hgood + 1) * 7)
         (equalityBoundary_fits
           (firstEqualityAccepted shape answers hgood + 1)
             (firstEqualityAccepted_lt shape answers hgood)) := by
@@ -83,13 +83,13 @@ theorem rawControlUntil_equality_boundary_after_first_eq
       have haccepted := rawControlUntil_after_first_equality_live_some shape
         causalSecret completion witness coins prelude answers hgood
       let previous := rawControlUntil shape causalSecret completion witness coins
-        prelude answers (equalityOffset + attempt * 6)
+        prelude answers (equalityOffset + attempt * 7)
           (equalityBoundary_fits attempt hprevCap)
       have hpreviousEq : previous =
           rawControlUntil shape causalSecret completion witness coins prelude
             answers
             (equalityOffset +
-              (firstEqualityAccepted shape answers hgood + 1) * 6)
+              (firstEqualityAccepted shape answers hgood + 1) * 7)
             (equalityBoundary_fits
               (firstEqualityAccepted shape answers hgood + 1)
                 (firstEqualityAccepted_lt shape answers hgood)) := by
@@ -101,12 +101,12 @@ theorem rawControlUntil_equality_boundary_after_first_eq
         rw [hpreviousEq]
         exact haccepted.2
       have hlocalEq :
-          iterateFrom (equalityStep shape) (equalityOffset + attempt * 6) 6
+          iterateFrom (equalityStep shape) (equalityOffset + attempt * 7) 7
               previous (equalityAttemptAnswers answers ⟨attempt, hattempt⟩) =
             previous :=
         equalityAttempt_eq_of_some shape attempt previous _ hpreviousSome
       have hlocalStatus :
-          (iterateFrom (equalityStep shape) (equalityOffset + attempt * 6) 6
+          (iterateFrom (equalityStep shape) (equalityOffset + attempt * 7) 7
             previous
             (equalityAttemptAnswers answers ⟨attempt, hattempt⟩)).status =
               .live := by
@@ -115,7 +115,7 @@ theorem rawControlUntil_equality_boundary_after_first_eq
       have hstep := rawControlUntil_equality_boundary_step shape causalSecret
         completion witness coins prelude answers attempt hattempt hlocalStatus
       change rawControlUntil shape causalSecret completion witness coins prelude
-        answers (equalityOffset + (attempt + 1) * 6) _ = _
+        answers (equalityOffset + (attempt + 1) * 7) _ = _
       rw [hstep, hlocalEq, hpreviousEq]
 
 end VeiledFlock.ProductionSamplingScheduleEqualityAcceptedBoundary

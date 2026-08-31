@@ -178,7 +178,7 @@ theorem bitsGhashEquiv_apply (value : Bits128) :
   intro index _
   rw [ghashBasis128_apply]
   cases hbit : value.getLsb index <;>
-    simp [boolF2Equiv, BinaryPolynomial.bitValue, hbit, Algebra.smul_def]
+    simp [boolF2Equiv, BinaryPolynomial.bitValue,  Algebra.smul_def]
 
 theorem coefficientBits_xor (left right : Bits128) :
     coefficientBits (left ^^^ right) =
@@ -258,7 +258,7 @@ noncomputable def programScalarCoinEquiv :
     apply Prod.ext
     · apply oracleBlockSplit.injective
       simp [programScalarPrefix]
-    · simp [programScalarPrefix]
+    · simp
 
 @[simp]
 theorem programScalarCoinEquiv_programmedBlock

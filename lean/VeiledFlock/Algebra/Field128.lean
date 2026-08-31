@@ -46,7 +46,7 @@ private def exceptionalEquiv :
     apply Subtype.ext
     rcases value.property with hzero | hone
     · simp [hzero]
-    · simp [hone, zero_ne_one]
+    · simp [hone]
   right_inv bit := by
     cases bit <;> simp
 

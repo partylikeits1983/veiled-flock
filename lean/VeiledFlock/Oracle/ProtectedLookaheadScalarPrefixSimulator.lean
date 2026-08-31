@@ -163,6 +163,7 @@ noncomputable def programmedMachine (sites : ℕ)
     state fixedPoints rightSchedule hright continueWith
     (coinEquiv sites fixedPoints rightSchedule input).1
 
+omit [DecidableEq AlgCoins] in
 theorem simulator_exact (sites : ℕ)
     (state : AlgCoins → BlockAnswers sites → State)
     (fixedPoints : Prior → Point)

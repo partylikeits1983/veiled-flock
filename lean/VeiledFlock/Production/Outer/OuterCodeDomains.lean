@@ -47,7 +47,7 @@ theorem outerBaseIndex_lt (mask queries : ℕ) (hqueries : queries ≤ mask)
       omega
 
 theorem outerBaseIndex_injective (mask queries : ℕ)
-    (hqueries : queries ≤ mask) :
+    (_hqueries : queries ≤ mask) :
     Injective (outerBaseIndex mask queries) := by
   intro left right heq
   cases left with

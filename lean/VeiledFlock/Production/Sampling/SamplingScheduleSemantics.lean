@@ -125,7 +125,7 @@ machine. -/
 theorem sliceFromBlocks_ofFn_eq_equalityAttempt
     {length : ℕ}
     (hlength : length ≤ ChallengeSampling.maxEqualityPointOuterCoordinates)
-    (blocks : Fin 6 → OracleBlock) (index : Fin length) :
+    (blocks : Fin 7 → OracleBlock) (index : Fin length) :
     sliceFromBlocks length (List.ofFn blocks) index =
       equalityAttemptEquiv blocks (Fin.castLE hlength index) := by
   have hblock : index.val / 2 < (List.ofFn blocks).length := by
@@ -163,13 +163,13 @@ theorem exists_equality_attempt_of_not_globalBad (shape : BatchShape)
   unfold equalityFlatAbort at hnot
   rw [mem_transportBad_iff, mem_equalityBlockAbortRuns_iff,
     mem_abortRuns_iff] at hnot
-  push_neg at hnot
+  push Not at hnot
   exact hnot
 
 theorem equality_attempt_prefix_accepted
     {length : ℕ}
     (hlength : length ≤ ChallengeSampling.maxEqualityPointOuterCoordinates)
-    (blocks : Fin 6 → OracleBlock)
+    (blocks : Fin 7 → OracleBlock)
     (hgood : equalityAttemptEquiv blocks ∉ equalityPointVectorFailure) :
     accepted (sliceFromBlocks length (List.ofFn blocks)) := by
   intro index hone
@@ -193,7 +193,7 @@ theorem exists_nonzero_answer_of_not_globalBad (shape : BatchShape)
         zeroFailure := by
   have hnot := not_badAt_of_not_globalBad shape answers hgood (.nonzero site)
   rw [badAt, mem_windowBad_iff, mem_scalarBlockAbortRuns_iff] at hnot
-  push_neg at hnot
+  push Not at hnot
   simpa [VeiledFlock.FixedWindowProbability.window] using hnot
 
 theorem exists_multiplicationAlpha_answer_of_not_globalBad
@@ -207,7 +207,7 @@ theorem exists_multiplicationAlpha_answer_of_not_globalBad
   have hnot := not_badAt_of_not_globalBad shape answers hgood
     (.multiplicationAlpha)
   rw [badAt, mem_windowBad_iff, mem_scalarBlockAbortRuns_iff] at hnot
-  push_neg at hnot
+  push Not at hnot
   simpa [VeiledFlock.FixedWindowProbability.window] using hnot
 
 theorem exists_blindGrinding_answer_of_not_globalBad
@@ -221,7 +221,7 @@ theorem exists_blindGrinding_answer_of_not_globalBad
   have hnot := not_badAt_of_not_globalBad shape answers hgood
     (.blindGrinding)
   rw [badAt, mem_windowBad_iff, mem_blockAbortRuns_iff] at hnot
-  push_neg at hnot
+  push Not at hnot
   simpa [VeiledFlock.FixedWindowProbability.window, blindGrindingGood] using hnot
 
 theorem exists_ligeritoGrinding_answer_of_not_globalBad
@@ -234,7 +234,7 @@ theorem exists_ligeritoGrinding_answer_of_not_globalBad
   have hnot := not_badAt_of_not_globalBad shape answers hgood
     (.ligeritoGrinding site)
   rw [badAt, mem_windowBad_iff, mem_blockAbortRuns_iff] at hnot
-  push_neg at hnot
+  push Not at hnot
   simpa [VeiledFlock.FixedWindowProbability.window, Nat.add_assoc] using hnot
 
 theorem outerPositions_card_ge_of_not_globalBad
@@ -983,50 +983,53 @@ theorem rawBlindGrinding_live_done
 
 /-! ## Skip, equality-point, and zerocheck operational semantics -/
 
-def equalityLiveBlocks (shape : BatchShape) (blocks : Fin 6 → OracleBlock) :
+def equalityLiveBlocks (shape : BatchShape) (blocks : Fin 7 → OracleBlock) :
     List OracleBlock :=
   List.ofFn (fun index : Fin (equalityBlockCount shape) ↦
-    blocks (Fin.castLE (equalityBlockCount_le_six shape) index))
+    blocks (Fin.castLE (equalityBlockCount_le_seven shape) index))
 
 theorem sliceFrom_equalityLiveBlocks (shape : BatchShape)
-    (blocks : Fin 6 → OracleBlock) :
+    (blocks : Fin 7 → OracleBlock) :
     sliceFromBlocks (m shape - kSkip - 7) (equalityLiveBlocks shape blocks) =
       sliceFromBlocks (m shape - kSkip - 7) (List.ofFn blocks) := by
   funext index
   cases shape <;> fin_cases index <;> rfl
 
 theorem equalityLiveBlocks_eq_take (shape : BatchShape)
-    (blocks : Fin 6 → OracleBlock) :
+    (blocks : Fin 7 → OracleBlock) :
     equalityLiveBlocks shape blocks =
       (List.ofFn blocks).take (equalityBlockCount shape) := by
   unfold equalityLiveBlocks
-  exact Fin.ofFn_take_eq_take_ofFn (equalityBlockCount_le_six shape) blocks
+  exact Fin.ofFn_take_eq_take_ofFn (equalityBlockCount_le_seven shape) blocks
 
 set_option maxRecDepth 10000 in
 theorem equalityAttempt_live_some_of_accepted
     (shape : BatchShape) (attempt : ℕ) (control : Control shape)
-    (blocks : Fin 6 → OracleBlock)
+    (blocks : Fin 7 → OracleBlock)
     (hstatus : control.status = .live)
     (hnone : control.equalityPoint = none)
     (hskip : control.skip.isSome = true)
     (haccepted : accepted
       (sliceFromBlocks (m shape - kSkip - 7) (List.ofFn blocks))) :
     let result := iterateFrom (equalityStep shape)
-      (equalityOffset + attempt * equalityAttemptBlocks) 6 control blocks
+      (equalityOffset + attempt * equalityAttemptBlocks) 7 control blocks
     result.status = .live ∧ result.equalityPoint.isSome = true := by
   have hoff (counter : ℕ) :
-      equalityOffset + attempt * 6 + counter - equalityOffset =
-        attempt * 6 + counter := by omega
-  have hoff2 : equalityOffset + attempt * 6 + 1 + 1 - equalityOffset =
-      attempt * 6 + 2 := by omega
-  have hoff3 : equalityOffset + attempt * 6 + 1 + 1 + 1 - equalityOffset =
-      attempt * 6 + 3 := by omega
-  have hoff4 : equalityOffset + attempt * 6 + 1 + 1 + 1 + 1 - equalityOffset =
-      attempt * 6 + 4 := by omega
-  have hoff5 : equalityOffset + attempt * 6 + 1 + 1 + 1 + 1 + 1 -
-      equalityOffset = attempt * 6 + 5 := by omega
-  have hdiv4 : (attempt * 6 + 4) / 6 = attempt := by omega
-  have hdiv5 : (attempt * 6 + 5) / 6 = attempt := by omega
+      equalityOffset + attempt * 7 + counter - equalityOffset =
+        attempt * 7 + counter := by omega
+  have hoff2 : equalityOffset + attempt * 7 + 1 + 1 - equalityOffset =
+      attempt * 7 + 2 := by omega
+  have hoff3 : equalityOffset + attempt * 7 + 1 + 1 + 1 - equalityOffset =
+      attempt * 7 + 3 := by omega
+  have hoff4 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 - equalityOffset =
+      attempt * 7 + 4 := by omega
+  have hoff5 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 5 := by omega
+  have hoff6 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 6 := by omega
+  have hdiv4 : (attempt * 7 + 4) / 7 = attempt := by omega
+  have hdiv5 : (attempt * 7 + 5) / 7 = attempt := by omega
+  have hdiv6 : (attempt * 7 + 6) / 7 = attempt := by omega
   have hslice := sliceFrom_equalityLiveBlocks shape blocks
   cases hskipValue : control.skip with
   | none => simp [hskipValue] at hskip
@@ -1035,56 +1038,66 @@ theorem equalityAttempt_live_some_of_accepted
         simp [iterateFrom, iterateList, equalityStep, equalityBlockCount,
           equalityAttemptBlocks,
           m, kSkip, rejectionTrials,
-          hoff, hoff2, hoff3, hoff4, hoff5,
-          equalityLiveBlocks, hslice, hnone, hstatus, hskipValue]
+          hoff, hoff2, hoff3, hoff4, hoff5, hoff6, hdiv4, hdiv5, hdiv6,
+          equalityLiveBlocks,  hnone, hstatus, hskipValue]
           at haccepted hslice ⊢ <;>
         simp_all
 
 set_option maxRecDepth 10000 in
 theorem equalityAttempt_live_none_of_rejected_before_cap
     (shape : BatchShape) (attempt : ℕ) (control : Control shape)
-    (blocks : Fin 6 → OracleBlock)
+    (blocks : Fin 7 → OracleBlock)
     (hstatus : control.status = .live)
     (hnone : control.equalityPoint = none)
     (hrejected : ¬accepted
       (sliceFromBlocks (m shape - kSkip - 7) (List.ofFn blocks)))
     (hbefore : attempt + 1 < rejectionTrials) :
     let result := iterateFrom (equalityStep shape)
-      (equalityOffset + attempt * equalityAttemptBlocks) 6 control blocks
+      (equalityOffset + attempt * equalityAttemptBlocks) 7 control blocks
     result.status = .live ∧ result.equalityPoint = none := by
   have hoff (counter : ℕ) :
-      equalityOffset + attempt * 6 + counter - equalityOffset =
-        attempt * 6 + counter := by omega
-  have hoff2 : equalityOffset + attempt * 6 + 1 + 1 - equalityOffset =
-      attempt * 6 + 2 := by omega
-  have hoff3 : equalityOffset + attempt * 6 + 1 + 1 + 1 - equalityOffset =
-      attempt * 6 + 3 := by omega
-  have hoff4 : equalityOffset + attempt * 6 + 1 + 1 + 1 + 1 - equalityOffset =
-      attempt * 6 + 4 := by omega
-  have hoff5 : equalityOffset + attempt * 6 + 1 + 1 + 1 + 1 + 1 -
-      equalityOffset = attempt * 6 + 5 := by omega
-  have hdiv4 : (attempt * 6 + 4) / 6 = attempt := by omega
-  have hdiv5 : (attempt * 6 + 5) / 6 = attempt := by omega
-  have hne4 : (attempt * 6 + 4) / 6 + 1 ≠ rejectionTrials := by
+      equalityOffset + attempt * 7 + counter - equalityOffset =
+        attempt * 7 + counter := by omega
+  have hoff2 : equalityOffset + attempt * 7 + 1 + 1 - equalityOffset =
+      attempt * 7 + 2 := by omega
+  have hoff3 : equalityOffset + attempt * 7 + 1 + 1 + 1 - equalityOffset =
+      attempt * 7 + 3 := by omega
+  have hoff4 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 - equalityOffset =
+      attempt * 7 + 4 := by omega
+  have hoff5 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 5 := by omega
+  have hoff6 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 6 := by omega
+  have hdiv4 : (attempt * 7 + 4) / 7 = attempt := by omega
+  have hdiv5 : (attempt * 7 + 5) / 7 = attempt := by omega
+  have hdiv6 : (attempt * 7 + 6) / 7 = attempt := by omega
+  have hne4 : (attempt * 7 + 4) / 7 + 1 ≠ rejectionTrials := by
     rw [hdiv4]
     omega
-  have hne5 : (attempt * 6 + 5) / 6 + 1 ≠ rejectionTrials := by
+  have hne5 : (attempt * 7 + 5) / 7 + 1 ≠ rejectionTrials := by
     rw [hdiv5]
     omega
-  have hlast4 : (attempt * 6 + 4) / 6 ≠ 4095 := by
+  have hne6 : (attempt * 7 + 6) / 7 + 1 ≠ rejectionTrials := by
+    rw [hdiv6]
+    omega
+  have hlast4 : (attempt * 7 + 4) / 7 ≠ 4095 := by
     rw [hdiv4]
     norm_num [rejectionTrials] at hbefore ⊢
     omega
-  have hlast5 : (attempt * 6 + 5) / 6 ≠ 4095 := by
+  have hlast5 : (attempt * 7 + 5) / 7 ≠ 4095 := by
     rw [hdiv5]
+    norm_num [rejectionTrials] at hbefore ⊢
+    omega
+  have hlast6 : (attempt * 7 + 6) / 7 ≠ 4095 := by
+    rw [hdiv6]
     norm_num [rejectionTrials] at hbefore ⊢
     omega
   have hslice := sliceFrom_equalityLiveBlocks shape blocks
   cases shape <;>
     simp [iterateFrom, iterateList, equalityStep, equalityBlockCount,
       equalityAttemptBlocks, m, kSkip, rejectionTrials,
-      hoff, hoff2, hoff3, hoff4, hoff5, equalityLiveBlocks,
-      hdiv4, hdiv5, hne4, hne5, hlast4, hlast5,
+      hoff, hoff2, hoff3, hoff4, hoff5, hoff6, equalityLiveBlocks,
+      hdiv4, hdiv5, hdiv6,
       hnone, hstatus] at hrejected hslice ⊢ <;>
     simp_all <;> omega
 
@@ -1106,10 +1119,10 @@ theorem iterateEquality_skip (shape : BatchShape) (start rounds : ℕ)
       exact ih (blocks := fun index ↦ blocks index.castSucc)
 
 theorem equalityAttempt_eq_of_some (shape : BatchShape) (attempt : ℕ)
-    (control : Control shape) (blocks : Fin 6 → OracleBlock)
+    (control : Control shape) (blocks : Fin 7 → OracleBlock)
     (hsome : control.equalityPoint.isSome = true) :
     iterateFrom (equalityStep shape)
-      (equalityOffset + attempt * equalityAttemptBlocks) 6 control blocks =
+      (equalityOffset + attempt * equalityAttemptBlocks) 7 control blocks =
         control := by
   cases hpoint : control.equalityPoint with
   | none => simp [hpoint] at hsome
@@ -1118,48 +1131,48 @@ theorem equalityAttempt_eq_of_some (shape : BatchShape) (attempt : ℕ)
 
 noncomputable def equalityAttemptsRun (shape : BatchShape) :
     (attempts : ℕ) → Control shape →
-      (Fin attempts → Fin 6 → OracleBlock) → Control shape
+      (Fin attempts → Fin 7 → OracleBlock) → Control shape
   | 0, control, _ => control
   | attempts + 1, control, blocks =>
       iterateFrom (equalityStep shape)
-        (equalityOffset + attempts * equalityAttemptBlocks) 6
+        (equalityOffset + attempts * equalityAttemptBlocks) 7
         (equalityAttemptsRun shape attempts control
           (fun index ↦ blocks index.castSucc))
         (blocks (Fin.last attempts))
 
 noncomputable def flatAttemptsEquiv (attempts : ℕ) :
-    (Fin (attempts * 6) → OracleBlock) ≃
-      (Fin attempts → Fin 6 → OracleBlock) :=
+    (Fin (attempts * 7) → OracleBlock) ≃
+      (Fin attempts → Fin 7 → OracleBlock) :=
   (Equiv.arrowCongr
-      (finProdFinEquiv (m := attempts) (n := 6))
+      (finProdFinEquiv (m := attempts) (n := 7))
       (Equiv.refl OracleBlock)).symm.trans
-    (Equiv.curry (Fin attempts) (Fin 6) OracleBlock)
+    (Equiv.curry (Fin attempts) (Fin 7) OracleBlock)
 
 @[simp]
 theorem flatAttemptsEquiv_apply (attempts : ℕ)
-    (flat : Fin (attempts * 6) → OracleBlock)
-    (attempt : Fin attempts) (counter : Fin 6) :
+    (flat : Fin (attempts * 7) → OracleBlock)
+    (attempt : Fin attempts) (counter : Fin 7) :
     flatAttemptsEquiv attempts flat attempt counter =
-      flat ⟨counter.val + 6 * attempt.val, by
+      flat ⟨counter.val + 7 * attempt.val, by
         have ha := attempt.isLt
         have hc := counter.isLt
         nlinarith⟩ := by
   rfl
 
 theorem equalityAttemptsRun_eq_flat (shape : BatchShape) (attempts : ℕ)
-    (control : Control shape) (flat : Fin (attempts * 6) → OracleBlock) :
+    (control : Control shape) (flat : Fin (attempts * 7) → OracleBlock) :
     equalityAttemptsRun shape attempts control
         (flatAttemptsEquiv attempts flat) =
-      iterateFrom (equalityStep shape) equalityOffset (attempts * 6)
+      iterateFrom (equalityStep shape) equalityOffset (attempts * 7)
         control flat := by
   induction attempts with
   | zero => rfl
   | succ attempts ih =>
-      have hsize : (attempts + 1) * 6 = attempts * 6 + 6 := by omega
-      let flat' : Fin (attempts * 6 + 6) → OracleBlock :=
+      have hsize : (attempts + 1) * 7 = attempts * 7 + 7 := by omega
+      let flat' : Fin (attempts * 7 + 7) → OracleBlock :=
         fun index ↦ flat (Fin.cast hsize.symm index)
-      let prefixFlat : Fin (attempts * 6) → OracleBlock :=
-        fun index ↦ flat' (Fin.castAdd 6 index)
+      let prefixFlat : Fin (attempts * 7) → OracleBlock :=
+        fun index ↦ flat' (Fin.castAdd 7 index)
       have hprefix :
           (fun index : Fin attempts ↦
             flatAttemptsEquiv (attempts + 1) flat index.castSucc) =
@@ -1168,25 +1181,25 @@ theorem equalityAttemptsRun_eq_flat (shape : BatchShape) (attempts : ℕ)
         simp only [flatAttemptsEquiv_apply]
         apply congrArg flat
         apply Fin.ext
-        simp [prefixFlat, flat']
+        simp
       have hlast : flatAttemptsEquiv (attempts + 1) flat
             (Fin.last attempts) =
-          (fun counter : Fin 6 ↦ flat' (Fin.natAdd (attempts * 6) counter)) := by
+          (fun counter : Fin 7 ↦ flat' (Fin.natAdd (attempts * 7) counter)) := by
         funext counter
         simp only [flatAttemptsEquiv_apply]
         apply congrArg flat
         apply Fin.ext
-        simp [flat']
+        simp
         omega
       rw [equalityAttemptsRun, hprefix, hlast,
         ih (flat := prefixFlat)]
       have hadd := iterateFrom_add (equalityStep shape) equalityOffset
-        (attempts * 6) 6 control flat'
-      rw [show equalityOffset + attempts * 6 =
+        (attempts * 7) 7 control flat'
+      rw [show equalityOffset + attempts * 7 =
           equalityOffset + attempts * equalityAttemptBlocks by
         simp [equalityAttemptBlocks]] at hadd
       rw [iterateFrom_cast (equalityStep shape) equalityOffset
-        ((attempts + 1) * 6) (attempts * 6 + 6) control flat hsize]
+        ((attempts + 1) * 7) (attempts * 7 + 7) control flat hsize]
       exact hadd.symm
 
 theorem equalityFlatEquiv_eq_flatAttemptsEquiv :
@@ -1264,7 +1277,7 @@ theorem rawEquality_eq_of_final_live
       exact hprefix
 
 theorem equalityAttemptsRun_skip (shape : BatchShape) (attempts : ℕ)
-    (control : Control shape) (blocks : Fin attempts → Fin 6 → OracleBlock) :
+    (control : Control shape) (blocks : Fin attempts → Fin 7 → OracleBlock) :
     (equalityAttemptsRun shape attempts control blocks).skip = control.skip := by
   induction attempts with
   | zero => rfl
@@ -1274,7 +1287,7 @@ theorem equalityAttemptsRun_skip (shape : BatchShape) (attempts : ℕ)
 
 theorem equalityAttemptsRun_status_live_of_lt
     (shape : BatchShape) (attempts : ℕ) (control : Control shape)
-    (blocks : Fin attempts → Fin 6 → OracleBlock)
+    (blocks : Fin attempts → Fin 7 → OracleBlock)
     (hattempts : attempts < rejectionTrials)
     (hstatus : control.status = .live)
     (hskip : control.skip.isSome = true) :
@@ -1293,7 +1306,7 @@ theorem equalityAttemptsRun_status_live_of_lt
         rw [hskipEq]
         exact hskip
       change (iterateFrom (equalityStep shape)
-        (equalityOffset + attempts * equalityAttemptBlocks) 6 priorControl
+        (equalityOffset + attempts * equalityAttemptBlocks) 7 priorControl
         (blocks (Fin.last attempts))).status = .live
       cases hpoint : priorControl.equalityPoint with
       | some point =>
@@ -1312,7 +1325,7 @@ theorem equalityAttemptsRun_status_live_of_lt
 
 theorem equalityAttemptsRun_live_some_of_exists
     (shape : BatchShape) (attempts : ℕ) (control : Control shape)
-    (blocks : Fin attempts → Fin 6 → OracleBlock)
+    (blocks : Fin attempts → Fin 7 → OracleBlock)
     (hattempts : attempts ≤ rejectionTrials)
     (hstatus : control.status = .live)
     (hskip : control.skip.isSome = true)
@@ -1327,10 +1340,10 @@ theorem equalityAttemptsRun_live_some_of_exists
       let priorControl := equalityAttemptsRun shape attempts control
         (fun index ↦ blocks index.castSucc)
       change (iterateFrom (equalityStep shape)
-          (equalityOffset + attempts * equalityAttemptBlocks) 6 priorControl
+          (equalityOffset + attempts * equalityAttemptBlocks) 7 priorControl
           (blocks (Fin.last attempts))).status = .live ∧
         (iterateFrom (equalityStep shape)
-          (equalityOffset + attempts * equalityAttemptBlocks) 6 priorControl
+          (equalityOffset + attempts * equalityAttemptBlocks) 7 priorControl
           (blocks (Fin.last attempts))).equalityPoint.isSome = true
       by_cases hlast : accepted (sliceFromBlocks (m shape - kSkip - 7)
           (List.ofFn (blocks (Fin.last attempts))))
@@ -1468,7 +1481,7 @@ theorem zerocheckStep_preserves_live_and_equality
   | none => simp [hpoint] at hequality
   | some point =>
       simp [zerocheckStep, hpoint, hstatus]
-      split <;> simp_all <;> split <;> simp_all
+      split <;> simp_all ; split <;> simp_all
 
 set_option maxRecDepth 10000 in
 theorem rawStep_zerocheck
@@ -1585,7 +1598,7 @@ theorem ligeritoStep_trial_good {shape : BatchShape}
   rw [hoff.1, hoff.2]
   have hpositive : 1 + trial ≠ 0 := by omega
   by_cases hlast : site.val + 1 = maxLigeritoSites <;>
-    simp [hpositive, hstatus, hdone, hgood, hlast,
+    simp [ hstatus, hdone, hgood, hlast,
       ligeritoSiteTerminalStatus]
 
 theorem ligeritoStep_trial_bad_before_cap {shape : BatchShape}
@@ -1604,7 +1617,7 @@ theorem ligeritoStep_trial_bad_before_cap {shape : BatchShape}
   rw [hoff.1, hoff.2]
   have hpositive : 1 + trial ≠ 0 := by omega
   have hcap : 1 + trial ≠ maxLigeritoTrials := by omega
-  simp [hpositive, hstatus, hdone, hbad, hcap]
+  simp [ hstatus, hdone, hbad, hcap]
 
 theorem not_before_ligerito {round bound : ℕ}
     (hbound : bound ≤ ligeritoOffset) (hround : ligeritoOffset ≤ round) :
@@ -1703,7 +1716,7 @@ theorem ligeritoStep_trial_eq_of_done {shape : BatchShape}
   dsimp only
   rw [hoff.1, hoff.2]
   have hpositive : 1 + trial ≠ 0 := by omega
-  simp [hpositive, hdone]
+  simp [ hdone]
 
 theorem rawStep_ligeritoTrial_preserves_terminal {W : Type*}
     (shape : BatchShape)
@@ -1991,7 +2004,7 @@ theorem rawControlUntil_ligerito_prefix_status
     let fit : ligeritoOffset + sites * ligeritoSiteWidth ≤
         productionSamplingSlots := by
       unfold productionSamplingSlots ligeritoWidth
-      have hwidth : 0 < ligeritoSiteWidth := by
+      have _hwidth : 0 < ligeritoSiteWidth := by
         unfold ligeritoSiteWidth
         omega
       nlinarith

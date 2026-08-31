@@ -128,6 +128,7 @@ def productionStartLengthBound (shape : BatchShape)
     2 * (10 + 16 * ell) + 2
 
 set_option maxHeartbeats 800000 in
+omit [Fintype AdversaryCoins] in
 /-- A successful concrete trace always fits the public start budget.  Thus
 `BadStartBound` carries no probability once the experiment instantiates a
 large enough `maxStartLength`. -/
@@ -169,6 +170,7 @@ noncomputable def BadStartBound (tape : Tape shape maxStartLength
     ¬ StartBound shape maxStartLength causalSecret weights context statement
       witness houter hlinear hhadamard tape trace
 
+omit [Fintype AdversaryCoins] in
 theorem not_badStartBound
     (hmax : productionStartLengthBound shape statement r1csDigest ≤
       maxStartLength)
@@ -292,6 +294,7 @@ noncomputable def preMerklePointSet
   ((productionPreHistory adversary statement rest.2.2 rest.2.1).map
     (fun call => unboundBytes call.1)).toFinset
 
+omit [Fintype AdversaryCoins] in
 theorem preMerklePointSet_card_le
     (rest : ProductionCoinsWithoutHiddenSalts shape ×
       ProductionSharedOracleTable shape maxStartLength × AdversaryCoins) :
@@ -323,6 +326,7 @@ noncomputable def badPreMerkleSaltAssignments
     (preMerklePointSet shape maxStartLength adversary statement rest)).map
       (productionHiddenSaltsFinEquiv shape).symm.toEmbedding
 
+omit [Fintype AdversaryCoins] in
 theorem mem_badPreMerkleSaltAssignments_iff
     (rest : ProductionCoinsWithoutHiddenSalts shape ×
       ProductionSharedOracleTable shape maxStartLength × AdversaryCoins)
@@ -364,6 +368,7 @@ theorem mem_badPreMerkleSaltAssignments_iff
         Equiv.symm_apply_apply] using hpoint
     · exact (productionHiddenSaltsFinEquiv shape).symm_apply_apply salts
 
+omit [Fintype AdversaryCoins] in
 /-- Uniform hidden salts expose a pre-proof leaf input with probability at
 most `hiddenLeaves * preQueries / 2^256`, on the actual operational fiber. -/
 theorem badPreMerkleSaltAssignments_probability_le
@@ -637,6 +642,7 @@ noncomputable def badPrequeryNonces
     (proofNonceFramedProgramPoint shape statement r1csDigest)
     (prequeryPointSet shape maxStartLength adversary statement rest)
 
+omit [Fintype AdversaryCoins] in
 theorem prequeryPointSet_card_le
     (rest : ProductionCoinsWithoutProofNonce shape ×
       ProductionSharedOracleTable shape maxStartLength × AdversaryCoins) :
@@ -657,6 +663,7 @@ theorem prequeryPointSet_card_le
         rest.2.1 (List.ofFn id) []
       simpa using hlength
 
+omit [Fintype AdversaryCoins] in
 /-- The actual adaptive prequery fiber costs at most one adversarial-query
 factor for each production programming site. -/
 theorem badPrequeryNonces_card_le
@@ -677,6 +684,7 @@ theorem badPrequeryNonces_card_le
       (prequeryPointSet_card_le shape maxStartLength adversary statement rest)
 
 set_option maxHeartbeats 800000 in
+omit [Fintype AdversaryCoins] in
 /-- Every point that the concrete simulator programs after a successful real
 trace is in the conservative proof-nonce-framed family used above. -/
 theorem productionSimulatorProgramPoint_framed
@@ -890,7 +898,7 @@ noncomputable def ProgrammingSucceeds (tape : Tape shape maxStartLength
     (hstart : StartBound shape maxStartLength causalSecret weights context
       statement witness houter hlinear hhadamard tape trace) : Prop :=
   let input := couplingInput shape maxStartLength tape
-  let moved := productionMerkleCoinOracleEquivAt shape input.1 causalSecret
+  let _moved := productionMerkleCoinOracleEquivAt shape input.1 causalSecret
     (baseMessage shape) (publicPositions shape) weights context witness
     (publicRepresentative shape statement) trace.answers trace.tail.rest
     houter hlinear hhadamard input
@@ -908,6 +916,7 @@ noncomputable def ProgrammingSucceeds (tape : Tape shape maxStartLength
   (programSharedByteSchedule schedule trace.answers preState).1 = .ok ()
 
 set_option maxHeartbeats 1000000 in
+omit [Fintype AdversaryCoins] in
 /-- Merkle-transport freshness and Fiat--Shamir prequery freshness together
 make programming success deterministic.  There is no separate random
 `BadProgramConflict` event once these two histories are safe. -/
@@ -1031,6 +1040,7 @@ noncomputable def BadProgramConflict (tape : Tape shape maxStartLength
     ¬ ProgrammingSucceeds shape maxStartLength causalSecret weights context
       adversary statement witness houter hlinear hhadamard tape trace hstart
 
+omit [Fintype AdversaryCoins] in
 /-- A programming conflict can only occur if a transported Merkle point or a
 future Fiat--Shamir programming point was already reached.  It has no
 independent failure probability. -/
@@ -1077,6 +1087,7 @@ noncomputable def GlobalGood (tape : Tape shape maxStartLength
       hhadamard tape
 
 set_option maxRecDepth 10000 in
+omit [Fintype AdversaryCoins] in
 /-- Field-by-field bridge from the operational ledger event to the exact
 `ProductionGood` required by the complete-view coupling. -/
 theorem globalGood_implies_productionGood

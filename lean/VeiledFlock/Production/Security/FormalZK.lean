@@ -266,6 +266,7 @@ noncomputable def costedProductionSimulator :
   cost := fun _ ↦ productionSimulatorCost shape
     (ProductionMaxPointLength shape maxStartLength + preQueries + postQueries)
 
+omit [Fintype AdversaryCoins] [Nonempty AdversaryCoins] in
 @[simp] theorem costedProductionSimulator_run
     (tape : SimulatorInput (AdversaryCoins := AdversaryCoins)
       shape maxStartLength) :

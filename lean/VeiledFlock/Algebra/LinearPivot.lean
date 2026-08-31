@@ -48,6 +48,7 @@ theorem weightedSum_solveAt (weights values : Index → F) (pivot : Index)
     (partialSum weights values pivot)
   linear_combination hcancel
 
+omit [CharP F 2] [Fintype Index] [DecidableEq Index] in
 /-- A nonzero coefficient exists whenever the weights do not all vanish. -/
 theorem exists_nonzero_weight (weights : Index → F)
     (hnonzero : weights ≠ 0) : ∃ pivot, weights pivot ≠ 0 := by
@@ -57,6 +58,7 @@ theorem exists_nonzero_weight (weights : Index → F)
   funext pivot
   exact h pivot
 
+omit [CharP F 2] [DecidableEq Index] in
 /-- In particular, any linear interpolation rule that evaluates the constant
 polynomial correctly has a usable pivot. -/
 theorem exists_nonzero_weight_of_sum_eq_one (weights : Index → F)

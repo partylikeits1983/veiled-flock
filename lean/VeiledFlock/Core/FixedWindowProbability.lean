@@ -25,7 +25,7 @@ def transportBad {A B : Type*} [DecidableEq A]
 theorem mem_transportBad_iff {A B : Type*} [DecidableEq A]
     (equiv : A ≃ B) (bad : Finset B) (value : A) :
     value ∈ transportBad equiv bad ↔ equiv value ∈ bad := by
-  simp [transportBad, Equiv.eq_symm_apply]
+  simp [transportBad]
 
 @[simp]
 theorem card_transportBad {A B : Type*} [DecidableEq A]
@@ -51,6 +51,7 @@ def windowSchedule {total : ℕ} (start width : ℕ)
     else
       ⟨0, htotal⟩
 
+omit [Fintype Outcome] [DecidableEq Outcome] in
 @[simp]
 theorem tracePoint_windowSchedule {total : ℕ} (start width : ℕ)
     (hfit : start + width ≤ total) (htotal : 0 < total)
@@ -60,6 +61,7 @@ theorem tracePoint_windowSchedule {total : ℕ} (start width : ℕ)
       ⟨start + site.val, by omega⟩ := by
   simp [tracePoint, windowSchedule, site.isLt]
 
+omit [Fintype Outcome] [DecidableEq Outcome] in
 theorem windowSchedule_tracePoints_injective {total : ℕ}
     (start width : ℕ) (hfit : start + width ≤ total)
     (htotal : 0 < total)
@@ -74,6 +76,7 @@ theorem windowSchedule_tracePoints_injective {total : ℕ}
   have := congrArg Fin.val heq
   exact Nat.add_left_cancel this
 
+omit [Fintype Outcome] [DecidableEq Outcome] in
 @[simp]
 theorem run_windowSchedule {total : ℕ} (start width : ℕ)
     (hfit : start + width ≤ total) (htotal : 0 < total)
