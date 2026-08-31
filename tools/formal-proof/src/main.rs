@@ -164,7 +164,7 @@ fn audit(root: &Path) -> Result<()> {
         .output()
         .map_err(|error| invalid_input(format!("could not start Lean axiom audit: {error}")))?;
 
-    io::stdout().write_all(&output.stdout)?;
+    io::stderr().write_all(&output.stdout)?;
     io::stderr().write_all(&output.stderr)?;
     if !output.status.success() {
         return Err(invalid_input(format!(
@@ -198,11 +198,10 @@ fn audit(root: &Path) -> Result<()> {
         )));
     }
 
-    println!(
+    eprintln!(
         "lean-axioms: OK — {} theorems depend only on propext / Classical.choice / Quot.sound",
         names.len()
     );
-    io::stdout().flush()?;
     Ok(())
 }
 
