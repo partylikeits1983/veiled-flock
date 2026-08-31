@@ -106,6 +106,38 @@ theorem ligeritoRecursiveSteps_positive (shape : BatchShape) :
     0 < ligeritoRecursiveSteps shape := by
   cases shape <;> decide
 
+/-- Largest per-fold grind in the selected Secure profile.  These are the
+first-level `fold_grinding_bits` values in `m23_secure` through `m27_secure`;
+all registered levels use the non-tapered UDR regime. -/
+def ligeritoLiveFoldGrindingBits : BatchShape → ℕ
+  | .slots256 => 1
+  | .slots512 => 2
+  | .slots1024 => 3
+  | .slots2048 => 4
+  | .slots4096 => 5
+
+/-- The preblinded L0 challenge charges one bit beyond the first-level fold
+grind, exactly as Rust's `l0_derived_grind_bits`. -/
+def blindGrindingBits (shape : BatchShape) : ℕ :=
+  ligeritoLiveFoldGrindingBits shape + 1
+
+/-- Number of positive-width fold-grind nonces emitted by the complete Secure
+profile: six initial lane folds, plus each live three-fold recursive level. -/
+def ligeritoPositiveFoldGrindingSites : BatchShape → ℕ
+  | .slots256 => 6
+  | .slots512 => 9
+  | .slots1024 => 9
+  | .slots2048 => 12
+  | .slots4096 => 12
+
+theorem registered_grinding_bounds (shape : BatchShape) :
+    ligeritoLiveFoldGrindingBits shape ≤
+        VeiledFlock.Grinding.maxLigeritoBits ∧
+      blindGrindingBits shape ≤ VeiledFlock.Grinding.maxBlindBits ∧
+      ligeritoPositiveFoldGrindingSites shape ≤
+        VeiledFlock.Grinding.maxLigeritoSites := by
+  cases shape <;> decide
+
 /-- Per-lane committed message dimension after adjoining the low random half. -/
 def outerMessagePositions (shape : BatchShape) : ℕ :=
   2 * outerMaskSymbolsPerLane shape
