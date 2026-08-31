@@ -63,6 +63,7 @@ noncomputable def productionState
     veilSecret querySecret message
     (fun rest history view => (rest, history, view)) witness coins
 
+omit [Fintype K] [Fintype (K → F)] [Fintype Rest] [Nonempty Rest] in
 /-- Pointwise production algebraic transport, packaged for composition with
 the random-oracle state machine. -/
 theorem productionState_transport
@@ -105,6 +106,7 @@ theorem productionState_transport
     querySecret message statement hpublicKernel
     (fun rest history view => (rest, history, view)) hpublic coins
 
+omit [Fintype K] in
 /-- Exact production algebraic+pROM simulator theorem.  The public simulator
 uses a representative of the public statement; the representative need not
 satisfy the private nonlinear relation because the accepting zerocheck

@@ -283,7 +283,7 @@ theorem productionMerkleRoot_pairedOracle_exact
       treeNonce leafLength depth hdepth leftSalts leftPayload
     let rightInjective := productionLeafPoint_index_injective channel treeDepth
       treeNonce leafLength depth hdepth rightSalts rightPayload
-    let cross := fun left right equality =>
+    let cross := fun _left _right equality =>
       productionLeafPoint_cross_index channel treeDepth treeNonce leafLength
         depth hdepth leftSalts rightSalts leftPayload rightPayload equality
     productionMerkleRoot
@@ -360,7 +360,7 @@ theorem productionMerkleRoot_pairedOracle_otherChannel
     let hright := productionLeafPoint_index_injective hiddenChannel
       hiddenTreeDepth hiddenTreeNonce hiddenLeafLength hiddenDepth
       hhiddenDepth rightHiddenSalts rightHiddenPayload
-    let hcross := fun left right equality =>
+    let hcross := fun _left _right equality =>
       productionLeafPoint_cross_index hiddenChannel hiddenTreeDepth
         hiddenTreeNonce hiddenLeafLength hiddenDepth hhiddenDepth
         leftHiddenSalts rightHiddenSalts leftHiddenPayload rightHiddenPayload

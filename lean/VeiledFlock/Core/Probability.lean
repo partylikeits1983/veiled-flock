@@ -94,6 +94,7 @@ def fiberwiseEquiv (split : Global ≃ Local × Rest)
       right_inv := fun pair => by simp
     } : (Local × Rest) ≃ (Local × Rest)) |>.trans split.symm
 
+omit [Fintype Global] [DecidableEq Global] [Fintype Local] [DecidableEq Local] [Fintype Rest] in
 @[simp]
 theorem fiberwiseEquiv_split_apply (split : Global ≃ Local × Rest)
     (reparameterize : Rest → Local ≃ Local) (global : Global) :
@@ -108,11 +109,13 @@ noncomputable def liftBad (split : Global ≃ Local × Rest)
     (bad : Finset Local) : Finset Global :=
   Finset.univ.filter fun global => (split global).1 ∈ bad
 
+omit [DecidableEq Global] [Fintype Local] [Fintype Rest] in
 theorem mem_liftBad_iff (split : Global ≃ Local × Rest)
     (bad : Finset Local) (global : Global) :
     global ∈ liftBad split bad ↔ (split global).1 ∈ bad := by
   simp [liftBad]
 
+omit [DecidableEq Global] [Fintype Local] in
 /-- A lifted component event has exactly `|bad| * |Rest|` global tapes. -/
 theorem card_liftBad (split : Global ≃ Local × Rest)
     (bad : Finset Local) :
@@ -125,6 +128,7 @@ theorem card_liftBad (split : Global ≃ Local × Rest)
       simp [liftBad]
     _ = bad.card * Fintype.card Rest := by simp
 
+omit [DecidableEq Global] in
 /-- Normalizing by the complete tape cancels every independent component not
 used by the event. -/
 theorem liftBad_probability_eq [Nonempty Local] [Nonempty Rest]
@@ -152,12 +156,14 @@ noncomputable def liftFiberBad (split : Global ≃ Local × Rest)
   Finset.univ.filter fun global =>
     (split global).1 ∈ badAt (split global).2
 
+omit [DecidableEq Global] [Fintype Local] [Fintype Rest] in
 theorem mem_liftFiberBad_iff (split : Global ≃ Local × Rest)
     (badAt : Rest → Finset Local) (global : Global) :
     global ∈ liftFiberBad split badAt ↔
       (split global).1 ∈ badAt (split global).2 := by
   simp [liftFiberBad]
 
+omit [DecidableEq Global] in
 theorem card_liftFiberBad (split : Global ≃ Local × Rest)
     (badAt : Rest → Finset Local) :
     (liftFiberBad split badAt).card = ∑ rest, (badAt rest).card := by
@@ -173,6 +179,7 @@ theorem card_liftFiberBad (split : Global ≃ Local × Rest)
         using (FlockZk.card_filter_prod_eq_sum
           (g := fun item rest => decide (item ∈ badAt rest)) true)
 
+omit [DecidableEq Global] in
 /-- Conditional component lifting: a uniform local bound in every fixed
 fiber is also a bound in the complete global tape. -/
 theorem liftFiberBad_probability_le [Nonempty Local] [Nonempty Rest]

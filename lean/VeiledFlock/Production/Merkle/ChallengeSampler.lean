@@ -115,10 +115,10 @@ def nonzero (value : GhashField) : Prop := value ≠ 0
 def notZeroOrOne (value : GhashField) : Prop := value ≠ 0 ∧ value ≠ 1
 
 noncomputable instance nonzeroDecidable : DecidablePred nonzero :=
-  fun value => Classical.dec _
+  fun _value => Classical.dec _
 
 noncomputable instance notZeroOrOneDecidable : DecidablePred notZeroOrOne :=
-  fun value => Classical.dec _
+  fun _value => Classical.dec _
 
 noncomputable def sampleNonzero (oracle : List Byte → OracleBlock)
     (trials : ℕ) (transcript : List Byte) :=

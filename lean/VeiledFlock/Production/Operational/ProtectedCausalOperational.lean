@@ -34,6 +34,7 @@ variable [Fintype PublicCoord]
 variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Finite Prior]
 
+omit [DecidableEq Rest] in
 /-- Exact protected operational simulator.  The only protocol/refinement
 premise left is transport of the absorbed pre-zerocheck prefix. -/
 theorem publicSimulator_causal_protected_exact

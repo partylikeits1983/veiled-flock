@@ -1099,7 +1099,7 @@ noncomputable def productionSimulatedProof
     (fallback : OracleBlock)
     (r1csDigest : List Byte)
     (causalSecret : ProductionCausalSecret (W := W) shape)
-    (completion : Completion OracleBlock (programmedPoints shape))
+    (_completion : Completion OracleBlock (programmedPoints shape))
     (baseMessage : W → BaseWord shape)
     (publicPositions : PublicCoord → ResidualDataIndex shape × LaneIndex)
     (weights : History (Outcome := OracleBlock) (programmedPoints shape) →

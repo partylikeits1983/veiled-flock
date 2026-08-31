@@ -137,7 +137,7 @@ theorem rawQuery_ligerito_trial
   have hoff := ligerito_trial_offset site trial htrial
   rw [hoff.1]
   have hpositive : 1 + trial ≠ 0 := by omega
-  simp [hpositive, hactive, hstate]
+  simp [ hactive, hstate]
 
 set_option maxRecDepth 10000 in
 theorem rawControlUntil_ligerito_stable_of_done
@@ -329,7 +329,7 @@ theorem grindFrom_ligerito_site_some
           dsimp only
           rw [hoff.1, hoff.2]
           simp [hactive', show ¬rustLeadingZeroBitsAtLeast maxLigeritoBits
-            (by decide) (answers round) from hgood, hnotCap, hstate']
+            (by decide) (answers round) from hgood,  hstate']
           split <;> rfl
         have hnextTranscript : next.transcript = current.transcript := by
           rw [hsucc']
@@ -338,7 +338,7 @@ theorem grindFrom_ligerito_site_some
           dsimp only
           rw [hoff.1, hoff.2]
           simp [hactive', show ¬rustLeadingZeroBitsAtLeast maxLigeritoBits
-            (by decide) (answers round) from hgood, hnotCap]
+            (by decide) (answers round) from hgood]
           split <;> rfl
         have hnextExists : ∃ offset : Fin remaining,
             rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
@@ -400,7 +400,7 @@ theorem grindLigeritoSites_from_index_some
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers (ligeritoOffset + siteIndex * ligeritoSiteWidth) (by
           unfold productionSamplingSlots ligeritoWidth
-          have hwidth : 0 < ligeritoSiteWidth := by
+          have _hwidth : 0 < ligeritoSiteWidth := by
             unfold ligeritoSiteWidth
             omega
           nlinarith)).transcript = transcript) :

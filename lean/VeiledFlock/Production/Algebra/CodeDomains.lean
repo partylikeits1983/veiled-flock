@@ -34,7 +34,7 @@ def baseIndex (logical padding : ℕ) : Fin logical ⊕ Fin padding → ℕ
 theorem baseIndex_lt (logical padding : ℕ)
     (index : Fin logical ⊕ Fin padding) :
     baseIndex logical padding index < logical + padding := by
-  cases index <;> simp [baseIndex] <;> omega
+  cases index <;> simp [baseIndex] ; omega
 
 theorem baseIndex_injective (logical padding : ℕ) :
     Function.Injective (baseIndex logical padding) := by
@@ -185,7 +185,7 @@ theorem capacityBaseIndex_lt (logical padding capacity : ℕ)
     omega
 
 theorem capacityBaseIndex_injective (logical padding capacity : ℕ)
-    (htotal : logical + padding ≤ capacity) :
+    (_htotal : logical + padding ≤ capacity) :
     Function.Injective (capacityBaseIndex logical padding capacity) := by
   intro left right heq
   rcases left with (⟨left | left⟩ | left) <;>

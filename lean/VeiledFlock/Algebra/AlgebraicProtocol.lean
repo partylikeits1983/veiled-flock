@@ -86,10 +86,12 @@ noncomputable def simulatorCoinEquiv
           (Equiv.addRight querySecret))
         (foldedEquiv c hc message)))
 
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype (I → F)] in
 @[simp]
 private theorem flockCoinEquiv_apply (left right coins : I → F) :
     flockCoinEquiv left right coins = coins + (left - right) := rfl
 
+omit [Fintype F] [DecidableEq F] in
 private theorem dummyView_veilCoinEquiv
     (alpha : F) (halpha : alpha ≠ 0) (hplus : 1 + alpha ≠ 0)
     (left right coins : F × F × F) :
@@ -100,6 +102,7 @@ private theorem dummyView_veilCoinEquiv
         (dummyViewEquiv alpha halpha hplus coins + (left - right))) = _
   rw [Equiv.apply_symm_apply, dummyViewEquiv_apply]
 
+omit [Fintype F] [DecidableEq F] [Fintype (Padding → F)] in
 private theorem paddingToQueries_paddingCoinEquiv
     (base : Data ⊕ Padding → F) (hbase : Injective base)
     (queries : Padding → F) (hqueries : Injective queries)
@@ -113,6 +116,7 @@ private theorem paddingToQueries_paddingCoinEquiv
       (codeEquiv.symm (codeEquiv coins + (left - right))) = _
   rw [LinearEquiv.apply_symm_apply, paddingQueryEquiv_apply]
 
+omit [Fintype F] [DecidableEq F] [Fintype J] [Fintype (J → F)] in
 @[simp]
 private theorem pcsCoinEquiv_apply (c : F) (delta coins : J → F) :
     pcsCoinEquiv c delta coins = translateBlind c delta coins := by
@@ -185,6 +189,7 @@ noncomputable def simulatedView
   (coins.1, coins.2.1, coins.2.2.1,
     simulatedOpeningView c functional publicMessageValue coins.2.2.2)
 
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype J] [Fintype (I → F)] [Fintype (Padding → F)] [Fintype (J → F)] in
 theorem realView_simulator_transport
     (alpha c : F) (halpha : alpha ≠ 0) (hplus : 1 + alpha ≠ 0)
     (hc : c ≠ 0)
@@ -225,6 +230,7 @@ theorem realView_simulator_transport
         exact realOpeningView_foldedEquiv c hc functional
           (message witness) pcsCoins
 
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype J] [Fintype (I → F)] [Fintype (Padding → F)] [Fintype (J → F)] in
 private theorem pointwise_transport
     (alpha c : F) (halpha : alpha ≠ 0) (hplus : 1 + alpha ≠ 0)
     (hc : c ≠ 0)
@@ -293,6 +299,7 @@ private theorem pointwise_transport
           exact (functional_translate c pcsCoins (message right - message left)
             functional hkernel).symm
 
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype J] [Fintype (I → F)] [Fintype (Padding → F)] [Fintype (J → F)] in
 /-- The joint algebraic view is pointwise preserved by
 `witnessCoinEquiv`. -/
 theorem realView_witnessCoinEquiv
@@ -322,6 +329,7 @@ theorem realView_witnessCoinEquiv
     hdisjoint functional flockSecret veilSecret querySecret message left right
     hkernel coins
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 /-- **Explicit algebraic simulator.** The simulator receives only the public
 statement, samples fresh uniform algebraic coins, and produces exactly the
 honest algebraic view distribution. -/
@@ -359,6 +367,7 @@ theorem algebraicSimulator_exact
     hqueries hdisjoint functional flockSecret veilSecret querySecret message
     witness coins
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 /-- **Exact algebraic end-to-end zero knowledge.** For witnesses with the same
 public statement, the entire modeled algebraic VEIL--FLOCK view has identical
 distribution.  The only relation-specific premise is that the exposed public
@@ -400,6 +409,7 @@ section Fiberwise
 
 variable {Rest FullView : Type*}
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 /-- **Challenge-dependent algebraic zero knowledge.**  All Fiat--Shamir
 challenges, evaluation points, linear functionals, and witness-derived
 algebraic messages may depend on a fixed fiber containing the complete public
@@ -461,8 +471,7 @@ theorem fiberwise_algebraic_e2e_zeroKnowledge
       (message rest left) (message rest right))
   apply VeiledFlock.Probability.uniform_map_eq_of_equiv equiv
   intro coins
-  simp only [equiv, split,
-    VeiledFlock.Probability.fiberwiseEquiv_split_apply, Equiv.refl_apply]
+  simp only [equiv, split]
   apply congrArg (continueWith coins.2)
   exact pointwise_transport (alpha coins.2) (c coins.2)
     (halpha coins.2) (hplus coins.2) (hc coins.2)

@@ -62,7 +62,7 @@ theorem card_coordinateBad {sites : ℕ} (site : Fin sites)
       refine Finset.card_equiv (splitCoordinate site) fun assignments => ?_
       simp [coordinateBad, splitCoordinate]
     _ = bad.card * Fintype.card Coin ^ (sites - 1) := by
-      simp [Fintype.card_fun, card_otherCoordinates site, Nat.mul_comm]
+      simp [ card_otherCoordinates site, Nat.mul_comm]
 
 /-- Assignments on which at least one independent site is bad. -/
 noncomputable def anyBad (sites : ℕ) (bad : Finset Coin) :

@@ -116,7 +116,7 @@ theorem rawQuery_beforeZerocheck_length_eq
   let offset := round - equalityOffset
   let counter := offset % equalityAttemptBlocks
   by_cases hsome : control.equalityPoint.isSome
-  · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome] at hquery
+  · simp [rawQuery, hstatus, hskip, hequality,   hsome] at hquery
   by_cases hcounter : counter < equalityBlockCount shape
   · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome,
       hcounter] at hquery
@@ -369,13 +369,13 @@ theorem acceptScalar_active_transcript_length_eq
   by_cases hzero : round - start = 0
   · by_cases hfailed :
         VeiledFlock.ProductionScalarProjection.scalarFromBlock answer ∈ failed
-    · simp [acceptScalar, hzero, hfailed, afterScalar_length]
+    · simp [acceptScalar, hzero, hfailed]
       split <;> simp_all [afterScalar_length]
     · simp [acceptScalar, hzero, hfailed, afterScalar_length]
   · have hdone : control.stageDone = false := hactive.resolve_left hzero
     by_cases hfailed :
         VeiledFlock.ProductionScalarProjection.scalarFromBlock answer ∈ failed
-    · simp [acceptScalar, hzero, hdone, hfailed, afterScalar_length]
+    · simp [acceptScalar, hzero, hdone, hfailed]
       split <;> simp_all [afterScalar_length]
     · simp [acceptScalar, hzero, hdone, hfailed, afterScalar_length]
 
@@ -388,11 +388,11 @@ theorem acceptPositions_active_transcript_length_eq
       control.transcript.length + 18 := by
   classical
   by_cases hzero : round - start = 0
-  · simp [acceptPositions, hzero, afterScalar_length]
+  · simp [acceptPositions, hzero]
     split <;> simp_all [afterScalar_length]
     split <;> simp_all [afterScalar_length]
   · have hdone : control.stageDone = false := hactive.resolve_left hzero
-    simp [acceptPositions, hzero, hdone, afterScalar_length]
+    simp [acceptPositions, hzero, hdone]
     split <;> simp_all [afterScalar_length]
     split <;> simp_all [afterScalar_length]
 

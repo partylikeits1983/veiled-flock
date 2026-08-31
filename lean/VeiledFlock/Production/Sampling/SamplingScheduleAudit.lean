@@ -71,7 +71,7 @@ theorem acceptPositions_transcript_length_le {shape : BatchShape}
             (VeiledFlock.ProductionScalarProjection.scalarFromBlock answer))
             control.positions).card
       · simp [acceptPositions, hzero, hdone, haccept, afterScalar_length]
-      · simp [acceptPositions, hzero, hdone, haccept, afterScalar_length]
+      · simp [acceptPositions, hzero, hdone, haccept]
         split <;> simp_all [afterScalar_length]
 
 theorem equalityStep_transcript_length_le (shape : BatchShape) (round : ℕ)
@@ -100,10 +100,10 @@ theorem equalityStep_transcript_length_le (shape : BatchShape) (round : ℕ)
                 outer, hlast, haccept, hskip, hbase, afterSlice_length]
               cases shape <;> norm_num [m, kSkip]
         · simp [equalityStep, hsome, counter, hcounter, base, blocks, outer,
-            hlast, haccept, hbase, afterSlice_length]
-          split <;> simp_all [afterSlice_length, hbase] <;>
+            hlast, haccept, hbase]
+          split <;> simp_all [afterSlice_length] <;>
             (cases shape <;> norm_num [m, kSkip])
-      · simp [equalityStep, hsome, counter, hcounter, base, blocks, hlast,
+      · simp [equalityStep, hsome, counter, hcounter, base,  hlast,
           hbase]
     · simp [equalityStep, hsome, counter, hcounter]
 
@@ -152,7 +152,7 @@ theorem ligeritoStep_transcript_length_le {shape : BatchShape}
     · simp [ligeritoStep, hstate, hdone]
     · by_cases hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits
           (by decide) answer
-      · simp [ligeritoStep, hstate, hdone, hgood, afterGrind_length]
+      · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all [afterGrind_length]
       · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all
@@ -328,7 +328,7 @@ theorem rawQuery_length_le
   · let offset := round - equalityOffset
     let counter := offset % equalityAttemptBlocks
     by_cases hsome : control.equalityPoint.isSome
-    · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome] at hquery
+    · simp [rawQuery, hstatus, hskip, hequality,   hsome] at hquery
     by_cases hcounter : counter < equalityBlockCount shape
     · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome,
         hcounter] at hquery
@@ -340,7 +340,7 @@ theorem rawQuery_length_le
   · let offset := round - zerocheckOffset
     cases heq : control.equalityPoint with
     | none =>
-        simp [rawQuery, hstatus, hskip, hequality, hzero, offset, heq] at hquery
+        simp [rawQuery, hstatus, hskip, hequality, hzero,  heq] at hquery
     | some equalityPoint =>
         by_cases hsite : offset < programmedPoints shape
         · simp [rawQuery, hstatus, hskip, hequality, hzero, offset, heq,

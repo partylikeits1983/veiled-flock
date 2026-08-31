@@ -4,7 +4,8 @@ import VeiledFlock.Concrete.ChallengeSampling
 /-!
 # Registered VEIL--FLOCK parameters
 
-These are the four BLAKE3-preimage batch geometries accepted by PR 61.  The
+These are the five BLAKE3-preimage batch geometries accepted by the full-ZK
+entry point.  The
 formulas mirror `MaskLayout::{piop_count, observed_count}` and the simulator's
 `1 + m - K_SKIP` programmed-challenge count.  The small closed datatype lets
 Lean exhaustively prove the bounds for every accepted shape.
@@ -18,6 +19,7 @@ inductive BatchShape
   | slots512
   | slots1024
   | slots2048
+  | slots4096
   deriving DecidableEq, Fintype
 
 def m : BatchShape → ℕ
@@ -25,12 +27,14 @@ def m : BatchShape → ℕ
   | .slots512 => 23
   | .slots1024 => 24
   | .slots2048 => 25
+  | .slots4096 => 26
 
 def expectedMasks : BatchShape → ℕ
   | .slots256 => 754
   | .slots512 => 756
   | .slots1024 => 758
   | .slots2048 => 760
+  | .slots4096 => 762
 
 def kSkip : ℕ := 6
 def kLog : ℕ := 14
@@ -55,13 +59,13 @@ theorem observedCount_eq_expectedMasks (shape : BatchShape) :
 /-- Number of Fiat--Shamir sites programmed by the zerocheck simulator. -/
 def programmedPoints (shape : BatchShape) : ℕ := 1 + m shape - kSkip
 
-def maxProgrammedPoints : ℕ := 20
+def maxProgrammedPoints : ℕ := 21
 def maxProtocolOracleQueriesPerProof : ℕ := 1_000_000
 /-- `sampleProductionTailRaw` samples the blind, outer, linear, Hadamard,
 and product challenges independently with the bounded nonzero sampler. -/
 def maxNonzeroChallengeSites : ℕ := 5
 def maxNotZeroOrOneChallengeSites : ℕ := 1
-def maxEqualityPointOuterCoordinates : ℕ := 12
+def maxEqualityPointOuterCoordinates : ℕ := 13
 def veilQueryCount : ℕ := 160
 def veilSamplingTrials : ℕ := 4096
 def veilInverseRate : ℕ := 8
@@ -80,12 +84,13 @@ def outerMaskSymbolsPerLane (shape : BatchShape) : ℕ :=
   2 ^ (m shape - 13)
 
 /-- Exact L0 query count in the registered Secure Ligerito profiles
-`m22_secure.toml` through `m25_secure.toml`. -/
+`m22_secure.toml` through `m26_secure.toml`. -/
 def outerL0QueryCount : BatchShape → ℕ
   | .slots256 => 298
   | .slots512 => 294
   | .slots1024 => 292
   | .slots2048 => 291
+  | .slots4096 => 290
 
 /-- Per-lane committed message dimension after adjoining the low random half. -/
 def outerMessagePositions (shape : BatchShape) : ℕ :=
@@ -146,7 +151,7 @@ theorem programmedPoints_positive (shape : BatchShape) :
   cases shape <;> decide
 
 /-- The largest rejection-sampled equality-point suffix is
-`25 - K_SKIP(6) - N_INNER(7) = 12`. -/
+`26 - K_SKIP(6) - N_INNER(7) = 13`. -/
 theorem equalityPointOuterCoordinates_le_max (shape : BatchShape) :
     m shape - kSkip - 7 ≤ maxEqualityPointOuterCoordinates := by
   cases shape <;> decide

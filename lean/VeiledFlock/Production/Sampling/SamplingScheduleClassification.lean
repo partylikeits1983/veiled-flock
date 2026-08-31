@@ -182,7 +182,7 @@ theorem equalityStep_fiat (shape : BatchShape) (round : ℕ)
         · simp [equalityStep, hsome, counter, hcounter, base, blocks, outer,
             hlast, haccept]
           split <;> exact afterSlice_isFiatShamir hbase outer
-      · simp [equalityStep, hsome, counter, hcounter, base, blocks, hlast,
+      · simp [equalityStep, hsome, counter, hcounter, base,  hlast,
           hbase]
     · simp [equalityStep, hsome, counter, hcounter, hfiat]
 
@@ -223,7 +223,7 @@ theorem blindGrindingStep_fiat {shape : BatchShape} (round : ℕ)
   · by_cases hgood : blindGrindingGood answer
     · simp [blindGrindingStep, hdone, hgood]
       exact afterGrind_isFiatShamir' hfiat _
-    · simp [blindGrindingStep, hdone, hgood, hfiat]
+    · simp [blindGrindingStep, hdone, hgood]
       split <;> simp_all
 
 theorem ligeritoStep_fiat {shape : BatchShape} (round : ℕ)
@@ -240,7 +240,7 @@ theorem ligeritoStep_fiat {shape : BatchShape} (round : ℕ)
           (by decide) answer
       · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all [afterGrind_isFiatShamir']
-      · simp [ligeritoStep, hstate, hdone, hgood, hfiat]
+      · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all
 
 set_option maxRecDepth 30000 in
@@ -407,7 +407,7 @@ theorem rawQuery_classified
   · let offset := round - equalityOffset
     let counter := offset % equalityAttemptBlocks
     by_cases hsome : control.equalityPoint.isSome
-    · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome] at hquery
+    · simp [rawQuery, hstatus, hskip, hequality,   hsome] at hquery
     by_cases hcounter : counter < equalityBlockCount shape
     · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome,
         hcounter] at hquery
@@ -419,7 +419,7 @@ theorem rawQuery_classified
   · let offset := round - zerocheckOffset
     cases heq : control.equalityPoint with
     | none =>
-        simp [rawQuery, hstatus, hskip, hequality, hzero, offset, heq] at hquery
+        simp [rawQuery, hstatus, hskip, hequality, hzero,  heq] at hquery
     | some equalityPoint =>
         by_cases hsite : offset < programmedPoints shape
         · simp [rawQuery, hstatus, hskip, hequality, hzero, offset, heq,

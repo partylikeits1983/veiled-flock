@@ -44,6 +44,7 @@ noncomputable def coordinateBad {count : ℕ} (site : Fin count)
   ((Finset.univ : Finset ({other : Fin count // other ≠ site} → Salt)).product
     bad).map (splitCoordinate site).symm.toEmbedding
 
+omit [DecidableEq Salt] in
 theorem mem_coordinateBad_iff {count : ℕ} (site : Fin count)
     (bad : Finset Salt) (values : Fin count → Salt) :
     values ∈ coordinateBad site bad ↔ values site ∈ bad := by
@@ -56,6 +57,7 @@ private theorem card_otherCoordinates {count : ℕ} (site : Fin count) :
     (p := fun other : Fin count => other = site)]
   simp
 
+omit [DecidableEq Salt] in
 /-- Fixing one coordinate to a set of `b` values leaves all other coordinates
 free, hence exactly `b * |Salt|^(count-1)` assignments. -/
 theorem card_coordinateBad {count : ℕ} (site : Fin count)
@@ -63,7 +65,7 @@ theorem card_coordinateBad {count : ℕ} (site : Fin count)
     (coordinateBad site bad).card =
       bad.card * Fintype.card Salt ^ (count - 1) := by
   classical
-  simp [coordinateBad, Fintype.card_fun, card_otherCoordinates site,
+  simp [coordinateBad,  card_otherCoordinates site,
     Nat.mul_comm]
 
 /-- Salt values that expose one framed hidden input to the adversary's prior
@@ -207,6 +209,9 @@ noncomputable def saltedLeafCoinEquiv {hidden : ℕ}
       (fun site => point right site (salts site))
       (hinjective left salts) (hinjective right salts))
 
+omit [Nonempty Outcome] [Nonempty Salt] in
+omit [Fintype Salt] [DecidableEq Salt] [Fintype Outcome] [DecidableEq Outcome] in
+omit [DecidableEq Point] in
 /-- Corresponding salted leaves receive exactly the same oracle answers under
 the coin permutation. -/
 theorem leafAnswers_saltedLeafCoinEquiv {hidden : ℕ}
@@ -242,6 +247,7 @@ theorem leafAnswers_saltedLeafCoinEquiv {hidden : ℕ}
     (fun index => point right index (coins.1 index))
     (hinjective left coins.1) (hinjective right coins.1) coins.2 site
 
+omit [DecidableEq Salt] [DecidableEq Outcome] in
 /-- Perfect hiding of the entire vector of fresh salted leaf hashes.  An
 arbitrary deterministic Merkle continuation may depend on the salts and leaf
 answers; therefore all internal hashing and the final root are covered once
@@ -283,6 +289,7 @@ def combinedPoints {Prior Leaf : Type*}
     (prior : Prior → Point) (leaf : Leaf → Point) : Prior ⊕ Leaf → Point :=
   Sum.elim prior leaf
 
+omit [DecidableEq Point] [Fintype Point] in
 theorem combinedPoints_injective {Prior Leaf : Type*}
     (prior : Prior → Point) (leaf : Leaf → Point)
     (hprior : Function.Injective prior)
@@ -433,6 +440,7 @@ noncomputable def universalHiddenInputBadAssignments {hidden : ℕ}
       (VeiledFlock.UniversalFreshness.badNonces
         (fun _ : Fin 1 => point site) priorQueries)
 
+omit [DecidableEq Point] in
 theorem mem_universalHiddenInputBadAssignments_iff {hidden : ℕ}
     (point : Fin hidden → Salt → Context → Point)
     (priorQueries : Finset Point) (salts : Fin hidden → Salt) :

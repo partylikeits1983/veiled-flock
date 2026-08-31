@@ -40,7 +40,7 @@ theorem sampleSlice_eq_sliceFromBlocks
   by_cases heven : index.val % 2 = 0
   · simp [blockFieldsEquiv, heven]
   · have hmod : index.val % 2 = 1 := by omega
-    simp [blockFieldsEquiv, heven, hmod]
+    simp [blockFieldsEquiv,  hmod]
 
 /-- The one shared oracle agrees with the answer tape at every query issued by
 the literal production state machine.  The operational experiment discharges
@@ -98,7 +98,7 @@ theorem production_skip_sample_eq
     rw [List.getD_eq_getElem _ _ hlist, List.getElem_ofFn]
     apply congrArg answers
     apply Fin.ext
-    simp [window, counter]
+    simp [ counter]
   exact (hagrees counter _ hquery).symm.trans hget.symm
 
 set_option maxRecDepth 10000 in
@@ -114,7 +114,7 @@ theorem production_equality_attempt_sample_eq
     (attempt : ℕ)
     (hattempt : attempt ≤ firstEqualityAccepted shape answers hgood) :
     let boundary := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6)
+      prelude answers (equalityOffset + attempt * 7)
         (equalityBoundary_fits attempt
           (hattempt.trans
             (firstEqualityAccepted_lt shape answers hgood).le))
@@ -133,11 +133,11 @@ theorem production_equality_attempt_sample_eq
     completion witness coins prelude answers hgood attempt counter hattempt
     hcounter
   let site : Fin productionSamplingSlots :=
-    ⟨equalityOffset + attempt * 6 + counter, by
+    ⟨equalityOffset + attempt * 7 + counter, by
       have ha : attempt < rejectionTrials := lt_of_le_of_lt hattempt
         (firstEqualityAccepted_lt shape answers hgood)
-      have hc : counter < 6 :=
-        hcounter.trans_le (equalityBlockCount_le_six shape)
+      have hc : counter < 7 :=
+        hcounter.trans_le (equalityBlockCount_le_seven shape)
       rw [productionSamplingSlots_eq]
       norm_num [equalityOffset, equalitySkipBlocks, rejectionTrials] at ha ⊢
       omega⟩
@@ -146,7 +146,7 @@ theorem production_equality_attempt_sample_eq
         answers site site.isLt.le) =
       some (slicePoint
         (rawControlUntil shape causalSecret completion witness coins prelude
-          answers (equalityOffset + attempt * 6)
+          answers (equalityOffset + attempt * 7)
             (equalityBoundary_fits attempt
               (hattempt.trans
                 (firstEqualityAccepted_lt shape answers hgood).le))).transcript
@@ -163,7 +163,7 @@ theorem production_equality_attempt_sample_eq
         (rawControlUntil shape causalSecret completion witness coins prelude
           answers site site.isLt.le).transcript =
         (rawControlUntil shape causalSecret completion witness coins prelude
-          answers (equalityOffset + attempt * 6)
+          answers (equalityOffset + attempt * 7)
             (equalityBoundary_fits attempt
               (hattempt.trans
                 (firstEqualityAccepted_lt shape answers hgood).le))).transcript := by
@@ -174,17 +174,17 @@ theorem production_equality_attempt_sample_eq
     have hequality : site.val < zerocheckOffset := by
       have ha : attempt < rejectionTrials := lt_of_le_of_lt hattempt
         (firstEqualityAccepted_lt shape answers hgood)
-      have hc : counter < 6 :=
-        hcounter.trans_le (equalityBlockCount_le_six shape)
+      have hc : counter < 7 :=
+        hcounter.trans_le (equalityBlockCount_le_seven shape)
       norm_num [site, zerocheckOffset, equalityWidth, equalityAttemptBlocks,
         equalityOffset] at ⊢
       omega
-    have hoffset : site.val - equalityOffset = attempt * 6 + counter := by
+    have hoffset : site.val - equalityOffset = attempt * 7 + counter := by
       simp only [site]
       omega
-    have hmod : (attempt * 6 + counter) % equalityAttemptBlocks = counter := by
-      have hc : counter < 6 :=
-        hcounter.trans_le (equalityBlockCount_le_six shape)
+    have hmod : (attempt * 7 + counter) % equalityAttemptBlocks = counter := by
+      have hc : counter < 7 :=
+        hcounter.trans_le (equalityBlockCount_le_seven shape)
       norm_num [equalityAttemptBlocks]
       omega
     simp [rawQuery, hstatus, hskip, hequality, hnone, hoffset, hmod,
@@ -194,7 +194,7 @@ theorem production_equality_attempt_sample_eq
         ⟨attempt, lt_of_le_of_lt hattempt
           (firstEqualityAccepted_lt shape answers hgood)⟩)).length := by
     rw [List.length_ofFn]
-    exact hcounter.trans_le (equalityBlockCount_le_six shape)
+    exact hcounter.trans_le (equalityBlockCount_le_seven shape)
   have hget :
       (List.ofFn (equalityAttemptAnswers answers
         ⟨attempt, lt_of_le_of_lt hattempt
@@ -207,26 +207,28 @@ theorem production_equality_attempt_sample_eq
 set_option maxRecDepth 10000 in
 theorem equalityAttempt_transcript_eq_afterSlice
     (shape : BatchShape) (attempt : ℕ) (control : Control shape)
-    (blocks : Fin 6 → OracleBlock)
+    (blocks : Fin 7 → OracleBlock)
     (hstatus : control.status = .live)
     (hnone : control.equalityPoint = none)
     (hskip : control.skip.isSome = true) :
     (iterateFrom (equalityStep shape)
-      (equalityOffset + attempt * equalityAttemptBlocks) 6 control
+      (equalityOffset + attempt * equalityAttemptBlocks) 7 control
       blocks).transcript =
         afterSlice control.transcript
           (sliceFromBlocks (m shape - kSkip - 7) (List.ofFn blocks)) := by
   have hoff (counter : ℕ) :
-      equalityOffset + attempt * 6 + counter - equalityOffset =
-        attempt * 6 + counter := by omega
-  have hoff2 : equalityOffset + attempt * 6 + 1 + 1 - equalityOffset =
-      attempt * 6 + 2 := by omega
-  have hoff3 : equalityOffset + attempt * 6 + 1 + 1 + 1 - equalityOffset =
-      attempt * 6 + 3 := by omega
-  have hoff4 : equalityOffset + attempt * 6 + 1 + 1 + 1 + 1 -
-      equalityOffset = attempt * 6 + 4 := by omega
-  have hoff5 : equalityOffset + attempt * 6 + 1 + 1 + 1 + 1 + 1 -
-      equalityOffset = attempt * 6 + 5 := by omega
+      equalityOffset + attempt * 7 + counter - equalityOffset =
+        attempt * 7 + counter := by omega
+  have hoff2 : equalityOffset + attempt * 7 + 1 + 1 - equalityOffset =
+      attempt * 7 + 2 := by omega
+  have hoff3 : equalityOffset + attempt * 7 + 1 + 1 + 1 - equalityOffset =
+      attempt * 7 + 3 := by omega
+  have hoff4 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 4 := by omega
+  have hoff5 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 5 := by omega
+  have hoff6 : equalityOffset + attempt * 7 + 1 + 1 + 1 + 1 + 1 + 1 -
+      equalityOffset = attempt * 7 + 6 := by omega
   have hslice := sliceFrom_equalityLiveBlocks shape blocks
   cases hskipValue : control.skip with
   | none => simp [hskipValue] at hskip
@@ -234,7 +236,7 @@ theorem equalityAttempt_transcript_eq_afterSlice
       cases shape <;>
         simp [iterateFrom, iterateList, equalityStep, equalityBlockCount,
           equalityAttemptBlocks, m, kSkip, rejectionTrials, hoff, hoff2,
-          hoff3, hoff4, hoff5, equalityLiveBlocks, hslice, hnone, hstatus,
+          hoff3, hoff4, hoff5, hoff6,   hnone, hstatus,
           hskipValue] <;>
         split <;> simp_all <;>
         (try split) <;> (try simp_all) <;>
@@ -250,12 +252,12 @@ theorem production_equality_boundary_succ_transcript
     (attempt : ℕ)
     (hattempt : attempt ≤ firstEqualityAccepted shape answers hgood) :
     let before := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6)
+      prelude answers (equalityOffset + attempt * 7)
         (equalityBoundary_fits attempt
           (hattempt.trans
             (firstEqualityAccepted_lt shape answers hgood).le))
     let after := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + (attempt + 1) * 6)
+      prelude answers (equalityOffset + (attempt + 1) * 7)
         (equalityBoundary_fits (attempt + 1) (by
           have hfirst := firstEqualityAccepted_lt shape answers hgood
           omega))
@@ -271,9 +273,9 @@ theorem production_equality_boundary_succ_transcript
     completion witness coins prelude answers hgood attempt hattempt
   let blocks := equalityAttemptAnswers answers ⟨attempt, hattemptLt⟩
   have hlocalStatus :
-      (iterateFrom (equalityStep shape) (equalityOffset + attempt * 6) 6
+      (iterateFrom (equalityStep shape) (equalityOffset + attempt * 7) 7
         (rawControlUntil shape causalSecret completion witness coins prelude
-          answers (equalityOffset + attempt * 6)
+          answers (equalityOffset + attempt * 7)
             (equalityBoundary_fits attempt hattemptLt.le)) blocks).status =
         .live := by
     by_cases hfirst : attempt = firstEqualityAccepted shape answers hgood
@@ -282,7 +284,7 @@ theorem production_equality_boundary_succ_transcript
         (firstEqualityAccepted shape answers hgood)
         (rawControlUntil shape causalSecret completion witness coins prelude
           answers
-            (equalityOffset + firstEqualityAccepted shape answers hgood * 6)
+            (equalityOffset + firstEqualityAccepted shape answers hgood * 7)
             (equalityBoundary_fits
               (firstEqualityAccepted shape answers hgood)
               (firstEqualityAccepted_lt shape answers hgood).le))
@@ -292,7 +294,7 @@ theorem production_equality_boundary_succ_transcript
           firstEqualityAccepted shape answers hgood := by omega
       exact (equalityAttempt_live_none_of_rejected_before_cap shape attempt
         (rawControlUntil shape causalSecret completion witness coins prelude
-          answers (equalityOffset + attempt * 6)
+          answers (equalityOffset + attempt * 7)
             (equalityBoundary_fits attempt hattemptLt.le)) blocks hbefore.1
         hbefore.2.1
         (before_firstEqualityAccepted_rejects shape answers hgood attempt
@@ -319,7 +321,7 @@ theorem sampleUntilAccepted_from_equality_boundary_some
     (distance attempt : ℕ)
     (hsum : attempt + distance = firstEqualityAccepted shape answers hgood) :
     let boundary := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6)
+      prelude answers (equalityOffset + attempt * 7)
         (equalityBoundary_fits attempt (by
           have hfirst := firstEqualityAccepted_lt shape answers hgood
           omega))
@@ -333,7 +335,7 @@ theorem sampleUntilAccepted_from_equality_boundary_some
       subst attempt
       let first := firstEqualityAccepted shape answers hgood
       let boundary := rawControlUntil shape causalSecret completion witness coins
-        prelude answers (equalityOffset + first * 6)
+        prelude answers (equalityOffset + first * 7)
           (equalityBoundary_fits first
             (firstEqualityAccepted_lt shape answers hgood).le)
       have hsample := production_equality_attempt_sample_eq shape causalSecret
@@ -362,10 +364,10 @@ theorem sampleUntilAccepted_from_equality_boundary_some
       have hattemptLt : attempt < rejectionTrials :=
         hattempt.trans (firstEqualityAccepted_lt shape answers hgood)
       let boundary := rawControlUntil shape causalSecret completion witness coins
-        prelude answers (equalityOffset + attempt * 6)
+        prelude answers (equalityOffset + attempt * 7)
           (equalityBoundary_fits attempt hattemptLt.le)
       let nextBoundary := rawControlUntil shape causalSecret completion witness
-        coins prelude answers (equalityOffset + (attempt + 1) * 6)
+        coins prelude answers (equalityOffset + (attempt + 1) * 7)
           (equalityBoundary_fits (attempt + 1) (by omega))
       have hsample := production_equality_attempt_sample_eq shape causalSecret
         completion witness coins prelude answers hgood oracle hagrees attempt
@@ -442,12 +444,12 @@ theorem sampleUntilAccepted_from_equality_boundary_eq_first
     (hsum : attempt + distance = firstEqualityAccepted shape answers hgood) :
     let first := firstEqualityAccepted shape answers hgood
     let boundary := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6)
+      prelude answers (equalityOffset + attempt * 7)
         (equalityBoundary_fits attempt (by
           have hfirst := firstEqualityAccepted_lt shape answers hgood
           omega))
     let firstBoundary := rawControlUntil shape causalSecret completion witness
-      coins prelude answers (equalityOffset + first * 6)
+      coins prelude answers (equalityOffset + first * 7)
         (equalityBoundary_fits first
           (firstEqualityAccepted_lt shape answers hgood).le)
     let firstOuter := sliceFromBlocks (m shape - kSkip - 7)
@@ -463,7 +465,7 @@ theorem sampleUntilAccepted_from_equality_boundary_eq_first
       subst attempt
       let first := firstEqualityAccepted shape answers hgood
       let boundary := rawControlUntil shape causalSecret completion witness coins
-        prelude answers (equalityOffset + first * 6)
+        prelude answers (equalityOffset + first * 7)
           (equalityBoundary_fits first
             (firstEqualityAccepted_lt shape answers hgood).le)
       let firstOuter := sliceFromBlocks (m shape - kSkip - 7)
@@ -491,7 +493,7 @@ theorem sampleUntilAccepted_from_equality_boundary_eq_first
       have hattemptLt : attempt < rejectionTrials :=
         hattempt.trans (firstEqualityAccepted_lt shape answers hgood)
       let boundary := rawControlUntil shape causalSecret completion witness coins
-        prelude answers (equalityOffset + attempt * 6)
+        prelude answers (equalityOffset + attempt * 7)
           (equalityBoundary_fits attempt hattemptLt.le)
       have hsample := production_equality_attempt_sample_eq shape causalSecret
         completion witness coins prelude answers hgood oracle hagrees attempt
@@ -523,7 +525,7 @@ theorem sampleEqualityPointPrefix_eq_some_raw
     let first := firstEqualityAccepted shape answers hgood
     let skip := sampleSlice oracle prelude 6
     let firstBoundary := rawControlUntil shape causalSecret completion witness
-      coins prelude answers (equalityOffset + first * 6)
+      coins prelude answers (equalityOffset + first * 7)
         (equalityBoundary_fits first
           (firstEqualityAccepted_lt shape answers hgood).le)
     let outer := sliceFromBlocks (m shape - kSkip - 7)

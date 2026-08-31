@@ -93,6 +93,7 @@ noncomputable def successfulTrace
     ProductionExecutionTrace shape :=
   Classical.choose tape.property
 
+omit [Fintype AdversaryCoins] in
 theorem successfulTrace_spec
     (tape : {tape : Tape shape maxStartLength
       (AdversaryCoins := AdversaryCoins) //
@@ -176,6 +177,7 @@ theorem initial_programming_ok
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 4000000 in
 include hvalid hnodes in
+omit [Fintype AdversaryCoins] in
 /-- Running the actual witness-free simulator on a successful transported
 input yields the concrete real trace proof. -/
 theorem successfulCoupling_simulatedProof
@@ -242,6 +244,7 @@ theorem successfulCoupling_simulatedProof
 set_option maxRecDepth 10000 in
 set_option maxHeartbeats 6000000 in
 include hvalid houter hlinear hhadamard hnodes hmax in
+omit [Fintype AdversaryCoins] in
 /-- The concrete successful real-to-simulator coupling is injective on the
 actual operational tape.  No equality or coupling premise is assumed. -/
 theorem successfulCoupling_injective :

@@ -37,6 +37,7 @@ def openedColumns (encode : (Index → F) →ₗ[F] (Row → F))
     | .inl data => encode (message witness data)
     | .inr _ => encode mask
 
+omit [Fintype Row] in
 /-- Encoding and column folding commute.  Thus the opened-column RLC is the
 encoding of the base-vector RLC, including the additive-mask column. -/
 theorem columnCombination_openedColumns
@@ -56,6 +57,7 @@ theorem columnCombination_openedColumns
     map_add, map_sum, map_smul]
   simp
 
+omit [Fintype Row] in
 /-- Once the Horner-mask translation has preserved the complete base RLC,
 the induced change of all encoded columns has zero RLC.  This is the exact
 compatibility condition required to preserve the revealed raw-padding RLC. -/
@@ -87,6 +89,7 @@ def paddingCoinEquiv (rowMask : (Row → F) ≃ₗ[F] (Row → F))
       else openedColumns encode message left leftMask)
     false true
 
+omit [Fintype DataColumn] [Fintype Row] in
 @[simp]
 theorem paddingCoinEquiv_apply
     (rowMask : (Row → F) ≃ₗ[F] (Row → F))
@@ -102,6 +105,7 @@ theorem paddingCoinEquiv_apply
           else openedColumns encode message left leftMask)
         false true padding := rfl
 
+omit [Fintype Row] in
 /-- Pointwise preservation of all opened code rows and the correlated raw
 padding RLC after the Horner RLC has been preserved. -/
 theorem paddingView_transport_after_horner
@@ -227,6 +231,7 @@ noncomputable def commitmentCoinEquiv
     rw [hmask]
     exact Prod.ext rfl (paddingEquiv.apply_symm_apply padding)
 
+omit [Fintype F] [DecidableEq F] [Fintype Index] [Fintype (Index → F)] [Fintype Padding] in
 theorem commitmentView_commitmentCoinEquiv
     (rowMask : (Row → F) ≃ₗ[F] (Row → F))
     (encode : (Index → F) →ₗ[F] (Row → F))
@@ -270,6 +275,7 @@ theorem commitmentView_commitmentCoinEquiv
             rightMask coins.2))
     simpa [LinearLeakageMask.view] using hpadding
 
+omit [Fintype F] [DecidableEq F] [Fintype Index] in
 /-- Exact joint finite-distribution theorem for one complete production-shaped
 padded proximity commitment. -/
 theorem commitment_witness_independent

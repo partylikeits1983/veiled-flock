@@ -93,6 +93,7 @@ noncomputable def answerEquiv
         (context answers history outer rest))
     left right
 
+omit [Fintype K] [DecidableEq K] [DecidableEq Rest] in
 /-- Exact honest-to-operational-simulator distributional identity for one
 production proof.  The full oracle is available to `continueWith`, hence this
 covers arbitrary bounded adaptive queries after the proof.  The three byte

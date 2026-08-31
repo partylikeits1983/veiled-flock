@@ -17,7 +17,7 @@ open VeiledFlock.ConcreteParameters
 open VeiledFlock.Grinding
 
 def equalitySkipBlocks : ℕ := 3
-def equalityAttemptBlocks : ℕ := 6
+def equalityAttemptBlocks : ℕ := 7
 
 def equalityOffset : ℕ := equalitySkipBlocks
 def equalityWidth : ℕ := rejectionTrials * equalityAttemptBlocks
@@ -48,7 +48,7 @@ def ligeritoWidth : ℕ := maxLigeritoSites * ligeritoSiteWidth
 zerocheck, rejection, position, and grinding schedule. -/
 def productionSamplingSlots : ℕ := ligeritoOffset + ligeritoWidth
 
-theorem productionSamplingSlots_eq : productionSamplingSlots = 131112 := by
+theorem productionSamplingSlots_eq : productionSamplingSlots = 135209 := by
   decide
 
 theorem productionSamplingSlots_le_protocol_cap :

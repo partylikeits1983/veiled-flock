@@ -39,6 +39,7 @@ def fullValues : ((Data → F) × (Padding → F)) →ₗ[F]
     funext index
     cases index <;> rfl
 
+omit [Fintype Data] [Fintype Padding] [DecidableEq Data] [DecidableEq Padding] in
 theorem fullValues_eq_data_add_padding (data : Data → F)
     (padding : Padding → F) :
     fullValues (data, padding) =

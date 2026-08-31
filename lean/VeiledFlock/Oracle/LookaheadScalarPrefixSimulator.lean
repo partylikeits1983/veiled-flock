@@ -143,6 +143,7 @@ noncomputable def programmedMachine (sites : ℕ)
   VeiledFlock.LookaheadOperationalSimulator.programmedMachine sites state
     rightSchedule hright continueWith (coinEquiv sites rightSchedule input).1
 
+omit [DecidableEq AlgCoins] in
 /-- The implementation-shaped low-half programmer and the ordinary
 full-block look-ahead programmer induce exactly equal distributions. -/
 theorem simulator_exact (sites : ℕ)

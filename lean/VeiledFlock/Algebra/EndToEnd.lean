@@ -39,6 +39,7 @@ def uniformTV (left right : Coins → View) : ℚ :=
   (1 / 2 : ℚ) * ∑ view : View,
     abs (uniformFiberMass left view - uniformFiberMass right view)
 
+omit [Nonempty Coins] in
 /-- Reparameterizing uniform coins through a bijection has zero statistical
 cost. -/
 theorem uniformTV_reparameterize_left (equiv : Coins ≃ Coins)
@@ -60,6 +61,7 @@ theorem uniformTV_reparameterize_left (equiv : Coins ≃ Coins)
   intro view _
   rw [hfiber view]
 
+omit [Nonempty Coins] in
 theorem uniformTV_comm (left right : Coins → View) :
     uniformTV left right = uniformTV right left := by
   unfold uniformTV
@@ -67,8 +69,9 @@ theorem uniformTV_comm (left right : Coins → View) :
   apply Finset.sum_congr rfl
   intro view _
   rw [← abs_neg]
-  congr 2 <;> ring
+  congr 2; ring
 
+omit [Nonempty Coins] in
 /-- Uniform reparameterization is equally valid on the simulator side. -/
 theorem uniformTV_reparameterize_right (equiv : Coins ≃ Coins)
     (left right : Coins → View) :
@@ -177,6 +180,7 @@ theorem finiteSupportTV_le_badProbability (left right : Coins → Output)
   apply Subtype.ext
   exact hsame coins hcoins
 
+omit [Nonempty Coins] in
 theorem uniformSupport_comp_equiv_right (equiv : Coins ≃ Coins)
     (left right : Coins → Output) :
     uniformSupport left (right ∘ equiv) = uniformSupport left right := by
@@ -193,6 +197,7 @@ theorem uniformSupport_comp_equiv_right (equiv : Coins ≃ Coins)
     · exact Or.inl ⟨coins, hleft⟩
     · exact Or.inr ⟨equiv.symm coins, by simpa using hright⟩
 
+omit [Nonempty Coins] in
 /-- A permutation of the uniformly sampled coins on either side does not
 change the exact finite-support total-variation distance. -/
 theorem finiteSupportTV_reparameterize_right (equiv : Coins ≃ Coins)
@@ -236,10 +241,12 @@ variable [DecidableEq Coins]
 def badUnion (bad : Index → Finset Coins) : Finset Coins :=
   Finset.univ.biUnion bad
 
+omit [Fintype Coins] [Nonempty Coins] [DecidableEq Index] in
 theorem mem_badUnion_iff (bad : Index → Finset Coins) (coins : Coins) :
     coins ∈ badUnion bad ↔ ∃ index, coins ∈ bad index := by
   simp [badUnion]
 
+omit [DecidableEq Index] in
 /-- Exact finite union bound, normalized by the uniform coin-space mass. -/
 theorem badUnionProbability_le_sum (bad : Index → Finset Coins) :
     ((badUnion bad).card : ℚ) / Fintype.card Coins ≤
@@ -258,6 +265,7 @@ theorem badUnionProbability_le_sum (bad : Index → Finset Coins) :
     _ = ∑ index, ((bad index).card : ℚ) / Fintype.card Coins := by
       rw [Finset.sum_div]
 
+omit [DecidableEq Index] in
 /-- A ledger entry may be replaced by any proved upper bound. -/
 theorem badUnionProbability_le_bounds (bad : Index → Finset Coins)
     (bound : Index → ℚ)
@@ -268,6 +276,7 @@ theorem badUnionProbability_le_bounds (bad : Index → Finset Coins)
   exact (badUnionProbability_le_sum bad).trans
     (Finset.sum_le_sum fun index _ => hbound index)
 
+omit [DecidableEq Index] in
 /-- **Ledger form of the end-to-end ZK theorem.** The full real and simulated
 views agree after algebraic coin reparameterization whenever no listed bad
 event occurs.  Their statistical distance is therefore at most the sum of the

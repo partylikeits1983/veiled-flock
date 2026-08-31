@@ -44,6 +44,7 @@ def compile {sites : ℕ}
     else
       Sum.inr ⟨sites, Nat.lt_succ_self sites⟩
 
+omit [Fintype Point] [DecidableEq Point] in
 theorem tracePoint_compile {sites : ℕ}
     (next : OptionalSchedule (Point := Point) (Outcome := Outcome) sites)
     (answers : History (Outcome := Outcome) sites) (site : Fin sites) :
@@ -65,6 +66,7 @@ def oracleDummyEquiv (sites : ℕ) :
       (CompiledPoint Point sites → Outcome) :=
   (Equiv.sumArrowEquivProdArrow Point (Fin (sites + 1)) Outcome).symm
 
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem oracleDummyEquiv_real (sites : ℕ)
     (oracle : Point → Outcome) (dummy : Fin (sites + 1) → Outcome)
@@ -72,6 +74,7 @@ theorem oracleDummyEquiv_real (sites : ℕ)
     oracleDummyEquiv sites (oracle, dummy) (Sum.inl point) = oracle point := by
   exact Equiv.sumArrowEquivProdArrow_symm_apply_inl oracle dummy point
 
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem oracleDummyEquiv_dummy (sites : ℕ)
     (oracle : Point → Outcome) (dummy : Fin (sites + 1) → Outcome)
@@ -99,6 +102,7 @@ def ActiveInjective {sites : ℕ}
     next right (priorAnswers answers right) = some rightPoint →
     leftPoint = rightPoint → left = right
 
+omit [Fintype Point] [DecidableEq Point] in
 /-- An optional schedule with distinct active points compiles to an injective
 ordinary adaptive trace. -/
 theorem tracePoints_compile_injective {sites : ℕ}
@@ -148,6 +152,7 @@ def ProtectedActiveFresh {Prior : Type*} {sites : ℕ}
     next site (priorAnswers answers site) = some point →
       fixed answers prior ≠ point
 
+omit [Fintype Point] [DecidableEq Point] in
 /-- Fixed-point injectivity, active trace injectivity, and mutual freshness
 imply injectivity of the complete protected optional family. -/
 theorem protectedTracePoints_injective {Prior : Type*} {sites : ℕ}
@@ -211,6 +216,7 @@ def SameActivity {sites : ℕ}
     (left site (priorAnswers answers site)).isSome =
       (right site (priorAnswers answers site)).isSome
 
+omit [Fintype Point] [DecidableEq Point] in
 theorem compile_sameActivity {sites : ℕ}
     (left right : OptionalSchedule (Point := Point) (Outcome := Outcome) sites)
     (answers : History (Outcome := Outcome) sites)

@@ -69,6 +69,7 @@ noncomputable def combinedCoinEquiv (sites : ℕ)
           (schedule (simulatedAlgebraic (algebraicCoinEquiv coins)))
           (hinjective (simulatedAlgebraic (algebraicCoinEquiv coins))))
 
+omit [Fintype AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 @[simp]
 theorem combinedCoinEquiv_apply (sites : ℕ)
     (simulatedAlgebraic : AlgCoins → AlgView)
@@ -112,6 +113,7 @@ noncomputable def simulatedMachine (sites : ℕ)
       (hinjective (simulatedAlgebraic coins.1)) coins.2)
     coins.2.1
 
+omit [Fintype AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Pointwise equality after the combined algebraic/oracle coin equivalence. -/
 theorem realMachine_transport (sites : ℕ)
     (realAlgebraic simulatedAlgebraic : AlgCoins → AlgView)
@@ -169,6 +171,7 @@ theorem realMachine_transport (sites : ℕ)
   rw [horacle]
   rfl
 
+omit [DecidableEq Outcome] in
 /-- Exact distributional ZK for the combined algebraic and adaptive-pROM
 state machine. -/
 theorem combinedSimulator_exact (sites : ℕ)

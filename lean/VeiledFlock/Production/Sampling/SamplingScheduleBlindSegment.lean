@@ -67,7 +67,7 @@ theorem rawControlUntil_blind_eq_segment
     (completion : Completion OracleBlock (programmedPoints shape))
     (witness : W) (coins : ProductionCoins shape) (prelude : List Byte)
     (answers : SamplingAnswerTape)
-    (hbefore : (rawControlUntil shape causalSecret completion witness coins
+    (_hbefore : (rawControlUntil shape causalSecret completion witness coins
       prelude answers blindStateOffset blindStateOffset_le_slots).status = .live) :
     let before := rawControlUntil shape causalSecret completion witness coins
       prelude answers blindStateOffset blindStateOffset_le_slots

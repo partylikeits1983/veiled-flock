@@ -41,9 +41,9 @@ theorem rawControlUntil_equality_after_first_isSome
     (answers : SamplingAnswerTape) (hgood : answers ∉ globalBad shape)
     (attempt counter : ℕ)
     (hafter : firstEqualityAccepted shape answers hgood < attempt)
-    (hattempt : attempt < rejectionTrials) (hcounter : counter < 6) :
+    (hattempt : attempt < rejectionTrials) (hcounter : counter < 7) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers
-      (equalityOffset + attempt * 6 + counter) (by
+      (equalityOffset + attempt * 7 + counter) (by
         have hnext := equalityBoundary_fits (attempt + 1) hattempt
         omega)).equalityPoint.isSome = true := by
   let first := firstEqualityAccepted shape answers hgood
@@ -59,13 +59,13 @@ theorem rawControlUntil_equality_after_first_isSome
     rawControlUntil_equality_boundary_after_first_eq shape causalSecret
       completion witness coins prelude answers hgood extra hextraCap
   let boundary := rawControlUntil shape causalSecret completion witness coins
-    prelude answers (equalityOffset + attempt * 6)
+    prelude answers (equalityOffset + attempt * 7)
       (equalityBoundary_fits attempt hattempt.le)
   have hboundarySome : boundary.equalityPoint.isSome = true := by
     rw [show boundary = rawControlUntil shape causalSecret completion witness
       coins prelude answers
         (equalityOffset +
-          (firstEqualityAccepted shape answers hgood + 1 + extra) * 6)
+          (firstEqualityAccepted shape answers hgood + 1 + extra) * 7)
         (equalityBoundary_fits
           (firstEqualityAccepted shape answers hgood + 1 + extra)
             hextraCap) by
@@ -79,7 +79,7 @@ theorem rawControlUntil_equality_after_first_isSome
     rw [show boundary = rawControlUntil shape causalSecret completion witness
       coins prelude answers
         (equalityOffset +
-          (firstEqualityAccepted shape answers hgood + 1 + extra) * 6)
+          (firstEqualityAccepted shape answers hgood + 1 + extra) * 7)
         (equalityBoundary_fits
           (firstEqualityAccepted shape answers hgood + 1 + extra)
             hextraCap) by
@@ -89,21 +89,21 @@ theorem rawControlUntil_equality_after_first_isSome
     rw [hboundaryEq]
     exact (rawControlUntil_after_first_equality_live_some shape causalSecret
       completion witness coins prelude answers hgood).1
-  have hfit : equalityOffset + attempt * 6 + counter ≤
+  have hfit : equalityOffset + attempt * 7 + counter ≤
       productionSamplingSlots := by
     have hnext := equalityBoundary_fits (attempt + 1) hattempt
     omega
   let localAnswers :=
-    window (equalityOffset + attempt * 6) counter hfit answers
+    window (equalityOffset + attempt * 7) counter hfit answers
   have hlocalEq : iterateFrom (equalityStep shape)
-      (equalityOffset + attempt * 6) counter boundary localAnswers = boundary :=
+      (equalityOffset + attempt * 7) counter boundary localAnswers = boundary :=
     iterateEquality_eq_of_some shape _ _ boundary localAnswers hboundarySome
   have hraw := rawEqualityAttempt_eq_of_final_live shape causalSecret completion
     witness coins attempt hattempt counter hcounter.le boundary localAnswers (by
       rw [hlocalEq]
       exact hboundaryStatus)
   have hadd := rawControlUntil_add shape causalSecret completion witness coins
-    prelude answers (equalityOffset + attempt * 6) counter hfit
+    prelude answers (equalityOffset + attempt * 7) counter hfit
   rw [hadd, hraw, hlocalEq]
   exact hboundarySome
 
@@ -124,7 +124,7 @@ theorem rawQuery_active_equality_metadata
     let offset := round.val - equalityOffset
     let attempt := offset / equalityAttemptBlocks
     let counter := offset % equalityAttemptBlocks
-    round.val = equalityOffset + attempt * 6 + counter ∧
+    round.val = equalityOffset + attempt * 7 + counter ∧
       attempt ≤ firstEqualityAccepted shape answers hgood ∧
       counter < equalityBlockCount shape ∧
       point = slicePoint
@@ -138,12 +138,12 @@ theorem rawQuery_active_equality_metadata
   have hoffset : round.val = equalityOffset + offset := by
     dsimp only [offset]
     omega
-  have hdecomp : offset = attempt * 6 + counter := by
+  have hdecomp : offset = attempt * 7 + counter := by
     dsimp only [attempt, counter]
     have := (Nat.div_add_mod offset equalityAttemptBlocks).symm
     norm_num [equalityAttemptBlocks] at this ⊢
     omega
-  have hround : round.val = equalityOffset + attempt * 6 + counter := by
+  have hround : round.val = equalityOffset + attempt * 7 + counter := by
     omega
   have hoffsetUpper : offset < equalityWidth := by
     norm_num [zerocheckOffset] at hupper
@@ -153,7 +153,7 @@ theorem rawQuery_active_equality_metadata
     unfold equalityWidth at hoffsetUpper
     exact (Nat.div_lt_iff_lt_mul (by decide)).2 (by
       simpa [equalityAttemptBlocks, Nat.mul_comm] using hoffsetUpper)
-  have hcounterSix : counter < 6 := by
+  have hcounterSix : counter < 7 := by
     dsimp only [counter]
     exact Nat.mod_lt _ (by decide)
   let control := rawControlUntil shape causalSecret completion witness coins
@@ -178,17 +178,17 @@ theorem rawQuery_active_equality_metadata
         causalSecret completion witness coins prelude answers hgood attempt
         counter hafter hattempt hcounterSix
       have hcontrolEq : control = rawControlUntil shape causalSecret completion
-          witness coins prelude answers (equalityOffset + attempt * 6 + counter)
+          witness coins prelude answers (equalityOffset + attempt * 7 + counter)
             (by simpa [hround] using round.isLt.le) := by
         dsimp only [control]
         congr 2 <;> omega
       rw [hcontrolEq] at hsome
       simp [hsomeTrue] at hsome
     refine ⟨hround, hattemptFirst, hcounter, ?_⟩
-    simp [rawQuery, hstatus, hskip, hequality, offset, attempt, counter,
+    simp [rawQuery, hstatus, hskip, hequality, offset,  counter,
       hsome, hcounter] at hquery
     exact hquery.symm
-  · simp [rawQuery, hstatus, hskip, hequality, offset, attempt, counter,
+  · simp [rawQuery, hstatus, hskip, hequality, offset,  counter,
       hsome, hcounter] at hquery
 
 end VeiledFlock.ProductionSamplingScheduleEqualityQuery

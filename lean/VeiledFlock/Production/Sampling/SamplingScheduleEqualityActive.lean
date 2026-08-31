@@ -32,13 +32,13 @@ theorem rawControlUntil_active_equality_fields
     (hattempt : attempt ≤ firstEqualityAccepted shape answers hgood)
     (hcounter : counter < equalityBlockCount shape) :
     let boundary := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6)
+      prelude answers (equalityOffset + attempt * 7)
         (equalityBoundary_fits attempt
           (hattempt.trans
             (firstEqualityAccepted_lt shape answers hgood).le))
     let active := rawControlUntil shape causalSecret completion witness coins
-      prelude answers (equalityOffset + attempt * 6 + counter) (by
-        have hc := equalityBlockCount_le_six shape
+      prelude answers (equalityOffset + attempt * 7 + counter) (by
+        have hc := equalityBlockCount_le_seven shape
         have hc6 : counter ≤ 6 := by
           norm_num [equalityAttemptBlocks] at hc ⊢
           omega
@@ -51,26 +51,27 @@ theorem rawControlUntil_active_equality_fields
   have hattemptLt : attempt < rejectionTrials :=
     lt_of_le_of_lt hattempt
       (firstEqualityAccepted_lt shape answers hgood)
-  have hcounterSix : counter ≤ 6 :=
-    (Nat.le_of_lt hcounter).trans (equalityBlockCount_le_six shape)
-  have hfit : equalityOffset + attempt * 6 + counter ≤
+  have hcounterSeven : counter ≤ 7 :=
+    (Nat.le_of_lt hcounter).trans
+      ((equalityBlockCount_le_seven shape).trans (by decide))
+  have hfit : equalityOffset + attempt * 7 + counter ≤
       productionSamplingSlots := by
     have := equalityBoundary_fits (attempt + 1) (by omega)
     omega
   let boundary := rawControlUntil shape causalSecret completion witness coins
-    prelude answers (equalityOffset + attempt * 6)
+    prelude answers (equalityOffset + attempt * 7)
       (equalityBoundary_fits attempt hattemptLt.le)
   let localAnswers :=
-    window (equalityOffset + attempt * 6) counter hfit answers
+    window (equalityOffset + attempt * 7) counter hfit answers
   have hboundary := rawControlUntil_equality_boundary_live_none shape
     causalSecret completion witness coins prelude answers hgood attempt hattempt
   have hlocal := equalityPrefix_control_fields shape attempt boundary counter
     localAnswers hcounter hboundary.1 hboundary.2.1
   have hraw := rawEqualityAttempt_eq_of_final_live shape causalSecret completion
-    witness coins attempt hattemptLt counter hcounterSix boundary localAnswers
+    witness coins attempt hattemptLt counter hcounterSeven boundary localAnswers
     hlocal.1
   have hadd := rawControlUntil_add shape causalSecret completion witness coins
-    prelude answers (equalityOffset + attempt * 6) counter hfit
+    prelude answers (equalityOffset + attempt * 7) counter hfit
   rw [hadd, hraw]
   exact hlocal
 
@@ -84,12 +85,12 @@ theorem rawControlUntil_equality_boundary_transcript_strict_succ
     (attempt : ℕ)
     (hbound : attempt + 1 ≤ firstEqualityAccepted shape answers hgood) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers
-        (equalityOffset + attempt * 6)
+        (equalityOffset + attempt * 7)
           (equalityBoundary_fits attempt (by
             have := firstEqualityAccepted_lt shape answers hgood
             omega))).transcript.length <
       (rawControlUntil shape causalSecret completion witness coins prelude answers
-        (equalityOffset + (attempt + 1) * 6)
+        (equalityOffset + (attempt + 1) * 7)
           (equalityBoundary_fits (attempt + 1) (by
             have := firstEqualityAccepted_lt shape answers hgood
             omega))).transcript.length := by
@@ -101,7 +102,7 @@ theorem rawControlUntil_equality_boundary_transcript_strict_succ
   have hrejected := before_firstEqualityAccepted_rejects shape answers hgood
     attempt (by omega) hattempt
   let before := rawControlUntil shape causalSecret completion witness coins
-    prelude answers (equalityOffset + attempt * 6)
+    prelude answers (equalityOffset + attempt * 7)
       (equalityBoundary_fits attempt hattempt.le)
   have hlocal := equalityAttempt_live_none_of_rejected_before_cap shape attempt
     before (equalityAttemptAnswers answers ⟨attempt, hattempt⟩)
@@ -125,12 +126,12 @@ theorem rawControlUntil_equality_boundaries_transcript_strict
     (left right : ℕ) (hlt : left < right)
     (hright : right ≤ firstEqualityAccepted shape answers hgood) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers
-        (equalityOffset + left * 6)
+        (equalityOffset + left * 7)
           (equalityBoundary_fits left (by
             have := firstEqualityAccepted_lt shape answers hgood
             omega))).transcript.length <
       (rawControlUntil shape causalSecret completion witness coins prelude answers
-        (equalityOffset + right * 6)
+        (equalityOffset + right * 7)
           (equalityBoundary_fits right (by
             have := firstEqualityAccepted_lt shape answers hgood
             omega))).transcript.length := by
@@ -138,7 +139,7 @@ theorem rawControlUntil_equality_boundaries_transcript_strict
     causalSecret completion witness coins prelude answers hgood left (by omega)
   have hmono := rawControlUntil_transcript_length_mono shape causalSecret
     completion witness coins prelude answers
-    (equalityOffset + (left + 1) * 6) (equalityOffset + right * 6)
+    (equalityOffset + (left + 1) * 7) (equalityOffset + right * 7)
     (by omega) (equalityBoundary_fits right (by
       have := firstEqualityAccepted_lt shape answers hgood
       omega))

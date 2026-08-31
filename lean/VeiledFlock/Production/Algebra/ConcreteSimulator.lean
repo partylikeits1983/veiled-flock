@@ -33,6 +33,7 @@ variable [Fintype PublicCoord]
 variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [Fintype K] [DecidableEq K] [DecidableEq Rest] in
 /-- Exact public simulator through the complete injective, byte-framed
 production oracle trace.  `representative` depends only on the public R1CS
 statement. -/

@@ -63,6 +63,7 @@ noncomputable def coinOracleEquiv (coinEquiv : Coins ≃ Coins)
           exact hcross (coinEquiv.symm output.1) leftIndex rightIndex (by
             simpa using equality))).apply_symm_apply output.2
 
+omit [Finite Index] [DecidableEq Point] in
 @[simp]
 theorem coinOracleEquiv_coins (coinEquiv : Coins ≃ Coins)
     (left right : Coins → Index → Point)
@@ -113,6 +114,7 @@ theorem coinOracleEquiv_off (coinEquiv : Coins ≃ Coins)
     (hleft input.1) (hright (coinEquiv input.1)) (hcross input.1)
     input.2 point hoffLeft hoffRight
 
+omit [Finite Index] in
 /-- The joint reparameterization preserves the uniform coin/oracle
 distribution exactly. -/
 theorem uniform_coinOracleEquiv

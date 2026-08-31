@@ -34,6 +34,7 @@ variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Fintype Point] [DecidableEq Point]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [Fintype K] [DecidableEq K] [Fintype I] [DecidableEq I] [DecidableEq Rest] in
 theorem simulator_exact
     (shape : BatchShape)
     (secret : Rest → Secret (F := GhashField) (I := K)
@@ -88,6 +89,7 @@ theorem simulator_exact
     hchallenge message functionals statement hpublicKernel layerSpec
     hspecStatement left right hpublic coins
 
+omit [Fintype K] [DecidableEq K] [Fintype I] [DecidableEq I] [DecidableEq Rest] in
 /-- Byte-level specialization using the exact production query encoder. The
 only schedule premise left to implementation refinement is injectivity of the
 typed logical query sequence; framing cannot introduce a collision. -/

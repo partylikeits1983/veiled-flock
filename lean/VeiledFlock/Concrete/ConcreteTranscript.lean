@@ -83,7 +83,7 @@ variable {Rest FullView : Type*}
 Rust `MaskingChallenger`, `mask_proofs`, and `mask_ring_claims` path.  The
 unmasked value may depend on the complete visible prefix and on arbitrary
 fixed external state (including the random-oracle table). -/
-abbrev CausalSecret (shape : BatchShape) :=
+abbrev CausalSecret (_shape : BatchShape) :=
   Rest → W → ∀ round : ℕ, (Fin round → F) → F
 
 private def liftCausalSecret (shape : BatchShape)
@@ -102,8 +102,8 @@ def scalarMaskEquiv (count : ℕ) :
   invFun masks := fun site => masks site ()
   left_inv _ := rfl
   right_inv masks := by
-    funext site unit
-    cases unit
+    funext site punit
+    cases punit
     rfl
 
 /-- Visible scalar coordinates in exact mask-cursor order. -/
@@ -128,6 +128,7 @@ def adaptiveMaskCoinEquiv (shape : BatchShape)
       (expectedMasks shape)).trans
         (scalarMaskEquiv (F := F) (expectedMasks shape)).symm)
 
+omit [Fintype F] [DecidableEq F] in
 theorem adaptiveMaskedTranscript_transport (shape : BatchShape)
     (secret : CausalSecret (F := F) (W := W) (Rest := Rest) shape)
     (rest : Rest) (left right : W)
@@ -143,6 +144,7 @@ theorem adaptiveMaskedTranscript_transport (shape : BatchShape)
         (expectedMasks shape)
         (scalarMaskEquiv (expectedMasks shape) masks)) site) ()
 
+omit [DecidableEq F] in
 /-- Registered end-to-end masking theorem for all 754--760 production mask
 coordinates.  Challenges may be derived adaptively from the unchanged oracle
 in `Rest`, and arbitrary post-processing of the complete visible transcript

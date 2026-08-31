@@ -141,6 +141,7 @@ noncomputable def codeCoinEquiv
       (hadamardOpeningEquiv HadamardColumn hadamardPositions
         hhadamardPositions) hadamardSecret left right)
 
+omit [Fintype (LinearPadding LinearColumn)] [Fintype (HadamardPadding HadamardColumn)] in
 theorem codeView_codeCoinEquiv
     (shape : BatchShape)
     (linearPositions : QueryIndex → Fin linearCodeLength)

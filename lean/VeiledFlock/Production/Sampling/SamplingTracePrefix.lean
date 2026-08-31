@@ -40,8 +40,8 @@ theorem raw_zerocheck_start_transcript_eq_equality_sample
       coins prelude answers oracle) :
     let first := firstEqualityAccepted shape answers hgood
     let skip := sampleSlice oracle prelude 6
-    let firstBoundary := rawControlUntil shape causalSecret completion witness
-      coins prelude answers (equalityOffset + first * 6)
+    let _firstBoundary := rawControlUntil shape causalSecret completion witness
+      coins prelude answers (equalityOffset + first * 7)
         (equalityBoundary_fits first
           (firstEqualityAccepted_lt shape answers hgood).le)
     let outer := sliceFromBlocks (m shape - kSkip - 7)
@@ -58,7 +58,7 @@ theorem raw_zerocheck_start_transcript_eq_equality_sample
   dsimp only at hsample
   let first := firstEqualityAccepted shape answers hgood
   let firstBoundary := rawControlUntil shape causalSecret completion witness coins
-    prelude answers (equalityOffset + first * 6)
+    prelude answers (equalityOffset + first * 7)
       (equalityBoundary_fits first
         (firstEqualityAccepted_lt shape answers hgood).le)
   have hstep := production_equality_boundary_succ_transcript shape causalSecret
@@ -74,7 +74,7 @@ theorem raw_zerocheck_start_transcript_eq_equality_sample
   have hleft : equalityOffset +
       (firstEqualityAccepted shape answers hgood + 1 +
         (rejectionTrials -
-          (firstEqualityAccepted shape answers hgood + 1))) * 6 =
+          (firstEqualityAccepted shape answers hgood + 1))) * 7 =
       zerocheckOffset := by
     rw [hextra]
     rfl
@@ -83,7 +83,7 @@ theorem raw_zerocheck_start_transcript_eq_equality_sample
     (right := equalityOffset +
       (firstEqualityAccepted shape answers hgood + 1 +
         (rejectionTrials -
-          (firstEqualityAccepted shape answers hgood + 1))) * 6)
+          (firstEqualityAccepted shape answers hgood + 1))) * 7)
     (by decide) (by rw [hleft]; decide) hleft.symm
   have hfinal :
       afterSlice firstBoundary.transcript
@@ -98,7 +98,7 @@ theorem raw_zerocheck_start_transcript_eq_equality_sample
             (List.ofFn (equalityAttemptAnswers answers
               ⟨first, firstEqualityAccepted_lt shape answers hgood⟩))) =
           (rawControlUntil shape causalSecret completion witness coins prelude
-            answers (equalityOffset + (first + 1) * 6)
+            answers (equalityOffset + (first + 1) * 7)
               (equalityBoundary_fits (first + 1)
                 (firstEqualityAccepted_lt shape answers hgood))).transcript :=
         hstep.symm
@@ -106,7 +106,7 @@ theorem raw_zerocheck_start_transcript_eq_equality_sample
             answers (equalityOffset +
               (firstEqualityAccepted shape answers hgood + 1 +
                 (rejectionTrials -
-                  (firstEqualityAccepted shape answers hgood + 1))) * 6) _).transcript :=
+                  (firstEqualityAccepted shape answers hgood + 1))) * 7) _).transcript :=
         hstableTranscript.symm
       _ = (rawControlUntil shape causalSecret completion witness coins prelude
             answers zerocheckOffset (by decide)).transcript :=

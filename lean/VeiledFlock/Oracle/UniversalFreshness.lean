@@ -30,6 +30,7 @@ noncomputable def badNonces
   exact Finset.univ.filter fun nonce ↦
     ∃ site context, programPoint site nonce context ∈ priorQueries
 
+omit [DecidableEq Nonce] [DecidableEq Site] [DecidableEq Point] in
 theorem mem_badNonces_iff
     (programPoint : Site → Nonce → Context → Point)
     (priorQueries : Finset Point) (nonce : Nonce) :
@@ -54,6 +55,7 @@ noncomputable def witnessContext
   Classical.choose (Classical.choose_spec
     ((mem_badNonces_iff programPoint priorQueries nonce.1).1 nonce.2))
 
+omit [DecidableEq Nonce] [DecidableEq Site] [DecidableEq Point] in
 theorem witnessPoint_mem
     (programPoint : Site → Nonce → Context → Point)
     (priorQueries : Finset Point)
@@ -74,6 +76,7 @@ noncomputable def collisionWitness
       (witnessContext programPoint priorQueries nonce),
       witnessPoint_mem programPoint priorQueries nonce⟩)
 
+omit [DecidableEq Nonce] [DecidableEq Site] [DecidableEq Point] in
 /-- The universal bad set costs only `sites * priorQueries`, independently of
 the number of possible answer histories. -/
 theorem card_badNonces_le
@@ -108,6 +111,7 @@ theorem card_badNonces_le
     (collisionWitness programPoint priorQueries) hinjective
   simpa only [Fintype.card_coe, Fintype.card_prod] using hcard
 
+omit [DecidableEq Nonce] [DecidableEq Site] [DecidableEq Point] in
 /-- Avoiding the universally bad set gives freshness simultaneously at every
 site and for every counterfactual history. -/
 theorem fresh_of_not_mem_badNonces

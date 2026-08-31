@@ -125,8 +125,8 @@ noncomputable def piopRestriction (shape : BatchShape) :
     (MaskIndex shape → GhashField) →ₗ[GhashField]
       (PiopIndex shape → GhashField) where
   toFun values index := values (piopIndex shape index)
-  map_add' left right := rfl
-  map_smul' scalar values := rfl
+  map_add' _left _right := rfl
+  map_smul' _scalar _values := rfl
 
 @[simp] theorem piopRestriction_apply (shape : BatchShape)
     (values : MaskIndex shape → GhashField) (index : PiopIndex shape) :

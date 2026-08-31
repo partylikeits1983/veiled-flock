@@ -109,12 +109,12 @@ theorem run_powStateSchedule (answers : SamplingAnswerTape) :
 /-- Reindex the flat equality reservation into attempts, then counter blocks. -/
 noncomputable def equalityFlatEquiv :
     (Fin equalityWidth → OracleBlock) ≃
-      (Fin rejectionTrials → Fin 6 → OracleBlock) :=
+      (Fin rejectionTrials → Fin 7 → OracleBlock) :=
   (Equiv.arrowCongr
       (finProdFinEquiv (m := rejectionTrials)
-        (n := 6))
+        (n := 7))
       (Equiv.refl OracleBlock)).symm.trans
-    (Equiv.curry (Fin rejectionTrials) (Fin 6)
+    (Equiv.curry (Fin rejectionTrials) (Fin 7)
       OracleBlock)
 
 theorem equalityWidth_eq :

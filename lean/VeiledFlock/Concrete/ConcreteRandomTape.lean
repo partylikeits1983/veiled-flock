@@ -87,7 +87,7 @@ def CoinType (parameters : Parameters) (Core : Type) : CoinKind → Type
   | .equalityPointChallenges =>
       Fin parameters.proofs →
         (Fin ChallengeSampling.rejectionTrials →
-          (Fin 6 → ConcreteOracle.OracleBlock))
+          (Fin 7 → ConcreteOracle.OracleBlock))
   | .outerPositions =>
       Fin parameters.proofs →
         (Fin UniquePositionSampling.samplingTrials →
@@ -316,7 +316,7 @@ noncomputable def universalFramedChallengePrequeryComponent
       ConcreteFraming.transcriptPoint (head rest history site)
         (suffix rest history site context) nonce)
     priorQueries
-    (fun rest history site leftNonce leftContext rightNonce rightContext ↦
+    (fun rest history site _leftNonce _leftContext _rightNonce _rightContext ↦
       UniversalFreshness.transcriptPoint_cross_injective
         (head rest history site)
         (suffix rest history site) (suffix rest history site))

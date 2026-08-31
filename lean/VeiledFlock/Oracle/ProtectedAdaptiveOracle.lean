@@ -41,6 +41,7 @@ noncomputable def splitTable {Index : Type*} [Finite Index]
         (Equiv.ofInjective pointFamily hinjective)).symm
       (Equiv.refl _))
 
+omit [Fintype Point] [DecidableEq Point] in
 theorem splitTable_programmed {Index : Type*} [Finite Index]
     (pointFamily : Index → Point) (hinjective : Injective pointFamily)
     (oracle : RandomOracle (Point := Point) (Outcome := Outcome))
@@ -57,6 +58,8 @@ def points {sites : ℕ} (fixedPoints : Prior → Point)
   VeiledFlock.MerkleHiding.combinedPoints fixedPoints
     (tracePoints next answers)
 
+omit [Finite Prior] in
+omit [Fintype Point] [DecidableEq Point] in
 theorem points_injective {sites : ℕ} (fixedPoints : Prior → Point)
     (next : Schedule (Point := Point) (Outcome := Outcome))
     (answers : History (Outcome := Outcome) sites)
@@ -86,6 +89,7 @@ noncomputable def simulatedOracle {sites : ℕ}
   (splitTable (points fixedPoints next coins.1) (hinjective coins.1)).symm
     (Sum.elim coins.2.1 coins.1, coins.2.2)
 
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem simulatedOracle_protected {sites : ℕ}
     (fixedPoints : Prior → Point)
@@ -107,6 +111,7 @@ theorem simulatedOracle_protected {sites : ℕ}
     (hinjective coins.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem simulatedOracle_trace {sites : ℕ}
     (fixedPoints : Prior → Point)
@@ -128,6 +133,7 @@ theorem simulatedOracle_trace {sites : ℕ}
     (hinjective coins.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype Point] [DecidableEq Point] in
 /-- The programmed adaptive schedule realizes its proposed answer vector. -/
 theorem run_simulatedOracle {sites : ℕ}
     (fixedPoints : Prior → Point)

@@ -45,8 +45,8 @@ noncomputable def maskRestriction (shape : BatchShape) :
     (FullIndex shape → GhashField) →ₗ[GhashField]
       (MaskIndex shape → GhashField) where
   toFun values index := values (Fin.castAdd 6 index)
-  map_add' left right := rfl
-  map_smul' scalar values := rfl
+  map_add' _left _right := rfl
+  map_smul' _scalar _values := rfl
 
 @[simp]
 theorem maskRestriction_paddedMessage (shape : BatchShape)
@@ -75,8 +75,8 @@ theorem extendFunctional_paddedMessage (shape : BatchShape)
 noncomputable def dummyCoordinate (shape : BatchShape) (index : Fin 6) :
     (FullIndex shape → GhashField) →ₗ[GhashField] GhashField where
   toFun values := values (Fin.natAdd (expectedMasks shape) index)
-  map_add' left right := rfl
-  map_smul' scalar values := rfl
+  map_add' _left _right := rfl
+  map_smul' _scalar _values := rfl
 
 @[simp]
 theorem dummyCoordinate_paddedMessage (shape : BatchShape) (index : Fin 6)
@@ -156,7 +156,7 @@ noncomputable def compiledRows (shape : BatchShape) (alpha : GhashField)
     (linkRow shape alpha execution)
 
 noncomputable def compiledConstants {shape : BatchShape} {Public : Type*}
-    (alpha : GhashField)
+    (_alpha : GhashField)
     (execution : ShiftedExecution shape W)
     (_ : Public) (claims : GhashField × GhashField × GhashField) :
     Fin combinedLinearConstraints → GhashField :=

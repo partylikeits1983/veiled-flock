@@ -78,7 +78,7 @@ noncomputable def sliceFromBlocks (length : ℕ) (blocks : List OracleBlock) :
 def equalityBlockCount (shape : BatchShape) : ℕ :=
   ((m shape - kSkip - 7) + 1) / 2
 
-theorem equalityBlockCount_le_six (shape : BatchShape) :
+theorem equalityBlockCount_le_seven (shape : BatchShape) :
     equalityBlockCount shape ≤ equalityAttemptBlocks := by
   cases shape <;> decide
 
@@ -91,7 +91,7 @@ def inRange (start width round : ℕ) : Prop :=
 
 noncomputable def nonzeroStageQuery {shape : BatchShape} (start round : ℕ)
     (control : Control shape) : Option (List Byte) :=
-  if hrange : start ≤ round ∧ round < start + rejectionTrials then
+  if _hrange : start ≤ round ∧ round < start + rejectionTrials then
     let offset := round - start
     if offset = 0 ∨ !control.stageDone then
       some (scalarPoint control.transcript)
@@ -106,9 +106,9 @@ noncomputable def rawQuery
     (witness : W) (coins : ProductionCoins shape)
     (round : ℕ) (control : Control shape) : Option (List Byte) :=
   if control.status != .live then none
-  else if hskip : round < equalitySkipBlocks then
+  else if _hskip : round < equalitySkipBlocks then
     some (slicePoint control.transcript 6 (BitVec.ofNat 64 round))
-  else if hequality : round < zerocheckOffset then
+  else if _hequality : round < zerocheckOffset then
     let offset := round - equalityOffset
     let counter := offset % equalityAttemptBlocks
     if control.equalityPoint.isSome then none
@@ -116,57 +116,57 @@ noncomputable def rawQuery
       some (slicePoint control.transcript (m shape - kSkip - 7)
         (BitVec.ofNat 64 counter))
     else none
-  else if hzero : round < blindStateOffset then
+  else if _hzero : round < blindStateOffset then
     let offset := round - zerocheckOffset
     match control.equalityPoint with
     | none => none
-    | some equalityPoint =>
-        if hsite : offset < programmedPoints shape then
+    | some _equalityPoint =>
+        if _hsite : offset < programmedPoints shape then
           some ((zerocheckRealByteSchedule shape causalSecret completion
             control.transcript witness coins) offset
               (historyFromList control.zerocheckAnswers offset))
         else none
-  else if hblindState : round < blindGrindingOffset then
+  else if _hblindState : round < blindGrindingOffset then
     some (scalarPoint control.transcript)
-  else if hblindGrind : round < blindChallengeOffset then
+  else if _hblindGrind : round < blindChallengeOffset then
     let offset := round - blindGrindingOffset
     if control.stageDone then none
     else control.powState.map fun state ↦
       encodePowPoint state (BitVec.ofNat 64 offset)
-  else if hblind : round < multiplicationAlphaOffset then
+  else if _hblind : round < multiplicationAlphaOffset then
     nonzeroStageQuery blindChallengeOffset round control
-  else if halpha : round < outerChallengeOffset then
-    if hrange : multiplicationAlphaOffset ≤ round ∧
+  else if _halpha : round < outerChallengeOffset then
+    if _hrange : multiplicationAlphaOffset ≤ round ∧
         round < multiplicationAlphaOffset + rejectionTrials then
       let offset := round - multiplicationAlphaOffset
       if offset = 0 ∨ !control.stageDone then
         some (scalarPoint control.transcript)
       else none
     else none
-  else if houterChallenge : round < outerPositionsOffset then
+  else if _houterChallenge : round < outerPositionsOffset then
     nonzeroStageQuery outerChallengeOffset round control
-  else if houterPositions : round < linearPositionsOffset then
+  else if _houterPositions : round < linearPositionsOffset then
     let offset := round - outerPositionsOffset
     if offset = 0 ∨ !control.stageDone then
       some (scalarPoint control.transcript)
     else none
-  else if hlinearPositions : round < linearRhoOffset then
+  else if _hlinearPositions : round < linearRhoOffset then
     let offset := round - linearPositionsOffset
     if offset = 0 ∨ !control.stageDone then
       some (scalarPoint control.transcript)
     else none
-  else if hlinearRho : round < hadamardPositionsOffset then
+  else if _hlinearRho : round < hadamardPositionsOffset then
     nonzeroStageQuery linearRhoOffset round control
-  else if hhadamardPositions : round < hadamardRhoOffset then
+  else if _hhadamardPositions : round < hadamardRhoOffset then
     let offset := round - hadamardPositionsOffset
     if offset = 0 ∨ !control.stageDone then
       some (scalarPoint control.transcript)
     else none
-  else if hhadamardRho : round < productCoefficientOffset then
+  else if _hhadamardRho : round < productCoefficientOffset then
     nonzeroStageQuery hadamardRhoOffset round control
-  else if hproduct : round < ligeritoOffset then
+  else if _hproduct : round < ligeritoOffset then
     nonzeroStageQuery productCoefficientOffset round control
-  else if hligerito : round < productionSamplingSlots then
+  else if _hligerito : round < productionSamplingSlots then
     let offset := round - ligeritoOffset
     let within := offset % ligeritoSiteWidth
     if within = 0 then some (scalarPoint control.transcript)
@@ -243,7 +243,7 @@ noncomputable def equalityStep (shape : BatchShape) (round : ℕ)
     let offset := round - equalityOffset
     let attempt := offset / equalityAttemptBlocks
     let counter := offset % equalityAttemptBlocks
-    if hcounter : counter < equalityBlockCount shape then
+    if _hcounter : counter < equalityBlockCount shape then
       let base := if counter = 0 then
           { control with equalityBlocks := [] }
         else control
@@ -282,7 +282,7 @@ noncomputable def zerocheckStep
   match control.equalityPoint with
   | none => { control with status := .abort }
   | some _ =>
-      if hsite : offset < programmedPoints shape then
+      if _hsite : offset < programmedPoints shape then
         let blocks := control.zerocheckAnswers ++ [answer]
         if offset + 1 = programmedPoints shape then
           let answers := historyFromList blocks (programmedPoints shape)
@@ -350,7 +350,7 @@ noncomputable def rawStep
     (round : ℕ) (control : Control shape) (answer : OracleBlock) :
     Control shape :=
   if control.status != .live then control
-  else if hskip : round < equalitySkipBlocks then
+  else if _hskip : round < equalitySkipBlocks then
     let blocks := control.skipBlocks ++ [answer]
     if round + 1 = equalitySkipBlocks then
       let skip := sliceFromBlocks 6 blocks
@@ -359,39 +359,39 @@ noncomputable def rawStep
         skip := some skip
         transcript := afterSlice control.transcript skip }
     else { control with skipBlocks := blocks }
-  else if hequality : round < zerocheckOffset then
+  else if _hequality : round < zerocheckOffset then
     equalityStep shape round control answer
-  else if hzero : round < blindStateOffset then
+  else if _hzero : round < blindStateOffset then
     zerocheckStep shape causalSecret completion witness coins round control answer
-  else if hblindState : round < blindGrindingOffset then
+  else if _hblindState : round < blindGrindingOffset then
     { control with
       powState := some answer
       stageDone := false
       stageBlocks := [] }
-  else if hblindGrind : round < blindChallengeOffset then
+  else if _hblindGrind : round < blindChallengeOffset then
     blindGrindingStep round control answer
-  else if hblind : round < multiplicationAlphaOffset then
+  else if _hblind : round < multiplicationAlphaOffset then
     acceptScalar zeroFailure round blindChallengeOffset control answer
-  else if halpha : round < outerChallengeOffset then
+  else if _halpha : round < outerChallengeOffset then
     acceptScalar zeroOrOneFailure round multiplicationAlphaOffset control answer
-  else if houterChallenge : round < outerPositionsOffset then
+  else if _houterChallenge : round < outerPositionsOffset then
     acceptScalar zeroFailure round outerChallengeOffset control answer
-  else if houterPositions : round < linearPositionsOffset then
+  else if _houterPositions : round < linearPositionsOffset then
     acceptPositions (fun value ↦ (rustLowPosition (m shape - 11) value).val)
       (outerL0QueryCount shape) outerPositionsOffset round control answer
-  else if hlinearPositions : round < linearRhoOffset then
+  else if _hlinearPositions : round < linearRhoOffset then
     acceptPositions (fun value ↦ (rustLowPosition 13 value).val)
       veilQueryCount linearPositionsOffset round control answer
-  else if hlinearRho : round < hadamardPositionsOffset then
+  else if _hlinearRho : round < hadamardPositionsOffset then
     acceptScalar zeroFailure round linearRhoOffset control answer
-  else if hhadamardPositions : round < hadamardRhoOffset then
+  else if _hhadamardPositions : round < hadamardRhoOffset then
     acceptPositions (fun value ↦ (rustLowPosition 11 value).val)
       veilQueryCount hadamardPositionsOffset round control answer
-  else if hhadamardRho : round < productCoefficientOffset then
+  else if _hhadamardRho : round < productCoefficientOffset then
     acceptScalar zeroFailure round hadamardRhoOffset control answer
-  else if hproduct : round < ligeritoOffset then
+  else if _hproduct : round < ligeritoOffset then
     acceptScalar zeroFailure round productCoefficientOffset control answer
-  else if hligerito : round < productionSamplingSlots then
+  else if _hligerito : round < productionSamplingSlots then
     ligeritoStep round control answer
   else control
 
@@ -529,7 +529,7 @@ theorem freshSchedule_point_inserted
   cases result with
   | none => simp at hquery
   | some candidate =>
-      simp only [hraw]
+      simp only
       by_cases hseen : candidate ∈ before.seen
       · simp [hseen] at hquery
       · simp [hseen] at hquery

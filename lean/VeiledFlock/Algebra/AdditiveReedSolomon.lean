@@ -98,10 +98,12 @@ def paddingValues : (Padding → F) →ₗ[F] (Data ⊕ Padding → F) where
     funext i
     cases i <;> simp
 
+omit [Fintype Data] [Fintype Padding] [DecidableEq Data] [DecidableEq Padding] in
 @[simp]
 theorem paddingValues_data (padding : Padding → F) (i : Data) :
     paddingValues padding (Sum.inl i) = 0 := rfl
 
+omit [Fintype Data] [Fintype Padding] [DecidableEq Data] [DecidableEq Padding] in
 @[simp]
 theorem paddingValues_padding (padding : Padding → F) (i : Padding) :
     paddingValues (Data := Data) padding (Sum.inr i) = padding i := rfl
@@ -153,6 +155,7 @@ theorem paddingToQueries_apply (base : Data ⊕ Padding → F)
     paddingToQueries base hbase queries padding i =
       (polynomialFromPadding base hbase padding).1.eval (queries i) := rfl
 
+omit [Field F] [Fintype Data] [Fintype Padding] [DecidableEq Data] [DecidableEq Padding] in
 private theorem dataQueries_injective (base : Data ⊕ Padding → F)
     (hbase : Injective base) (queries : Padding → F) (hqueries : Injective queries)
     (hdisjoint : ∀ d q, base (Sum.inl d) ≠ queries q) :

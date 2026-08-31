@@ -71,6 +71,8 @@ noncomputable def programmedOracle (sites : ℕ)
     (tracePoints (rightSchedule input.1 input.2.1) input.2.1)
     (hright input.1 input.2.1)).symm (input.2.1, input.2.2)
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
+omit [Fintype Point] in
 @[simp]
 theorem programmedOracle_at (sites : ℕ)
     (rightSchedule : AlgCoins → History (Outcome := Outcome) sites →
@@ -94,6 +96,8 @@ theorem programmedOracle_at (sites : ℕ)
   rw [hsplit] at h
   exact h.symm
 
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
+omit [Fintype Point] in
 /-- The honest causal schedule realizes the proposed target vector in the
 reconstructed oracle whenever its reached points match the look-ahead trace
 along that vector. -/
@@ -293,6 +297,7 @@ noncomputable def programmedMachine (sites : ℕ)
   continueWith (state input.1 input.2.1)
     (programmedOracle sites rightSchedule hright input) input.2.1
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Honest execution and the straightline look-ahead programmable simulator
 have exactly equal full-view distributions. -/
 theorem simulator_exact {sites : ℕ}

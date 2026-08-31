@@ -59,6 +59,7 @@ noncomputable def publicDirectFunctional (shape : BatchShape)
     weightedFunctional (publicDataPosition shape positions)
       (weights history rest direct)
 
+omit [Fintype PublicCoord] in
 @[simp]
 theorem projection_fullMessage (shape : BatchShape)
     (positions : PublicCoord → ResidualDataIndex shape × LaneIndex)

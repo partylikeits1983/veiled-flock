@@ -29,6 +29,7 @@ noncomputable def pairedSwap (left right : Index → Point) (point : Point) :
     left (Classical.choose hright)
   else point
 
+omit [Finite Index] [DecidableEq Point] in
 theorem pairedSwap_left (left right : Index → Point)
     (hleft : Injective left) (index : Index) :
     pairedSwap left right (left index) = right index := by
@@ -41,6 +42,7 @@ theorem pairedSwap_left (left right : Index → Point)
     exact (Classical.choose_spec hexists).trans rfl
   next hnone => exact False.elim (hnone ⟨index, rfl⟩)
 
+omit [Finite Index] [DecidableEq Point] in
 theorem pairedSwap_right (left right : Index → Point)
     (hright : Injective right)
     (hcross : ∀ leftIndex rightIndex,
@@ -65,6 +67,7 @@ theorem pairedSwap_right (left right : Index → Point)
       exact (Classical.choose_spec hexists).trans rfl
     next hnone => exact False.elim (hnone ⟨index, rfl⟩)
 
+omit [Finite Index] [DecidableEq Point] in
 theorem pairedSwap_off (left right : Index → Point) (point : Point)
     (hoffLeft : ∀ index, point ≠ left index)
     (hoffRight : ∀ index, point ≠ right index) :
@@ -82,6 +85,7 @@ theorem pairedSwap_off (left right : Index → Point) (point : Point)
       exact False.elim (hoffRight index hindex.symm)
     next _ => rfl
 
+omit [Finite Index] [DecidableEq Point] in
 theorem pairedSwap_involutive (left right : Index → Point)
     (hleft : Injective left) (hright : Injective right)
     (hcross : ∀ leftIndex rightIndex,
@@ -136,6 +140,7 @@ noncomputable def renameOracle (left right : Index → Point)
       oracle point
     rw [pairedSwap_involutive left right hleft hright hcross point]
 
+omit [Finite Index] [DecidableEq Point] in
 @[simp]
 theorem renameOracle_at_right (left right : Index → Point)
     (hleft : Injective left) (hright : Injective right)
@@ -146,6 +151,7 @@ theorem renameOracle_at_right (left right : Index → Point)
       oracle (left index) := by
   exact congrArg oracle (pairedSwap_right left right hright hcross index)
 
+omit [Finite Index] [DecidableEq Point] in
 @[simp]
 theorem renameOracle_at_left (left right : Index → Point)
     (hleft : Injective left) (hright : Injective right)
@@ -156,6 +162,7 @@ theorem renameOracle_at_left (left right : Index → Point)
       oracle (right index) := by
   exact congrArg oracle (pairedSwap_left left right hleft index)
 
+omit [Finite Index] [DecidableEq Point] in
 /-- Every point outside both moved families retains its exact oracle answer. -/
 theorem renameOracle_off (left right : Index → Point)
     (hleft : Injective left) (hright : Injective right)
@@ -196,6 +203,9 @@ noncomputable def fiberwiseRenameOracle
     (fun rest ↦ renameOracle (left rest) (right rest)
       (hleft rest) (hright rest) (hcross rest))
 
+omit [Nonempty Rest] in
+omit [Fintype Point] [Fintype Rest] [DecidableEq Rest] [Fintype Outcome] [DecidableEq Outcome] in
+omit [Finite Index] [DecidableEq Point] in
 theorem fiberwiseRenameOracle_rest
     (left right : Rest → Index → Point)
     (hleft : ∀ rest, Injective (left rest))
@@ -212,6 +222,8 @@ theorem fiberwiseRenameOracle_rest
       (hleft rest) (hright rest) (hcross rest)) input
   exact congrArg Prod.snd hsplit
 
+omit [Nonempty Rest] in
+omit [Fintype Point] [Fintype Rest] [DecidableEq Rest] [Fintype Outcome] [DecidableEq Outcome] in
 theorem fiberwiseRenameOracle_at_right
     (left right : Rest → Index → Point)
     (hleft : ∀ rest, Injective (left rest))
@@ -235,6 +247,8 @@ theorem fiberwiseRenameOracle_at_right
   exact renameOracle_at_right (left input.1) (right input.1)
     (hleft input.1) (hright input.1) (hcross input.1) input.2 index
 
+omit [Nonempty Rest] in
+omit [Fintype Point] [Fintype Rest] [DecidableEq Rest] [Fintype Outcome] [DecidableEq Outcome] in
 theorem fiberwiseRenameOracle_off
     (left right : Rest → Index → Point)
     (hleft : ∀ rest, Injective (left rest))

@@ -88,7 +88,7 @@ theorem mem_operationalGlobalBadTapeSet_iff
           statement ∨
         tape ∈ badPostMerkleTapeSet shape maxStartLength fallback r1csDigest
           causalSecret completion weights context adversary statement witness := by
-  simp [operationalGlobalBadTapeSet, or_assoc]
+  simp [operationalGlobalBadTapeSet]
 
 set_option maxHeartbeats 1000000 in
 theorem not_globalGood_implies_mem_operationalGlobalBadTapeSet
@@ -104,7 +104,7 @@ theorem not_globalGood_implies_mem_operationalGlobalBadTapeSet
   intro hnotGood
   rw [mem_operationalGlobalBadTapeSet_iff]
   by_contra hnotMember
-  push_neg at hnotMember
+  push Not at hnotMember
   rcases hnotMember with ⟨htraceSet, hpreMerkleSet, hprequerySet, hpostSet⟩
   have htrace : ¬ BadTraceFailure shape maxStartLength fallback r1csDigest
       causalSecret completion statement witness tape := by

@@ -134,7 +134,7 @@ theorem collisionProbability_le [Nonempty Outcome] (rounds : ℕ) :
   have hcard : (Fintype.card (Fin rounds → Outcome) : ℚ) =
       Fintype.card Outcome ^ rounds := by
     norm_cast
-    simp [Fintype.card_fun]
+    simp
   rw [hcard]
   have hpow : (0 : ℚ) < (Fintype.card Outcome : ℚ) ^ rounds :=
     pow_pos houtcome _

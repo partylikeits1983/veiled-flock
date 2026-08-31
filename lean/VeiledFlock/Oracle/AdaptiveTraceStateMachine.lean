@@ -46,6 +46,8 @@ noncomputable def retargetedCoinEquiv {sites : ℕ}
       (hright (coinEquiv coins)))).trans
     (Equiv.prodCongr coinEquiv (Equiv.refl _))
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem retargetedCoinEquiv_state {sites : ℕ}
     (coinEquiv : StateCoins ≃ StateCoins)
     (leftSchedule rightSchedule : StateCoins →
@@ -70,6 +72,8 @@ theorem retargetedCoinEquiv_state {sites : ℕ}
   change coinEquiv (fiber coins).1 = coinEquiv coins.1
   rw [hstate]
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem retargetedCoinEquiv_answers {sites : ℕ}
     (coinEquiv : StateCoins ≃ StateCoins)
     (leftSchedule rightSchedule : StateCoins →
@@ -121,6 +125,7 @@ noncomputable def machine {sites : ℕ}
     (coins : StateCoins × Oracle (Point := Point) (Outcome := Outcome)) : View :=
   continueWith (state coins.1) (run (schedule coins.1) coins.2 sites)
 
+omit [Nonempty StateCoins] [Nonempty Outcome] in
 /-- Pointwise preservation of the visible state and the complete adaptive
 oracle-answer trace. -/
 theorem machine_transport {sites : ℕ}

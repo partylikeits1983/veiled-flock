@@ -54,7 +54,7 @@ theorem rawQuery_nonFiat_range
   · let offset := round.val - equalityOffset
     let counter := offset % equalityAttemptBlocks
     by_cases hsome : control.equalityPoint.isSome
-    · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome]
+    · simp [rawQuery, hstatus, hskip, hequality,   hsome]
         at hquery
     by_cases hcounter : counter < equalityBlockCount shape
     · simp [rawQuery, hstatus, hskip, hequality, offset, counter, hsome,
@@ -67,7 +67,7 @@ theorem rawQuery_nonFiat_range
   · let offset := round.val - zerocheckOffset
     cases heq : control.equalityPoint with
     | none =>
-        simp [rawQuery, hstatus, hskip, hequality, hzero, offset, heq] at hquery
+        simp [rawQuery, hstatus, hskip, hequality, hzero,  heq] at hquery
     | some equalityPoint =>
         by_cases hsite : offset < programmedPoints shape
         · simp [rawQuery, hstatus, hskip, hequality, hzero, offset, heq,

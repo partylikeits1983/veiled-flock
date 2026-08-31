@@ -49,6 +49,7 @@ noncomputable def simulatedOracle {sites : ℕ}
   (splitTable (points fixedPoints next coins.1) (hinjective coins.1)).symm
     (Sum.elim coins.2.1 coins.1, coins.2.2)
 
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem simulatedOracle_protected {sites : ℕ}
     (fixedPoints : History (Outcome := Outcome) sites → Prior → Point)
@@ -70,6 +71,7 @@ theorem simulatedOracle_protected {sites : ℕ}
     (hinjective coins.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype Point] [DecidableEq Point] in
 @[simp]
 theorem simulatedOracle_trace {sites : ℕ}
     (fixedPoints : History (Outcome := Outcome) sites → Prior → Point)
@@ -91,6 +93,7 @@ theorem simulatedOracle_trace {sites : ℕ}
     (hinjective coins.1)).apply_symm_apply] at h
   exact h.symm
 
+omit [Fintype Point] [DecidableEq Point] in
 theorem run_simulatedOracle {sites : ℕ}
     (fixedPoints : History (Outcome := Outcome) sites → Prior → Point)
     (next : Schedule (Point := Point) (Outcome := Outcome))

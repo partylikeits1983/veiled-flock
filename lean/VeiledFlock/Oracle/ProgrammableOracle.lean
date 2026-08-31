@@ -26,6 +26,7 @@ def badNonces {programmed : ℕ}
   Finset.univ.filter fun nonce =>
     ∃ site : Fin programmed, programPoint site nonce ∈ priorQueries
 
+omit [DecidableEq Nonce] in
 theorem mem_badNonces_iff {programmed : ℕ}
     (programPoint : Fin programmed → Nonce → Point)
     (priorQueries : Finset Point) (nonce : Nonce) :
@@ -33,6 +34,7 @@ theorem mem_badNonces_iff {programmed : ℕ}
       ∃ site, programPoint site nonce ∈ priorQueries := by
   simp [badNonces]
 
+omit [DecidableEq Nonce] in
 /-- Outside the counted bad set, the complete programming family is disjoint
 from the prior-query set. -/
 theorem range_disjoint_prior_of_nonce_not_bad {programmed : ℕ}
@@ -150,16 +152,19 @@ private def splitFirst (rounds : ℕ) :
       rfl
     · rfl
 
+omit [Fintype Nonce] [DecidableEq Nonce] [Nonempty Nonce] in
 @[simp]
 private theorem splitFirst_symm_zero (rounds : ℕ)
     (pair : (Fin rounds → Nonce) × Nonce) :
     (splitFirst rounds).symm pair 0 = pair.2 := rfl
 
+omit [Fintype Nonce] [DecidableEq Nonce] [Nonempty Nonce] in
 @[simp]
 private theorem splitFirst_symm_succ (rounds : ℕ)
     (pair : (Fin rounds → Nonce) × Nonce) (site : Fin rounds) :
     (splitFirst rounds).symm pair site.succ = pair.1 site := rfl
 
+omit [Nonempty Nonce] in
 private theorem card_runFails_succ
     (badAt : List Nonce → Finset Nonce) (history : List Nonce)
     (rounds : ℕ) :
@@ -190,6 +195,7 @@ private theorem card_runFails_succ
             decide (first ∈ badAt history ∨
               runFails badAt (history ++ [first]) rounds tail = true)) true)
 
+omit [Nonempty Nonce] in
 /-- Adaptive union bound.  If every history leaves at most `perProof` bad
 nonces for the next proof, then among all `rounds`-nonce executions at most
 `rounds * perProof * |Nonce|^(rounds-1)` ever hit a bad set. -/
@@ -246,8 +252,8 @@ theorem card_adaptive_runFails_le
             cases rounds with
             | zero => simp
             | succ rounds =>
-                simp only [Nat.succ_eq_add_one, Nat.add_sub_cancel,
-                  Nat.add_sub_cancel_left, pow_succ]
+                simp only [ Nat.add_sub_cancel,
+                   pow_succ]
                 ring
 
 /-- Probability form of the adaptive multi-proof freshness bound. -/
@@ -266,7 +272,7 @@ theorem adaptiveCollisionProbability_le
   have hcard : (Fintype.card (Fin rounds → Nonce) : ℚ) =
       Fintype.card Nonce ^ rounds := by
     norm_cast
-    simp [Fintype.card_fun]
+    simp
   rw [hcard]
   have hpow : (0 : ℚ) < (Fintype.card Nonce : ℚ) ^ rounds := pow_pos hnonce _
   rw [div_le_iff₀ hpow]

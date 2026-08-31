@@ -97,7 +97,7 @@ theorem equalityStep_transcript_length_mono (shape : BatchShape) (round : ℕ)
         · simp [equalityStep, hsome, counter, hcounter, base, blocks, outer,
             hlast, haccept, hbase]
           split <;> simp_all <;> omega
-      · simp [equalityStep, hsome, counter, hcounter, base, blocks, hlast,
+      · simp [equalityStep, hsome, counter, hcounter, base,  hlast,
           hbase]
     · simp [equalityStep, hsome, counter, hcounter]
 
@@ -161,14 +161,14 @@ theorem acceptScalar_transcript_length_eq_or_add_seventeen_le
   by_cases hzero : round - start = 0
   · by_cases hfailed :
         VeiledFlock.ProductionScalarProjection.scalarFromBlock answer ∈ failed
-    · simp [acceptScalar, hzero, hfailed, afterScalar_length]
+    · simp [acceptScalar, hzero, hfailed]
       split <;> simp_all <;> omega
     · simp [acceptScalar, hzero, hfailed, afterScalar_length]
   · by_cases hdone : control.stageDone
     · simp [acceptScalar, hzero, hdone]
     · by_cases hfailed :
           VeiledFlock.ProductionScalarProjection.scalarFromBlock answer ∈ failed
-      · simp [acceptScalar, hzero, hdone, hfailed, afterScalar_length]
+      · simp [acceptScalar, hzero, hdone, hfailed]
         split <;> simp_all <;> omega
       · simp [acceptScalar, hzero, hdone, hfailed, afterScalar_length]
 
@@ -182,12 +182,12 @@ theorem acceptPositions_transcript_length_eq_or_add_seventeen_le
         (acceptPositions project target start round control answer).transcript.length := by
   classical
   by_cases hzero : round - start = 0
-  · simp [acceptPositions, hzero, afterScalar_length]
-    split <;> simp_all <;> split <;> simp_all <;> omega
+  · simp [acceptPositions, hzero]
+    split <;> simp_all ; split <;> simp_all <;> omega
   · by_cases hdone : control.stageDone
     · simp [acceptPositions, hzero, hdone]
-    · simp [acceptPositions, hzero, hdone, afterScalar_length]
-      split <;> simp_all <;> split <;> simp_all <;> omega
+    · simp [acceptPositions, hzero, hdone]
+      split <;> simp_all ; split <;> simp_all <;> omega
 
 theorem ligeritoStep_transcript_length_eq_or_add_seventeen_le
     {shape : BatchShape} (round : ℕ) (control : Control shape)
@@ -203,7 +203,7 @@ theorem ligeritoStep_transcript_length_eq_or_add_seventeen_le
     · simp [ligeritoStep, hstate, hdone]
     · by_cases hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits
           (by decide) answer
-      · simp [ligeritoStep, hstate, hdone, hgood, afterGrind_length]
+      · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all
       · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all
@@ -367,7 +367,7 @@ theorem rawStep_transcript_length_eq_or_add_seventeen_le
                 hcap]
               cases shape <;> norm_num [m, kSkip] <;> omega
         · simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,
-            counter, hcounter, base, blocks, hlast, hbase]
+            counter, hcounter, base,  hlast, hbase]
       · simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,
           counter, hcounter]
   by_cases hzero : round < blindStateOffset

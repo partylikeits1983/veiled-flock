@@ -19,9 +19,11 @@ variable [Fintype (I → F)] [DecidableEq (I → F)]
 /-- The mask-to-visible-coordinate map used by a coordinate-wise one-time pad. -/
 def identityMask : (I → F) →+ (I → F) := AddMonoidHom.id (I → F)
 
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype (I → F)] [DecidableEq (I → F)] in
 theorem identityMask_surjective : Function.Surjective (identityMask (F := F) (I := I)) :=
   fun value ↦ ⟨value, rfl⟩
 
+omit [Fintype F] [DecidableEq F] [Fintype I] in
 /-- Adding one independent uniform mask per coordinate makes the complete
 visible vector exactly independent of the private vector. -/
 theorem maskedVector_witness_independent (secret : W → I → F) (left right : W) :

@@ -374,7 +374,7 @@ theorem programSharedByteEntries_ok_of_fresh {maxPointLength : ℕ}
         intro current hmem hcurrentFit
         rw [wasProgrammed_programSharedBytes_of_fresh entry.1 entry.2 state
           hentryFit hentryQuery hentryProgram]
-        push_neg
+        push Not
         constructor
         · exact hprograms current (by simp [hmem]) hcurrentFit
         · intro heq
@@ -439,10 +439,10 @@ theorem programSharedByteEntries_restores {maxPointLength : ℕ}
       | mk result nextState =>
           cases result with
           | error conflict =>
-              simp only [hhead] at hok
+              simp only  at hok
               contradiction
           | ok _unit =>
-              simp only [hhead] at hok ⊢
+              simp only  at hok ⊢
               have hheadOk :
                   (programSharedBytes entry.1 entry.2 state).1 = .ok () := by
                 rw [hhead]
@@ -693,10 +693,10 @@ theorem runQueryList_value {maxPointLength sites : ℕ}
       rw [runQueryList, runQueryValues]
       cases hquery : nextQuery round history with
       | none =>
-          simp only [hquery]
+          simp only
           exact ih history state
       | some point =>
-          simp only [hquery, queryShared]
+          simp only
           exact ih (history ++ [(point, state.table point)]) _
 
 theorem runQueryList_table {maxPointLength sites : ℕ}
@@ -715,10 +715,10 @@ theorem runQueryList_table {maxPointLength sites : ℕ}
       rw [runQueryList]
       cases hquery : nextQuery round history with
       | none =>
-          simp only [hquery]
+          simp only
           exact ih history state
       | some point =>
-          simp only [hquery, queryShared]
+          simp only
           exact ih (history ++ [(point, state.table point)]) _
 
 /-- Audit events corresponding exactly to a visible query/answer history. -/
@@ -751,12 +751,12 @@ private theorem runQueryList_events_eq_queryEvents
       rw [runQueryList]
       cases hquery : nextQuery round history with
       | none =>
-          simp only [hquery]
+          simp only
           exact ih history state hstate
       | some point =>
-          simp only [hquery]
+          simp only
           apply ih
-          simp [queryShared, queryEvents, hstate]
+          simp [ queryEvents, hstate]
 
 theorem runQueryValues_prefix {maxPointLength sites : ℕ}
     (nextQuery : Fin sites →
@@ -793,12 +793,12 @@ theorem runQueryValues_length_le {maxPointLength sites : ℕ}
       cases hquery : nextQuery round history with
       | none =>
         have htail := ih history
-        simp only [hquery, List.length_cons]
+        simp only [ List.length_cons]
         omega
       | some point =>
         have htail := ih (history ++ [(point, table point)])
         simp only [List.length_append, List.length_singleton] at htail
-        simp only [hquery, List.length_cons]
+        simp only [ List.length_cons]
         omega
 
 /-- Adaptive query histories are identical when the two tables agree at every
@@ -821,11 +821,11 @@ theorem runQueryValues_eq_of_agrees_on_result {maxPointLength sites : ℕ}
       cases hquery : nextQuery round history with
       | none =>
         simp only [runQueryValues, hquery] at hagrees
-        simp only [hquery]
+        simp only
         exact ih history hagrees
       | some point =>
         simp only [runQueryValues, hquery] at hagrees
-        simp only [hquery]
+        simp only
         have hmem : (point, left point) ∈
             runQueryValues nextQuery left rounds
               (history ++ [(point, left point)]) :=
@@ -1160,7 +1160,7 @@ theorem runTwoPhaseQueryValues_hit_transport
   let rightPre := runQueryValues preQuery rightTable (List.ofFn id) []
   let leftPost := runQueryValues (postQuery leftPre) leftTable
     (List.ofFn id) []
-  simp only [runTwoPhaseQueryValues, leftPre, rightPre, leftPost] at hhit ⊢
+  simp only [runTwoPhaseQueryValues] at hhit ⊢
   rw [queryHistoryHits_append_iff] at hhit
   rcases hhit with hpreHit | hpostHit
   · have htransport := runQueryValues_hit_transport preQuery leftPoints

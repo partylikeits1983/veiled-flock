@@ -133,6 +133,7 @@ noncomputable def veilFlockSimulator {sites : ℕ}
         proofBytes := visible.proofBytes
         oracleView := visible.oracleView })
 
+omit [Fintype RelationCoins] [DecidableEq RelationCoins] [Nonempty RelationCoins] [Finite Prior] [Fintype Point] [DecidableEq Point] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Witness independence is structural: varying a witness cannot change the
 simulator invocation because no witness is present in its type or arguments. -/
 theorem simulator_witness_independent {sites : ℕ}

@@ -156,7 +156,7 @@ theorem rawControlUntil_zerocheck_prefix_fields
                 (zerocheckOffset + rounds) previous
                 (answers site)).zerocheckAnswers =
                 previous.zerocheckAnswers ++ [answers site] := by
-            simp [zerocheckStep, hpoint, hsite, hround]
+            simp [zerocheckStep, hpoint,  hround]
             split <;> rfl
           constructor
           · exact (congrArg Control.status hsucc').trans hnextStatus
@@ -263,7 +263,7 @@ theorem zerocheck_run_eq_answer_window
                   funext prior
                   simp [historyFromList]
                 simp [rawQuery, site, hstatus, hskip, hequalityRange, hzero,
-                  hpoint, hsite, schedule, hfields.2.2.2 hround, hhistory]
+                  hpoint,  schedule]
                 constructor
                 · exact hround
                 · have hoffset : site.val - zerocheckOffset = rounds := by
