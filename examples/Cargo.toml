@@ -1,0 +1,35 @@
+[package]
+name = "veil-examples"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+publish = false
+description = "Ports of the slop-veil examples as full-ZK GF(2^128) VEIL protocols."
+
+[lib]
+path = "src/lib.rs"
+
+[dependencies]
+flock-core = { path = "../crates/flock-core", features = ["zk"] }
+veil-f128 = { path = "../crates/veil-f128" }
+serde = { workspace = true }
+bincode = { workspace = true }
+
+[[example]]
+name = "root_zk"
+path = "root_zk.rs"
+test = true
+
+[[example]]
+name = "mle_eval_zk"
+path = "mle_eval_zk.rs"
+test = true
+
+[[example]]
+name = "zerocheck_zk"
+path = "zerocheck_zk.rs"
+test = true
+
+[lints]
+workspace = true
