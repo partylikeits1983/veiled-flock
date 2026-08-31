@@ -8,7 +8,7 @@ This module expands the previously abstract `original_satisfied` premise into
 the exact row inventory emitted by `shifted_verifier_circuit`: one lincheck
 row, then two blocks of 128 ring-scale rows, then two terminal ring-claim
 rows.  It also binds every ring variable to the literal suffix of the flat
-754--760-element mask cursor.
+754--762-element mask cursor.
 
 The remaining semantic premises are the ordinary completeness identities of
 the underlying honest FLOCK transcript: its lincheck equation, the definition

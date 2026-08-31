@@ -4,7 +4,7 @@ import VeiledFlock.Production.Algebra.LayerSpec
 /-!
 # Causal FLOCK masking composed with the complete VEIL layer
 
-The production FLOCK transcript consumes 754--760 scalar masks causally:
+The production FLOCK transcript consumes 754--762 scalar masks causally:
 later unmasked messages depend on earlier masked messages and Fiat--Shamir
 answers. After translating that mask tape, the entire visible history is
 unchanged. The VEIL layer translation is then selected in that unchanged

@@ -5,7 +5,7 @@ import VeiledFlock.Algebra.InteractiveAlgebraic
 
 `InteractiveAlgebraic` is deliberately generic enough to compose two
 independent additive mask channels.  The Rust VEIL--FLOCK path has only one:
-the 754--760 scalar tape consumed causally by `MaskingChallenger`,
+the 754--762 scalar tape consumed causally by `MaskingChallenger`,
 `mask_proofs`, and `mask_ring_claims`.
 
 This module gives the faithful specialization.  The causal tape is the sole

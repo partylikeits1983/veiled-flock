@@ -251,6 +251,32 @@ structure BatchOpeningProofLigerito where
   ligerito : LigeritoProof
   zkBlind : Option ZkBlindOpening
 
+/-- Exact PCS mode and recursive-opening shape checks enforced by the
+production preblinded verifier.  The outer commitment is in ZK mode, but the
+blinding challenge is supplied by the enclosing VEIL--FLOCK protocol, so the
+PCS-local `zkBlind` opening must be absent.  L0 is salted and every later
+recursive opening is unsalted. -/
+structure BatchOpeningProofLigerito.PassesProductionModeChecks
+    (proof : BatchOpeningProofLigerito) (recursiveSteps : ℕ) : Prop where
+  preblinded : proof.zkBlind = none
+  canonicalRecursiveShape :
+    proof.ligerito.IsCanonical recursiveSteps .salted
+
+theorem BatchOpeningProofLigerito.PassesProductionModeChecks.initial_salt_count
+    {proof : BatchOpeningProofLigerito} {recursiveSteps : ℕ}
+    (hvalid : proof.PassesProductionModeChecks recursiveSteps) :
+    proof.ligerito.initialProof.leafSalts.length =
+      proof.ligerito.initialProof.openedRows.length := by
+  exact hvalid.canonicalRecursiveShape.initial_salt_count
+
+theorem BatchOpeningProofLigerito.PassesProductionModeChecks.recursive_leafSalts_empty
+    {proof : BatchOpeningProofLigerito} {recursiveSteps : ℕ}
+    (hvalid : proof.PassesProductionModeChecks recursiveSteps)
+    {recursiveProof : RecursiveProof}
+    (hmem : recursiveProof ∈ proof.ligerito.recursiveProofs) :
+    recursiveProof.leafSalts = [] := by
+  exact hvalid.canonicalRecursiveShape.recursive_leafSalts_empty hmem
+
 /-- The exact mathematical fields of Rust `VeilFlockProof`. -/
 structure VeilFlockProof (shape : BatchShape) where
   proofNonce : Nonce256

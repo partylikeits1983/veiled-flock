@@ -9,7 +9,7 @@ This module composes the production-faithful single FLOCK mask tape with the
 exact adaptive programmable-random-oracle equivalence.  Unlike the older
 `VeilFlockProm` theorem, there is no second, fictitious fixed FLOCK mask
 channel: `Fin 0` occupies that legacy slot and the causal tape is the sole
-source of the 754--760 transcript masks.
+source of the 754--762 transcript masks.
 -/
 
 namespace VeiledFlock.ProductionProm

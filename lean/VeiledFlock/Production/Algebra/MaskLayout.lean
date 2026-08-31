@@ -16,7 +16,7 @@ import VeiledFlock.Algebra.RingScale
 7. for each of two ring claims, 128 witness values followed by 128 blinder
    values.
 
-This file gives every segment its literal Rust offset in the 754--760 element
+This file gives every segment its literal Rust offset in the 754--762 element
 vector and proves that the last cursor position is exactly `expectedMasks` for
 all registered shapes.
 -/

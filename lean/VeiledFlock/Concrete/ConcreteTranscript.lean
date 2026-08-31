@@ -145,7 +145,7 @@ theorem adaptiveMaskedTranscript_transport (shape : BatchShape)
         (scalarMaskEquiv (expectedMasks shape) masks)) site) ()
 
 omit [DecidableEq F] in
-/-- Registered end-to-end masking theorem for all 754--760 production mask
+/-- Registered end-to-end masking theorem for all 754--762 production mask
 coordinates.  Challenges may be derived adaptively from the unchanged oracle
 in `Rest`, and arbitrary post-processing of the complete visible transcript
 is covered. -/
