@@ -79,6 +79,8 @@ noncomputable def machine {sites : ℕ}
     (fun coins => compile (schedule coins)) continueWith
     (compiledInputEquiv sites input)
 
+omit [DecidableEq Point] in
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Exact pointwise transport for the complete optional execution.  The
 view may contain the serialized proof, every adaptive oracle query/answer,
 and the adversary's final state, so this theorem is joint rather than
@@ -119,6 +121,7 @@ theorem machine_transport {sites : ℕ}
       (fun coins => compile (rightSchedule coins))
       hleft hright continueWith (compiledInputEquiv sites input))
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Uniform real and simulator views remain exactly equal for a bounded
 early-stopping trace.  The two injectivity premises include the protected
 shared-oracle family and the compiled active/dummy schedule. -/

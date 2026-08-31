@@ -65,6 +65,7 @@ noncomputable def oracleEquiv {sites : ℕ}
     (right_injective_at answerEquiv fixedPoints rightSchedule hright
       (answerEquiv answers coins))
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem oracleEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -88,6 +89,7 @@ theorem oracleEquiv_answers {sites : ℕ}
     (right_injective_at answerEquiv fixedPoints rightSchedule hright
       (answerEquiv answers coins)) oracle
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem oracleEquiv_protected {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -196,15 +198,12 @@ noncomputable def coinEquiv {sites : ℕ}
     rw [hrun]
     dsimp only
     rw [hrecovered]
-    change
-      (translated,
-        oracleEquiv answerEquiv fixedPoints leftSchedule rightSchedule hleft
-          hright coins answers transportedBack) = (translated, oracle)
     rw [show transportedBack =
         (oracleEquiv answerEquiv fixedPoints leftSchedule rightSchedule hleft
           hright coins answers).symm oracle by rfl]
     simp
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -234,6 +233,7 @@ theorem coinEquiv_answers {sites : ℕ}
   exact oracleEquiv_answers answerEquiv fixedPoints leftSchedule rightSchedule
     hleft hright input.1 (run (leftSchedule input.1) input.2 sites) input.2
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_protected {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -271,6 +271,8 @@ noncomputable def machine {sites : ℕ}
   continueWith (state input.1 answers)
     (fun prior => input.2 (fixedPoints prior)) answers
 
+omit [DecidableEq Point] in
+omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Exact interleaved simulator theorem.  The visible algebraic state, the
 complete protected oracle prefix, and the complete Fiat--Shamir answer vector
 are pointwise identical after the joint coin bijection. -/
@@ -333,6 +335,7 @@ theorem machine_transport {sites : ℕ}
   funext prior
   exact (hprotected prior).symm
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 theorem simulator_exact {sites : ℕ}
     (leftState rightState :
       AlgCoins → History (Outcome := Outcome) sites → State)

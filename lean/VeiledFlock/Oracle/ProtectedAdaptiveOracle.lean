@@ -295,6 +295,7 @@ noncomputable def retarget {sites : ℕ}
     ((retargetCoins fixedPoints left right hleft hright).trans
       (split fixedPoints right hright).symm)
 
+omit [DecidableEq Point] in
 theorem retarget_answers {sites : ℕ}
     (fixedPoints : Prior → Point)
     (left right : Schedule (Point := Point) (Outcome := Outcome))
@@ -309,6 +310,7 @@ theorem retarget_answers {sites : ℕ}
     (retargetCoins fixedPoints left right hleft hright
       (split fixedPoints left hleft oracle))
 
+omit [DecidableEq Point] in
 theorem retarget_protected {sites : ℕ}
     (fixedPoints : Prior → Point)
     (left right : Schedule (Point := Point) (Outcome := Outcome))

@@ -164,6 +164,7 @@ noncomputable def realJointView
       (querySecret history coins.2.2) (message history coins.2.2)
       witness coins.2.1)
 
+omit [Fintype F] [DecidableEq F] [Fintype I] [Fintype J] [Fintype (I → F)] [Fintype (Padding → F)] [Fintype (J → F)] in
 omit [Fintype K] [Fintype (K → F)] [Fintype Rest] [Nonempty Rest] in
 /-- Pointwise preservation of the whole interactive algebraic view. -/
 theorem realJointView_transport
@@ -259,6 +260,7 @@ theorem realJointView_transport
     (hpublicKernel (run (secret rest) left rounds masks) rest left right hpublic)
     algebraic
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 omit [Fintype K] in
 /-- Exact distributional zero knowledge for the complete interleaved
 algebraic protocol, before random-oracle bad events are charged. -/
@@ -307,6 +309,7 @@ theorem interactiveAlgebraic_zeroKnowledge
     queries hqueries hdisjoint functional flockSecret veilSecret querySecret
     message statement hpublicKernel continueWith hpublic
 
+omit [DecidableEq F] [Fintype I] [Fintype J] in
 omit [Fintype K] in
 /-- Explicit public-input simulator corollary.  A public-fiber representative
 need not satisfy the original nonlinear relation: it is merely the assignment

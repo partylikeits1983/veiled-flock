@@ -159,8 +159,7 @@ theorem rawQuery_zerocheck_length_eq
           (historyFromList control.zerocheckAnswers
             (round - zerocheckOffset))
       · exfalso
-        simpa [rawQuery, hstatus, hskip, hequality, hzero, heq, hsite] using
-          hquery
+        simp [rawQuery, hstatus, hskip, hequality, hzero, heq, hsite] at hquery
 
 set_option maxRecDepth 30000 in
 set_option maxHeartbeats 1000000 in
@@ -289,10 +288,10 @@ theorem rawQuery_afterZerocheck_fiat_length_eq
               hproduct, hligerito, offset, within, hstate, hdone, hpow] at hquery
             subst point
             exact False.elim (fiatShamir_ne_pow hfiat state _ rfl)
-  · simpa [rawQuery, hstatus, hskip, hequality, hzero, hblindState,
+  · simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState,
       hblindGrind, hblind, halpha, houterChallenge, houterPositions,
       hlinearPositions, hlinearRho, hhadamardPositions, hhadamardRho,
-      hproduct, hligerito] using hquery
+      hproduct, hligerito] at hquery
 
 theorem zerocheck_query_length_strict
     {W : Type*} (shape : BatchShape)
@@ -590,9 +589,9 @@ theorem rawStep_afterZerocheck_fiat_add_eighteen
               hdone, hpow] at hquery
             subst point
             exact False.elim (fiatShamir_ne_pow hfiat state _ rfl)
-  · simpa [rawQuery, hstatus, hskip, hequality, hzero, hblindState,
+  · simp [rawQuery, hstatus, hskip, hequality, hzero, hblindState,
       hblindGrind, hblind, halpha, houterChallenge, houterPositions,
       hlinearPositions, hlinearRho, hhadamardPositions, hhadamardRho,
-      hproduct, hligerito] using hquery
+      hproduct, hligerito] at hquery
 
 end VeiledFlock.ProductionSamplingScheduleQueryFreshness

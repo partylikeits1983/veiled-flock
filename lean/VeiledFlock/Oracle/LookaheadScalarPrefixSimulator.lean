@@ -188,6 +188,7 @@ theorem simulator_exact (sites : ℕ)
       rfl
     _ = _ := VeiledFlock.Probability.uniform_map_ignore_right view
 
+omit [DecidableEq AlgCoins] in
 /-- Honest execution is exactly distributed as the Rust-shaped look-ahead
 scalar-prefix simulator. -/
 theorem honest_simulator_exact {sites : ℕ}

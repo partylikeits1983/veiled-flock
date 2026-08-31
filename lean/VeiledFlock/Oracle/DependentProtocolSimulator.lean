@@ -60,6 +60,7 @@ noncomputable def splitCoinEquiv (sites : ℕ)
     (Equiv.sigmaCongrRight fun coins ↦
       splitAdaptive (sites := sites) (schedule coins) (hinjective coins))
 
+omit [Fintype Point] in
 omit [Fintype AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 @[simp]
 theorem splitCoinEquiv_apply (sites : ℕ)
@@ -98,6 +99,7 @@ noncomputable def programmedMachine (sites : ℕ)
     (simulatedOracle (schedule input.1) (hinjective input.1) input.2)
     input.2.1
 
+omit [Fintype Point] in
 omit [Fintype AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Pointwise equivalence of the clairvoyant view and the executable adaptive
 programmer. -/

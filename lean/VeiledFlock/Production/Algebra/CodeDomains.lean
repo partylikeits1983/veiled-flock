@@ -354,8 +354,6 @@ noncomputable def linearPaddingQueryEquiv (shape : BatchShape)
     (hpositions : Injective positions) :
     (Fin veilQueryCount → GhashField) ≃ₗ[GhashField]
       (Fin veilQueryCount → GhashField) := by
-  change (Fin veilQueryCount → GhashField) ≃ₗ[GhashField]
-    (Fin veilQueryCount → GhashField)
   have hcode : linearCodeLength = 2 ^ 13 := by decide
   let castPosition : Fin linearCodeLength ≃ Fin (2 ^ 13) := finCongr hcode
   let concretePositions := fun index => castPosition (positions index)
@@ -371,8 +369,6 @@ noncomputable def hadamardPaddingQueryEquiv
     (hpositions : Injective positions) :
     (Fin veilQueryCount → GhashField) ≃ₗ[GhashField]
       (Fin veilQueryCount → GhashField) := by
-  change (Fin veilQueryCount → GhashField) ≃ₗ[GhashField]
-    (Fin veilQueryCount → GhashField)
   have hcode : hadamardCodeLength = 2 ^ 11 := by decide
   let castPosition : Fin hadamardCodeLength ≃ Fin (2 ^ 11) := finCongr hcode
   let concretePositions := fun index => castPosition (positions index)

@@ -1099,7 +1099,7 @@ theorem equalityAttempt_live_none_of_rejected_before_cap
       hoff, hoff2, hoff3, hoff4, hoff5, hoff6, equalityLiveBlocks,
       hdiv4, hdiv5, hdiv6,
       hnone, hstatus] at hrejected hslice ⊢ <;>
-    simp_all <;> omega
+    simp_all
 
 theorem equalityStep_skip (shape : BatchShape) (round : ℕ)
     (control : Control shape) (answer : OracleBlock) :
@@ -1969,7 +1969,7 @@ theorem rawControlUntil_add
         (window start width hfit answers) := by
   unfold rawControlUntil
   rw [iterateFrom_add, Nat.zero_add]
-  congr 1 <;> funext index <;> rfl
+  congr 1
 
 theorem controlAfter_eq_rawControlUntil
     {W : Type*} (shape : BatchShape)

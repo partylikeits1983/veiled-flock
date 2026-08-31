@@ -34,6 +34,7 @@ variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Finite Prior]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [DecidableEq Outcome] in
 omit [Fintype K] [DecidableEq K] [DecidableEq Rest] in
 /-- Exact public-only simulator preserving the complete earlier classical
 adversary oracle view.  Freshness is expressed as disjointness of its unique

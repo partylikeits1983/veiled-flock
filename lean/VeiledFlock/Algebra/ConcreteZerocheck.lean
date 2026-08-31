@@ -124,7 +124,6 @@ theorem firstFriendly_ne_zero : firstFriendly ≠ 0 := by
   intro hzero
   apply firstFriendlyBits_ne_zero
   exact bitsGhashEquiv.injective (by
-    change bitsGhashEquiv firstFriendlyBits = bitsGhashEquiv (0 : Bits128)
     rw [bitsGhashEquiv_zero]
     exact hzero)
 

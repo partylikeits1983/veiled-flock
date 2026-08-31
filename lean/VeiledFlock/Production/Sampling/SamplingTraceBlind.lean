@@ -75,7 +75,7 @@ theorem rawControlUntil_blind_stable_of_done
   induction remaining generalizing trial with
   | zero =>
       have htrial : trial = maxBlindTrials := by omega
-      simpa [blindChallengeOffset, blindGrindingWidth, htrial]
+      simp [blindChallengeOffset, blindGrindingWidth, htrial]
   | succ remaining ih =>
       let site : Fin productionSamplingSlots :=
         ⟨blindGrindingOffset + trial, by

@@ -548,7 +548,7 @@ theorem expandedSamplingAnswers_active
   rw [answerBounded_of_le fallback input.1.2.1 point hfit, htable]
   have hboundEq : boundBytes point hfit = bounded.1 := by
     apply unboundBytes_injective
-    simpa [hunbound]
+    simp [hunbound]
   change answers site = tableOfSplit
     (ProductionMaxPointLength shape maxStartLength) split.1.1 split.2.2.1
       (boundBytes point hfit)

@@ -43,8 +43,7 @@ theorem mem_containedRuns {domain trials : ℕ}
 theorem card_containedRuns {domain trials : ℕ}
     (support : Finset (Fin domain)) :
     (containedRuns support trials).card = support.card ^ trials := by
-  simpa [containedRuns] using
-    (Fintype.card_piFinset_const support trials)
+  simp [containedRuns]
 
 /-- Every aborting run is covered by an event indexed by a support of size
 `target - 1`. -/

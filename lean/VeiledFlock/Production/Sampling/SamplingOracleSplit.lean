@@ -189,7 +189,7 @@ theorem boundedFreshSchedule_some_raw (maxPointLength : ℕ)
       simpa using hsome.symm
     rw [hraw]
     congr 1
-    simpa [hpoint]
+    simp [hpoint]
 
 theorem boundedFreshSchedule_activeInjective (maxPointLength : ℕ)
     (hfits : ScheduleFits shape causalSecret completion witness coins prelude

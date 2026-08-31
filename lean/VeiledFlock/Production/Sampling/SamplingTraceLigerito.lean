@@ -166,7 +166,7 @@ theorem rawControlUntil_ligerito_stable_of_done
   | zero =>
       have htrial : trial = maxLigeritoTrials := by omega
       subst trial
-      congr 1 <;> simp [ligeritoSiteWidth]
+      congr 1
   | succ remaining ih =>
       have htrial : trial < maxLigeritoTrials := by omega
       let round : Fin productionSamplingSlots :=

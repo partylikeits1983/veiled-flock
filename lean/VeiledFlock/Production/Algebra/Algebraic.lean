@@ -42,6 +42,7 @@ def emptyFlockSecret :
     History (F := F) (I := K) rounds → Rest → W → Fin 0 → F :=
   fun _ _ _ impossible => Fin.elim0 impossible
 
+omit [DecidableEq F] [Fintype J] in
 omit [Fintype K] in
 /-- Exact witness independence for the production algebraic randomness
 inventory.  There is one causal transcript-mask tape, followed by VEIL
@@ -90,6 +91,8 @@ theorem productionAlgebraic_zeroKnowledge
     base hbase queries hqueries hdisjoint functional emptyFlockSecret
     veilSecret querySecret message statement hpublicKernel continueWith hpublic
 
+omit [DecidableEq F] [Fintype J] in
+omit [Fintype K] in
 /-- Public-input simulator corollary for the same exact production tape. -/
 theorem productionAlgebraic_simulatorExact
     (secret : Rest → Secret (F := F) (I := K) (W := W))

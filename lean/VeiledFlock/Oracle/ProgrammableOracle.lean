@@ -49,7 +49,7 @@ theorem range_disjoint_prior_of_nonce_not_bad {programmed : ℕ}
     exact False.elim (hgood ((mem_badNonces_iff
       programPoint priorQueries nonce).2 ⟨site, hprior⟩))
   · intro h
-    exact False.elim (by simpa using h)
+    simp at h
 
 /-- Injective nonce framing gives the exact `programmed * queries` union
 bound on programming collisions. -/

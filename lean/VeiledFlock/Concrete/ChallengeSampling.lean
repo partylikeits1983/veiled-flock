@@ -100,7 +100,7 @@ theorem equalityPointAccepted_ne_one
   apply hgood
   apply (RepeatedEvents.mem_anyBad_iff
     maxEqualityPointOuterCoordinates oneFailure accepted).2
-  exact ⟨index, by simpa [oneFailure, hone]⟩
+  exact ⟨index, by simp [oneFailure, hone]⟩
 
 /-- Every accepted equality-point vector has the same exact probability mass;
 the only discrepancy from uniform sampling over valid vectors is the explicit

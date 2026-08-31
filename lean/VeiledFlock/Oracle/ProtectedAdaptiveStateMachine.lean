@@ -47,6 +47,7 @@ noncomputable def coinEquiv {sites : ℕ}
       (rightSchedule (stateEquiv coins)) (hleft coins) (hright coins))).trans
     (Equiv.prodCongr stateEquiv (Equiv.refl _))
 
+omit [DecidableEq Point] in
 omit [Nonempty StateCoins] [Nonempty Outcome] in
 omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_state {sites : ℕ}
@@ -77,6 +78,7 @@ theorem coinEquiv_state {sites : ℕ}
   change stateEquiv (fiber coins).1 = stateEquiv coins.1
   rw [hstate]
 
+omit [DecidableEq Point] in
 omit [Nonempty StateCoins] [Nonempty Outcome] in
 omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_oracle {sites : ℕ}
@@ -108,6 +110,7 @@ theorem coinEquiv_oracle {sites : ℕ}
       (hleft stateCoins) (hright stateCoins)) coins
   exact congrArg Prod.fst hsplit
 
+omit [DecidableEq Point] in
 omit [Nonempty StateCoins] [Nonempty Outcome] in
 omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_fixedAnswers {sites : ℕ}
@@ -137,6 +140,7 @@ theorem coinEquiv_fixedAnswers {sites : ℕ}
     (rightSchedule (stateEquiv coins.1)) (hleft coins.1) (hright coins.1)
     coins.2 prior
 
+omit [DecidableEq Point] in
 omit [Nonempty StateCoins] [Nonempty Outcome] in
 omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 theorem coinEquiv_protocolAnswers {sites : ℕ}
@@ -176,6 +180,8 @@ noncomputable def machine {sites : ℕ}
     (fun prior => coins.2 (fixedPoints coins.1 prior))
     (run (schedule coins.1) coins.2 sites)
 
+omit [DecidableEq Point] in
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 omit [Nonempty StateCoins] [Nonempty Outcome] in
 /-- Pointwise equality of the complete algebraic, adversary-prefix, and
 protocol-answer view. -/
@@ -216,6 +222,7 @@ theorem machine_transport {sites : ℕ}
   funext prior
   exact (hfixedAnswers prior).symm
 
+omit [DecidableEq StateCoins] [DecidableEq Outcome] in
 /-- Exact distributional equality on the good event, including the complete
 earlier classical adversary view. -/
 theorem simulator_exact {sites : ℕ}

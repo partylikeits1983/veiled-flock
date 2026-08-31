@@ -113,7 +113,7 @@ theorem card_outputRuns_eq (bad : Finset A) (trials : ℕ)
         have : value = left := by
           apply swap.injective
           simpa [swap] using h
-        simpa [hrun, this]
+        simp [this]
 
 /-- Uniform bounded rejection sampling assigns identical probability mass to
 all accepted values. -/
