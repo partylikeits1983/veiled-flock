@@ -542,6 +542,8 @@ impl ZkProverCtx {
     /// commitments, prove the shifted circuit, and assemble the proof.
     pub fn prove(mut self) -> Result<ZkProof, VeilError> {
         if self.read_cursor != self.sent.len() {
+            return Err(VeilError::TranscriptNotConsumed);
+        }
         if self.challenge_cursor < self.challenges.len() {
             return Err(VeilError::ChallengeReplayExhausted);
         }
