@@ -231,6 +231,7 @@ noncomputable def commitmentCoinEquiv
     rw [hmask]
     exact Prod.ext rfl (paddingEquiv.apply_symm_apply padding)
 
+omit [Fintype Row] in
 omit [Fintype F] [DecidableEq F] [Fintype Index] [Fintype (Index → F)] [Fintype Padding] in
 theorem commitmentView_commitmentCoinEquiv
     (rowMask : (Row → F) ≃ₗ[F] (Row → F))
@@ -275,6 +276,7 @@ theorem commitmentView_commitmentCoinEquiv
             rightMask coins.2))
     simpa [LinearLeakageMask.view] using hpadding
 
+omit [Fintype Row] in
 omit [Fintype F] [DecidableEq F] [Fintype Index] in
 /-- Exact joint finite-distribution theorem for one complete production-shaped
 padded proximity commitment. -/

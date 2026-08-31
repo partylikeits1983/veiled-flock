@@ -542,18 +542,7 @@ theorem outerRowPayload_length {W : Type*} (shape : BatchShape)
 theorem linearRowPayload_length (shape : BatchShape)
     (coins : ProductionCoins shape) (row : Fin (2 ^ 13)) :
     (linearRowPayload shape coins row).length = 32 := by
-  simpa [linearRowPayload] using
-    (matrixRowBytes_length (row := fun column : Fin 2 ↦
-      if hdata : column.val < 1 then
-        linearCodeword shape
-          (paddedMessage shape
-            (fun index ↦ coins.outer.2.2 index ()) coins.layer.1)
-          (coins.layer.2.1.2 (Sum.inl ⟨column.val, hdata⟩))
-          ((finCongr (by decide : linearCodeLength = 2 ^ 13)).symm row)
-      else
-        linearCodeword shape coins.layer.2.1.1
-          (coins.layer.2.1.2 (Sum.inr ()))
-          ((finCongr (by decide : linearCodeLength = 2 ^ 13)).symm row)))
+  simp [linearRowPayload, matrixRowBytes_length]
 
 @[simp]
 theorem hadamardRowPayload_length {W Public : Type*} (shape : BatchShape)
@@ -561,19 +550,7 @@ theorem hadamardRowPayload_length {W Public : Type*} (shape : BatchShape)
     (witness : W) (coins : ProductionCoins shape)
     (row : Fin (2 ^ 11)) :
     (hadamardRowPayload shape spec witness coins row).length = 64 := by
-  simpa [hadamardRowPayload] using
-    (matrixRowBytes_length (row := fun column : Fin 4 ↦
-      if hdata : column.val < 3 then
-        let data : Fin 3 := ⟨column.val, hdata⟩
-        hadamardCodeword
-          (VeiledFlock.ProductionCorrelatedVeilLayer.hadamardMessage
-            spec.multiplicationSecret witness coins.layer.1 data)
-          (coins.layer.2.2.1.2 (Sum.inl data))
-          ((finCongr (by decide : hadamardCodeLength = 2 ^ 11)).symm row)
-      else
-        hadamardCodeword coins.layer.2.2.1.1
-          (coins.layer.2.2.1.2 (Sum.inr ()))
-          ((finCongr (by decide : hadamardCodeLength = 2 ^ 11)).symm row)))
+  simp [hadamardRowPayload, matrixRowBytes_length]
 
 /-- The three fixed geometries used by one production proof.  The algebraic
 coin transport preserves these nonces definitionally. -/

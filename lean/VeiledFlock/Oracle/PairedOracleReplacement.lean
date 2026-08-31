@@ -222,6 +222,7 @@ theorem fiberwiseRenameOracle_rest
       (hleft rest) (hright rest) (hcross rest)) input
   exact congrArg Prod.snd hsplit
 
+omit [Finite Index] [DecidableEq Point] in
 omit [Nonempty Rest] in
 omit [Fintype Point] [Fintype Rest] [DecidableEq Rest] [Fintype Outcome] [DecidableEq Outcome] in
 theorem fiberwiseRenameOracle_at_right
@@ -247,6 +248,7 @@ theorem fiberwiseRenameOracle_at_right
   exact renameOracle_at_right (left input.1) (right input.1)
     (hleft input.1) (hright input.1) (hcross input.1) input.2 index
 
+omit [Finite Index] [DecidableEq Point] in
 omit [Nonempty Rest] in
 omit [Fintype Point] [Fintype Rest] [DecidableEq Rest] [Fintype Outcome] [DecidableEq Outcome] in
 theorem fiberwiseRenameOracle_off

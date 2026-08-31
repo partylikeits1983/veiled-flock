@@ -87,7 +87,7 @@ theorem production_skip_sample_eq
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers counter counter.isLt.le) =
         some (slicePoint prelude 6 (BitVec.ofNat 64 (index.val / 2))) := by
-    simpa [rawQuery, hcounter, hcontrol.1, hcontrol.2, counter]
+    simp [rawQuery, hcounter, hcontrol.1, hcontrol.2, counter]
   have hlist : index.val / 2 <
       (List.ofFn (window 0 equalitySkipBlocks (by decide) answers)).length := by
     rw [List.length_ofFn]

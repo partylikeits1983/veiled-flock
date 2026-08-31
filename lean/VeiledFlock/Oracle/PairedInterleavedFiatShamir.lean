@@ -41,6 +41,7 @@ noncomputable def oracleEquiv {sites : ℕ}
     (leftSchedule coins) (rightSchedule (answerEquiv answers coins))
     (hleft coins) (hright (answerEquiv answers coins))
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- The answer-dependent retargeting preserves the complete adaptive answer
 vector for every input oracle. -/
@@ -65,6 +66,7 @@ theorem oracleEquiv_answers {sites : ℕ}
     (leftSchedule coins) (rightSchedule (answerEquiv answers coins))
     (hleft coins) (hright (answerEquiv answers coins)) oracle
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Corresponding protected inputs receive the same oracle answers. -/
 theorem oracleEquiv_protected {sites : ℕ}
@@ -172,15 +174,12 @@ noncomputable def coinEquiv {sites : ℕ}
     rw [hrun]
     dsimp only
     rw [hrecovered]
-    change
-      (translated,
-        oracleEquiv answerEquiv leftFixed rightFixed leftSchedule rightSchedule
-          hleft hright coins answers transportedBack) = (translated, oracle)
     rw [show transportedBack =
         (oracleEquiv answerEquiv leftFixed rightFixed leftSchedule
           rightSchedule hleft hright coins answers).symm oracle by rfl]
     simp
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_answers {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -209,6 +208,7 @@ theorem coinEquiv_answers {sites : ℕ}
     rightSchedule hleft hright input.1
     (run (leftSchedule input.1) input.2 sites) input.2
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 theorem coinEquiv_protected {sites : ℕ}
     (answerEquiv : History (Outcome := Outcome) sites → AlgCoins ≃ AlgCoins)
@@ -244,6 +244,7 @@ noncomputable def machine {sites : ℕ}
   continueWith (state input.1 answers)
     (fun prior => input.2 (fixedPoints input.1 answers prior)) answers
 
+omit [DecidableEq Point] in
 omit [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Exact pointwise transport of the visible algebraic state, every paired
 protected answer, and the full adaptive oracle trace. -/
@@ -312,6 +313,7 @@ theorem machine_transport {sites : ℕ}
   funext prior
   exact (hprotected prior).symm
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Uniform real and simulator views are exactly equal on the good event. -/
 theorem simulator_exact {sites : ℕ}
     (leftState rightState :

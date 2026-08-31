@@ -162,14 +162,14 @@ theorem acceptScalar_transcript_length_eq_or_add_seventeen_le
   · by_cases hfailed :
         VeiledFlock.ProductionScalarProjection.scalarFromBlock answer ∈ failed
     · simp [acceptScalar, hzero, hfailed]
-      split <;> simp_all <;> omega
+      split <;> simp_all
     · simp [acceptScalar, hzero, hfailed, afterScalar_length]
   · by_cases hdone : control.stageDone
     · simp [acceptScalar, hzero, hdone]
     · by_cases hfailed :
           VeiledFlock.ProductionScalarProjection.scalarFromBlock answer ∈ failed
       · simp [acceptScalar, hzero, hdone, hfailed]
-        split <;> simp_all <;> omega
+        split <;> simp_all
       · simp [acceptScalar, hzero, hdone, hfailed, afterScalar_length]
 
 theorem acceptPositions_transcript_length_eq_or_add_seventeen_le
@@ -183,11 +183,11 @@ theorem acceptPositions_transcript_length_eq_or_add_seventeen_le
   classical
   by_cases hzero : round - start = 0
   · simp [acceptPositions, hzero]
-    split <;> simp_all ; split <;> simp_all <;> omega
+    split <;> simp_all ; split <;> simp_all
   · by_cases hdone : control.stageDone
     · simp [acceptPositions, hzero, hdone]
     · simp [acceptPositions, hzero, hdone]
-      split <;> simp_all ; split <;> simp_all <;> omega
+      split <;> simp_all ; split <;> simp_all
 
 theorem ligeritoStep_transcript_length_eq_or_add_seventeen_le
     {shape : BatchShape} (round : ℕ) (control : Control shape)
@@ -352,7 +352,7 @@ theorem rawStep_transcript_length_eq_or_add_seventeen_le
                 simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,
                   counter, hcounter, base, blocks, outer, hlast, haccept,
                   hskipValue, hbase]
-                cases shape <;> norm_num [m, kSkip] <;> omega
+                cases shape <;> norm_num [m, kSkip]
           · by_cases hcap :
                 (round - equalityOffset) / equalityAttemptBlocks + 1 =
                   rejectionTrials
@@ -360,12 +360,12 @@ theorem rawStep_transcript_length_eq_or_add_seventeen_le
               simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,
                 counter, hcounter, base, blocks, outer, hlast, haccept, hbase,
                 hcap]
-              cases shape <;> norm_num [m, kSkip] <;> omega
+              cases shape <;> norm_num [m, kSkip]
             · right
               simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,
                 counter, hcounter, base, blocks, outer, hlast, haccept, hbase,
                 hcap]
-              cases shape <;> norm_num [m, kSkip] <;> omega
+              cases shape <;> norm_num [m, kSkip]
         · simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,
             counter, hcounter, base,  hlast, hbase]
       · simp [rawStep, hstatus, hskip, hequality, equalityStep, hsome,

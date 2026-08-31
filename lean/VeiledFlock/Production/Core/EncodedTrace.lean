@@ -34,6 +34,7 @@ variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 variable {rounds : ℕ}
 
+omit [DecidableEq F] [Fintype K] [Fintype J] [DecidableEq Outcome] in
 omit [DecidableEq K] [DecidableEq J] [DecidableEq Rest] in
 theorem productionEncodedTraceSimulator_exact
     (secret : Rest → Secret (F := F) (I := K) (W := W))

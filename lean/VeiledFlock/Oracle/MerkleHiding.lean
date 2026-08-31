@@ -309,6 +309,7 @@ theorem combinedPoints_injective {Prior Leaf : Type*}
           exact False.elim (hdisjoint rightPrior leftLeaf heq.symm)
       | inr rightLeaf => exact congrArg Sum.inr (hleaf heq)
 
+omit [DecidableEq Salt] [DecidableEq Outcome] in
 /-- Exact salted-leaf replacement while preserving a complete vector of
 earlier oracle answers.  The no-prequery good event supplies `hdisjoint`; the
 counting theorem above bounds its complement. -/
@@ -450,6 +451,7 @@ theorem mem_universalHiddenInputBadAssignments_iff {hidden : ℕ}
   simp [universalHiddenInputBadAssignments, mem_coordinateBad_iff,
     VeiledFlock.UniversalFreshness.mem_badNonces_iff]
 
+omit [DecidableEq Point] in
 /-- Quantifying over every counterfactual suffix has no cardinality cost:
 at a fixed site and prior point, cross-context injectivity recovers at most
 one salt. -/
@@ -493,6 +495,7 @@ theorem card_universalHiddenInputBadAssignments_le {hidden : ℕ}
           Fintype.card Salt ^ (hidden - 1) := by
       simp [mul_assoc]
 
+omit [DecidableEq Point] in
 theorem universalHiddenInputProbability_le [Nonempty Salt] {hidden : ℕ}
     (point : Fin hidden → Salt → Context → Point)
     (priorQueries : Finset Point)

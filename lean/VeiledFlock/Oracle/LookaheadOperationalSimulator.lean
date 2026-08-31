@@ -260,10 +260,6 @@ noncomputable def coinEquiv {sites : ℕ}
           Unprogrammed
             (tracePoints (rightSchedule translated proposed) proposed) →
               Outcome))
-    change
-      (splitOracle
-        (tracePoints (rightSchedule translated answers) answers)
-        (hright translated answers) oracle).2 = outside
     exact congrArg Prod.snd
       ((splitOracle
         (tracePoints (rightSchedule translated answers) answers)

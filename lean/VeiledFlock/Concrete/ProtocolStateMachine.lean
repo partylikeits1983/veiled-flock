@@ -69,6 +69,7 @@ noncomputable def combinedCoinEquiv (sites : ℕ)
           (schedule (simulatedAlgebraic (algebraicCoinEquiv coins)))
           (hinjective (simulatedAlgebraic (algebraicCoinEquiv coins))))
 
+omit [Fintype Point] in
 omit [Fintype AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 @[simp]
 theorem combinedCoinEquiv_apply (sites : ℕ)
@@ -113,6 +114,7 @@ noncomputable def simulatedMachine (sites : ℕ)
       (hinjective (simulatedAlgebraic coins.1)) coins.2)
     coins.2.1
 
+omit [Fintype Point] in
 omit [Fintype AlgCoins] [Nonempty AlgCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Pointwise equality after the combined algebraic/oracle coin equivalence. -/
 theorem realMachine_transport (sites : ℕ)

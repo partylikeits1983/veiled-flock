@@ -63,6 +63,7 @@ noncomputable def productionState
     veilSecret querySecret message
     (fun rest history view => (rest, history, view)) witness coins
 
+omit [Fintype F] [DecidableEq F] [Fintype J] [Fintype (Padding → F)] [Fintype (J → F)] in
 omit [Fintype K] [Fintype (K → F)] [Fintype Rest] [Nonempty Rest] in
 /-- Pointwise production algebraic transport, packaged for composition with
 the random-oracle state machine. -/
@@ -106,6 +107,8 @@ theorem productionState_transport
     querySecret message statement hpublicKernel
     (fun rest history view => (rest, history, view)) hpublic coins
 
+omit [DecidableEq F] [Fintype J] in
+omit [DecidableEq Outcome] in
 omit [Fintype K] in
 /-- Exact production algebraic+pROM simulator theorem.  The public simulator
 uses a representative of the public statement; the representative need not
@@ -186,6 +189,8 @@ open VeiledFlock.ConcreteOracle
 open VeiledFlock.Framing
 open VeiledFlock.TranscriptSchedule
 
+omit [DecidableEq F] [Fintype J] in
+omit [Fintype K] in
 /-- Byte-concrete specialization using the production 32-byte oracle block,
 16-byte scalar prefix, and 54-byte append-only round growth. -/
 theorem productionScalarPromSimulator_exact

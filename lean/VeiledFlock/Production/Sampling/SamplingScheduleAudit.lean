@@ -125,7 +125,7 @@ theorem zerocheckStep_transcript_length_le
             VeiledFlock.ProductionSamplingSchedule.afterZerocheck_length]
           cases shape <;>
             norm_num [programmedPoints,
-              VeiledFlock.ProductionMaskLayout.ell, kSkip, m] <;> omega
+              VeiledFlock.ProductionMaskLayout.ell, kSkip, m]
         · simp [zerocheckStep, heq, hsite, hlast]
       · simp [zerocheckStep, heq, hsite]
 

@@ -213,7 +213,7 @@ theorem rawQuery_before_zerocheck_injective
         (rawControlUntil shape causalSecret completion witness coins prelude
           answers right right.isLt.le).transcript := by
       rw [hleftTranscript, hrightTranscript]
-      simpa only [hattemptEq]
+      simp only [hattemptEq]
     have hpointEq :
         slicePoint
             (rawControlUntil shape causalSecret completion witness coins prelude

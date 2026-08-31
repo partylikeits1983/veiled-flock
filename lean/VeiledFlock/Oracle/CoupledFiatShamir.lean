@@ -162,6 +162,7 @@ theorem machine_transport {sites : ℕ}
   rw [hanswers, coinEquiv_oracle, coinEquiv_state,
     ← hstate input.1 answers]
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Exact zero-cost Fiat--Shamir hybrid with a fully preserved oracle. -/
 theorem simulator_exact {sites : ℕ}
     (leftState rightState :
@@ -350,6 +351,7 @@ theorem traceCoinEquiv_answers {sites : ℕ}
   exact run_translated_eq answerEquiv leftSchedule rightSchedule htrace
     input.1 input.2
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Exact simulator theorem from causal trace correspondence, preserving the
 entire random oracle pointwise. -/
 theorem trace_simulator_exact {sites : ℕ}

@@ -35,6 +35,7 @@ variable [Fintype Rest] [DecidableEq Rest] [Nonempty Rest]
 variable [Finite Prior]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [DecidableEq Outcome] in
 omit [Fintype K] [DecidableEq K] [DecidableEq Rest] in
 /-- Exact public-only simulator with the production algebraic coin
 translation selected by the oracle answers that the execution actually sees.

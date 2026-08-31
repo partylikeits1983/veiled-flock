@@ -125,6 +125,7 @@ noncomputable def machine {sites : ℕ}
     (coins : StateCoins × Oracle (Point := Point) (Outcome := Outcome)) : View :=
   continueWith (state coins.1) (run (schedule coins.1) coins.2 sites)
 
+omit [Fintype StateCoins] [DecidableEq StateCoins] [Fintype Outcome] [DecidableEq Outcome] in
 omit [Nonempty StateCoins] [Nonempty Outcome] in
 /-- Pointwise preservation of the visible state and the complete adaptive
 oracle-answer trace. -/
@@ -153,6 +154,7 @@ theorem machine_transport {sites : ℕ}
       hright,
     hstate, hanswers]
 
+omit [DecidableEq StateCoins] [DecidableEq Outcome] in
 /-- Exact distributional equality for a production state translation followed
 by arbitrary witness-dependent, causal random-oracle work. -/
 theorem simulator_exact {sites : ℕ}

@@ -181,7 +181,7 @@ theorem rawQuery_active_equality_metadata
           witness coins prelude answers (equalityOffset + attempt * 7 + counter)
             (by simpa [hround] using round.isLt.le) := by
         dsimp only [control]
-        congr 2 <;> omega
+        congr 2
       rw [hcontrolEq] at hsome
       simp [hsomeTrue] at hsome
     refine ⟨hround, hattemptFirst, hcounter, ?_⟩

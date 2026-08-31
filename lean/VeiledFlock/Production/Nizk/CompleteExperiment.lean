@@ -157,6 +157,8 @@ theorem simulator_witness_independent {sites : ℕ}
     (fun _ : Witness => veilFlockSimulator statement simulatedState
       fixedPoints schedule render input) right := rfl
 
+omit [DecidableEq Point] in
+omit [Fintype RelationCoins] [DecidableEq RelationCoins] [Nonempty RelationCoins] [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome] in
 /-- Pointwise equality of the complete joint views under the single concrete
 coin transport.  A final production instantiation obtains the injectivity
 premises from freshness (`Good`); `render` ensures that this equality includes
@@ -228,6 +230,7 @@ theorem real_sim_equal_on_good {sites : ℕ}
     (hleft := hreal) (hright := hsimulated)
     (continueWith := continueWith) input
 
+omit [DecidableEq RelationCoins] [DecidableEq Outcome] in
 /-- Exact joint-distribution theorem for the complete real and simulator
 views. An instantiation supplies the already-proved production algebraic
 transport and byte-schedule freshness; `render` then exposes proof bytes and

@@ -19,6 +19,7 @@ variable {AlgCoins State Point View : Type*}
 variable [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins]
 variable [Fintype Point] [DecidableEq Point]
 
+omit [DecidableEq AlgCoins] in
 /-- Exact distributional identity between honest execution with a uniform
 complete oracle and the adaptive scalar-prefix programmer.  The complete
 reconstructed oracle is passed to `continueWith`, so the identity covers any

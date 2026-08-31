@@ -77,6 +77,7 @@ theorem coinOracleEquiv_coins (coinEquiv : Coins ≃ Coins)
       coinEquiv input.1 := by
   rfl
 
+omit [Finite Index] [DecidableEq Point] in
 /-- A corresponding simulated point receives the honest point's answer after
 the joint transport. -/
 theorem coinOracleEquiv_at_right (coinEquiv : Coins ≃ Coins)
@@ -95,6 +96,7 @@ theorem coinOracleEquiv_at_right (coinEquiv : Coins ≃ Coins)
     (hleft input.1) (hright (coinEquiv input.1)) (hcross input.1)
     input.2 index
 
+omit [Finite Index] [DecidableEq Point] in
 /-- Every point outside both moved families retains its exact oracle answer
 under the joint transport. -/
 theorem coinOracleEquiv_off (coinEquiv : Coins ≃ Coins)

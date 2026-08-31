@@ -21,6 +21,7 @@ variable [Fintype AlgCoins] [DecidableEq AlgCoins] [Nonempty AlgCoins]
 variable [Fintype Point] [DecidableEq Point]
 variable [Fintype Outcome] [DecidableEq Outcome] [Nonempty Outcome]
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Exact distributional identity between an honest Fiat--Shamir execution
 and the answer-dependent adaptive programmable-oracle simulator.  The only
 remaining statistical step in an external ZK game is the failure probability
@@ -66,6 +67,7 @@ theorem simulator_exact {sites : ℕ}
       VeiledFlock.DependentProtocolSimulator.programmed_exact sites rightState
         rightSchedule hrightInjective continueWith
 
+omit [DecidableEq AlgCoins] [DecidableEq Outcome] in
 /-- Production-strength form of `simulator_exact`: the honest and simulated
 schedules need only agree at each causal trace point along the proposed full
 answer vector.  This permits an earlier simulated mask to depend on challenges

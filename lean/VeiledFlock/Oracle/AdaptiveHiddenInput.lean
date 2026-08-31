@@ -462,6 +462,7 @@ theorem dummyHitSet_probability_le
       gcongr
       exact postQueryPointSet_card_le point proof nextQuery coins
 
+omit [Nonempty Salt] [DecidableEq Rest] [Nonempty Rest] in
 theorem card_swappedDummyHitSet_eq
     {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)
@@ -481,6 +482,7 @@ theorem card_swappedDummyHitSet_eq
   refine Finset.card_equiv (saltOracleSwap point hindexCross) fun coins => ?_
   simp only [mem_swappedDummyHitSet_iff, mem_dummyHitSet_iff]
 
+omit [Nonempty Salt] [Nonempty Rest] in
 theorem liftedPostHitSet_subset_dummy_union
     {hidden maxPointLength queries : ℕ}
     (point : Rest → Fin hidden → Salt → BoundedBytes maxPointLength)

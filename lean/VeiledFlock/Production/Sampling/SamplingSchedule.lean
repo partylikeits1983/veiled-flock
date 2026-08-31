@@ -534,8 +534,7 @@ theorem freshSchedule_point_inserted
       · simp [hseen] at hquery
       · simp [hseen] at hquery
         subst point
-        simpa [before, hraw, hseen] using
-          (Finset.mem_insert_self candidate before.seen)
+        simp [before, hseen]
 
 theorem scheduledControlAfter_seen_mono
     {W : Type*} (shape : BatchShape)
