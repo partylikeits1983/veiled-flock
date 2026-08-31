@@ -11,7 +11,7 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 
 ## Performance
 
-| Hashes | FLOCK prove | FLOCK verify | FLOCK bundle | Full-ZK prove | Full-ZK verify | Full-ZK bundle | Bundle size overhead vs. FLOCK |
+| Hashes | FLOCK prove | FLOCK verify | FLOCK size | Full-ZK prove | Full-ZK verify | Full-ZK size | Size overhead vs. non-ZK FLOCK |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 64 | 5.402 ms | 12.705 ms | 274,676 B | 21.898 ms | 15.549 ms | 803,764 B | 192.6% |
 | 128 | 6.086 ms | 13.121 ms | 283,604 B | 21.832 ms | 15.189 ms | 805,556 B | 184.0% |
@@ -21,13 +21,17 @@ claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 | 2,048 | 14.888 ms | 14.599 ms | 433,492 B | 78.313 ms | 17.229 ms | 929,468 B | 114.4% |
 | 4,096 | 23.771 ms | 17.193 ms | 452,004 B | 134.793 ms | 19.671 ms | 1,017,308 B | 125.1% |
 
-Release-mode medians of five runs after one warm-up on an AMD Ryzen 7 7840HS
-(8 cores/16 threads), Linux x86-64, Rust 1.98.0. Setup, test-vector and digest
-construction, serialization, and compilation are excluded; the public prove
-APIs' witness checks are included. Both protocols use the Secure Ligerito
-profile. Full-ZK pads the 64- and 128-hash batches to its minimum registered
-256-slot shape, and its bundle includes the public digest list; the non-ZK
-FLOCK bundle does not.
+Measured on an AMD Ryzen 7 7840HS.
+
+The [VEIL paper](https://eprint.iacr.org/2026/683) reports 12% proof-size
+overhead for a `2^29`-element trace over a 31-bit prime base field, so it is not
+directly comparable to these small `GF(2^128)` proof files. The 128-versus-31-bit
+field width contributes (the issue is element width, not binary versus prime by
+itself), but it is not the whole gap. This one-packed-witness PCS has little
+opportunity to amortize VEIL's additions: ZK commits `[mask || witness]` and a
+same-size blinder `g`, doubling both the message dimension and initial Merkle
+leaf width, then adds VEIL constraint and ring-linkage proofs. The serialized
+Full-ZK format also carries the public digest list.
 
 Reproduce the benchmark with:
 
