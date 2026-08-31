@@ -14,6 +14,7 @@ variable {R : Type*} [CommRing R] [IsDomain R] [DecidableEq R]
 
 /-- A nonzero polynomial with emitted per-variable degree bounds vanishes on
 at most the corresponding Schwartz-Zippel budget over a product set. -/
+-- @audit:FlockZk.schwartz_zippel_degree_budget
 theorem schwartz_zippel_degree_budget {n : Nat}
     {p : MvPolynomial (Fin n) R} (hp : p ≠ 0)
     (degreeBudget : Fin n -> Nat)
@@ -28,5 +29,6 @@ theorem schwartz_zippel_degree_budget {n : Nat}
     _ <= Finset.sum univ (fun i => (degreeBudget i / #(S i) : ℚ≥0)) := by
       gcongr with i
       exact_mod_cast hdegree i
+-- @audit:end
 
 end FlockZk
