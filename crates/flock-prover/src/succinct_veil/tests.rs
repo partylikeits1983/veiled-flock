@@ -6,6 +6,7 @@ use super::{
 use crate::r1cs_hashes::blake3::build_block_r1cs_zk;
 use crate::r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE_BLOCKS};
 use flock_core::field::F128;
+use std::{collections::BTreeMap, fs, path::Path};
 use veil_f128::LinearCombination;
 
 #[test]
@@ -88,54 +89,16 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
 
 #[test]
 fn embedded_secure_profiles_match_the_formal_parameter_table() {
-    struct ExpectedProfile {
-        log_inv_rates: &'static [usize],
-        log_message_columns: &'static [usize],
-        queries: &'static [usize],
-        fold_grinding_bits: &'static [usize],
-        final_log_size: usize,
-    }
+    let formal_profiles = formal_secure_profiles_from_lean();
+    assert_eq!(
+        formal_profiles.keys().copied().collect::<Vec<_>>(),
+        vec![256, 512, 1024, 2048, 4096]
+    );
 
-    const EXPECTED: [ExpectedProfile; 5] = [
-        ExpectedProfile {
-            log_inv_rates: &[1, 2, 4],
-            log_message_columns: &[10, 7, 4],
-            queries: &[294, 182, 137],
-            fold_grinding_bits: &[1, 0, 0],
-            final_log_size: 4,
-        },
-        ExpectedProfile {
-            log_inv_rates: &[1, 2, 3],
-            log_message_columns: &[11, 8, 5],
-            queries: &[292, 180, 151],
-            fold_grinding_bits: &[2, 1, 0],
-            final_log_size: 5,
-        },
-        ExpectedProfile {
-            log_inv_rates: &[1, 2, 3, 5],
-            log_message_columns: &[12, 9, 6, 3],
-            queries: &[291, 179, 148, 131],
-            fold_grinding_bits: &[3, 2, 0, 0],
-            final_log_size: 3,
-        },
-        ExpectedProfile {
-            log_inv_rates: &[1, 2, 3, 4],
-            log_message_columns: &[13, 10, 7, 4],
-            queries: &[290, 178, 147, 137],
-            fold_grinding_bits: &[4, 3, 1, 0],
-            final_log_size: 4,
-        },
-        ExpectedProfile {
-            log_inv_rates: &[1, 2, 3, 4],
-            log_message_columns: &[14, 11, 8, 5],
-            queries: &[290, 178, 146, 134],
-            fold_grinding_bits: &[5, 4, 2, 0],
-            final_log_size: 5,
-        },
-    ];
-
-    for (index, expected) in EXPECTED.iter().enumerate() {
-        let blocks = 1usize << (8 + index);
+    for (index, blocks) in [256usize, 512, 1024, 2048, 4096].into_iter().enumerate() {
+        let expected = formal_profiles
+            .get(&blocks)
+            .expect("registered Lean Secure profile");
         let setup = Blake3PreimageZkSetup::new(blocks);
         let config = flock_core::pcs::ligerito::prover_config_for(
             setup.pcs_params.log_msg_len(),
@@ -144,32 +107,193 @@ fn embedded_secure_profiles_match_the_formal_parameter_table() {
         )
         .expect("registered Secure profile");
 
-        assert_eq!(config.log_inv_rates, expected.log_inv_rates);
-        assert_eq!(config.initial_log_msg_cols, expected.log_message_columns[0]);
+        let expected_log_inv_rates = expected
+            .levels
+            .iter()
+            .map(|level| level.log_inv_rate)
+            .collect::<Vec<_>>();
+        let expected_log_message_columns = expected
+            .levels
+            .iter()
+            .map(|level| level.log_message_columns)
+            .collect::<Vec<_>>();
+        let expected_fold_widths = expected
+            .levels
+            .iter()
+            .map(|level| level.fold_width)
+            .collect::<Vec<_>>();
+        let expected_queries = expected
+            .levels
+            .iter()
+            .map(|level| level.queries)
+            .collect::<Vec<_>>();
+        let expected_fold_grinding_bits = expected
+            .levels
+            .iter()
+            .map(|level| level.fold_grinding_bits)
+            .collect::<Vec<_>>();
+
+        assert_eq!(setup.r1cs.m, 22 + index);
+        assert_eq!(config.log_inv_rates, expected_log_inv_rates);
+        assert_eq!(config.initial_log_msg_cols, expected_log_message_columns[0]);
         assert_eq!(
             config.recursive_log_msg_cols,
-            expected.log_message_columns[1..]
+            expected_log_message_columns[1..]
         );
-        assert_eq!(config.initial_log_num_interleaved, 6);
-        assert_eq!(config.initial_k, 6);
-        assert_eq!(
-            config.recursive_ks,
-            vec![3; expected.log_inv_rates.len() - 1]
-        );
-        assert_eq!(config.recursive_steps, expected.log_inv_rates.len() - 1);
-        assert_eq!(config.queries, expected.queries);
-        assert_eq!(config.grinding_bits, vec![0; expected.log_inv_rates.len()]);
-        assert_eq!(config.fold_grinding_bits, expected.fold_grinding_bits);
+        assert_eq!(config.initial_log_num_interleaved, expected_fold_widths[0]);
+        assert_eq!(config.initial_k, expected_fold_widths[0]);
+        assert_eq!(config.recursive_ks, expected_fold_widths[1..]);
+        assert_eq!(config.recursive_steps, expected.levels.len() - 1);
+        assert_eq!(config.queries, expected_queries);
+        assert_eq!(config.grinding_bits, vec![0; expected.levels.len()]);
+        assert_eq!(config.fold_grinding_bits, expected_fold_grinding_bits);
         assert_eq!(
             config.fold_grinding_taper,
-            vec![false; expected.log_inv_rates.len()]
+            vec![false; expected.levels.len()]
         );
-        assert_eq!(config.ood_samples, vec![0; expected.log_inv_rates.len()]);
+        assert_eq!(config.ood_samples, vec![0; expected.levels.len()]);
         assert_eq!(
             config.initial_log_msg_cols - config.recursive_ks.iter().sum::<usize>(),
             expected.final_log_size
         );
     }
+}
+
+#[derive(Debug, Default)]
+struct FormalSecureProfile {
+    levels: Vec<FormalSecureLevel>,
+    final_log_size: usize,
+}
+
+#[derive(Debug)]
+struct FormalSecureLevel {
+    log_inv_rate: usize,
+    log_message_columns: usize,
+    fold_width: usize,
+    queries: usize,
+    fold_grinding_bits: usize,
+}
+
+fn formal_secure_profiles_from_lean() -> BTreeMap<usize, FormalSecureProfile> {
+    let path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../lean/VeiledFlock/Concrete/ConcreteParameters.lean");
+    let source = fs::read_to_string(&path).expect("read Lean concrete parameter table");
+    let profiles = parse_formal_secure_profiles(&source);
+    assert!(
+        profiles
+            .values()
+            .all(|profile| !profile.levels.is_empty() && profile.final_log_size > 0),
+        "Lean Secure profile table is incomplete in {}",
+        path.display()
+    );
+    profiles
+}
+
+fn parse_formal_secure_profiles(source: &str) -> BTreeMap<usize, FormalSecureProfile> {
+    let mut profiles: BTreeMap<usize, FormalSecureProfile> = BTreeMap::new();
+    let mut current_slots = None;
+    let mut reading_levels = false;
+    let mut reading_final_sizes = false;
+
+    for line in source.lines() {
+        let line = line.trim();
+        if line.starts_with("def registeredLigeritoLevels ") {
+            reading_levels = true;
+            reading_final_sizes = false;
+            current_slots = None;
+            continue;
+        }
+        if line.starts_with("def ligeritoFinalLogSize ") {
+            reading_levels = false;
+            reading_final_sizes = true;
+            current_slots = None;
+            continue;
+        }
+        if line.starts_with("def ") || line.starts_with("theorem ") {
+            reading_levels = false;
+            reading_final_sizes = false;
+            current_slots = None;
+        }
+
+        if reading_levels {
+            if let Some(slots) = slots_case(line) {
+                profiles.entry(slots).or_default();
+                current_slots = Some(slots);
+                continue;
+            }
+            if let Some(level) = secure_udr_level(line) {
+                let slots = current_slots.expect("Lean Secure level appears before a shape case");
+                profiles.entry(slots).or_default().levels.push(level);
+            }
+        } else if reading_final_sizes
+            && let Some((slots, final_log_size)) = final_log_size_case(line)
+        {
+            profiles.entry(slots).or_default().final_log_size = final_log_size;
+        }
+    }
+
+    profiles
+}
+
+fn slots_case(line: &str) -> Option<usize> {
+    let rest = line.strip_prefix("| .slots")?;
+    let (slots, _) = rest.split_once("=>")?;
+    slots.trim().parse().ok()
+}
+
+fn final_log_size_case(line: &str) -> Option<(usize, usize)> {
+    let slots = slots_case(line)?;
+    let (_, value) = line.split_once("=>")?;
+    Some((slots, value.trim().parse().ok()?))
+}
+
+fn secure_udr_level(line: &str) -> Option<FormalSecureLevel> {
+    let (_, fields) = line.split_once("secureUdrLevel ")?;
+    let fields = fields
+        .split(|character: char| !character.is_ascii_digit())
+        .filter(|field| !field.is_empty())
+        .map(str::parse::<usize>)
+        .collect::<Result<Vec<_>, _>>()
+        .ok()?;
+    match fields.as_slice() {
+        [
+            log_inv_rate,
+            log_message_columns,
+            fold_width,
+            queries,
+            fold_grinding_bits,
+        ] => Some(FormalSecureLevel {
+            log_inv_rate: *log_inv_rate,
+            log_message_columns: *log_message_columns,
+            fold_width: *fold_width,
+            queries: *queries,
+            fold_grinding_bits: *fold_grinding_bits,
+        }),
+        _ => None,
+    }
+}
+
+#[test]
+fn parses_formal_secure_profile_table() {
+    let source = r#"
+def registeredLigeritoLevels : BatchShape -> List RegisteredLigeritoLevel
+  | .slots256 =>
+      [secureUdrLevel 1 10 6 294 1,
+        secureUdrLevel 2 7 3 182 0]
+  | .slots512 =>
+      [secureUdrLevel 1 11 6 292 2]
+
+def ligeritoFinalLogSize : BatchShape -> Nat
+  | .slots256 => 4
+  | .slots512 => 5
+"#;
+    let profiles = parse_formal_secure_profiles(source);
+    assert_eq!(profiles[&256].levels.len(), 2);
+    assert_eq!(profiles[&256].levels[0].queries, 294);
+    assert_eq!(profiles[&256].levels[1].fold_grinding_bits, 0);
+    assert_eq!(profiles[&256].final_log_size, 4);
+    assert_eq!(profiles[&512].levels[0].log_message_columns, 11);
+    assert_eq!(profiles[&512].final_log_size, 5);
 }
 
 #[test]

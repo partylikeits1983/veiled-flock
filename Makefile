@@ -33,6 +33,7 @@ clippy-x86:
 smoke-test:
 	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_preimage_roundtrip_and_mutations -- --exact
 	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_public_only_simulator_is_accepted -- --exact
+	$(CARGO) test --locked --release -p flock-prover --features veil --lib succinct_veil::tests::embedded_secure_profiles_match_the_formal_parameter_table -- --exact
 
 formal-proof:
 	LAKE="$(LAKE)" $(CARGO) run --locked --release -p formal-proof -- verify
