@@ -10,8 +10,6 @@ is checked by the Lean kernel; this module deliberately avoids `native_decide`.
 
 namespace VeiledFlock.KernelFailureBounds
 
-set_option maxRecDepth 10000
-
 open VeiledFlock.ChallengeSampling
 open VeiledFlock.ConcreteParameters
 open VeiledFlock.Grinding

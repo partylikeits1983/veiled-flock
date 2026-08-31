@@ -7,13 +7,11 @@ import VeiledFlock.Concrete.KernelFailureBounds
 The Rust diagnostic tests a conservative deployment envelope of at most
 1,024 proofs, at most `2^64` adversarial oracle queries, at most one million
 protocol oracle queries per proof, and 32 programmable points per proof.
-The registered shapes actually program at most 20 points.  This file evaluates
+The registered shapes actually program at most 21 points.  This file evaluates
 the complete exact-rational Lean ledger under that larger envelope.
 -/
 
 namespace VeiledFlock.ConcreteSecurityBound
-
-set_option maxRecDepth 1000000
 
 open VeiledFlock.ConcreteParameters
 open VeiledFlock.Grinding
@@ -39,6 +37,7 @@ theorem reviewedParameters_fields :
       reviewedParameters.protocolQueriesPerProof = 1_000_000 := by
   decide
 
+set_option maxRecDepth 10000 in
 /-- Even the 1,024-proof conservative envelope has statistical distance
 strictly below `2^-126` in the classical programmable random-oracle model. -/
 theorem reviewed_zkBound_lt_two_pow_neg_126 :
