@@ -9,6 +9,8 @@ private:  64-byte messages x[0..b)
 claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 ```
 
+## Performance
+
 | Hashes | FLOCK prove | FLOCK verify | FLOCK bundle | Full-ZK prove | Full-ZK verify | Full-ZK bundle | Bundle size overhead vs. FLOCK |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 64 | 5.402 ms | 12.705 ms | 274,676 B | 21.898 ms | 15.549 ms | 803,764 B | 192.6% |
