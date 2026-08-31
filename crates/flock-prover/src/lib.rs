@@ -27,3 +27,5 @@ pub mod sim_game;
 pub mod sim_oracle;
 #[cfg(feature = "veil")]
 pub mod succinct_veil;
+#[cfg(feature = "veil")]
+pub mod transcript_schema;
