@@ -129,7 +129,7 @@ theorem blindGrindingStep_transcript_length_mono {shape : BatchShape}
   classical
   by_cases hdone : control.stageDone
   · simp [blindGrindingStep, hdone]
-  · by_cases hgood : blindGrindingGood answer
+  · by_cases hgood : blindGrindingGood shape answer
     · simp [blindGrindingStep, hdone, hgood]
     · simp [blindGrindingStep, hdone, hgood]
       split <;> simp_all
@@ -143,8 +143,8 @@ theorem ligeritoStep_transcript_length_mono {shape : BatchShape}
   · simp [ligeritoStep, hstate]
   · by_cases hdone : control.stageDone
     · simp [ligeritoStep, hstate, hdone]
-    · by_cases hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits
-        (by decide) answer
+    · by_cases hgood : ligeritoGrindingGood shape
+        ((round - ligeritoOffset) / ligeritoSiteWidth) answer
       · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all [afterGrind_length]
       · simp [ligeritoStep, hstate, hdone, hgood]
@@ -201,8 +201,8 @@ theorem ligeritoStep_transcript_length_eq_or_add_seventeen_le
   · simp [ligeritoStep, hstate]
   · by_cases hdone : control.stageDone
     · simp [ligeritoStep, hstate, hdone]
-    · by_cases hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits
-          (by decide) answer
+    · by_cases hgood : ligeritoGrindingGood shape
+          ((round - ligeritoOffset) / ligeritoSiteWidth) answer
       · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all
       · simp [ligeritoStep, hstate, hdone, hgood]
@@ -393,7 +393,7 @@ theorem rawStep_transcript_length_eq_or_add_seventeen_le
   · by_cases hdone : control.stageDone
     · simp [rawStep, hstatus, hskip, hequality, hzero, hblindState,
         hblindGrind, blindGrindingStep, hdone]
-    · by_cases hgood : blindGrindingGood answer
+    · by_cases hgood : blindGrindingGood shape answer
       · right
         simp [rawStep, hstatus, hskip, hequality, hzero, hblindState,
           hblindGrind, blindGrindingStep, hdone, hgood, afterGrind_length]

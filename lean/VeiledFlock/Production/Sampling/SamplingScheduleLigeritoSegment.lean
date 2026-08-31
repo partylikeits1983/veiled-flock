@@ -54,7 +54,7 @@ theorem ligeritoSegmentResult_add_seventeen
     (answers : SamplingAnswerTape)
     (hstatus : before.status = .live)
     (hexists : ∃ trial : Fin maxLigeritoTrials,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (window (ligeritoSiteStart site + 1) maxLigeritoTrials
           (ProductionSamplingScheduleSemantics.ligeritoGrinding_window_fits site)
           answers trial)) :

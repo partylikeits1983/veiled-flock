@@ -30,7 +30,7 @@ theorem rawControlUntil_blind_add_seventeen
     (hbefore : (rawControlUntil shape causalSecret completion witness coins
       prelude answers blindStateOffset blindStateOffset_le_slots).status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood
+      blindGrindingGood shape
         (window blindGrindingOffset maxBlindTrials blindGrinding_window_fits
           answers trial)) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers

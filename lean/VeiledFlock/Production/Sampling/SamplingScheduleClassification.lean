@@ -220,7 +220,7 @@ theorem blindGrindingStep_fiat {shape : BatchShape} (round : ℕ)
   unfold ControlFiat at hfiat ⊢
   by_cases hdone : control.stageDone
   · simp [blindGrindingStep, hdone, hfiat]
-  · by_cases hgood : blindGrindingGood answer
+  · by_cases hgood : blindGrindingGood shape answer
     · simp [blindGrindingStep, hdone, hgood]
       exact afterGrind_isFiatShamir' hfiat _
     · simp [blindGrindingStep, hdone, hgood]
@@ -236,8 +236,8 @@ theorem ligeritoStep_fiat {shape : BatchShape} (round : ℕ)
   · simp [ligeritoStep, hstate, hfiat]
   · by_cases hdone : control.stageDone
     · simp [ligeritoStep, hstate, hdone, hfiat]
-    · by_cases hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits
-          (by decide) answer
+    · by_cases hgood : ligeritoGrindingGood shape
+          ((round - ligeritoOffset) / ligeritoSiteWidth) answer
       · simp [ligeritoStep, hstate, hdone, hgood]
         split <;> simp_all [afterGrind_isFiatShamir']
       · simp [ligeritoStep, hstate, hdone, hgood]

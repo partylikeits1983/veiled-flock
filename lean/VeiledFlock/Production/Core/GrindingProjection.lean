@@ -75,6 +75,20 @@ theorem rustLeadingZeroBitsAtLeast_iff (bits : ℕ) (hbits : bits ≤ 8)
   simp [rustLeadingZeroBitsAtLeast, rustLeadingPrefix,
     bytePrefixSplitEquiv, Fin.ext_iff, finProdFinEquiv]
 
+/-- Satisfying a wider leading-zero test implies every narrower test. -/
+theorem rustLeadingZeroBitsAtLeast_mono
+    {narrow wide : ℕ} (hnarrow : narrow ≤ 8) (hwide : wide ≤ 8)
+    (hle : narrow ≤ wide) (block : OracleBlock)
+    (hgood : rustLeadingZeroBitsAtLeast wide hwide block) :
+    rustLeadingZeroBitsAtLeast narrow hnarrow block := by
+  rw [rustLeadingZeroBitsAtLeast_iff] at hgood ⊢
+  rcases (Nat.div_eq_zero_iff).mp hgood with hzero | hlt
+  · have hpositive : 0 < 2 ^ (8 - wide) := by positivity
+    omega
+  · apply Nat.div_eq_of_lt
+    exact hlt.trans_le (Nat.pow_le_pow_right (by decide : 0 < 2)
+      (Nat.sub_le_sub_left hle 8))
+
 /-- Split a fixed run of oracle answers coordinatewise. -/
 def runPrefixSplitEquiv (bits : ℕ) (hbits : bits ≤ 8) (trials : ℕ) :
     (Fin trials → OracleBlock) ≃

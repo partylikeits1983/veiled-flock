@@ -119,7 +119,7 @@ theorem rawQuery_ligerito_pow_origin
     (causalSecret : ProductionCausalSecret (W := W) shape)
     (completion : Completion OracleBlock (programmedPoints shape))
     (witness : W) (coins : ProductionCoins shape) (prelude : List Byte)
-    (answers : SamplingAnswerTape) (hgood : answers ∉ globalBad shape)
+    (answers : SamplingAnswerTape) (_hgood : answers ∉ globalBad shape)
     (round : Fin productionSamplingSlots) (point : List Byte)
     (hlower : ligeritoOffset ≤ round.val)
     (hwithin : (round.val - ligeritoOffset) % ligeritoSiteWidth ≠ 0)
@@ -165,21 +165,6 @@ theorem rawQuery_ligerito_pow_origin
   have htrial : within - 1 < maxLigeritoTrials := by
     unfold ligeritoSiteWidth at hwithinUpper
     omega
-  have hstart := rawControlUntil_ligerito_live_of_not_globalBad shape
-    causalSecret completion witness coins prelude answers hgood
-  have hprefix := rawControlUntil_ligerito_prefix_status shape causalSecret
-    completion witness coins prelude answers hstart
-    (exists_ligeritoGrinding_answer_of_not_globalBad shape answers hgood)
-    site.val site.isLt.le
-  have hsiteLive :
-      (rawControlUntil shape causalSecret completion witness coins prelude
-        answers (ligeritoSiteStart site)
-          (ligeritoSiteStart_lt_slots site).le).status = .live := by
-    unfold ligeritoSiteStart
-    simpa [show site.val ≠ maxLigeritoSites by omega] using hprefix
-  have hpowState := rawControlUntil_ligerito_powState shape causalSecret
-    completion witness coins prelude answers site round.val (by omega)
-    (by rw [hroundSite]; unfold ligeritoSiteWidth; omega) hsiteLive
   let control := rawControlUntil shape causalSecret completion witness coins
     prelude answers round round.isLt.le
   change rawQuery shape causalSecret completion witness coins round control =
@@ -189,6 +174,21 @@ theorem rawQuery_ligerito_pow_origin
     have hne : control.status != .live := by
       cases h : control.status <;> simp [h] at hnot ⊢
     simp [rawQuery, hne] at hquery
+  have hsiteStartLe : ligeritoSiteStart site ≤ round.val := by
+    rw [hroundSite]
+    omega
+  have hsiteLive :
+      (rawControlUntil shape causalSecret completion witness coins prelude
+        answers (ligeritoSiteStart site)
+          (ligeritoSiteStart_lt_slots site).le).status = .live := by
+    have hback := rawControlUntil_status_live_backward shape causalSecret
+      completion witness coins prelude answers (ligeritoSiteStart site)
+      (round.val - ligeritoSiteStart site) (by omega) (by
+        simpa only [Nat.add_sub_of_le hsiteStartLe, control] using hstatus)
+    exact hback
+  have hpowState := rawControlUntil_ligerito_powState shape causalSecret
+    completion witness coins prelude answers site round.val (by omega)
+    (by rw [hroundSite]; unfold ligeritoSiteWidth; omega) hsiteLive
   have hskip : ¬ round.val < equalitySkipBlocks :=
     not_lt_of_ge ((by decide : equalitySkipBlocks ≤ ligeritoOffset).trans hlower)
   have hequality : ¬ round.val < zerocheckOffset :=

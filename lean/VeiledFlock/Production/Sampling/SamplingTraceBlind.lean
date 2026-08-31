@@ -141,13 +141,14 @@ theorem grindFrom_blind_stage_some
               productionSamplingSlots := by decide
           omega)).powState = some state)
     (hexists : ∃ offset : Fin remaining,
-      blindGrindingGood
+      blindGrindingGood shape
         (answers ⟨blindGrindingOffset + trial + offset.val, by
           have : blindGrindingOffset + maxBlindTrials ≤
               productionSamplingSlots := by decide
           omega⟩)) :
     ∃ nonce,
-      grindFrom blindGrindingGood oracle state trial remaining = some nonce ∧
+      grindFrom (blindGrindingGood shape) oracle state trial remaining =
+        some nonce ∧
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers blindChallengeOffset (by decide)).transcript =
         afterGrind
@@ -179,9 +180,9 @@ theorem grindFrom_blind_stage_some
           hstatus' hactive' hstate'
       have horacle : oracle (encodePowPoint state (BitVec.ofNat 64 trial)) =
           answers site := (hagrees site _ hquery).symm
-      by_cases hgood : blindGrindingGood (answers site)
+      by_cases hgood : blindGrindingGood shape (answers site)
       · let nonce : Word64 := BitVec.ofNat 64 trial
-        have hgrind : grindFrom blindGrindingGood oracle state trial
+        have hgrind : grindFrom (blindGrindingGood shape) oracle state trial
             (remaining + 1) = some nonce := by
           simp only [grindFrom, nonce]
           rw [horacle]
@@ -253,7 +254,7 @@ theorem grindFrom_blind_stage_some
           rw [hsucc']
           simp [blindGrindingStep, hactive', hgood, hnotCap]
         have hnextExists : ∃ offset : Fin remaining,
-            blindGrindingGood
+            blindGrindingGood shape
               (answers ⟨blindGrindingOffset + (trial + 1) + offset.val, by
                 have : blindGrindingOffset + maxBlindTrials ≤
                     productionSamplingSlots := by decide

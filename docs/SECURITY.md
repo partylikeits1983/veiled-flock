@@ -121,7 +121,10 @@ blinding grinding uses the canonical first-success nonce and accepts only the
 first 8192 attempts. Every Ligerito query/fold grind nonce is limited to 4096;
 the ledger conservatively reserves sixteen grind sites. At most three levels of
 a registered full-ZK shape carry a positive fold grind, and such a shape emits
-at most twelve fold-grind nonces.
+at most twelve fold-grind nonces. In slot order, the exact 256/512/1024/2048/
+4096 schedules are `6×1`, `6×2 + 3×1`, `6×3 + 3×2`,
+`6×4 + 3×3 + 3×1`, and `6×5 + 3×4 + 3×2` bits; the corresponding
+preblinded L0 grinds use 2/3/4/5/6 bits.
 
 The Secure profile is in the unique-decoding regime, where the fold-challenge
 grind is flat: every fold round of a level grinds the full

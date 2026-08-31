@@ -121,7 +121,7 @@ theorem iterateFrom_blindGrinding_done_add_seventeen
           exact Bool.eq_false_of_not_eq_true hbeforeDone
         have hprefix := iterateFrom_blindGrinding_transcript_length_mono start
           rounds control (fun index ↦ answers index.castSucc)
-        by_cases hgood : blindGrindingGood (answers (Fin.last rounds))
+        by_cases hgood : blindGrindingGood shape (answers (Fin.last rounds))
         · simp [blindGrindingStep, before, hbeforeFalse, hgood,
             VeiledFlock.ProductionGrinding.afterGrind_length]
           omega
@@ -140,7 +140,7 @@ theorem rawControlUntil_blind_add_seventeen
     (hbefore : (rawControlUntil shape causalSecret completion witness coins
       prelude answers blindStateOffset (by decide)).status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood
+      blindGrindingGood shape
         (window blindGrindingOffset maxBlindTrials (by decide) answers trial)) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers
         blindStateOffset (by decide)).transcript.length + 17 ≤

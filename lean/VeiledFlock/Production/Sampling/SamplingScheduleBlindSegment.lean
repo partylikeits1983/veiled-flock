@@ -52,7 +52,7 @@ theorem blindSegmentResult_add_seventeen
     (answers : Fin maxBlindTrials → OracleBlock)
     (hstatus : before.status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood (answers trial)) :
+      blindGrindingGood shape (answers trial)) :
     before.transcript.length + 17 ≤
       (blindSegmentResult shape causalSecret completion witness coins before
         stateAnswer answers).transcript.length := by

@@ -40,7 +40,8 @@ theorem blindGrinding_oracle_answer_of_prefix_bad
         answers blindStateOffset blindStateOffset_le_slots).status = .live)
     (offset : Fin maxBlindTrials)
     (hprior : ∀ prior : Fin maxBlindTrials, prior.val < offset.val →
-      ¬ blindGrindingGood (answers (blindGrindingTapeSite prior))) :
+      ¬ blindGrindingGood shape
+        (answers (blindGrindingTapeSite prior))) :
     oracle (encodePowPoint (answers blindStateTapeSite)
         (BitVec.ofNat 64 offset.val)) =
       answers (blindGrindingTapeSite offset) := by
@@ -65,7 +66,7 @@ theorem blindGrinding_oracle_answer_of_prefix_bad
   let prefixAnswers : Fin offset.val → OracleBlock :=
     window blindGrindingOffset offset.val hfit answers
   have hprefixBad : ∀ index,
-      ¬ blindGrindingGood (prefixAnswers index) := by
+      ¬ blindGrindingGood shape (prefixAnswers index) := by
     intro index
     let prior : Fin maxBlindTrials := ⟨index.val, index.isLt.trans offset.isLt⟩
     have h := hprior prior index.isLt

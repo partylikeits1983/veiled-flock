@@ -300,7 +300,7 @@ noncomputable def blindGrindingStep {shape : BatchShape} (round : ℕ)
   else
     let offset := round - blindGrindingOffset
     let blocks := control.stageBlocks ++ [answer]
-    if blindGrindingGood answer then
+    if blindGrindingGood shape answer then
         { control with
           stageDone := true
           stageBlocks := blocks
@@ -326,13 +326,13 @@ noncomputable def ligeritoStep {shape : BatchShape} (round : ℕ)
   else if control.stageDone then control
   else
     let blocks := control.stageBlocks ++ [answer]
-    if rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide) answer then
+    if ligeritoGrindingGood shape site answer then
       let next := { control with
         stageDone := true
         stageBlocks := blocks
         transcript := afterGrind control.transcript
             (BitVec.ofNat 64 (within - 1)) }
-      if site + 1 = maxLigeritoSites then
+      if site + 1 = ligeritoPositiveFoldGrindingSites shape then
         { next with status := .success }
       else next
     else if within = maxLigeritoTrials then

@@ -306,7 +306,7 @@ theorem sampleProductionTail_some_of_raw_agreement
     answers hgood
   rcases grindLigeritoSites_from_index_some shape causalSecret completion witness
       coins prelude answers oracle hagrees statuses.ligerito hligeritoExists
-      0 maxLigeritoSites (by omega) afterProduct
+      0 (ligeritoPositiveFoldGrindingSites shape) (by omega) afterProduct
       (by simpa [scalarStageStart, productCoefficientOffset, ligeritoOffset]
         using hproductTranscript') with
     ⟨ligeritoNonces, finalTranscript, hligeritoSample, hfinalTranscript⟩

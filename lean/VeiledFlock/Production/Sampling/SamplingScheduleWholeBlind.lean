@@ -33,7 +33,7 @@ theorem rawControlUntil_blind_live_done
     (hbefore : (rawControlUntil shape causalSecret completion witness coins
       prelude answers blindStateOffset (by decide)).status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood
+      blindGrindingGood shape
         (window blindGrindingOffset maxBlindTrials (by decide) answers trial)) :
     let result := rawControlUntil shape causalSecret completion witness coins
       prelude answers blindChallengeOffset (by decide)

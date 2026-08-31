@@ -44,7 +44,7 @@ theorem runBlindGrinding_of_not_globalBad
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers blindStateOffset blindStateOffset_le_slots).status = .live) :
     ∃ nonce,
-      grindPowBounded blindGrindingGood oracle
+      grindPowBounded (blindGrindingGood shape) oracle
           (oracle (scalarPoint transcript)) maxBlindTrials = some nonce ∧
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers blindChallengeOffset blindChallengeOffset_le_slots).transcript =
@@ -73,7 +73,7 @@ theorem runBlindGrinding_of_not_globalBad
     window blindGrindingOffset maxBlindTrials blindGrinding_window_fits answers
   have horacle : ∀ offset : Fin maxBlindTrials,
       (∀ prior : Fin maxBlindTrials, prior.val < offset.val →
-        ¬ blindGrindingGood (grindAnswers prior)) →
+        ¬ blindGrindingGood shape (grindAnswers prior)) →
       oracle (encodePowPoint state (BitVec.ofNat 64 offset.val)) =
         grindAnswers offset := by
     intro offset hprior
@@ -86,13 +86,13 @@ theorem runBlindGrinding_of_not_globalBad
     simpa [state, blindSite, blindStateTapeSite, grindAnswers,
       blindGrindingTapeSite, FixedWindowProbability.window] using h
   have hexists : ∃ offset : Fin maxBlindTrials,
-      blindGrindingGood (grindAnswers offset) := by
+      blindGrindingGood shape (grindAnswers offset) := by
     rcases exists_blindGrinding_answer_of_not_globalBad shape answers hgood with
       ⟨offset, hoffset⟩
     exact ⟨offset, by simpa [grindAnswers] using hoffset⟩
   have horacleZero : ∀ offset : Fin maxBlindTrials,
       (∀ prior : Fin maxBlindTrials, prior.val < offset.val →
-        ¬ blindGrindingGood (grindAnswers prior)) →
+        ¬ blindGrindingGood shape (grindAnswers prior)) →
       oracle (encodePowPoint state (BitVec.ofNat 64 (0 + offset.val))) =
         grindAnswers offset := by simpa using horacle
   rcases grindFrom_blindLoop_some oracle state 0 maxBlindTrials (by omega)

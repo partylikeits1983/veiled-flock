@@ -27,7 +27,7 @@ theorem rawBlindGrinding_add_seventeen_explicit
     (answers : Fin maxBlindTrials → OracleBlock)
     (hstatus : control.status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood (answers trial)) :
+      blindGrindingGood shape (answers trial)) :
     control.transcript.length + 17 ≤
       (iterateFrom (rawStep shape causalSecret completion witness coins)
         blindGrindingOffset maxBlindTrials

@@ -147,19 +147,20 @@ theorem ligerito_state_fiat_query_length_strict
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers right right.isLt.le)
       rightPoint hrightFiat hright (by omega) (by omega)
-  have hligerito := rawControlUntil_ligerito_live_of_not_globalBad shape
-    causalSecret completion witness coins prelude answers hgood
-  have hprefix := rawControlUntil_ligerito_prefix_status shape causalSecret
-    completion witness coins prelude answers hligerito
-    (exists_ligeritoGrinding_answer_of_not_globalBad shape answers hgood)
-    site.val site.isLt.le
   have hleftStatus :
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers (ligeritoSiteStart site)
           (Nat.le_trans (Nat.le_add_right _ _) (ligeritoSite_window_fits site))).status =
         .live := by
-    simpa only [ligeritoSiteStart, if_neg (by omega : site.val ≠ maxLigeritoSites)]
-      using hprefix
+    generalize hcontrol : rawControlUntil shape causalSecret completion witness
+      coins prelude answers (ligeritoSiteStart site)
+        (Nat.le_trans (Nat.le_add_right _ _)
+          (ligeritoSite_window_fits site)) = control at hleft ⊢
+    cases hstatus : control.status with
+    | live => rfl
+    | abort => simp [rawQuery, hstatus] at hleft
+    | success => simp [rawQuery, hstatus] at hleft
+    | collision => simp [rawQuery, hstatus] at hleft
   have hbound :
       (rawControlUntil shape causalSecret completion witness coins prelude
           answers (ligeritoSiteStart site)

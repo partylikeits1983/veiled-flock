@@ -151,7 +151,7 @@ theorem rawControlUntil_ligerito_stable_of_done
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers (ligeritoSiteStart site + 1 + trial) (by
           exact ligeritoPrefix_le_slots site trial (by omega))).status =
-        ligeritoSiteTerminalStatus site)
+        ligeritoSiteTerminalStatus shape site)
     (hdone :
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers (ligeritoSiteStart site + 1 + trial) (by
@@ -174,7 +174,8 @@ theorem rawControlUntil_ligerito_stable_of_done
           exact ligeritoTrial_lt_slots site trial htrial⟩
       let current := rawControlUntil shape causalSecret completion witness coins
         prelude answers (ligeritoSiteStart site + 1 + trial) round.isLt.le
-      have hstatus' : current.status = ligeritoSiteTerminalStatus site := hstatus
+      have hstatus' : current.status = ligeritoSiteTerminalStatus shape site :=
+        hstatus
       have hdone' : current.stageDone = true := hdone
       have hsucc := rawControlUntil_succ shape causalSecret completion witness
         coins prelude answers round
@@ -187,7 +188,7 @@ theorem rawControlUntil_ligerito_stable_of_done
           exact ligeritoPrefix_le_slots site (trial + 1) (by omega))
       have hnext : next = current := by
         simpa only [next, current, round, Nat.add_assoc] using hsucc
-      have hnextStatus : next.status = ligeritoSiteTerminalStatus site := by
+      have hnextStatus : next.status = ligeritoSiteTerminalStatus shape site := by
         rw [hnext]
         exact hstatus'
       have hnextDone : next.stageDone = true := by rw [hnext]; exact hdone'
@@ -219,12 +220,12 @@ theorem grindFrom_ligerito_site_some
         answers (ligeritoSiteStart site + 1 + trial) (by
           exact ligeritoPrefix_le_slots site trial (by omega))).powState = some state)
     (hexists : ∃ offset : Fin remaining,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (answers ⟨ligeritoSiteStart site + 1 + trial + offset.val, by
           exact ligeritoTrialOffset_lt_slots site trial remaining hcap offset⟩)) :
     ∃ nonce,
-      grindFrom (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
-          oracle state trial remaining = some nonce ∧
+      grindFrom (ligeritoGrindingGood shape site.val) oracle state trial
+          remaining = some nonce ∧
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers (ligeritoSiteStart site + ligeritoSiteWidth) (by
           exact ligeritoSiteEnd_le_slots site)).transcript =
@@ -253,12 +254,10 @@ theorem grindFrom_ligerito_site_some
           hstatus' hactive' hstate'
       have horacle : oracle (encodePowPoint state (BitVec.ofNat 64 trial)) =
           answers round := (hagrees round _ hquery).symm
-      by_cases hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
-          (answers round)
+      by_cases hgood : ligeritoGrindingGood shape site.val (answers round)
       · let nonce : Word64 := BitVec.ofNat 64 trial
-        have hgrind : grindFrom
-            (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)) oracle state trial
-            (remaining + 1) = some nonce := by
+        have hgrind : grindFrom (ligeritoGrindingGood shape site.val) oracle
+            state trial (remaining + 1) = some nonce := by
           simp only [grindFrom, nonce]
           rw [horacle]
           simp [hgood]
@@ -275,7 +274,8 @@ theorem grindFrom_ligerito_site_some
           simpa only [next, round, Nat.add_assoc] using hsucc
         have hterminal := ligeritoStep_trial_good site trial htrial current
           (answers round) hstatus' hactive' hgood
-        have hnextStatus : next.status = ligeritoSiteTerminalStatus site := by
+        have hnextStatus : next.status =
+            ligeritoSiteTerminalStatus shape site := by
           rw [hsucc']
           exact hterminal.1
         have hnextDone : next.stageDone = true := by rw [hsucc']; exact hterminal.2
@@ -286,8 +286,7 @@ theorem grindFrom_ligerito_site_some
           unfold ligeritoStep
           dsimp only
           rw [hoff.1, hoff.2]
-          simp [hactive', show rustLeadingZeroBitsAtLeast maxLigeritoBits
-            (by decide) (answers round) from hgood, nonce]
+          simp [hactive', hgood, nonce]
           split <;> rfl
         have hstable := rawControlUntil_ligerito_stable_of_done shape
           causalSecret completion witness coins prelude answers site (trial + 1)
@@ -328,8 +327,7 @@ theorem grindFrom_ligerito_site_some
           unfold ligeritoStep
           dsimp only
           rw [hoff.1, hoff.2]
-          simp [hactive', show ¬rustLeadingZeroBitsAtLeast maxLigeritoBits
-            (by decide) (answers round) from hgood,  hstate']
+          simp [hactive', hgood, hstate']
           split <;> rfl
         have hnextTranscript : next.transcript = current.transcript := by
           rw [hsucc']
@@ -337,11 +335,10 @@ theorem grindFrom_ligerito_site_some
           unfold ligeritoStep
           dsimp only
           rw [hoff.1, hoff.2]
-          simp [hactive', show ¬rustLeadingZeroBitsAtLeast maxLigeritoBits
-            (by decide) (answers round) from hgood]
+          simp [hactive', hgood]
           split <;> rfl
         have hnextExists : ∃ offset : Fin remaining,
-            rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+            ligeritoGrindingGood shape site.val
               (answers ⟨ligeritoSiteStart site + 1 + (trial + 1) +
                   offset.val, by
                     exact ligeritoTrialOffset_lt_slots site (trial + 1)
@@ -390,11 +387,12 @@ theorem grindLigeritoSites_from_index_some
       prelude answers ligeritoOffset (by decide)).status = .live)
     (hgrind : ∀ site : Fin maxLigeritoSites,
       ∃ trial : Fin maxLigeritoTrials,
-        rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+        ligeritoGrindingGood shape site.val
           (window (ligeritoSiteStart site + 1) maxLigeritoTrials
             (ligeritoGrinding_window_fits site) answers trial))
     (siteIndex remaining : ℕ)
-    (hsum : siteIndex + remaining = maxLigeritoSites)
+    (hsum : siteIndex + remaining =
+      ligeritoPositiveFoldGrindingSites shape)
     (transcript : List Byte)
     (htranscript :
       (rawControlUntil shape causalSecret completion witness coins prelude
@@ -403,20 +401,57 @@ theorem grindLigeritoSites_from_index_some
           have _hwidth : 0 < ligeritoSiteWidth := by
             unfold ligeritoSiteWidth
             omega
+          have hbound := (registered_grinding_bounds shape).2.2
           nlinarith)).transcript = transcript) :
     ∃ nonces finalTranscript,
-      grindLigeritoSites oracle remaining transcript =
+      grindLigeritoSites shape oracle siteIndex remaining transcript =
           some (nonces, finalTranscript) ∧
       (rawControlUntil shape causalSecret completion witness coins prelude
         answers productionSamplingSlots (by rfl)).transcript = finalTranscript := by
   induction remaining generalizing siteIndex transcript with
   | zero =>
-      have hindex : siteIndex = maxLigeritoSites := by omega
+      have hindex : siteIndex = ligeritoPositiveFoldGrindingSites shape := by
+        omega
       subst siteIndex
       refine ⟨[], transcript, ?_, ?_⟩
       · simp [grindLigeritoSites]
-      · simpa [productionSamplingSlots, ligeritoWidth] using htranscript
+      · have hprefix := rawControlUntil_ligerito_prefix_status shape
+          causalSecret completion witness coins prelude answers hstart hgrind
+          (ligeritoPositiveFoldGrindingSites shape) (by rfl)
+        have hstopped :
+            (rawControlUntil shape causalSecret completion witness coins prelude
+              answers
+                (ligeritoOffset + ligeritoPositiveFoldGrindingSites shape *
+                  ligeritoSiteWidth) (by
+                    unfold productionSamplingSlots ligeritoWidth
+                    have hbound := (registered_grinding_bounds shape).2.2
+                    nlinarith)).status != .live := by
+          rw [hprefix]
+          simp
+        have hactiveEndLe :
+            ligeritoOffset + ligeritoPositiveFoldGrindingSites shape *
+                ligeritoSiteWidth ≤ productionSamplingSlots := by
+          unfold productionSamplingSlots ligeritoWidth
+          have hbound := (registered_grinding_bounds shape).2.2
+          nlinarith
+        have hstable := rawControlUntil_stable_of_status_ne_live shape
+          causalSecret completion witness coins prelude answers
+          (ligeritoOffset + ligeritoPositiveFoldGrindingSites shape *
+            ligeritoSiteWidth)
+          (productionSamplingSlots -
+            (ligeritoOffset + ligeritoPositiveFoldGrindingSites shape *
+              ligeritoSiteWidth)) (by omega) hstopped
+        have hstableFinal :
+            rawControlUntil shape causalSecret completion witness coins prelude
+                answers productionSamplingSlots (by rfl) =
+              rawControlUntil shape causalSecret completion witness coins
+                prelude answers
+                  (ligeritoOffset + ligeritoPositiveFoldGrindingSites shape *
+                    ligeritoSiteWidth) hactiveEndLe := by
+          simpa only [Nat.add_sub_of_le hactiveEndLe] using hstable
+        exact (congrArg Control.transcript hstableFinal).trans htranscript
   | succ remaining ih =>
+      have hactiveLeMax := (registered_grinding_bounds shape).2.2
       have hsiteLt : siteIndex < maxLigeritoSites := by omega
       let site : Fin maxLigeritoSites := ⟨siteIndex, hsiteLt⟩
       let current := rawControlUntil shape causalSecret completion witness coins
@@ -427,7 +462,8 @@ theorem grindLigeritoSites_from_index_some
         completion witness coins prelude answers hstart hgrind siteIndex (by omega)
       have hstatus : current.status = .live := by
         simpa [current, site, ligeritoSiteStart,
-          show siteIndex ≠ maxLigeritoSites by omega] using hprefix
+          show siteIndex ≠ ligeritoPositiveFoldGrindingSites shape by omega]
+          using hprefix
       have hcurrentTranscript : current.transcript = transcript := by
         simpa only [current, site, ligeritoSiteStart] using htranscript
       let startRound : Fin productionSamplingSlots :=
@@ -468,7 +504,7 @@ theorem grindLigeritoSites_from_index_some
       have hwithPow : withState.powState = some (answers startRound) := by
         simp [hwithState]
       have hexists : ∃ offset : Fin maxLigeritoTrials,
-          rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+          ligeritoGrindingGood shape site.val
             (answers ⟨ligeritoSiteStart site + 1 + offset.val, by
               exact ligeritoTrialOffset_lt_slots site 0 maxLigeritoTrials
                 (by omega) offset⟩) := by
@@ -482,7 +518,7 @@ theorem grindLigeritoSites_from_index_some
         (by simpa only [withState] using hwithPow) hexists
       rcases hsiteResult with ⟨nonce, hnonce, hsiteTranscript⟩
       have hnonce' : grindPowBounded
-          (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)) oracle
+          (ligeritoGrindingGood shape site.val) oracle
           (answers startRound) maxLigeritoTrials = some nonce := by
         simpa only [grindPowBounded] using hnonce
       have hnextTranscript :

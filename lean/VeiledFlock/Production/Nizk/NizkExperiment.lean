@@ -449,26 +449,42 @@ structure ProductionTailRaw (shape : BatchShape) where
 
 /-- The exact production blind-grinding predicate, named so both execution
 and transport use definitionally the same decision procedure. -/
-def blindGrindingGood : OracleBlock → Prop :=
-  rustLeadingZeroBitsAtLeast maxBlindBits (by decide)
+def blindGrindingGood (shape : BatchShape) : OracleBlock → Prop :=
+  rustLeadingZeroBitsAtLeast (blindGrindingBits shape)
+    (blindGrindingBits_le_eight shape)
 
-noncomputable instance : DecidablePred blindGrindingGood := by
+noncomputable instance (shape : BatchShape) :
+    DecidablePred (blindGrindingGood shape) := by
   unfold blindGrindingGood
   infer_instance
 
-/-- Execute `sites` independent production first-success Ligerito grinding
-loops in transcript order.  This never chooses an arbitrary valid nonce. -/
-noncomputable def grindLigeritoSites (oracle : List Byte → OracleBlock) :
-    ℕ → List Byte → Option (List Word64 × List Byte)
-  | 0, transcript => some ([], transcript)
-  | sites + 1, transcript =>
+/-- The exact Secure-profile predicate at one flattened fold-grinding site. -/
+def ligeritoGrindingGood (shape : BatchShape) (site : ℕ) :
+    OracleBlock → Prop :=
+  rustLeadingZeroBitsAtLeast (ligeritoFoldGrindingBitsAt shape site)
+    (ligeritoFoldGrindingBitsAt_le_eight shape site)
+
+noncomputable instance (shape : BatchShape) (site : ℕ) :
+    DecidablePred (ligeritoGrindingGood shape site) := by
+  unfold ligeritoGrindingGood
+  infer_instance
+
+/-- Execute `remaining` exact production first-success Ligerito grinding
+loops in transcript order, beginning at flattened fold site `site`.  This
+never chooses an arbitrary valid nonce. -/
+noncomputable def grindLigeritoSites (shape : BatchShape)
+    (oracle : List Byte → OracleBlock) :
+    ℕ → ℕ → List Byte → Option (List Word64 × List Byte)
+  | _, 0, transcript => some ([], transcript)
+  | site, remaining + 1, transcript =>
       let state : Nonce256 := oracle (scalarPoint transcript)
       match grindPowBounded
-          (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
+          (ligeritoGrindingGood shape site)
           oracle state maxLigeritoTrials with
       | none => none
       | some nonce =>
-          match grindLigeritoSites oracle sites (afterGrind transcript nonce) with
+          match grindLigeritoSites shape oracle (site + 1) remaining
+              (afterGrind transcript nonce) with
           | none => none
           | some (nonces, finalTranscript) =>
               some (nonce :: nonces, finalTranscript)
@@ -479,7 +495,8 @@ noncomputable def sampleProductionTailRaw (shape : BatchShape)
     (oracle : List Byte → OracleBlock) (transcript : List Byte) :
     Option (ProductionTailRaw shape) :=
   let grindState : Nonce256 := oracle (scalarPoint transcript)
-  match grindPowBounded blindGrindingGood oracle grindState maxBlindTrials with
+  match grindPowBounded (blindGrindingGood shape) oracle grindState
+      maxBlindTrials with
   | none => none
   | some blindNonce =>
     let afterBlindGrind := afterGrind transcript blindNonce
@@ -517,8 +534,8 @@ noncomputable def sampleProductionTailRaw (shape : BatchShape)
                         afterHadamardRho with
                     | none => none
                     | some (productCoefficient, afterProduct) =>
-                      match grindLigeritoSites oracle maxLigeritoSites
-                          afterProduct with
+                      match grindLigeritoSites shape oracle 0
+                          (ligeritoPositiveFoldGrindingSites shape) afterProduct with
                       | none => none
                       | some (ligeritoGrindingNonces, finalTranscript) =>
                         some {
@@ -547,7 +564,7 @@ noncomputable def sampleProductionTailOriginal (shape : BatchShape)
   classical
   let grindState : Nonce256 := oracle (scalarPoint transcript)
   match hblindGrind : grindPowBounded
-      (rustLeadingZeroBitsAtLeast maxBlindBits (by decide))
+      (blindGrindingGood shape)
       oracle grindState maxBlindTrials with
   | none => exact none
   | some blindNonce =>
@@ -586,8 +603,9 @@ noncomputable def sampleProductionTailOriginal (shape : BatchShape)
                         afterHadamardRho with
                     | none => exact none
                     | some (productCoefficient, afterProduct) =>
-                      match hligerito : grindLigeritoSites oracle
-                          maxLigeritoSites afterProduct with
+                      match hligerito : grindLigeritoSites shape oracle 0
+                          (ligeritoPositiveFoldGrindingSites shape)
+                          afterProduct with
                       | none => exact none
                       | some (ligeritoNonces, finalTranscript) =>
                         have houterCard : outerSet.card =

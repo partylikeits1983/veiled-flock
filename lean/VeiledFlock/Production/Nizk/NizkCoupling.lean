@@ -2221,31 +2221,32 @@ theorem collectUnique_some_isFiatShamir {domain : ℕ}
           (sampleScalar_next_isFiatShamir hfiat oracle) _ hsome
 
 theorem grindLigeritoSites_oracle_congr
+    (shape : BatchShape)
     (leftOracle rightOracle : List Byte → OracleBlock)
-    (sites : ℕ) (transcript : List Byte)
+    (site remaining : ℕ) (transcript : List Byte)
     (hfiat : isFiatShamirPoint transcript)
     (hscalar : ∀ point, isFiatShamirPoint point →
       rightOracle point = leftOracle point)
     (hpow : ∀ state nonce,
       rightOracle (encodePowPoint state nonce) =
         leftOracle (encodePowPoint state nonce)) :
-    grindLigeritoSites rightOracle sites transcript =
-      grindLigeritoSites leftOracle sites transcript := by
-  induction sites generalizing transcript with
+    grindLigeritoSites shape rightOracle site remaining transcript =
+      grindLigeritoSites shape leftOracle site remaining transcript := by
+  induction remaining generalizing site transcript with
   | zero => rfl
-  | succ sites ih =>
+  | succ remaining ih =>
       have hstate : rightOracle (scalarPoint transcript) =
           leftOracle (scalarPoint transcript) :=
         hscalar _ (scalarPoint_isFiatShamir hfiat)
       have hgrind := grindPowBounded_oracle_congr
-        (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
+        (ligeritoGrindingGood shape site)
         leftOracle rightOracle (leftOracle (scalarPoint transcript))
         maxLigeritoTrials (fun candidate _ => hpow _ _)
       let continueRight : Option Word64 →
           Option (List Word64 × List Byte)
         | none => none
         | some nonce =>
-            match grindLigeritoSites rightOracle sites
+            match grindLigeritoSites shape rightOracle (site + 1) remaining
                 (afterGrind transcript nonce) with
             | none => none
             | some (nonces, finalTranscript) =>
@@ -2254,23 +2255,23 @@ theorem grindLigeritoSites_oracle_congr
           Option (List Word64 × List Byte)
         | none => none
         | some nonce =>
-            match grindLigeritoSites leftOracle sites
+            match grindLigeritoSites shape leftOracle (site + 1) remaining
                 (afterGrind transcript nonce) with
             | none => none
             | some (nonces, finalTranscript) =>
                 some (nonce :: nonces, finalTranscript)
       calc
-        grindLigeritoSites rightOracle (sites + 1) transcript =
+        grindLigeritoSites shape rightOracle site (remaining + 1) transcript =
             continueRight
               (grindPowBounded
-                (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
+                (ligeritoGrindingGood shape site)
                 rightOracle (rightOracle (scalarPoint transcript))
                 maxLigeritoTrials) := by
               simp only [grindLigeritoSites, continueRight]
               congr 3
         _ = continueRight
               (grindPowBounded
-                (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
+                (ligeritoGrindingGood shape site)
                 leftOracle (leftOracle (scalarPoint transcript))
                 maxLigeritoTrials) := by
               apply congrArg continueRight
@@ -2278,20 +2279,21 @@ theorem grindLigeritoSites_oracle_congr
               exact hgrind
         _ = continueLeft
               (grindPowBounded
-                (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
+                (ligeritoGrindingGood shape site)
                 leftOracle (leftOracle (scalarPoint transcript))
                 maxLigeritoTrials) := by
               generalize hresult : grindPowBounded
-                (rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide))
+                (ligeritoGrindingGood shape site)
                 leftOracle (leftOracle (scalarPoint transcript))
                 maxLigeritoTrials = result
               cases result with
               | none => rfl
               | some nonce =>
                   simp only [continueRight, continueLeft]
-                  rw [ih (afterGrind transcript nonce)
+                  rw [ih (site + 1) (afterGrind transcript nonce)
                     (afterGrind_isFiatShamir hfiat nonce)]
-        _ = grindLigeritoSites leftOracle (sites + 1) transcript := by
+        _ = grindLigeritoSites shape leftOracle site (remaining + 1)
+            transcript := by
               simp only [grindLigeritoSites, continueLeft]
               congr 3
 
@@ -2314,7 +2316,8 @@ theorem sampleProductionTailRaw_oracle_congr
       leftOracle (scalarPoint transcript) :=
     hscalar _ (scalarPoint_isFiatShamir hfiat)
   rw [hstate]
-  rw [grindPowBounded_oracle_congr blindGrindingGood leftOracle rightOracle
+  rw [grindPowBounded_oracle_congr (blindGrindingGood shape)
+    leftOracle rightOracle
     (leftOracle (scalarPoint transcript)) maxBlindTrials
     (fun candidate _ => hpow _ _)]
   split
@@ -2479,8 +2482,9 @@ theorem sampleProductionTailRaw_oracle_congr
                           veilSamplingTrials afterHadamardRho
                           hafterHadamardRho productCoefficient afterProduct
                           hproductSample
-                      rw [grindLigeritoSites_oracle_congr leftOracle
-                        rightOracle maxLigeritoSites afterProduct hafterProduct
+                      rw [grindLigeritoSites_oracle_congr shape leftOracle
+                        rightOracle 0 (ligeritoPositiveFoldGrindingSites shape)
+                        afterProduct hafterProduct
                         hscalar hpow]
 
 /-- The certificate-bearing production tail is exactly preserved whenever

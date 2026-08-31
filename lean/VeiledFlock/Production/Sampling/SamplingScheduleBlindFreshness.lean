@@ -34,7 +34,7 @@ theorem rawBlindGrinding_add_seventeen
     (answers : Fin maxBlindTrials → OracleBlock)
     (hstatus : control.status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood (answers trial)) :
+      blindGrindingGood shape (answers trial)) :
     let withState := rawStep shape causalSecret completion witness coins
       blindStateOffset control stateAnswer
     let result := iterateFrom
@@ -73,7 +73,7 @@ theorem rawControlUntil_blind_add_seventeen
     (hbefore : (rawControlUntil shape causalSecret completion witness coins
       prelude answers blindStateOffset (by decide)).status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood
+      blindGrindingGood shape
         (window blindGrindingOffset maxBlindTrials (by decide) answers trial)) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers
         blindStateOffset (by decide)).transcript.length + 17 ≤

@@ -21,7 +21,7 @@ theorem ligeritoStep_trial_good_transcript_length_eq
     {shape : BatchShape} (site : Fin maxLigeritoSites) (trial : ℕ)
     (htrial : trial < maxLigeritoTrials) (control : Control shape)
     (answer : OracleBlock) (hdone : control.stageDone = false)
-    (hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide) answer) :
+    (hgood : ligeritoGrindingGood shape site.val answer) :
     (ligeritoStep (ligeritoSiteStart site + 1 + trial) control answer).transcript.length =
       control.transcript.length + 17 := by
   have hoff := ligerito_trial_offset site trial htrial
@@ -60,7 +60,7 @@ theorem rawLigeritoGrinding_add_seventeen_of_exists
     (hstatus : control.status = .live)
     (hdone : control.stageDone = false)
     (hexists : ∃ trial : Fin rounds,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (answers trial)) :
     control.transcript.length + 17 ≤
       (iterateFrom (rawStep shape causalSecret completion witness coins)
@@ -75,7 +75,7 @@ theorem rawLigeritoGrinding_add_seventeen_of_exists
         (rawStep shape causalSecret completion witness coins)
         (ligeritoSiteStart site + 1) rounds control prefixAnswers
       by_cases hearlier : ∃ trial : Fin rounds,
-          rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+          ligeritoGrindingGood shape site.val
             (prefixAnswers trial)
       · have hprefix := ih (answers := prefixAnswers) (hrounds := by omega)
           (hexists := hearlier)
@@ -83,13 +83,13 @@ theorem rawLigeritoGrinding_add_seventeen_of_exists
           (rawStep_transcript_length_mono shape causalSecret completion witness
             coins _ _ _)
       · have hallbad : ∀ trial : Fin rounds,
-            ¬rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+            ¬ligeritoGrindingGood shape site.val
               (prefixAnswers trial) := by
           simpa only [not_exists] using hearlier
         have hprefix := rawLigeritoFailures_live shape causalSecret completion
           witness coins site rounds control prefixAnswers (by omega) hstatus
           hdone hallbad
-        have hlast : rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+        have hlast : ligeritoGrindingGood shape site.val
             (answers (Fin.last rounds)) := by
           rcases hexists with ⟨trial, htrial⟩
           rcases Fin.eq_castSucc_or_eq_last trial with ⟨priorTrial, rfl⟩ | rfl
@@ -118,7 +118,7 @@ theorem rawLigeritoSite_add_seventeen
     (answers : Fin maxLigeritoTrials → OracleBlock)
     (hstatus : control.status = .live)
     (hexists : ∃ trial : Fin maxLigeritoTrials,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (answers trial)) :
     control.transcript.length + 17 ≤
       (iterateFrom (rawStep shape causalSecret completion witness coins)

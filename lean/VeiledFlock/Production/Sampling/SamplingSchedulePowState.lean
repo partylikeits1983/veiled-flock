@@ -47,7 +47,7 @@ theorem rawStep_blindGrinding_powState
       ↓reduceDIte, hequality, hzero, hstate, hupper]
     by_cases hdone : control.stageDone
     · simp [blindGrindingStep, hdone]
-    · by_cases hgood : blindGrindingGood answer
+    · by_cases hgood : blindGrindingGood shape answer
       · simp [blindGrindingStep, hdone, hgood]
       · by_cases hcap : round - blindGrindingOffset + 1 = maxBlindTrials
         <;> simp [blindGrindingStep, hdone, hgood, hcap]
@@ -157,10 +157,9 @@ theorem rawStep_ligeritoGrinding_powState
     rw [hoff.1, hoff.2]
     by_cases hdone : control.stageDone
     · simp [hdone]
-    · by_cases hgood :
-          VeiledFlock.ProductionGrindingProjection.rustLeadingZeroBitsAtLeast
-            maxLigeritoBits (by decide) answer
-      · by_cases hlast : site.val + 1 = maxLigeritoSites
+    · by_cases hgood : ligeritoGrindingGood shape site.val answer
+      · by_cases hlast :
+          site.val + 1 = ligeritoPositiveFoldGrindingSites shape
         <;> simp [hdone, hgood, hlast]
       · by_cases hcap : 1 + trial = maxLigeritoTrials
         <;> simp [hdone, hgood, hcap, htrialsPositive]

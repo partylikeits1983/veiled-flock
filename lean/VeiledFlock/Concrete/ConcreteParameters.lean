@@ -130,6 +130,73 @@ def ligeritoPositiveFoldGrindingSites : BatchShape → ℕ
   | .slots2048 => 12
   | .slots4096 => 12
 
+/-- Exact flattened fold-grinding width at a reserved production site.  The
+first six entries are the initial L0-to-L6 folds; each following group of
+three is one recursive Secure-profile level.  A zero denotes an inactive
+reserved site and is never executed. -/
+def ligeritoFoldGrindingBitsAt : BatchShape → ℕ → ℕ
+  | .slots256, site => if site < 6 then 1 else 0
+  | .slots512, site => if site < 6 then 2 else if site < 9 then 1 else 0
+  | .slots1024, site => if site < 6 then 3 else if site < 9 then 2 else 0
+  | .slots2048, site =>
+      if site < 6 then 4 else if site < 9 then 3 else if site < 12 then 1 else 0
+  | .slots4096, site =>
+      if site < 6 then 5 else if site < 9 then 4 else if site < 12 then 2 else 0
+
+/-- The exact Rust fold-grinding schedule, with inactive reservation slots
+excluded. -/
+def ligeritoFoldGrindingSchedule (shape : BatchShape) : List ℕ :=
+  List.ofFn fun site : Fin (ligeritoPositiveFoldGrindingSites shape) ↦
+    ligeritoFoldGrindingBitsAt shape site.val
+
+@[simp]
+theorem ligeritoFoldGrindingSchedule_length (shape : BatchShape) :
+    (ligeritoFoldGrindingSchedule shape).length =
+      ligeritoPositiveFoldGrindingSites shape := by
+  simp [ligeritoFoldGrindingSchedule]
+
+/-- Closed audit of the five Rust Secure-profile schedules. -/
+theorem registered_ligeritoFoldGrindingSchedules :
+    ligeritoFoldGrindingSchedule .slots256 = [1, 1, 1, 1, 1, 1] ∧
+    ligeritoFoldGrindingSchedule .slots512 = [2, 2, 2, 2, 2, 2, 1, 1, 1] ∧
+    ligeritoFoldGrindingSchedule .slots1024 = [3, 3, 3, 3, 3, 3, 2, 2, 2] ∧
+    ligeritoFoldGrindingSchedule .slots2048 =
+      [4, 4, 4, 4, 4, 4, 3, 3, 3, 1, 1, 1] ∧
+    ligeritoFoldGrindingSchedule .slots4096 =
+      [5, 5, 5, 5, 5, 5, 4, 4, 4, 2, 2, 2] := by
+  decide
+
+theorem ligeritoPositiveFoldGrindingSites_positive (shape : BatchShape) :
+    0 < ligeritoPositiveFoldGrindingSites shape := by
+  cases shape <;> decide
+
+theorem ligeritoFoldGrindingBitsAt_positive (shape : BatchShape) (site : ℕ)
+    (hsite : site < ligeritoPositiveFoldGrindingSites shape) :
+    0 < ligeritoFoldGrindingBitsAt shape site := by
+  cases shape with
+  | slots256 => simp_all [ligeritoPositiveFoldGrindingSites,
+      ligeritoFoldGrindingBitsAt]
+  | slots512 | slots1024 =>
+      simp only [ligeritoPositiveFoldGrindingSites] at hsite
+      simp only [ligeritoFoldGrindingBitsAt]
+      split <;> simp_all
+  | slots2048 | slots4096 =>
+      simp only [ligeritoPositiveFoldGrindingSites] at hsite
+      simp only [ligeritoFoldGrindingBitsAt]
+      split <;> simp_all
+      split <;> simp_all
+
+theorem ligeritoFoldGrindingBitsAt_le_max (shape : BatchShape) (site : ℕ) :
+    ligeritoFoldGrindingBitsAt shape site ≤
+      VeiledFlock.Grinding.maxLigeritoBits := by
+  cases shape <;> simp [ligeritoFoldGrindingBitsAt,
+    VeiledFlock.Grinding.maxLigeritoBits] <;> split <;> simp_all <;>
+    split <;> simp_all <;> split <;> simp_all
+
+theorem ligeritoFoldGrindingBitsAt_le_eight (shape : BatchShape) (site : ℕ) :
+    ligeritoFoldGrindingBitsAt shape site ≤ 8 :=
+  (ligeritoFoldGrindingBitsAt_le_max shape site).trans (by decide)
+
 theorem registered_grinding_bounds (shape : BatchShape) :
     ligeritoLiveFoldGrindingBits shape ≤
         VeiledFlock.Grinding.maxLigeritoBits ∧
@@ -137,6 +204,10 @@ theorem registered_grinding_bounds (shape : BatchShape) :
       ligeritoPositiveFoldGrindingSites shape ≤
         VeiledFlock.Grinding.maxLigeritoSites := by
   cases shape <;> decide
+
+theorem blindGrindingBits_le_eight (shape : BatchShape) :
+    blindGrindingBits shape ≤ 8 :=
+  (registered_grinding_bounds shape).2.1.trans (by decide)
 
 /-- Per-lane committed message dimension after adjoining the low random half. -/
 def outerMessagePositions (shape : BatchShape) : ℕ :=

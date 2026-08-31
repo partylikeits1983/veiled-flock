@@ -222,7 +222,7 @@ theorem sampleProductionTail_some_of_raw_agreement
   have hblindGrindState : blindWithState.powState = some (answers blindSite) := by
     simp [hblindWithState]
   have hblindDirect : ∃ offset : Fin maxBlindTrials,
-      blindGrindingGood
+      blindGrindingGood shape
         (answers ⟨blindGrindingOffset + offset.val, by
           have : blindGrindingOffset + maxBlindTrials ≤
               productionSamplingSlots := by decide
@@ -234,10 +234,10 @@ theorem sampleProductionTail_some_of_raw_agreement
       prelude answers oracle hagrees (answers blindSite) 0 maxBlindTrials
       (by omega) hblindGrindStatus hblindGrindDone hblindGrindState hblindDirect
     with ⟨blindNonce, hblindNonce, hafterBlind⟩
-  have hblindPow : grindPowBounded blindGrindingGood oracle
+  have hblindPow : grindPowBounded (blindGrindingGood shape) oracle
       (answers blindSite) maxBlindTrials = some blindNonce := by
     simpa only [grindPowBounded] using hblindNonce
-  have hblindPow' : grindPowBounded blindGrindingGood oracle
+  have hblindPow' : grindPowBounded (blindGrindingGood shape) oracle
       (oracle (scalarPoint transcript)) maxBlindTrials = some blindNonce := by
     rw [hblindStateAnswer]
     exact hblindPow
@@ -373,7 +373,7 @@ theorem sampleProductionTail_some_of_raw_agreement
     exact hproductTranscript
   rcases grindLigeritoSites_from_index_some shape causalSecret completion
       witness coins prelude answers oracle hagrees hligeritoStatus hligeritoExists
-      0 maxLigeritoSites (by omega) afterProduct
+      0 (ligeritoPositiveFoldGrindingSites shape) (by omega) afterProduct
       (by simpa only [Nat.zero_mul, Nat.add_zero] using hproductBoundary) with
     ⟨ligeritoNonces, finalTranscript, hligeritoSample, hfinalTranscript⟩
 

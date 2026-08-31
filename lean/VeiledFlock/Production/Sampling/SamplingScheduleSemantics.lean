@@ -214,7 +214,7 @@ theorem exists_blindGrinding_answer_of_not_globalBad
     (shape : BatchShape) (answers : SamplingAnswerTape)
     (hgood : answers ∉ globalBad shape) :
     ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood
+      blindGrindingGood shape
         (window blindGrindingOffset maxBlindTrials (by
           rw [productionSamplingSlots_eq]
           decide) answers trial) := by
@@ -222,20 +222,28 @@ theorem exists_blindGrinding_answer_of_not_globalBad
     (.blindGrinding)
   rw [badAt, mem_windowBad_iff, mem_blockAbortRuns_iff] at hnot
   push Not at hnot
-  simpa [VeiledFlock.FixedWindowProbability.window, blindGrindingGood] using hnot
+  rcases hnot with ⟨trial, htrial⟩
+  refine ⟨trial, rustLeadingZeroBitsAtLeast_mono
+    (blindGrindingBits_le_eight shape) (by decide)
+    (registered_grinding_bounds shape).2.1 _ ?_⟩
+  simpa [VeiledFlock.FixedWindowProbability.window] using htrial
 
 theorem exists_ligeritoGrinding_answer_of_not_globalBad
     (shape : BatchShape) (answers : SamplingAnswerTape)
     (hgood : answers ∉ globalBad shape) (site : Fin maxLigeritoSites) :
     ∃ trial : Fin maxLigeritoTrials,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (window (ligeritoOffset + site.val * ligeritoSiteWidth + 1)
           maxLigeritoTrials (ligeritoGrinding_window_fits site) answers trial) := by
   have hnot := not_badAt_of_not_globalBad shape answers hgood
     (.ligeritoGrinding site)
   rw [badAt, mem_windowBad_iff, mem_blockAbortRuns_iff] at hnot
   push Not at hnot
-  simpa [VeiledFlock.FixedWindowProbability.window, Nat.add_assoc] using hnot
+  rcases hnot with ⟨trial, htrial⟩
+  refine ⟨trial, rustLeadingZeroBitsAtLeast_mono
+    (ligeritoFoldGrindingBitsAt_le_eight shape site.val) (by decide)
+    (ligeritoFoldGrindingBitsAt_le_max shape site.val) _ ?_⟩
+  simpa [VeiledFlock.FixedWindowProbability.window, Nat.add_assoc] using htrial
 
 theorem outerPositions_card_ge_of_not_globalBad
     (shape : BatchShape) (answers : SamplingAnswerTape)
@@ -814,13 +822,13 @@ theorem blindGrindingStep_status_live_of_before_cap
   by_cases hdone : control.stageDone = true
   · simp [blindGrindingStep, hdone, hstatus]
   · have hcap : round - blindGrindingOffset + 1 ≠ maxBlindTrials := by omega
-    by_cases hgood : blindGrindingGood answer <;>
+    by_cases hgood : blindGrindingGood shape answer <;>
       simp [blindGrindingStep, hdone, hgood, hstatus, hcap]
 
 theorem blindGrindingStep_live_done_of_good
     {shape : BatchShape} (round : ℕ) (control : Control shape)
     (answer : OracleBlock) (hstatus : control.status = .live)
-    (hgood : blindGrindingGood answer) :
+    (hgood : blindGrindingGood shape answer) :
     let result := blindGrindingStep round control answer
     result.status = .live ∧ result.stageDone = true := by
   classical
@@ -854,7 +862,7 @@ theorem blindGrindingLoop_live_done_of_exists
     {shape : BatchShape} (rounds : ℕ) (control : Control shape)
     (answers : Fin rounds → OracleBlock) (hrounds : rounds ≤ maxBlindTrials)
     (hstatus : control.status = .live)
-    (hexists : ∃ trial : Fin rounds, blindGrindingGood (answers trial)) :
+    (hexists : ∃ trial : Fin rounds, blindGrindingGood shape (answers trial)) :
     let result := iterateFrom blindGrindingStep blindGrindingOffset rounds
       control answers
     result.status = .live ∧ result.stageDone = true := by
@@ -862,12 +870,12 @@ theorem blindGrindingLoop_live_done_of_exists
   | zero => simp at hexists
   | succ rounds ih =>
       rw [iterateFrom_succ_last]
-      by_cases hlast : blindGrindingGood (answers (Fin.last rounds))
+      by_cases hlast : blindGrindingGood shape (answers (Fin.last rounds))
       · exact blindGrindingStep_live_done_of_good _ _ _
           (blindGrindingLoop_status_live_of_lt rounds control
             (fun index ↦ answers index.castSucc) (by omega) hstatus) hlast
       · have hearlier : ∃ trial : Fin rounds,
-            blindGrindingGood (answers trial.castSucc) := by
+            blindGrindingGood shape (answers trial.castSucc) := by
           rcases hexists with ⟨trial, htrial⟩
           refine ⟨Fin.castLT trial (by
             by_contra heq
@@ -960,7 +968,7 @@ theorem rawBlindGrinding_live_done
     (answers : Fin maxBlindTrials → OracleBlock)
     (hstatus : control.status = .live)
     (hexists : ∃ trial : Fin maxBlindTrials,
-      blindGrindingGood (answers trial)) :
+      blindGrindingGood shape (answers trial)) :
     let withState := rawStep shape causalSecret completion witness coins
       blindStateOffset control stateAnswer
     let result := iterateFrom
@@ -1540,8 +1548,11 @@ theorem rawZerocheck_live_some
 def ligeritoSiteStart (site : Fin maxLigeritoSites) : ℕ :=
   ligeritoOffset + site.val * ligeritoSiteWidth
 
-def ligeritoSiteTerminalStatus (site : Fin maxLigeritoSites) : Status :=
-  if site.val + 1 = maxLigeritoSites then .success else .live
+def ligeritoSiteTerminalStatus (shape : BatchShape)
+    (site : Fin maxLigeritoSites) : Status :=
+  if site.val + 1 = ligeritoPositiveFoldGrindingSites shape then
+    .success
+  else .live
 
 theorem ligerito_trial_offset (site : Fin maxLigeritoSites)
     (trial : ℕ) (htrial : trial < maxLigeritoTrials) :
@@ -1587,17 +1598,17 @@ theorem ligeritoStep_trial_good {shape : BatchShape}
     (control : Control shape) (answer : OracleBlock)
     (hstatus : control.status = .live)
     (hdone : control.stageDone = false)
-    (hgood : rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide) answer) :
+    (hgood : ligeritoGrindingGood shape site.val answer) :
     let result := ligeritoStep (ligeritoSiteStart site + 1 + trial)
       control answer
-    result.status = ligeritoSiteTerminalStatus site ∧
+    result.status = ligeritoSiteTerminalStatus shape site ∧
       result.stageDone = true := by
   have hoff := ligerito_trial_offset site trial htrial
   unfold ligeritoStep
   dsimp only
   rw [hoff.1, hoff.2]
   have hpositive : 1 + trial ≠ 0 := by omega
-  by_cases hlast : site.val + 1 = maxLigeritoSites <;>
+  by_cases hlast : site.val + 1 = ligeritoPositiveFoldGrindingSites shape <;>
     simp [ hstatus, hdone, hgood, hlast,
       ligeritoSiteTerminalStatus]
 
@@ -1607,7 +1618,7 @@ theorem ligeritoStep_trial_bad_before_cap {shape : BatchShape}
     (control : Control shape) (answer : OracleBlock)
     (hstatus : control.status = .live)
     (hdone : control.stageDone = false)
-    (hbad : ¬rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide) answer) :
+    (hbad : ¬ligeritoGrindingGood shape site.val answer) :
     let result := ligeritoStep (ligeritoSiteStart site + 1 + trial)
       control answer
     result.status = .live ∧ result.stageDone = false := by
@@ -1728,11 +1739,11 @@ theorem rawStep_ligeritoTrial_preserves_terminal {W : Type*}
     (site : Fin maxLigeritoSites) (trial : ℕ)
     (htrial : trial < maxLigeritoTrials)
     (control : Control shape) (answer : OracleBlock)
-    (hstatus : control.status = ligeritoSiteTerminalStatus site)
+    (hstatus : control.status = ligeritoSiteTerminalStatus shape site)
     (hdone : control.stageDone = true) :
     rawStep shape causalSecret completion witness coins
         (ligeritoSiteStart site + 1 + trial) control answer = control := by
-  by_cases hlast : site.val + 1 = maxLigeritoSites
+  by_cases hlast : site.val + 1 = ligeritoPositiveFoldGrindingSites shape
   · have hsuccess : control.status = .success := by
       simpa [ligeritoSiteTerminalStatus, hlast] using hstatus
     unfold rawStep
@@ -1757,7 +1768,7 @@ theorem rawLigeritoFailures_live
     (hstatus : control.status = .live)
     (hdone : control.stageDone = false)
     (hallbad : ∀ trial : Fin rounds,
-      ¬rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ¬ligeritoGrindingGood shape site.val
         (answers trial)) :
     let result := iterateFrom
       (rawStep shape causalSecret completion witness coins)
@@ -1788,12 +1799,12 @@ theorem rawLigeritoGrinding_terminal_of_exists
     (hstatus : control.status = .live)
     (hdone : control.stageDone = false)
     (hexists : ∃ trial : Fin rounds,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (answers trial)) :
     let result := iterateFrom
       (rawStep shape causalSecret completion witness coins)
       (ligeritoSiteStart site + 1) rounds control answers
-    result.status = ligeritoSiteTerminalStatus site ∧
+    result.status = ligeritoSiteTerminalStatus shape site ∧
       result.stageDone = true := by
   induction rounds with
   | zero => simp at hexists
@@ -1805,13 +1816,14 @@ theorem rawLigeritoGrinding_terminal_of_exists
         (rawStep shape causalSecret completion witness coins)
         (ligeritoSiteStart site + 1) rounds control prefixAnswers
       by_cases hearlier : ∃ trial : Fin rounds,
-          rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+          ligeritoGrindingGood shape site.val
             (prefixAnswers trial)
       · have hprefix := ih (answers := prefixAnswers) (hrounds := by omega)
           (hexists := hearlier)
         change (rawStep shape causalSecret completion witness coins
           (ligeritoSiteStart site + 1 + rounds) prior
-          (answers (Fin.last rounds))).status = ligeritoSiteTerminalStatus site ∧
+          (answers (Fin.last rounds))).status =
+            ligeritoSiteTerminalStatus shape site ∧
           (rawStep shape causalSecret completion witness coins
           (ligeritoSiteStart site + 1 + rounds) prior
           (answers (Fin.last rounds))).stageDone = true
@@ -1820,13 +1832,13 @@ theorem rawLigeritoGrinding_terminal_of_exists
           (answers (Fin.last rounds)) hprefix.1 hprefix.2]
         exact hprefix
       · have hallbad : ∀ trial : Fin rounds,
-            ¬rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+            ¬ligeritoGrindingGood shape site.val
               (prefixAnswers trial) := by
           simpa only [not_exists] using hearlier
         have hprefix := rawLigeritoFailures_live shape causalSecret completion
           witness coins site rounds control prefixAnswers (by omega) hstatus
           hdone hallbad
-        have hlast : rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+        have hlast : ligeritoGrindingGood shape site.val
             (answers (Fin.last rounds)) := by
           rcases hexists with ⟨trial, htrial⟩
           rcases Fin.eq_castSucc_or_eq_last trial with ⟨priorTrial, rfl⟩ | rfl
@@ -1834,7 +1846,8 @@ theorem rawLigeritoGrinding_terminal_of_exists
           · exact htrial
         change (rawStep shape causalSecret completion witness coins
           (ligeritoSiteStart site + 1 + rounds) prior
-          (answers (Fin.last rounds))).status = ligeritoSiteTerminalStatus site ∧
+          (answers (Fin.last rounds))).status =
+            ligeritoSiteTerminalStatus shape site ∧
           (rawStep shape causalSecret completion witness coins
           (ligeritoSiteStart site + 1 + rounds) prior
           (answers (Fin.last rounds))).stageDone = true
@@ -1855,14 +1868,14 @@ theorem rawLigeritoSite_terminal
     (answers : Fin maxLigeritoTrials → OracleBlock)
     (hstatus : control.status = .live)
     (hexists : ∃ trial : Fin maxLigeritoTrials,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (answers trial)) :
     let withState := rawStep shape causalSecret completion witness coins
       (ligeritoSiteStart site) control stateAnswer
     let result := iterateFrom
       (rawStep shape causalSecret completion witness coins)
       (ligeritoSiteStart site + 1) maxLigeritoTrials withState answers
-    result.status = ligeritoSiteTerminalStatus site ∧
+    result.status = ligeritoSiteTerminalStatus shape site ∧
       result.stageDone = true := by
   rw [rawStep_ligeritoStart shape causalSecret completion witness coins site
     control stateAnswer hstatus, ligeritoStep_at_start]
@@ -1880,7 +1893,7 @@ theorem rawLigeritoSite_window_terminal
     (answers : SamplingAnswerTape)
     (hstatus : control.status = .live)
     (hexists : ∃ trial : Fin maxLigeritoTrials,
-      rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+      ligeritoGrindingGood shape site.val
         (window (ligeritoSiteStart site + 1) maxLigeritoTrials
           (ligeritoGrinding_window_fits site) answers trial)) :
     let result := iterateFrom
@@ -1890,7 +1903,7 @@ theorem rawLigeritoSite_window_terminal
         simpa only [ligeritoSiteStart, ligeritoSiteWidth, Nat.add_assoc] using
           ligeritoGrinding_window_fits site)
         answers)
-    result.status = ligeritoSiteTerminalStatus site ∧
+    result.status = ligeritoSiteTerminalStatus shape site ∧
       result.stageDone = true := by
   let step := rawStep shape causalSecret completion witness coins
   have hsiteFit : ligeritoSiteStart site + ligeritoSiteWidth ≤
@@ -1904,7 +1917,7 @@ theorem rawLigeritoSite_window_terminal
     hsiteFit answers
   change
     (iterateFrom step (ligeritoSiteStart site) (1 + maxLigeritoTrials)
-      control siteAnswers).status = ligeritoSiteTerminalStatus site ∧
+      control siteAnswers).status = ligeritoSiteTerminalStatus shape site ∧
     (iterateFrom step (ligeritoSiteStart site) (1 + maxLigeritoTrials)
       control siteAnswers).stageDone = true
   rw [iterateFrom_add]
@@ -1971,6 +1984,72 @@ theorem rawControlUntil_add
   rw [iterateFrom_add, Nat.zero_add]
   congr 1
 
+/-- Abort, success, and collision are terminal schedule states; all remaining
+reserved coordinates are operational no-ops. -/
+theorem rawControlUntil_stable_of_status_ne_live
+    {W : Type*} (shape : BatchShape)
+    (causalSecret : VeiledFlock.ProductionCausalOperational.ProductionCausalSecret
+      (W := W) shape)
+    (completion : VeiledFlock.OracleCausalOneTimePad.Completion OracleBlock
+      (programmedPoints shape))
+    (witness : W) (coins : ProductionCoins shape) (prelude : List Byte)
+    (answers : SamplingAnswerTape) (start width : ℕ)
+    (hfit : start + width ≤ productionSamplingSlots)
+    (hstopped : (rawControlUntil shape causalSecret completion witness coins
+      prelude answers start
+        (Nat.le_trans (Nat.le_add_right start width) hfit)).status != .live) :
+    rawControlUntil shape causalSecret completion witness coins prelude answers
+        (start + width) hfit =
+      rawControlUntil shape causalSecret completion witness coins prelude answers
+        start (Nat.le_trans (Nat.le_add_right start width) hfit) := by
+  rw [rawControlUntil_add]
+  let before := rawControlUntil shape causalSecret completion witness coins
+    prelude answers start (Nat.le_trans (Nat.le_add_right start width) hfit)
+  change iterateFrom (rawStep shape causalSecret completion witness coins)
+    start width before (window start width hfit answers) = before
+  have stable : ∀ (rounds start : ℕ) (control : Control shape)
+      (siteAnswers : Fin rounds → OracleBlock),
+      control.status != .live →
+      iterateFrom (rawStep shape causalSecret completion witness coins)
+        start rounds control siteAnswers = control := by
+    intro rounds start control siteAnswers hcontrol
+    induction rounds with
+    | zero => rfl
+    | succ rounds ih =>
+        rw [iterateFrom_succ_last, ih]
+        simp [rawStep, hcontrol]
+  exact stable width start before (window start width hfit answers) hstopped
+
+/-- A stopped raw schedule never returns to `live`; hence a live later control
+certifies that every earlier prefix control was live. -/
+theorem rawControlUntil_status_live_backward
+    {W : Type*} (shape : BatchShape)
+    (causalSecret : VeiledFlock.ProductionCausalOperational.ProductionCausalSecret
+      (W := W) shape)
+    (completion : VeiledFlock.OracleCausalOneTimePad.Completion OracleBlock
+      (programmedPoints shape))
+    (witness : W) (coins : ProductionCoins shape) (prelude : List Byte)
+    (answers : SamplingAnswerTape) (start width : ℕ)
+    (hfit : start + width ≤ productionSamplingSlots)
+    (hlive : (rawControlUntil shape causalSecret completion witness coins
+      prelude answers (start + width) hfit).status = .live) :
+    (rawControlUntil shape causalSecret completion witness coins prelude answers
+      start (Nat.le_trans (Nat.le_add_right start width) hfit)).status =
+        .live := by
+  let before := rawControlUntil shape causalSecret completion witness coins
+    prelude answers start (Nat.le_trans (Nat.le_add_right start width) hfit)
+  by_contra hnot
+  have hnot' : before.status ≠ .live := by
+    simpa only [before] using hnot
+  have hne : before.status != .live := by
+    cases hstatus : before.status with
+    | live => exact False.elim (hnot' hstatus)
+    | abort | success | collision => decide
+  have hstable := rawControlUntil_stable_of_status_ne_live shape causalSecret
+    completion witness coins prelude answers start width hfit hne
+  rw [hstable] at hlive
+  exact hnot hlive
+
 theorem controlAfter_eq_rawControlUntil
     {W : Type*} (shape : BatchShape)
     (causalSecret : VeiledFlock.ProductionCausalOperational.ProductionCausalSecret
@@ -1997,23 +2076,32 @@ theorem rawControlUntil_ligerito_prefix_status
       prelude answers ligeritoOffset (by decide)).status = .live)
     (hgrind : ∀ site : Fin maxLigeritoSites,
       ∃ trial : Fin maxLigeritoTrials,
-        rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+        ligeritoGrindingGood shape site.val
           (window (ligeritoSiteStart site + 1) maxLigeritoTrials
             (ligeritoGrinding_window_fits site) answers trial))
-    (sites : ℕ) (hsites : sites ≤ maxLigeritoSites) :
+    (sites : ℕ)
+    (hsites : sites ≤ ligeritoPositiveFoldGrindingSites shape) :
     let fit : ligeritoOffset + sites * ligeritoSiteWidth ≤
         productionSamplingSlots := by
       unfold productionSamplingSlots ligeritoWidth
       have _hwidth : 0 < ligeritoSiteWidth := by
         unfold ligeritoSiteWidth
         omega
+      have hactiveLeMax := (registered_grinding_bounds shape).2.2
       nlinarith
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       (ligeritoOffset + sites * ligeritoSiteWidth) fit).status =
-        if sites = maxLigeritoSites then .success else .live := by
+        if sites = ligeritoPositiveFoldGrindingSites shape then
+          .success
+        else .live := by
   induction sites with
-  | zero => simpa [maxLigeritoSites] using hstart
+  | zero =>
+      simpa [Nat.ne_of_lt (ligeritoPositiveFoldGrindingSites_positive shape)]
+        using hstart
   | succ sites ih =>
+      have hsitesLtActive :
+          sites < ligeritoPositiveFoldGrindingSites shape := by omega
+      have hactiveLeMax := (registered_grinding_bounds shape).2.2
       have hsitesLt : sites < maxLigeritoSites := by omega
       have hprefix := ih (hsites := by omega)
       have hprefixLive : (rawControlUntil shape causalSecret completion witness
@@ -2024,7 +2112,8 @@ theorem rawControlUntil_ligerito_prefix_status
               unfold ligeritoSiteWidth
               omega
             nlinarith)).status = .live := by
-        simpa [show sites ≠ maxLigeritoSites by omega] using hprefix
+        simpa [show sites ≠ ligeritoPositiveFoldGrindingSites shape by omega]
+          using hprefix
       let site : Fin maxLigeritoSites := ⟨sites, hsitesLt⟩
       have hfit : (ligeritoOffset + sites * ligeritoSiteWidth) +
           ligeritoSiteWidth ≤ productionSamplingSlots := by
@@ -2051,7 +2140,7 @@ theorem rawControlUntil_ligerito_prefix_status
                 exact Nat.le_trans (Nat.le_add_right _ _) hfit))
             (window (ligeritoOffset + sites * ligeritoSiteWidth)
               ligeritoSiteWidth hfit answers)
-          result.status = ligeritoSiteTerminalStatus site ∧
+          result.status = ligeritoSiteTerminalStatus shape site ∧
             result.stageDone = true := by
         simpa only [ligeritoSiteStart, site] using hsite
       have hcontrolEq :
@@ -2069,7 +2158,9 @@ theorem rawControlUntil_ligerito_prefix_status
       change
         (rawControlUntil shape causalSecret completion witness coins prelude
           answers (ligeritoOffset + (sites + 1) * ligeritoSiteWidth) _).status =
-          if sites + 1 = maxLigeritoSites then .success else .live
+          if sites + 1 = ligeritoPositiveFoldGrindingSites shape then
+            .success
+          else .live
       rw [hcontrolEq]
       simpa [ligeritoSiteTerminalStatus, site] using hsite'.1
 
@@ -2085,15 +2176,41 @@ theorem rawControlUntil_ligerito_success
       prelude answers ligeritoOffset (by decide)).status = .live)
     (hgrind : ∀ site : Fin maxLigeritoSites,
       ∃ trial : Fin maxLigeritoTrials,
-        rustLeadingZeroBitsAtLeast maxLigeritoBits (by decide)
+        ligeritoGrindingGood shape site.val
           (window (ligeritoSiteStart site + 1) maxLigeritoTrials
             (ligeritoGrinding_window_fits site) answers trial)) :
     (rawControlUntil shape causalSecret completion witness coins prelude answers
       productionSamplingSlots (by rfl)).status = .success := by
   have hprefix := rawControlUntil_ligerito_prefix_status shape causalSecret
-    completion witness coins prelude answers hstart hgrind maxLigeritoSites
+    completion witness coins prelude answers hstart hgrind
+    (ligeritoPositiveFoldGrindingSites shape)
     (by rfl)
-  simpa [productionSamplingSlots, ligeritoWidth] using hprefix
+  let activeEnd := ligeritoOffset +
+    ligeritoPositiveFoldGrindingSites shape * ligeritoSiteWidth
+  have hactiveLeMax := (registered_grinding_bounds shape).2.2
+  have hactiveEnd : activeEnd ≤ productionSamplingSlots := by
+    unfold activeEnd productionSamplingSlots ligeritoWidth
+    nlinarith
+  have hprefixSuccess :
+      (rawControlUntil shape causalSecret completion witness coins prelude
+        answers activeEnd hactiveEnd).status = .success := by
+    simpa [activeEnd] using hprefix
+  have hstopped :
+      (rawControlUntil shape causalSecret completion witness coins prelude
+        answers activeEnd hactiveEnd).status != .live := by
+    rw [hprefixSuccess]
+    decide
+  have hstable := rawControlUntil_stable_of_status_ne_live shape causalSecret
+    completion witness coins prelude answers activeEnd
+    (productionSamplingSlots - activeEnd) (by omega) hstopped
+  have hstableFinal :
+      rawControlUntil shape causalSecret completion witness coins prelude
+          answers productionSamplingSlots (by rfl) =
+        rawControlUntil shape causalSecret completion witness coins prelude
+          answers activeEnd hactiveEnd := by
+    simpa only [Nat.add_sub_of_le hactiveEnd] using hstable
+  rw [hstableFinal]
+  exact hprefixSuccess
 
 /-! ## Ledger witnesses in the exact state-machine formats -/
 
