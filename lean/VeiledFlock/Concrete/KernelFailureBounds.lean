@@ -145,23 +145,23 @@ theorem outer_abort_le_180 (shape : BatchShape) :
     outerAbortBound shape ≤ 1 / (2 : ℚ) ^ 180 := by
   cases shape with
   | slots256 =>
-      change (Nat.choose 2048 297 : ℚ) * (297 / 2048 : ℚ) ^ 4096 ≤ _
-      exact (binomial_tail_le 2048 297 4096 2 6144
+      change (Nat.choose 2048 293 : ℚ) * (293 / 2048 : ℚ) ^ 4096 ≤ _
+      exact (binomial_tail_le 2048 293 4096 2 6144
         (by norm_num) (by norm_num)).trans
         (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 6144)))
   | slots512 =>
-      change (Nat.choose 4096 293 : ℚ) * (293 / 4096 : ℚ) ^ 4096 ≤ _
-      exact (binomial_tail_le 4096 293 4096 3 8192
+      change (Nat.choose 4096 291 : ℚ) * (291 / 4096 : ℚ) ^ 4096 ≤ _
+      exact (binomial_tail_le 4096 291 4096 3 8192
         (by norm_num) (by norm_num)).trans
         (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 8192)))
   | slots1024 =>
-      change (Nat.choose 8192 291 : ℚ) * (291 / 8192 : ℚ) ^ 4096 ≤ _
-      exact (binomial_tail_le 8192 291 4096 4 8192
+      change (Nat.choose 8192 290 : ℚ) * (290 / 8192 : ℚ) ^ 4096 ≤ _
+      exact (binomial_tail_le 8192 290 4096 4 8192
         (by norm_num) (by norm_num)).trans
         (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 8192)))
   | slots2048 =>
-      change (Nat.choose 16384 290 : ℚ) * (290 / 16384 : ℚ) ^ 4096 ≤ _
-      exact (binomial_tail_le 16384 290 4096 5 4096
+      change (Nat.choose 16384 289 : ℚ) * (289 / 16384 : ℚ) ^ 4096 ≤ _
+      exact (binomial_tail_le 16384 289 4096 5 4096
         (by norm_num) (by norm_num)).trans
         (le_of_lt (two_pow_inverse_mono (by norm_num : 180 < 4096)))
   | slots4096 =>

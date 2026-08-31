@@ -83,13 +83,14 @@ def outerLaneCount : ℕ := 2 ^ 6
 def outerMaskSymbolsPerLane (shape : BatchShape) : ℕ :=
   2 ^ (m shape - 13)
 
-/-- Exact L0 query count in the registered Secure Ligerito profiles
-`m22_secure.toml` through `m26_secure.toml`. -/
+/-- Exact L0 query count in the registered Secure Ligerito profiles.
+ZK adds one committed-message dimension, so R1CS shapes `m22` through `m26`
+load `m23_secure.toml` through `m27_secure.toml`. -/
 def outerL0QueryCount : BatchShape → ℕ
-  | .slots256 => 298
-  | .slots512 => 294
-  | .slots1024 => 292
-  | .slots2048 => 291
+  | .slots256 => 294
+  | .slots512 => 292
+  | .slots1024 => 291
+  | .slots2048 => 290
   | .slots4096 => 290
 
 /-- Per-lane committed message dimension after adjoining the low random half. -/
