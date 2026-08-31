@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
-description = "Native GF(2^128) VEIL backend for the experimental veiled-FLOCK prover."
+description = "Native GF(2^128) VEIL backend for the veiled-FLOCK prover."
 
 [dependencies]
 flock-core = { path = "../flock-core", features = ["zk"] }

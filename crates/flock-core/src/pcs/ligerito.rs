@@ -127,6 +127,9 @@ pub struct ProverConfig {
     /// proximity-gap term, which lives on the fold challenges. Length =
     /// recursive_steps + 1.
     pub fold_grinding_bits: Vec<usize>,
+    /// Per-level fold-grind taper flag; length = recursive_steps + 1.
+    /// Johnson levels taper by round; UDR levels grind full width.
+    pub fold_grinding_taper: Vec<bool>,
     /// Per-commit-level out-of-domain samples (L0, ..., L_r), taken right
     /// after the level's Merkle root enters the transcript. `[0]` must be 0:
     /// L0 is bound by the opening's own (post-commit, random-point)
@@ -150,23 +153,68 @@ pub struct VerifierConfig {
     /// Per-level fold-challenge PoW grinding bits (one grind per fold
     /// challenge of the level). Length = recursive_steps + 1.
     pub fold_grinding_bits: Vec<usize>,
+    /// Per-level fold-grind taper flag; mirrors
+    /// [`ProverConfig::fold_grinding_taper`]. Length = recursive_steps + 1.
+    pub fold_grinding_taper: Vec<bool>,
     /// Per-commit-level OOD samples. Length = recursive_steps + 1.
     pub ood_samples: Vec<usize>,
 }
 
-/// Proximity loss `ε*` for the UDR (unique-decoding regime) analysis. It
-/// would back the proximity radius off to `γ = δ/2 − ε*` (δ = 1 − ρ the
-/// code's relative distance); set to `0`, so we decode to the full
-/// unique-decoding radius `γ = δ/2` with no backoff. Per our paper's Appendix
-/// C.3 (Theorem `ca-udr`, BCHKS25 Cor. 1.4) the proximity-gap exceptional set
-/// is then `a = γ·n + 1` — length-dependent (see [`paper_thm_1_4_log_a`]), so
-/// `eps_pg = 128 − log₂ a` shrinks ~1 bit per witness doubling and is
-/// recovered by `fold_grinding_bits`.
+/// Extra proximity loss `ε*` beyond the finite-length theorem backoff. Even
+/// at zero, [`udr_gamma`] uses `γ = δ/2 - 3/(δN)`, not the boundary `δ/2`.
 pub const UDR_PROXIMITY_LOSS: f64 = 0.0;
 
 /// Soundness (in bits) the query phase must close on its own at every level
 /// (the "100 bits from queries always" policy).
 const UDR_TARGET_BITS: f64 = 100.0;
+const ZERO_PROBABILITY: f64 = 0.0;
+const BINARY_PROBABILITY_BASE: f64 = 2.0;
+const MIN_EFFECTIVE_FOLD_COUNT: usize = 1;
+/// Extra PoW bits that a challenge derived from L0's fold grind carries over
+/// that level's registered width. See [`l0_derived_grind_bits`].
+const L0_DERIVED_EXTRA_GRIND_BITS: u32 = 1;
+const ROUNDED_DIAGNOSTIC_HALF_ULP_BITS: f64 = 0.05;
+const FULL_RELATIVE_DISTANCE: f64 = 1.0;
+const UDR_MAX_RADIUS_DISTANCE_DIVISOR: f64 = 2.0;
+const UDR_FINITE_LENGTH_BACKOFF: f64 = 3.0;
+const UDR_MIN_RADIUS_DISTANCE_DIVISOR: f64 = 3.0;
+const UDR_DISTANCE_FLOOR_FACTOR: f64 = 3.0;
+const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
+const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
+
+/// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
+/// Johnson levels taper by round; UDR levels use the full level width.
+fn fold_round_grind_bits(
+    fold_grinding_bits: &[usize],
+    fold_grinding_taper: &[bool],
+    lvl: usize,
+    j: usize,
+) -> u32 {
+    debug_assert_eq!(
+        fold_grinding_bits.len(),
+        fold_grinding_taper.len(),
+        "fold grind width and taper flag must cover the same levels"
+    );
+    let bits = fold_grinding_bits.get(lvl).copied().unwrap_or(0);
+    let bits = if fold_grinding_taper.get(lvl).copied().unwrap_or(false) {
+        bits.saturating_sub(j)
+    } else {
+        bits
+    };
+    bits.try_into().unwrap_or(u32::MAX)
+}
+
+/// PoW bits shared by hiding L0 `c` and outer blind challenges.
+/// This is one bit more than L0's registered fold grind.
+pub fn l0_derived_grind_bits(fold_grinding_bits: &[usize]) -> u32 {
+    fold_grinding_bits
+        .first()
+        .copied()
+        .unwrap_or(0)
+        .saturating_add(L0_DERIVED_EXTRA_GRIND_BITS as usize)
+        .try_into()
+        .unwrap_or(u32::MAX)
+}
 
 /// Number of queries for 100-bit soundness in the **unique-decoding regime**
 /// at rate `2^(-log_inv_rate)`: `γ = δ/2 = (1−ρ)/2`, per-query soundness
@@ -261,6 +309,7 @@ pub fn default_config(
         queries,
         grinding_bits,
         fold_grinding_bits: vec![0usize; n_levels],
+        fold_grinding_taper: vec![false; n_levels],
         ood_samples: vec![0usize; n_levels],
     })
 }
@@ -441,6 +490,7 @@ pub fn default_verifier_config(
         queries: p.queries,
         grinding_bits: p.grinding_bits,
         fold_grinding_bits: p.fold_grinding_bits,
+        fold_grinding_taper: p.fold_grinding_taper,
         ood_samples: p.ood_samples,
     })
 }
@@ -460,8 +510,8 @@ pub fn default_verifier_config(
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SoundnessRegime {
-    /// Unique decoding radius: γ = δ/2 (δ = 1 − ρ the code's relative
-    /// distance; no proximity-loss backoff). Theorem `ca-udr` of our paper's
+    /// Unique decoding radius: γ = δ/2 − 3/(δ·n) − ε* (δ = 1 − ρ the
+    /// code's relative distance). Theorem `ca-udr` of our paper's
     /// Appendix C.3 (adapted from Ben-Sasson–Carmon–Haböck–Kopparty–Saraf
     /// "On Proximity Gaps for Reed–Solomon Codes", 2025, Corollary 1.4): the
     /// exceptional set is `a = γ·n + 1`, growing with the codeword length `n`,
@@ -518,9 +568,10 @@ pub struct LigeritoLevelConfig {
     /// Slack from the Johnson radius. Required for the `JohnsonOod` regime;
     /// must be `None` for `Udr`.
     pub eta: Option<f64>,
-    /// Proximity loss `ε*` for the UDR radius `γ = δ/2 − ε*` (our paper
-    /// App. C.3 / BCHKS25 Cor. 1.4); `0` in the shipped configs (full
-    /// unique-decoding radius δ/2, no backoff). Required for `Udr`; must be
+    /// Additional proximity loss `ε*` below the theorem-mandated UDR radius
+    /// `γ = δ/2 − 3/(δ·n) − ε*` (our paper App. C.3 / BCHKS25 Cor. 1.4).
+    /// `0` in the shipped configs means no *additional* loss; the finite-size
+    /// `3/(δ·n)` backoff is still always applied. Required for `Udr`; must be
     /// `None` for `JohnsonOod`. The exceptional set is `a = γ·n + 1`,
     /// length-dependent (see [`paper_thm_1_4_log_a`]).
     #[serde(default)]
@@ -593,11 +644,10 @@ pub struct LigeritoSecurityConfig {
     /// L0 lane fold. Must equal the upstream `PcsParams::log_batch_size` so
     /// the L0 commit can be reused without re-committing.
     pub initial_k: usize,
-    /// Round-by-round security target (bits): validate() asserts every error
-    /// term at every round (round-by-round soundness) clears at least this
-    /// much. Total security is the *minimum* over rounds — the notion that
-    /// governs Fiat-Shamir security (cf. Ethereum's `soundcalc`) — so there is
-    /// deliberately no whole-protocol union bound over terms.
+    /// Per-component security target (bits): `validate()` checks every error
+    /// term at every level against this floor. This is not the final
+    /// whole-opening claim; use [`Self::aggregate_soundness_bound`] for the
+    /// additive composition over all registered bad events.
     pub target_security_bits: usize,
     /// Identifier of the proximity-gap analysis used. Self-documents which
     /// theorem the per-level parameters were derived from. Example:
@@ -613,6 +663,23 @@ pub struct LigeritoSecurityConfig {
     pub levels: Vec<LigeritoLevelConfig>,
     /// Final residual block descriptor.
     pub final_block: FinalBlockConfig,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct AggregateSoundnessBound {
+    pub proximity_probability: f64,
+    pub query_probability: f64,
+    pub ood_probability: f64,
+}
+
+impl AggregateSoundnessBound {
+    pub fn probability(self) -> f64 {
+        self.proximity_probability + self.query_probability + self.ood_probability
+    }
+
+    pub fn bits(self) -> f64 {
+        -self.probability().log2()
+    }
 }
 
 /// Default field size used for soundness analysis: `q = 2^128` (our F128).
@@ -707,9 +774,11 @@ fn paper_per_query_bits(log_inv_rate: usize, eta: f64) -> f64 {
 /// theorem-mandated minimum and shrinks with the codeword length.
 fn udr_gamma(log_inv_rate: usize, log_msg_cols: usize, proximity_loss: f64) -> f64 {
     let rho = (-(log_inv_rate as f64)).exp2();
-    let delta = 1.0 - rho;
+    let delta = FULL_RELATIVE_DISTANCE - rho;
     let n = ((log_msg_cols + log_inv_rate) as f64).exp2();
-    delta / 2.0 - 3.0 / (delta * n) - proximity_loss
+    delta / UDR_MAX_RADIUS_DISTANCE_DIVISOR
+        - UDR_FINITE_LENGTH_BACKOFF / (delta * n)
+        - proximity_loss
 }
 
 /// Per-query log₂(1/(1−γ)) under the UDR regime at the maximal radius
@@ -839,7 +908,7 @@ impl LigeritoLevelConfig {
             }
             SoundnessRegime::Udr => {
                 // App. C.3 Thm `ca-udr` (BCHKS25 Cor. 1.4): a = γ·n + 1 for
-                // radius γ = δ/2 (ε* = 0, no backoff).
+                // maximal theorem radius γ = δ/2 − 3/(δ·n) when ε* = 0.
                 let proximity_loss = self
                     .proximity_loss
                     .expect("Udr regime must carry proximity_loss");
@@ -873,7 +942,86 @@ impl LigeritoLevelConfig {
     }
 }
 
+fn validate_udr_theorem_range(
+    level_index: usize,
+    level: &LigeritoLevelConfig,
+) -> Result<(), String> {
+    let rho = (-(level.log_inv_rate as f64)).exp2();
+    let delta = FULL_RELATIVE_DISTANCE - rho;
+    let n = ((level.log_msg_cols + level.log_inv_rate) as f64).exp2();
+    let eps = level
+        .proximity_loss
+        .expect("UDR proximity loss was checked above");
+    let gamma = udr_gamma(level.log_inv_rate, level.log_msg_cols, eps);
+    let theorem_ceiling =
+        delta / UDR_MAX_RADIUS_DISTANCE_DIVISOR - UDR_FINITE_LENGTH_BACKOFF / (delta * n);
+    let size_floor = UDR_DISTANCE_FLOOR_FACTOR * UDR_DISTANCE_FLOOR_RADICAND.sqrt() / n.sqrt();
+
+    // BCHKS25 Cor. 1.4 is used only in its proved finite-length interval:
+    // delta/3 <= gamma <= delta/2 - 3/(delta*N), with
+    // delta >= 3*sqrt(2)/sqrt(N).
+    if delta < size_floor
+        || gamma < delta / UDR_MIN_RADIUS_DISTANCE_DIVISOR
+        || gamma > theorem_ceiling
+        || gamma <= STRICT_POSITIVE_RADIUS_FLOOR
+    {
+        return Err(format!(
+            "L{level_index}: UDR theorem range fails: delta={delta}, gamma={gamma}, \
+             ceiling={theorem_ceiling}, size_floor={size_floor}"
+        ));
+    }
+    Ok(())
+}
+
 impl LigeritoSecurityConfig {
+    /// Additive whole-opening bound over registered proximity, query, and OOD events.
+    /// Fold rounds are charged at worst-round proximity; taper flags align regimes.
+    pub fn aggregate_soundness_bound(&self) -> Result<AggregateSoundnessBound, String> {
+        self.validate()?;
+        let mut proximity_probability = ZERO_PROBABILITY;
+        let mut query_probability = ZERO_PROBABILITY;
+        let mut ood_probability = ZERO_PROBABILITY;
+        for level in &self.levels {
+            let (pg_bits, query_bits) = level.paper_predicted_bits();
+            let fold_count = level.log_num_interleaved.max(MIN_EFFECTIVE_FOLD_COUNT) as f64;
+            proximity_probability += fold_count
+                * BINARY_PROBABILITY_BASE.powf(-(pg_bits + level.fold_grinding_bits as f64));
+            query_probability +=
+                BINARY_PROBABILITY_BASE.powf(-(query_bits + level.grinding_bits as f64));
+            if let Some(ood_bits) = level.expected_eps_ood_bits {
+                // Stored diagnostics are rounded to one decimal place. Back
+                // off by half a unit in the last place for a conservative
+                // aggregate bound.
+                ood_probability +=
+                    BINARY_PROBABILITY_BASE.powf(-(ood_bits - ROUNDED_DIAGNOSTIC_HALF_ULP_BITS));
+            }
+        }
+        Ok(AggregateSoundnessBound {
+            proximity_probability,
+            query_probability,
+            ood_probability,
+        })
+    }
+
+    /// Additive bound for hiding full-ZK openings, including the extra L0 `c` event.
+    /// Fails closed for Johnson L0, where the row-union accounting differs.
+    pub fn aggregate_soundness_bound_zk_l0(&self) -> Result<AggregateSoundnessBound, String> {
+        let mut bound = self.aggregate_soundness_bound()?;
+        let l0 = self
+            .levels
+            .first()
+            .ok_or_else(|| "empty levels".to_string())?;
+        if matches!(l0.regime, SoundnessRegime::JohnsonOod) {
+            // Johnson L0 makes `c` the widest fold, so this bound is unproved.
+            // Fail closed instead of reporting it.
+            return Err("zk L0 bound covers the unique-decoding regime only".to_string());
+        }
+        let (pg_bits, _) = l0.paper_predicted_bits();
+        let c_grind_bits = f64::from(l0_derived_grind_bits(&[l0.fold_grinding_bits]));
+        bound.proximity_probability += BINARY_PROBABILITY_BASE.powf(-(pg_bits + c_grind_bits));
+        Ok(bound)
+    }
+
     /// Validate that the config is internally consistent and matches the
     /// declared analysis. Returns the first violation found, if any.
     pub fn validate(&self) -> Result<(), String> {
@@ -943,13 +1091,21 @@ impl LigeritoSecurityConfig {
                 (SoundnessRegime::Udr, None) => {
                     return Err(format!("L{i}: regime=udr but proximity_loss is missing"));
                 }
-                (SoundnessRegime::Udr, Some(eps)) if eps < 0.0 => {
-                    return Err(format!("L{i}: proximity_loss must be ≥ 0, got {eps}"));
+                (SoundnessRegime::Udr, Some(eps))
+                    if !eps.is_finite() || eps < UDR_PROXIMITY_LOSS =>
+                {
+                    return Err(format!(
+                        "L{i}: proximity_loss must be finite and ≥ 0, got {eps}"
+                    ));
                 }
                 (SoundnessRegime::JohnsonOod, Some(_)) => {
                     return Err(format!("L{i}: proximity_loss is only valid for regime=udr"));
                 }
                 _ => {}
+            }
+
+            if lv.regime == SoundnessRegime::Udr {
+                validate_udr_theorem_range(i, lv)?;
             }
 
             // OOD samples match regime: UDR has no list, so no OOD; under
@@ -1140,7 +1296,9 @@ impl LigeritoSecurityConfig {
         }
         for i in 0..=r {
             let rate = prover.log_inv_rates[i];
-            // UDR: γ = δ/2 = (1−ρ)/2 (ε* = UDR_PROXIMITY_LOSS = 0, no backoff).
+            // UDR: γ = δ/2 − 3/(δ·n) when the additional
+            // UDR_PROXIMITY_LOSS is zero. The finite-length backoff is always
+            // present.
             // Thm `ca-udr`'s exceptional set a = γ·n + 1 grows with the
             // codeword length, so eps_pg falls ~1 bit per witness doubling and
             // is recovered by fold_grinding_bits below.
@@ -1401,6 +1559,13 @@ impl LigeritoSecurityConfig {
         let grinding_bits: Vec<usize> = self.levels.iter().map(|lv| lv.grinding_bits).collect();
         let fold_grinding_bits: Vec<usize> =
             self.levels.iter().map(|lv| lv.fold_grinding_bits).collect();
+        // Johnson levels taper one bit per round; UDR levels grind full width.
+        // The flag is duplicated into prover and verifier configs.
+        let fold_grinding_taper: Vec<bool> = self
+            .levels
+            .iter()
+            .map(|lv| matches!(lv.regime, SoundnessRegime::JohnsonOod))
+            .collect();
         let ood_samples: Vec<usize> = self.levels.iter().map(|lv| lv.ood_samples).collect();
         let prover = ProverConfig {
             log_inv_rates: log_inv_rates.clone(),
@@ -1413,6 +1578,7 @@ impl LigeritoSecurityConfig {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: fold_grinding_bits.clone(),
+            fold_grinding_taper: fold_grinding_taper.clone(),
             ood_samples: ood_samples.clone(),
         };
         let verifier = VerifierConfig {
@@ -1426,6 +1592,7 @@ impl LigeritoSecurityConfig {
             queries,
             grinding_bits,
             fold_grinding_bits,
+            fold_grinding_taper,
             ood_samples,
         };
         Ok((prover, verifier))
@@ -1442,6 +1609,10 @@ pub struct RecursiveProof {
     /// emitted in **sorted** query-position order so they align with the
     /// merkle multi-proof.
     pub opened_rows: Vec<Vec<F128>>,
+    /// Present only for openings of the initial witness-dependent ZK
+    /// commitment. Recursive levels use the unsalted commitment domain and
+    /// verifiers reject non-empty salts there.
+    pub leaf_salts: Vec<[u8; 32]>,
     /// Single octopus multi-proof shared across all queries at this level.
     pub merkle_proof: Vec<Hash>,
 }
@@ -1485,7 +1656,9 @@ impl LigeritoProof {
     pub fn size_bytes(&self) -> usize {
         const ELEM: usize = core::mem::size_of::<F128>();
         let level_bytes = |p: &RecursiveProof| -> usize {
-            p.opened_rows.iter().map(|r| r.len() * ELEM).sum::<usize>() + p.merkle_proof.len() * 32
+            p.opened_rows.iter().map(|r| r.len() * ELEM).sum::<usize>()
+                + p.leaf_salts.len() * 32
+                + p.merkle_proof.len() * 32
         };
         let mut total = 32;
         total += self.recursive_roots.len() * 32;
@@ -1527,7 +1700,8 @@ impl LigeritoProof {
             .iter()
             .map(|r| r.len() * ELEM)
             .sum();
-        let init_merkle: usize = self.initial_proof.merkle_proof.len() * 32;
+        let init_merkle: usize =
+            (self.initial_proof.leaf_salts.len() + self.initial_proof.merkle_proof.len()) * 32;
         eprintln!(
             "  L0 (initial): opened={} ({}q × {}lanes × {}B)  merkle={}",
             kb(init_opened),
@@ -2997,6 +3171,7 @@ pub fn recursive_prover_with_basis<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        &[],
         None,
         None,
         false,
@@ -3029,6 +3204,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
     target: F128,
     l0_codeword: &[F128],
     l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
     round0_uv: (F128, F128),
     zk_l0: ZkL0,
     challenger: &mut Ch,
@@ -3041,6 +3217,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        l0_leaf_salts,
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3063,6 +3240,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
     target: F128,
     l0_codeword: &[F128],
     l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
     round0_uv: (F128, F128),
     zk_l0: ZkL0,
     ro: &crate::ro::RoContext,
@@ -3076,6 +3254,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
         target,
         l0_codeword,
         l0_tree,
+        l0_leaf_salts,
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3112,6 +3291,7 @@ pub fn recursive_prover_with_basis_precomputed_round0<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        &[],
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3145,6 +3325,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_with_ro<Ch: Challenger>(
         target,
         l0_codeword,
         l0_tree,
+        &[],
         Some(SumcheckMessage {
             u_0: round0_uv.0,
             u_2: round0_uv.1,
@@ -3165,6 +3346,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     target: F128,
     l0_codeword: &[F128],
     l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
     first_msg: Option<SumcheckMessage>,
     zk_l0: Option<ZkL0>,
     framed: bool,
@@ -3193,6 +3375,11 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         block_len_0 * num_interleaved_0 * l0_lane_mult
     );
     assert_eq!(l0_tree.len(), 2 * block_len_0 - 1);
+    if zk_l0.is_some() {
+        assert_eq!(l0_leaf_salts.len(), block_len_0);
+    } else {
+        assert!(l0_leaf_salts.is_empty());
+    }
 
     let trace = std::env::var("LIG_PROVE_TRACE").is_ok();
     let mut t_init_sumcheck = std::time::Duration::ZERO;
@@ -3230,8 +3417,14 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     );
     let mut ood_values: Vec<F128> = Vec::new();
     let mut fold_grinding_nonces: Vec<u64> = Vec::new();
-    let fold_bits =
-        |lvl: usize| -> u32 { config.fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32 };
+    let fold_round_bits = |lvl: usize, j: usize| -> u32 {
+        fold_round_grind_bits(
+            &config.fold_grinding_bits,
+            &config.fold_grinding_taper,
+            lvl,
+            j,
+        )
+    };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
 
     let _t = std::time::Instant::now();
@@ -3244,16 +3437,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 
     let mut r_lane_fold = Vec::with_capacity(initial_k);
     for j in 0..initial_k {
-        // Fold-challenge grinding: the L0 proximity-gap bad event lives on
-        // each of these lane-fold challenges, so each one is individually
-        // PoW-guarded (a cheating prover re-rolls a fold challenge by
-        // varying the preceding sumcheck message; the grind prices every
-        // such attempt). Tapered per round: round j folds a 2^{ℓ-j}-row word
-        // whose MCA error carries the factor 2^{ℓ-1-j} (App. C.3 Lemma
-        // `mca-commutes`), so it needs (fold_bits − j) bits — one fewer per
-        // round than the worst (j=0) round `fold_grinding_bits` is sized for.
-        // Derived from fold_grinding_bits + round index; not stored.
-        let bits = fold_bits(0).saturating_sub(j as u32);
+        // Each L0 fold challenge is PoW-guarded because it carries proximity risk.
+        // Johnson levels taper by round; UDR levels grind full width.
+        let bits = fold_round_bits(0, j);
         if bits > 0 {
             fold_grinding_nonces.push(challenger.grind_pow(bits));
         }
@@ -3360,6 +3546,14 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     };
     let initial_proof = RecursiveProof {
         opened_rows: opened_rows_0,
+        leaf_salts: if l0_leaf_salts.is_empty() {
+            Vec::new()
+        } else {
+            queries_0
+                .iter()
+                .map(|&query| l0_leaf_salts[query])
+                .collect()
+        },
         merkle_proof: merkle_proof_0,
     };
 
@@ -3403,9 +3597,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         let _t = std::time::Instant::now();
         for j in 0..k_i {
             // These folds fold level i+1's commitment — fold-challenge
-            // grinding guards its proximity-gap term. Tapered per round:
-            // round j needs (fold_bits − j) bits (see L0 loop).
-            let bits = fold_bits(i + 1).saturating_sub(j as u32);
+            // grinding guards its proximity-gap term. Tapered per round only
+            // in the Johnson regime (see L0 loop).
+            let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 fold_grinding_nonces.push(challenger.grind_pow(bits));
             }
@@ -3564,6 +3758,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         }
         recursive_proofs.push(RecursiveProof {
             opened_rows: opened_rows_i.clone(),
+            leaf_salts: Vec::new(),
             merkle_proof: merkle_proof_i,
         });
 
@@ -3698,6 +3893,9 @@ where
     if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
         return false;
     }
+    if !proof_has_expected_recursive_shape(proof, r) || !recursive_proof_salts_are_empty(proof) {
+        return false;
+    }
     if &proof.initial_root != expected_initial_root {
         return false;
     }
@@ -3722,8 +3920,14 @@ where
     challenger.observe_f128(start_msg.u_2);
     let mut running_quad = RoundQuad::from_msg(start_msg, t_r);
 
-    let fold_bits =
-        |lvl: usize| -> u32 { config.fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32 };
+    let fold_round_bits = |lvl: usize, j: usize| -> u32 {
+        fold_round_grind_bits(
+            &config.fold_grinding_bits,
+            &config.fold_grinding_taper,
+            lvl,
+            j,
+        )
+    };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
     if config.ood_samples.first().copied().unwrap_or(0) != 0 {
         return false; // L0 must be bound by the opening's own eval claim
@@ -3741,9 +3945,9 @@ where
 
     let mut r_lane_fold = Vec::with_capacity(initial_k);
     for j in 0..initial_k {
-        // Fold-challenge PoW mirror (L0's lane folds), tapered per round to
-        // (fold_bits − j) — see the prover's L0 loop.
-        let bits = fold_bits(0).saturating_sub(j as u32);
+        // Fold-challenge PoW mirror (L0's lane folds) — see the prover's L0
+        // loop for when the per-round taper applies.
+        let bits = fold_round_bits(0, j);
         if bits > 0 {
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
@@ -3823,6 +4027,14 @@ where
         t_sample_q += _t.elapsed();
     }
     let alpha_0 = challenger.sample_f128_vec(ceil_log2(num_queries_0));
+    let l0_salt_domain = if zk_l0.is_some() {
+        LevelOpenSaltDomain::Salted
+    } else {
+        LevelOpenSaltDomain::Unsalted
+    };
+    if zk_l0.is_some() && proof.initial_proof.leaf_salts.len() != queries_0.len() {
+        return false;
+    }
     let _t = std::time::Instant::now();
     // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
     // rows, then combine each into an F-row with c for the enforced sum.
@@ -3832,8 +4044,10 @@ where
         block_len_0,
         &queries_0,
         &proof.initial_proof.opened_rows,
+        &proof.initial_proof.leaf_salts,
         num_interleaved_0 * l0_lane_mult,
         &proof.initial_proof.merkle_proof,
+        l0_salt_domain,
         ro_context,
         0,
     ) {
@@ -3915,9 +4129,9 @@ where
         }
         let mut level_rs = Vec::with_capacity(k_i);
         for j in 0..k_i {
-            // Fold-challenge PoW mirror (level i+1's folds), tapered per round
-            // to (fold_bits − j) — see the prover's L0 loop.
-            let bits = fold_bits(i + 1).saturating_sub(j as u32);
+            // Fold-challenge PoW mirror (level i+1's folds) — see the
+            // prover's L0 loop for when the per-round taper applies.
+            let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
@@ -3990,8 +4204,10 @@ where
                 prev_block_len,
                 &queries_last,
                 &proof.final_proof.opened_rows,
+                &[],
                 prev_num_interleaved,
                 &proof.final_proof.merkle_proof,
+                LevelOpenSaltDomain::Unsalted,
                 ro_context,
                 (i + 1) as u8,
             ) {
@@ -4200,8 +4416,10 @@ where
             prev_block_len,
             &queries_i,
             &rp.opened_rows,
+            &rp.leaf_salts,
             prev_num_interleaved,
             &rp.merkle_proof,
+            LevelOpenSaltDomain::Unsalted,
             ro_context,
             (i + 1) as u8,
         ) {
@@ -4269,6 +4487,9 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
         return false;
     }
+    if !proof_has_expected_recursive_shape(proof, r) || !all_proof_salts_are_empty(proof) {
+        return false;
+    }
     if b_initial.len() != 1usize << log_n {
         return false;
     }
@@ -4297,8 +4518,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     challenger.observe_f128(start_msg.u_2);
     let mut running_quad = RoundQuad::from_msg(start_msg, t_r);
 
-    let fold_bits =
-        |lvl: usize| -> u32 { config.fold_grinding_bits.get(lvl).copied().unwrap_or(0) as u32 };
+    let fold_round_bits = |lvl: usize, j: usize| -> u32 {
+        fold_round_grind_bits(
+            &config.fold_grinding_bits,
+            &config.fold_grinding_taper,
+            lvl,
+            j,
+        )
+    };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
     if config.ood_samples.first().copied().unwrap_or(0) != 0 {
         return false; // L0 must be bound by the opening's own eval claim
@@ -4311,9 +4538,9 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
 
     let mut r_lane_fold = Vec::with_capacity(initial_k);
     for j in 0..initial_k {
-        // Fold-challenge PoW mirror (L0's lane folds), tapered per round to
-        // (fold_bits − j) — see the prover's L0 loop.
-        let bits = fold_bits(0).saturating_sub(j as u32);
+        // Fold-challenge PoW mirror (L0's lane folds) — see the prover's L0
+        // loop for when the per-round taper applies.
+        let bits = fold_round_bits(0, j);
         if bits > 0 {
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
@@ -4442,9 +4669,9 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         }
         let mut level_rs = Vec::with_capacity(k_i);
         for j in 0..k_i {
-            // Fold-challenge PoW mirror (level i+1's folds), tapered per round
-            // to (fold_bits − j) — see the prover's L0 loop.
-            let bits = fold_bits(i + 1).saturating_sub(j as u32);
+            // Fold-challenge PoW mirror (level i+1's folds) — see the
+            // prover's L0 loop for when the per-round taper applies.
+            let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
@@ -4742,6 +4969,7 @@ fn recursive_prover_inner<Ch: Challenger>(
     t_opens += t.elapsed();
     let initial_proof = RecursiveProof {
         opened_rows: opened_rows_0.clone(),
+        leaf_salts: Vec::new(),
         merkle_proof: merkle_proof_0,
     };
 
@@ -4875,6 +5103,7 @@ fn recursive_prover_inner<Ch: Challenger>(
         t_opens += t.elapsed();
         recursive_proofs.push(RecursiveProof {
             opened_rows: opened_rows_i.clone(),
+            leaf_salts: Vec::new(),
             merkle_proof: merkle_proof_i,
         });
 
@@ -4904,6 +5133,10 @@ fn recursive_prover_inner<Ch: Challenger>(
 
 /// Verify all opened rows against one root via a single octopus multi-proof.
 /// `queries` must be sorted ascending and aligned with `opened_rows`.
+fn f128_row_bytes(row: &[F128]) -> &[u8] {
+    unsafe { core::slice::from_raw_parts(row.as_ptr() as *const u8, core::mem::size_of_val(row)) }
+}
+
 fn verify_level_opens(
     root: &Hash,
     block_len: usize,
@@ -4921,15 +5154,7 @@ fn verify_level_opens(
     }
     let leaf_hashes = opened_rows
         .iter()
-        .map(|row| {
-            let bytes: &[u8] = unsafe {
-                core::slice::from_raw_parts(
-                    row.as_ptr() as *const u8,
-                    row.len() * core::mem::size_of::<F128>(),
-                )
-            };
-            merkle::hash_leaf(bytes)
-        })
+        .map(|row| merkle::hash_leaf(f128_row_bytes(row)))
         .collect::<Vec<_>>();
     merkle::verify_merkle_multi_proof(root, block_len, queries, &leaf_hashes, multi_proof)
 }
@@ -4954,13 +5179,7 @@ fn verify_level_opens_with_ro(
         if row.len() != expected_num_interleaved {
             return false;
         }
-        let bytes: &[u8] = unsafe {
-            core::slice::from_raw_parts(
-                row.as_ptr() as *const u8,
-                row.len() * core::mem::size_of::<F128>(),
-            )
-        };
-        leaf_payloads.push(bytes);
+        leaf_payloads.push(f128_row_bytes(row));
     }
     merkle::verify_merkle_multi_proof_framed(
         root,
@@ -4974,38 +5193,141 @@ fn verify_level_opens_with_ro(
     )
 }
 
+fn salted_opening_payloads(
+    opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
+    expected_num_interleaved: usize,
+) -> Option<Vec<Vec<u8>>> {
+    if leaf_salts.len() != opened_rows.len() {
+        return None;
+    }
+    let mut payloads = Vec::with_capacity(opened_rows.len());
+    for (row, salt) in opened_rows.iter().zip(leaf_salts) {
+        if row.len() != expected_num_interleaved {
+            return None;
+        }
+        let row_bytes = f128_row_bytes(row);
+        let mut payload = Vec::with_capacity(salt.len() + row_bytes.len());
+        payload.extend_from_slice(salt);
+        payload.extend_from_slice(row_bytes);
+        payloads.push(payload);
+    }
+    Some(payloads)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn verify_salted_level_opens_with_ro(
+    root: &Hash,
+    block_len: usize,
+    queries: &[usize],
+    opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
+    expected_num_interleaved: usize,
+    multi_proof: &[Hash],
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> bool {
+    if queries.len() != opened_rows.len() {
+        return false;
+    }
+    let Some(payloads) = salted_opening_payloads(opened_rows, leaf_salts, expected_num_interleaved)
+    else {
+        return false;
+    };
+    let refs = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
+    merkle::verify_merkle_multi_proof_framed(
+        root,
+        block_len,
+        queries,
+        &refs,
+        multi_proof,
+        ro,
+        channel,
+        tree_depth,
+    )
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum LevelOpenSaltDomain {
+    Unsalted,
+    Salted,
+}
+
 #[allow(clippy::too_many_arguments)]
 fn verify_level_opens_maybe_ro(
     root: &Hash,
     block_len: usize,
     queries: &[usize],
     opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
     expected_num_interleaved: usize,
     multi_proof: &[Hash],
+    salt_domain: LevelOpenSaltDomain,
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     tree_depth: u8,
 ) -> bool {
-    match ro_context {
-        Some((ro, channel)) => verify_level_opens_with_ro(
-            root,
-            block_len,
-            queries,
-            opened_rows,
-            expected_num_interleaved,
-            multi_proof,
-            ro,
-            channel,
-            tree_depth,
-        ),
-        None => verify_level_opens(
-            root,
-            block_len,
-            queries,
-            opened_rows,
-            expected_num_interleaved,
-            multi_proof,
-        ),
+    match salt_domain {
+        LevelOpenSaltDomain::Unsalted => {
+            if !leaf_salts.is_empty() {
+                return false;
+            }
+            match ro_context {
+                Some((ro, channel)) => verify_level_opens_with_ro(
+                    root,
+                    block_len,
+                    queries,
+                    opened_rows,
+                    expected_num_interleaved,
+                    multi_proof,
+                    ro,
+                    channel,
+                    tree_depth,
+                ),
+                None => verify_level_opens(
+                    root,
+                    block_len,
+                    queries,
+                    opened_rows,
+                    expected_num_interleaved,
+                    multi_proof,
+                ),
+            }
+        }
+        LevelOpenSaltDomain::Salted => match ro_context {
+            Some((ro, channel)) => verify_salted_level_opens_with_ro(
+                root,
+                block_len,
+                queries,
+                opened_rows,
+                leaf_salts,
+                expected_num_interleaved,
+                multi_proof,
+                ro,
+                channel,
+                tree_depth,
+            ),
+            None => false,
+        },
     }
+}
+
+fn recursive_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
+    proof
+        .recursive_proofs
+        .iter()
+        .all(|rp| rp.leaf_salts.is_empty())
+}
+
+fn all_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
+    proof.initial_proof.leaf_salts.is_empty() && recursive_proof_salts_are_empty(proof)
+}
+
+fn proof_has_expected_recursive_shape(proof: &LigeritoProof, r: usize) -> bool {
+    let Some(expected_recursive_proofs) = r.checked_sub(1) else {
+        return false;
+    };
+    proof.recursive_roots.len() == r && proof.recursive_proofs.len() == expected_recursive_proofs
 }
 
 /// Verifier counterpart to [`recursive_prover`]. Supports arbitrary `R ≥ 1`.
@@ -5027,6 +5349,9 @@ pub fn recursive_verifier<Ch: Challenger>(
     if config.ood_samples.iter().any(|&s| s != 0)
         || config.fold_grinding_bits.iter().any(|&b| b != 0)
     {
+        return false;
+    }
+    if !proof_has_expected_recursive_shape(proof, r) || !all_proof_salts_are_empty(proof) {
         return false;
     }
 
@@ -5468,6 +5793,21 @@ mod tests {
         );
     }
 
+    #[test]
+    fn secure_profile_reports_additive_whole_opening_soundness() {
+        let source = embedded_security_config(23, LigeritoProfile::Secure).unwrap();
+        let config = LigeritoSecurityConfig::from_toml_str(source).unwrap();
+        let bound = config.aggregate_soundness_bound().unwrap();
+        assert!(bound.proximity_probability > 0.0);
+        assert!(bound.query_probability > 0.0);
+        assert_eq!(bound.ood_probability, 0.0);
+        assert!(
+            bound.bits() > 114.0 && bound.bits() < 120.0,
+            "aggregate bits = {}",
+            bound.bits()
+        );
+    }
+
     /// TOML round-trip via `to_toml_string` ↔ `from_toml_str` preserves
     /// the config exactly (modulo validated invariants).
     #[test]
@@ -5518,6 +5858,18 @@ mod tests {
             err.contains("udr") && err.contains("proximity_loss"),
             "err = {err}"
         );
+    }
+
+    #[test]
+    fn ligerito_security_config_rejects_udr_outside_theorem_range() {
+        let mut cfg = blake3_m29_udr_example();
+        cfg.levels[0].proximity_loss = Some(0.2);
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("UDR theorem range"), "err = {err}");
+
+        cfg.levels[0].proximity_loss = Some(f64::NAN);
+        let err = cfg.validate().unwrap_err();
+        assert!(err.contains("finite"), "err = {err}");
     }
 
     /// `proximity_loss` is only valid for the UDR regime.
@@ -5576,8 +5928,8 @@ mod tests {
         let back: LigeritoSecurityConfig = serde_json::from_str(&json).expect("deserialize");
         back.validate().expect("roundtripped config validates");
         assert_eq!(back.levels.len(), cfg.levels.len());
-        // rate 1/2, 100-bit target, full UD radius γ = δ/2 (ε* = 0):
-        // per-query = log₂(1/(1−1/4)) ≈ 0.415 b/q → ⌈100/0.415⌉ = 241.
+        // At this large rate-1/2 fixture, the finite-length UDR radius is just
+        // below 1/4, so the rounded 100-bit query count remains 241.
         assert_eq!(back.levels[0].queries, 241);
         assert_eq!(back.levels[0].grinding_bits, 0);
     }
@@ -5620,6 +5972,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -5651,6 +6004,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"pow-test");
@@ -6145,6 +6499,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let verifier_cfg = VerifierConfig {
@@ -6158,6 +6513,7 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let _ = num_queries; // queries derived per-level from log_inv_rates now
@@ -6222,6 +6578,7 @@ mod tests {
             queries: queries_per_level.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: vec![0; r + 1],
+            fold_grinding_taper: vec![false; r + 1],
             ood_samples: vec![0; r + 1],
         };
         let v_cfg = VerifierConfig {
@@ -6235,6 +6592,7 @@ mod tests {
             queries: queries_per_level,
             grinding_bits,
             fold_grinding_bits: vec![0; r + 1],
+            fold_grinding_taper: vec![false; r + 1],
             ood_samples: vec![0; r + 1],
         };
 
@@ -6586,6 +6944,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 3],
+            fold_grinding_taper: vec![false; 3],
             ood_samples: vec![0; 3],
         };
         let v_cfg = VerifierConfig {
@@ -6599,6 +6958,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 3],
+            fold_grinding_taper: vec![false; 3],
             ood_samples: vec![0; 3],
         };
 
@@ -6641,6 +7001,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut p_ch = crate::challenger::FsChallenger::new(b"serde");
@@ -6685,6 +7046,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -6715,6 +7077,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"basis-test");
@@ -6905,6 +7268,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -6935,6 +7299,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -6976,10 +7341,155 @@ mod tests {
         assert!(succ_ok, "succinct verifier must accept");
     }
 
-    /// Build a matching (ProverConfig, VerifierConfig) pair with explicit
-    /// OOD samples and fold-challenge grinding, for the OOD-path tests below.
-    /// Shape: L0 (initial_k) → r recursive levels of `k`; small query counts
-    /// and grind bits keep the test fast while still exercising every path.
+    #[test]
+    fn verify_level_opens_maybe_ro_keeps_leaf_salts_domain_explicit() {
+        let ro = crate::ro::RoContext::plain();
+        let channel = crate::ro::RoChannel::Witness;
+        let tree_depth = 3;
+        let block_len = 4;
+        let expected_num_interleaved = 2;
+
+        let rows: Vec<Vec<F128>> = (0..block_len)
+            .map(|i| vec![F128::new(i as u64 + 1, 0), F128::new(0x100 + i as u64, 0)])
+            .collect();
+        let all_rows: Vec<F128> = rows.iter().flat_map(|row| row.iter().copied()).collect();
+        let all_row_bytes: &[u8] = unsafe {
+            core::slice::from_raw_parts(
+                all_rows.as_ptr() as *const u8,
+                all_rows.len() * core::mem::size_of::<F128>(),
+            )
+        };
+        let salts: Vec<[u8; 32]> = (0..block_len).map(|i| [0x30 + i as u8; 32]).collect();
+        let tree = merkle::merkle_tree_framed_salted(
+            all_row_bytes,
+            block_len,
+            &salts,
+            &ro,
+            channel,
+            tree_depth,
+        );
+        let root = tree[tree.len() - 1];
+
+        let queries = vec![0usize, 3usize];
+        let opened_rows: Vec<Vec<F128>> = queries.iter().map(|&q| rows[q].clone()).collect();
+        let opened_salts: Vec<[u8; 32]> = queries.iter().map(|&q| salts[q]).collect();
+        let proof = merkle_multi_proof_for(&tree, block_len, &queries);
+
+        assert!(
+            verify_level_opens_maybe_ro(
+                &root,
+                block_len,
+                &queries,
+                &opened_rows,
+                &opened_salts,
+                expected_num_interleaved,
+                &proof,
+                LevelOpenSaltDomain::Salted,
+                Some((&ro, channel)),
+                tree_depth,
+            ),
+            "salted openings remain valid for the explicit salted L0 domain"
+        );
+        assert!(
+            !verify_level_opens_maybe_ro(
+                &root,
+                block_len,
+                &queries,
+                &opened_rows,
+                &opened_salts,
+                expected_num_interleaved,
+                &proof,
+                LevelOpenSaltDomain::Unsalted,
+                Some((&ro, channel)),
+                tree_depth,
+            ),
+            "recursive/unsalted domains must not switch to salted verification"
+        );
+    }
+
+    #[test]
+    fn recursive_verifiers_reject_recursive_leaf_salts() {
+        let log_n = 12;
+        let initial_k = 3;
+        let ks = [2usize, 2usize];
+        let log_inv_rates = vec![1usize; ks.len() + 1];
+        let queries = vec![20usize; ks.len() + 1];
+
+        let mut rng = crate::challenger::RandomChallenger::new(0x5A17_D04A);
+        let poly: Vec<F128> = (0..(1usize << log_n)).map(|_| rng.sample_f128()).collect();
+        let z: Vec<F128> = (0..log_n).map(|_| rng.sample_f128()).collect();
+        let b = build_eq_table(&z);
+        let target: F128 = poly
+            .iter()
+            .zip(b.iter())
+            .map(|(&a, &c)| a * c)
+            .fold(F128::ZERO, |a, x| a + x);
+
+        let recursive_log_msg_cols =
+            vec![log_n - initial_k - ks[0], log_n - initial_k - ks[0] - ks[1]];
+        let cfg = ProverConfig {
+            log_inv_rates: log_inv_rates.clone(),
+            recursive_steps: ks.len(),
+            initial_log_msg_cols: log_n - initial_k,
+            initial_log_num_interleaved: initial_k,
+            initial_k,
+            recursive_log_msg_cols: recursive_log_msg_cols.clone(),
+            recursive_ks: ks.to_vec(),
+            queries: queries.clone(),
+            grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_taper: vec![false; log_inv_rates.len()],
+            ood_samples: vec![0; log_inv_rates.len()],
+        };
+        let v_cfg = VerifierConfig {
+            log_inv_rates: log_inv_rates.clone(),
+            recursive_steps: ks.len(),
+            initial_log_msg_cols: log_n - initial_k,
+            initial_log_num_interleaved: initial_k,
+            initial_k,
+            recursive_log_msg_cols,
+            recursive_ks: ks.to_vec(),
+            queries,
+            grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_bits: vec![0; log_inv_rates.len()],
+            fold_grinding_taper: vec![false; log_inv_rates.len()],
+            ood_samples: vec![0; log_inv_rates.len()],
+        };
+
+        let log_msg_cols_0 = log_n - initial_k;
+        let ntt_0 = AdditiveNttF128::standard(log_msg_cols_0 + log_inv_rates[0]);
+        let wtns_0 = ligero_commit(&poly, log_msg_cols_0, initial_k, log_inv_rates[0], &ntt_0);
+        let initial_root = wtns_0.root();
+
+        let mut p_ch = crate::challenger::FsChallenger::new(b"recursive-salts");
+        let proof = recursive_prover_with_basis(
+            &cfg,
+            poly.clone(),
+            b.clone(),
+            target,
+            &wtns_0.mat,
+            &wtns_0.tree,
+            &mut p_ch,
+        );
+        assert_eq!(proof.recursive_proofs.len(), 1);
+
+        let dense_accepts = |proof: &LigeritoProof| {
+            let mut ch = crate::challenger::FsChallenger::new(b"recursive-salts");
+            recursive_verifier_with_basis(&v_cfg, proof, &b, target, &initial_root, &mut ch)
+        };
+        assert!(dense_accepts(&proof), "honest proof must verify");
+
+        let mut salted = proof;
+        salted.recursive_proofs[0].leaf_salts =
+            vec![[0xA5; 32]; salted.recursive_proofs[0].opened_rows.len()];
+        assert!(
+            !dense_accepts(&salted),
+            "recursive proof salts are non-canonical and must be rejected"
+        );
+    }
+
+    /// Build matching test configs with explicit OOD samples and fold grinding.
+    /// Small query counts keep the path fast while exercising every feature.
     fn ood_test_configs(
         log_n: usize,
         initial_k: usize,
@@ -6997,6 +7507,9 @@ mod tests {
         }
         let queries = vec![20usize; r + 1];
         let grinding_bits = vec![0usize; r + 1];
+        // Pin the conservative flat flag, so the test drives the UDR
+        // schedule on both the prover and the verifier.
+        let fold_grinding_taper = vec![false; r + 1];
         let p = ProverConfig {
             log_inv_rates: log_inv_rates.clone(),
             recursive_steps: r,
@@ -7008,6 +7521,7 @@ mod tests {
             queries: queries.clone(),
             grinding_bits: grinding_bits.clone(),
             fold_grinding_bits: fold_grinding_bits.clone(),
+            fold_grinding_taper: fold_grinding_taper.clone(),
             ood_samples: ood_samples.clone(),
         };
         let v = VerifierConfig {
@@ -7021,16 +7535,14 @@ mod tests {
             queries,
             grinding_bits,
             fold_grinding_bits,
+            fold_grinding_taper,
             ood_samples,
         };
         (p, v)
     }
 
-    /// End-to-end OOD binding + fold-challenge grinding: a JohnsonOod-shaped
-    /// config (explicit OOD samples at L1/L2, a few fold-grind bits at every
-    /// level) round-trips through BOTH the dense and succinct verifiers, and
-    /// tampering with either an OOD value or a fold-grinding nonce makes both
-    /// reject. Exercises every new prover/verifier code path.
+    /// JohnsonOod OOD/fold-grind path round-trips through both verifiers.
+    /// Tampering with either an OOD value or fold nonce makes both reject.
     #[test]
     fn ligerito_ood_and_fold_grinding_roundtrip_and_tamper() {
         let log_n = 12;
@@ -7131,10 +7643,8 @@ mod tests {
         );
     }
 
-    /// A real embedded profile config (m=22 fast = JohnsonOod) drives a full
-    /// prover→verifier round-trip through the basis opening path. This is the
-    /// production shape: OOD samples and fold grinding come straight from the
-    /// derived TOML, not a hand-built config.
+    /// A real m22 Fast profile drives the basis opening path end to end.
+    /// OOD samples and fold grinding come from the embedded TOML.
     #[test]
     fn ligerito_fast_profile_m22_roundtrip() {
         let m = 22usize;
@@ -7228,6 +7738,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7258,6 +7769,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"batched");
@@ -7298,6 +7810,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7349,6 +7862,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let mut v_ch = crate::challenger::FsChallenger::new(b"l0-test");
@@ -7387,6 +7901,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
         let verifier_cfg = VerifierConfig {
@@ -7400,6 +7915,7 @@ mod tests {
             queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
             grinding_bits: vec![0; log_inv_rates.len()],
             fold_grinding_bits: vec![0; 2],
+            fold_grinding_taper: vec![false; 2],
             ood_samples: vec![0; 2],
         };
 
@@ -7466,5 +7982,217 @@ mod tests {
         // same root.
         let w2 = ligero_commit(&poly, log_msg, log_interleaved, log_inv_rate, &ntt);
         assert_eq!(w.root(), w2.root());
+    }
+}
+
+#[cfg(test)]
+mod fold_grind_taper_tests {
+    use super::*;
+
+    fn security_config(m: usize, profile: LigeritoProfile) -> LigeritoSecurityConfig {
+        let source = embedded_security_config(m, profile).expect("registered config");
+        LigeritoSecurityConfig::from_toml_str(source).expect("config validates")
+    }
+
+    /// Only the Johnson regime buys the per-round taper. Every Secure config
+    /// is UDR, so every full-ZK shape must grind flat.
+    #[test]
+    fn regime_selects_the_fold_grind_taper() {
+        for m in 22..=35 {
+            let secure = security_config(m, LigeritoProfile::Secure);
+            let (prover, verifier) = secure.to_prover_verifier_configs().unwrap();
+            assert!(
+                prover.fold_grinding_taper.iter().all(|&t| !t),
+                "m{m} Secure is UDR, so no level may taper"
+            );
+            assert_eq!(prover.fold_grinding_taper, verifier.fold_grinding_taper);
+            assert_eq!(prover.fold_grinding_taper.len(), secure.levels.len());
+
+            for profile in [LigeritoProfile::Fast, LigeritoProfile::Slim] {
+                let johnson = security_config(m, profile);
+                let (prover, _) = johnson.to_prover_verifier_configs().unwrap();
+                assert!(
+                    prover.fold_grinding_taper.iter().all(|&t| t),
+                    "m{m} {profile:?} is JohnsonOod, so every level tapers"
+                );
+            }
+        }
+    }
+
+    /// A UDR level emits one nonce per fold round, all at the registered
+    /// width. The tapered reading would drop the rounds whose bits reach 0.
+    #[test]
+    fn udr_level_grinds_every_fold_round_at_full_width() {
+        let log_n = 12;
+        let initial_k = 3;
+        let k_0 = 2;
+        let log_inv_rate = 1;
+        let fold_bits = 2usize;
+
+        let mut rng = crate::challenger::RandomChallenger::new(0xF01D_6417);
+        let poly: Vec<F128> = (0..(1usize << log_n)).map(|_| rng.sample_f128()).collect();
+        let z: Vec<F128> = (0..log_n).map(|_| rng.sample_f128()).collect();
+        let b = build_eq_table(&z);
+        let target: F128 = poly
+            .iter()
+            .zip(b.iter())
+            .map(|(&a, &c)| a * c)
+            .fold(F128::ZERO, |a, x| a + x);
+
+        let log_inv_rates = vec![log_inv_rate, log_inv_rate];
+        let build = |taper: bool| {
+            let prover = ProverConfig {
+                log_inv_rates: log_inv_rates.clone(),
+                recursive_steps: 1,
+                initial_log_msg_cols: log_n - initial_k,
+                initial_log_num_interleaved: initial_k,
+                initial_k,
+                recursive_log_msg_cols: vec![log_n - initial_k - k_0],
+                recursive_ks: vec![k_0],
+                queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
+                grinding_bits: vec![0; 2],
+                fold_grinding_bits: vec![fold_bits, 0],
+                fold_grinding_taper: vec![taper; 2],
+                ood_samples: vec![0; 2],
+            };
+            let verifier = VerifierConfig {
+                log_inv_rates: log_inv_rates.clone(),
+                recursive_steps: 1,
+                initial_log_msg_cols: log_n - initial_k,
+                initial_log_num_interleaved: initial_k,
+                initial_k,
+                recursive_log_msg_cols: vec![log_n - initial_k - k_0],
+                recursive_ks: vec![k_0],
+                queries: log_inv_rates.iter().map(|&r| udr_queries(r)).collect(),
+                grinding_bits: vec![0; 2],
+                fold_grinding_bits: vec![fold_bits, 0],
+                fold_grinding_taper: vec![taper; 2],
+                ood_samples: vec![0; 2],
+            };
+            (prover, verifier)
+        };
+
+        let log_msg_cols_0 = log_n - initial_k;
+        let ntt_0 = AdditiveNttF128::standard(log_msg_cols_0 + log_inv_rate);
+        let wtns_0 = ligero_commit(&poly, log_msg_cols_0, initial_k, log_inv_rate, &ntt_0);
+        let initial_root = wtns_0.root();
+
+        let prove_and_verify = |taper: bool| -> usize {
+            let (p_cfg, v_cfg) = build(taper);
+            let mut p_ch = crate::challenger::FsChallenger::new(b"taper-test");
+            let proof = recursive_prover_with_basis(
+                &p_cfg,
+                poly.clone(),
+                b.clone(),
+                target,
+                &wtns_0.mat,
+                &wtns_0.tree,
+                &mut p_ch,
+            );
+            let mut v_ch = crate::challenger::FsChallenger::new(b"taper-test");
+            assert!(
+                recursive_verifier_with_basis(&v_cfg, &proof, &b, target, &initial_root, &mut v_ch),
+                "verifier must accept its own taper setting"
+            );
+            proof.fold_grinding_nonces.len()
+        };
+
+        // Flat: 3 L0 rounds at 2 bits each.
+        assert_eq!(prove_and_verify(false), initial_k);
+        // Tapered: 2 bits, 1 bit, then 0 bits — the last round emits nothing.
+        assert_eq!(prove_and_verify(true), initial_k - 1);
+    }
+
+    /// Ligerito configs reachable from accepted full-ZK R1CS shapes.
+    /// ZK commits one extra message dimension: R1CS m22..m26 -> PCS m23..m27.
+    const FULL_ZK_LIGERITO_CONFIGS: std::ops::RangeInclusive<usize> = 23..=27;
+
+    /// Pinned aggregate PCS bits; this is a value pin, not a taper test.
+    /// It catches formula or TOML drift in the advertised numbers.
+    #[test]
+    fn secure_aggregate_bits_are_pinned() {
+        let expected = [
+            (22usize, 116.584f64),
+            (23, 116.420),
+            (24, 116.432),
+            (25, 116.086),
+            (26, 116.067),
+            (27, 115.933),
+        ];
+        for (m, bits) in expected {
+            let cfg = security_config(m, LigeritoProfile::Secure);
+            let got = cfg.aggregate_soundness_bound().unwrap().bits();
+            assert!(
+                (got - bits).abs() < 0.01,
+                "m{m}: aggregate PCS bits {got:.3}, expected {bits:.3}"
+            );
+        }
+    }
+
+    /// Under flat UDR grinding, emitted fold nonces must match charged events.
+    /// This is the invariant the taper broke.
+    #[test]
+    fn secure_nonce_count_matches_the_ledger_fold_count() {
+        for m in FULL_ZK_LIGERITO_CONFIGS {
+            let cfg = security_config(m, LigeritoProfile::Secure);
+            let (prover, _) = cfg.to_prover_verifier_configs().unwrap();
+            let ledger_events: usize = cfg
+                .levels
+                .iter()
+                .filter(|lv| lv.fold_grinding_bits > 0)
+                .map(|lv| lv.log_num_interleaved.max(MIN_EFFECTIVE_FOLD_COUNT))
+                .sum();
+            let ground_rounds: usize = cfg
+                .levels
+                .iter()
+                .enumerate()
+                .map(|(lvl, lv)| {
+                    let rounds = lv.k_recursive.max(MIN_EFFECTIVE_FOLD_COUNT);
+                    (0..rounds)
+                        .filter(|&j| {
+                            fold_round_grind_bits(
+                                &prover.fold_grinding_bits,
+                                &prover.fold_grinding_taper,
+                                lvl,
+                                j,
+                            ) > 0
+                        })
+                        .count()
+                })
+                .sum();
+            assert_eq!(
+                ground_rounds, ledger_events,
+                "m{m}: {ground_rounds} ground rounds against {ledger_events} charged events"
+            );
+        }
+    }
+
+    /// The hiding L0 combination is one extra proximity event, so the full-ZK
+    /// ledger must be strictly weaker than the plain one — by less than a bit.
+    #[test]
+    fn zk_l0_ledger_charges_the_c_combination() {
+        for m in FULL_ZK_LIGERITO_CONFIGS {
+            let cfg = security_config(m, LigeritoProfile::Secure);
+            let plain = cfg.aggregate_soundness_bound().unwrap().bits();
+            let zk = cfg.aggregate_soundness_bound_zk_l0().unwrap().bits();
+            assert!(zk < plain, "m{m}: zk ledger must charge more than plain");
+            assert!(
+                plain - zk < 1.0,
+                "m{m}: one guarded L0 event costs less than a bit"
+            );
+        }
+    }
+
+    /// A Johnson L0 makes the `c` round the widest fold, so the zk L0 term is
+    /// not justified there. The bound must fail closed.
+    #[test]
+    fn zk_l0_ledger_rejects_a_johnson_level() {
+        for profile in [LigeritoProfile::Fast, LigeritoProfile::Slim] {
+            let cfg = security_config(24, profile);
+            assert!(
+                cfg.aggregate_soundness_bound_zk_l0().is_err(),
+                "{profile:?} L0 is JohnsonOod, so the zk L0 bound must fail closed"
+            );
+        }
     }
 }

@@ -1,45 +1,54 @@
-# Succinct VEIL-FLOCK transcript (version 0)
+# VEIL-FLOCK transcript
 
-1. Absorb the fixed-digest statement.
-2. Commit hidingly to the randomized FLOCK witness and bind the proof nonce,
-   circuit shape, and witness root.
-3. Precommit to the VEIL mask vector `h` plus its six private multiplication
-   pads; absorb that root under `veil-flock-mask-root`.
-4. Run FLOCK zerocheck. Every prover F128 message is observed and serialized as
-   `value + h_i`. Scalar and slice Fiat--Shamir framing is preserved exactly.
-   Sampled equality coordinates used by the compressed recurrence are
-   rejection-sampled from `GF(2^128) \ {1}`.
-5. Run FLOCK lincheck with the same treatment for every round pair and the
-   final `z_partial` vector.
-6. Send the AB and C opening values and absorb them under
-   `veil-flock-output-claims`. These values are tied to randomized witness
-   rows and are checked in both the shifted circuit and PCS.
-7. Sample the public digest batching challenge and run one hiding
-   ring-switch/Ligerito opening for AB, C, and the digest claim.
-8. From the pre-opening transcript fork, absorb
-   `veil-flock-inner-fork` and finish the VEIL proof of the shifted verifier
-   circuit. This fork avoids relying on an unused historical invariant that
-   Ligerito's prover and verifier leave identical states after their terminal
-   opening; all linkage data is already bound before the fork.
+All labels below are stable, unversioned protocol domains. Every operation is
+typed and length-framed.
 
-At the batch-256 shape the mask vector has 242 F128 values:
+1. Absorb the ordered public statement under the fixed VEIL-FLOCK
+   BLAKE3-preimage Fiat-Shamir domain.
+2. Sample a fresh 256-bit proof nonce and independent 256-bit nonces for the
+   outer witness, VEIL-linear, and VEIL-Hadamard initial trees. Commit to the
+   randomized FLOCK witness and to the VEIL mask inputs using their respective
+   tree contexts. Bind the circuit shape, proof nonce, all tree nonces, witness
+   root, and mask root under `veil-flock-tree-nonces` and
+   `veil-flock-mask-root` before any PIOP challenge.
+3. Run FLOCK zerocheck. Observe and serialize every prover field value as
+   `value + fresh_mask`, preserving scalar/vector framing. Equality
+   coordinates are sampled from the exact production rejection domain.
+4. Run lincheck with the same one-time-pad treatment for every round pair and
+   the final partial vector.
+5. Mask and absorb the witness and blinder ring slices under
+   `veil-flock-ring-masks`. Build the sole public packed-direct functional from
+   the digest statement and absorb its blinder evaluation.
+6. Perform the bounded outer grind and sample the nonzero folding challenge.
+   Form the committed fold and absorb its masked AB/C slices.
+7. Fix the canonical claim manifest and batch AB, C, and the public digest
+   functional into one opening.
+8. Fork the fully bound prefix under `veil-flock-pcs-fork` and
+   `veil-flock-inner-fork`. The PCS branch performs the sole shielded
+   ring-switch/Ligerito opening. The VEIL branch proves the shifted verifier,
+   including the Hadamard and ring-link constraints.
+
+At the pinned batch-256 shape, the affine mask layout is:
 
 ```text
-2*64 zerocheck round-1 values
-+ 2*(22-6) zerocheck multilinear values
-+ 2 zerocheck terminal values (a,b)
-+ 2*(14-6) lincheck round values
-+ 64 lincheck z_partial values
-= 242
+128  zerocheck round-one coordinates
+ 32  zerocheck multilinear coordinates
+  2  zerocheck terminal coordinates
+ 16  lincheck round coordinates
+ 64  lincheck partial-vector coordinates
+512  two pairs of witness/blinder ring slices
+---
+754  independently sampled F128 masks
 ```
 
-`final_c_eval` is not an observed FLOCK message and is omitted from the masked
-zerocheck wire type. The proof stores the public C PCS claim once as `c_value`,
-while the shifted circuit reconstructs it from the masked round-1 C vector.
+The witness, VEIL-linear, and VEIL-Hadamard initial Merkle trees use distinct
+channels and independently sampled 256-bit tree nonces. Every initial leaf
+payload is framed as a fresh 256-bit salt followed by the row payload; internal
+nodes use a disjoint tag. The proof carries the public tree nonces and only the
+salts for queried leaves.
 
-No mask, preimage, witness bit, or unmasked PIOP round message is serialized.
-
-Fiat--Shamir, PCS, and VEIL hashing use one random oracle under injective,
-role-separated encodings. PCS and VEIL commitment queries are not represented
-in this algebraic transcript listing. See section 15 of the
-[specification](../SPEC.md).
+Fiat--Shamir squeezes use exact SHA-256 block semantics. Two `F128` challenges
+sharing one digest block are programmed jointly, unused halves are uniform,
+and rejection-sampled values retain every rejected block in the transcript.
+No mask, preimage, witness bit, code padding, or unmasked PIOP value is
+serialized.

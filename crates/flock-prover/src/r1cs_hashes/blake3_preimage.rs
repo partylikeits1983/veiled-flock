@@ -37,33 +37,41 @@
 //! ## Zero-knowledge status
 //!
 //! [`Blake3PreimageSetup`] is the non-ZK prover.
-//! [`Blake3PreimageZkSetup::prove_succinct`] uses a hiding commitment, masks
-//! the PIOP transcript, and proves the shifted verifier with `veil-f128`. Its
-//! security proof is incomplete; see `docs/SECURITY.md`.
+//! [`Blake3PreimageZkSetup::prove`] uses a hiding commitment, masks
+//! the PIOP transcript, and proves the shifted verifier with `veil-f128`.
+//! The exact classical-pROM theorem and exclusions are in `docs/SECURITY.md`.
 
 use flock_core::challenger::Challenger;
+#[cfg(feature = "veil")]
+use flock_core::challenger::FsChallenger;
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
-use flock_core::ro::RoContext;
-#[cfg(feature = "zk")]
+#[cfg(feature = "veil")]
 use flock_core::zk::MaskSampler;
 
 use crate::digest_bind::{
     DigestChallenges, DigestLayout, DigestStatement, PaddingDigest, digest_claim,
     digest_claim_point, digest_claim_value,
 };
-#[cfg(feature = "zk")]
+
+/// Pinned SHA-256 Fiat--Shamir domain for the sole public full-ZK protocol.
+pub const VEIL_FLOCK_FS_DOMAIN: &[u8] = b"veil-flock-blake3-preimage";
+#[cfg(feature = "veil")]
+use crate::r1cs_hashes::blake3::build_block_r1cs_zk_pinned;
+#[cfg(feature = "veil")]
 use crate::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
 use crate::r1cs_hashes::blake3::{
     BLAKE3_IV, Compression, FLAGS_ROOT_HASH, K_LOG, ParamPinning, ROOT_HASH_BLOCK_LEN,
-    build_block_r1cs_pinned, build_block_r1cs_zk_pinned,
-    generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
+    build_block_r1cs_pinned, generate_witness_with_ab_packed_and_lincheck_pinned, min_n_blocks_log,
 };
 /// Bytes of message covered by one instance of this relation.
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
 pub const DIGEST_BYTES: usize = 32;
+/// Largest batch covered by the registered full-ZK circuit and PCS certificates.
+/// Smaller batches are padded to the next power-of-two shape.
+pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -147,6 +155,85 @@ pub struct SimulatedSuccinctPreimage {
     pub proof: crate::succinct_veil::SuccinctVeilProof,
     pub commitment: Commitment,
     pub programmed_points: usize,
+    pub programming_audit: crate::sim_oracle::ProgrammingAudit,
+    pub protocol_oracle_queries: u64,
+    pub pow_oracle_queries: u64,
+}
+
+/// Additive soundness ledger before Fiat--Shamir: FLOCK PIOP, the live VEIL
+/// Hadamard/linear compiler, and the one recursive Ligerito opening.
+#[cfg(feature = "veil")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SuccinctInteractiveSoundnessBound {
+    pub flock_piop_probability: f64,
+    pub veil_constraint_probability: f64,
+    pub ligerito_pcs_probability: f64,
+}
+
+#[cfg(feature = "veil")]
+impl SuccinctInteractiveSoundnessBound {
+    pub fn probability(self) -> f64 {
+        self.flock_piop_probability
+            + self.veil_constraint_probability
+            + self.ligerito_pcs_probability
+    }
+
+    pub fn bits(self) -> f64 {
+        -self.probability().log2()
+    }
+}
+
+/// Classical-ROM soundness bound for a bounded adversary. Each completed
+/// proof attempt exposes a fresh public-coin transcript; union-bound the
+/// interactive error over those attempts, then charge collisions across the
+/// adversary and verifier's domain-separated oracle calls. This is not a QROM
+/// theorem and does not assert that concrete SHA-256 is a random oracle.
+#[cfg(feature = "veil")]
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SuccinctRomSoundnessBound {
+    pub interactive: SuccinctInteractiveSoundnessBound,
+    pub adversary_query_log2: u32,
+    pub completed_proof_attempts: u64,
+    pub max_protocol_oracle_queries_per_attempt: u64,
+}
+
+#[cfg(feature = "veil")]
+impl SuccinctRomSoundnessBound {
+    pub fn fiat_shamir_probability(self) -> f64 {
+        self.completed_proof_attempts as f64 * self.interactive.probability()
+    }
+
+    pub fn oracle_collision_probability(self) -> f64 {
+        let adversary_queries = 2f64.powi(self.adversary_query_log2 as i32);
+        let total = adversary_queries
+            + self.completed_proof_attempts as f64
+                * self.max_protocol_oracle_queries_per_attempt as f64;
+        total * (total - 1.0) * 0.5 * 2f64.powi(-256)
+    }
+
+    pub fn probability(self) -> f64 {
+        self.fiat_shamir_probability() + self.oracle_collision_probability()
+    }
+
+    pub fn bits(self) -> f64 {
+        -self.probability().log2()
+    }
+}
+
+#[cfg(feature = "veil")]
+impl SimulatedSuccinctPreimage {
+    pub fn classical_prom_bound(
+        &self,
+        adversary_query_log2: u32,
+        proofs: u64,
+    ) -> crate::sim_game::ClassicalPromZkBound {
+        crate::sim_game::ClassicalPromZkBound {
+            adversary_query_log2,
+            max_oracle_queries_per_proof: crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF,
+            programmed_points: self.programmed_points as u64,
+            proofs,
+        }
+    }
 }
 
 #[cfg(feature = "veil")]
@@ -178,7 +265,10 @@ impl Blake3PreimageSetup {
             // profile floor. Keep at least seven message-column bits so the
             // ad-hoc UDR query schedule remains feasible.
             log_batch_size: 6.min((r1cs.m - flock_core::pcs::LOG_PACKING) - 7),
-            profile: flock_core::pcs::ligerito::LigeritoProfile::Fast,
+            // The full-view ZK instantiation uses the unique-decoding
+            // profile. Fast/Slim rely on a separate Johnson/list-decoding
+            // analysis that is not part of this protocol's theorem stack.
+            profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
             zk: false,
         };
         Self {
@@ -401,10 +491,10 @@ impl Blake3PreimageSetup {
 // Zero-knowledge mode
 // ---------------------------------------------------------------------------
 
-/// Fixed-digest setup for the masked FLOCK and succinct VEIL proving modes.
+/// Full-ZK fixed-digest setup for the VEIL-FLOCK composition.
 ///
-/// Security claims and open proof obligations are documented in
-/// `docs/SECURITY.md`.
+/// Construction validates the exact circuit digest, mask geometry, code
+/// parameters, query budget, and soundness profiles before proving.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -413,22 +503,20 @@ pub struct Blake3PreimageZkSetup {
 }
 
 impl Blake3PreimageZkSetup {
-    pub fn new(n_blocks: usize) -> Self {
-        assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
-        let n_log = min_n_blocks_log(n_blocks);
-        Self::with_outer_log(n_blocks, n_log)
-    }
-
-    /// Succinct VEIL setup padded to the hiding-Ligerito production floor.
+    /// VEIL setup padded to the hiding-Ligerito production floor.
     /// This lets applications prove a short list while the public statement
     /// deterministically fills the remaining slots with the fixed padding
     /// digest.
     #[cfg(feature = "veil")]
-    pub fn new_succinct(n_blocks: usize) -> Self {
-        assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
+    pub fn new(n_blocks: usize) -> Self {
+        assert!(
+            (1..=MAX_ZK_PREIMAGE_BLOCKS).contains(&n_blocks),
+            "n_blocks must be in 1..={MAX_ZK_PREIMAGE_BLOCKS}"
+        );
         Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
     }
 
+    #[cfg(feature = "veil")]
     fn with_outer_log(n_blocks: usize, n_log: usize) -> Self {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
@@ -437,7 +525,7 @@ impl Blake3PreimageZkSetup {
             m: r1cs.m,
             log_inv_rate: 1,
             log_batch_size: 6,
-            profile: flock_core::pcs::ligerito::LigeritoProfile::Fast,
+            profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
             zk: true,
         };
         Self {
@@ -456,49 +544,90 @@ impl Blake3PreimageZkSetup {
     }
 
     #[cfg(feature = "veil")]
-    fn succinct_ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
+    fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
         let log_n = self.pcs_params.log_msg_len();
-        match flock_core::pcs::ligerito::prover_config_for(
+        flock_core::pcs::ligerito::prover_config_for(
             log_n,
             self.pcs_params.log_batch_size,
             self.pcs_params.profile,
-        ) {
-            Ok(config) => config,
-            Err(_) if self.pcs_params.m < 22 =>
-            {
-                #[allow(deprecated)]
-                flock_core::pcs::ligerito::default_config(
-                    log_n,
-                    self.pcs_params.log_batch_size,
-                    self.pcs_params.profile.log_inv_rate(),
-                )
-                .expect("small-batch succinct-VEIL Ligerito prover config")
-            }
-            Err(error) => panic!("Ligerito prover config: {error}"),
-        }
+        )
+        .unwrap_or_else(|error| panic!("registered Secure Ligerito prover config: {error}"))
     }
 
     #[cfg(feature = "veil")]
-    fn succinct_ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
+    fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
         let log_n = self.pcs_params.log_msg_len();
-        match flock_core::pcs::ligerito::verifier_config_for(
+        flock_core::pcs::ligerito::verifier_config_for(
             log_n,
             self.pcs_params.log_batch_size,
             self.pcs_params.profile,
-        ) {
-            Ok(config) => config,
-            Err(_) if self.pcs_params.m < 22 =>
-            {
-                #[allow(deprecated)]
-                flock_core::pcs::ligerito::default_verifier_config(
-                    log_n,
-                    self.pcs_params.log_batch_size,
-                    self.pcs_params.profile.log_inv_rate(),
-                )
-                .expect("small-batch succinct-VEIL Ligerito verifier config")
-            }
-            Err(error) => panic!("Ligerito verifier config: {error}"),
+        )
+        .unwrap_or_else(|error| panic!("registered Secure Ligerito verifier config: {error}"))
+    }
+
+    /// Additive whole-opening soundness of the registered Secure Ligerito
+    /// PCS component. This is one term in the final protocol ledger.
+    #[cfg(feature = "veil")]
+    pub fn ligerito_aggregate_soundness_bits(&self) -> f64 {
+        -self.ligerito_aggregate_soundness_probability().log2()
+    }
+
+    #[cfg(feature = "veil")]
+    fn ligerito_aggregate_soundness_probability(&self) -> f64 {
+        let effective_m = self.pcs_params.log_msg_len() + flock_core::pcs::LOG_PACKING;
+        let source = flock_core::pcs::ligerito::embedded_security_config(
+            effective_m,
+            self.pcs_params.profile,
+        )
+        .expect("full-ZK setup requires a registered Secure Ligerito configuration");
+        let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
+            .expect("registered Secure Ligerito configuration must validate");
+        // The full-ZK path opens the hiding wide-leaf L0 commitment, so the
+        // ledger must also carry the `c` combination event.
+        config
+            .aggregate_soundness_bound_zk_l0()
+            .expect("registered Secure Ligerito aggregate bound")
+            .probability()
+    }
+
+    /// Fail-closed additive soundness certificate for the exact interactive
+    /// protocol instantiated by this setup.
+    #[cfg(feature = "veil")]
+    pub fn interactive_soundness_bound(
+        &self,
+    ) -> Result<SuccinctInteractiveSoundnessBound, SuccinctPreimageError> {
+        let lincheck = self.r1cs.csc_lincheck_circuit();
+        let piop = crate::succinct_veil::certify_flock_piop_soundness(&self.r1cs, lincheck)?;
+        let veil = crate::succinct_veil::certify_shifted_veil_soundness(&self.r1cs)?;
+        Ok(SuccinctInteractiveSoundnessBound {
+            flock_piop_probability: piop.probability(),
+            veil_constraint_probability: veil.probability(),
+            ligerito_pcs_probability: self.ligerito_aggregate_soundness_probability(),
+        })
+    }
+
+    /// Classical-ROM soundness for a declared oracle budget and number of
+    /// completed proof attempts. The attempt count must fit the oracle-query
+    /// budget; callers cannot obtain a stronger bound by understating it.
+    #[cfg(feature = "veil")]
+    pub fn rom_soundness_bound(
+        &self,
+        adversary_query_log2: u32,
+        completed_proof_attempts: u64,
+    ) -> Result<SuccinctRomSoundnessBound, SuccinctPreimageError> {
+        if adversary_query_log2 >= 128
+            || completed_proof_attempts == 0
+            || completed_proof_attempts as f64 > 2f64.powi(adversary_query_log2 as i32)
+        {
+            return Err(crate::succinct_veil::SuccinctVeilError::InvalidParameters.into());
         }
+        Ok(SuccinctRomSoundnessBound {
+            interactive: self.interactive_soundness_bound()?,
+            adversary_query_log2,
+            completed_proof_attempts,
+            max_protocol_oracle_queries_per_attempt:
+                crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF,
+        })
     }
 
     /// The public statement for a digest list (same rule as the non-zk path).
@@ -517,10 +646,21 @@ impl Blake3PreimageZkSetup {
         }
     }
 
-    /// Proves FLOCK's zerocheck and lincheck verifier equations with succinct
-    /// VEIL and opens the committed witness through the hiding PCS.
+    /// Prove the fixed-digest relation with the succinct VEIL composition and
+    /// the pinned production SHA-256 Fiat--Shamir challenger.
     #[cfg(feature = "veil")]
-    pub fn prove_succinct<Ch: Challenger + Clone + Send>(
+    pub fn prove(
+        &self,
+        msgs: &[[u8; MESSAGE_BYTES]],
+        digests: &[[u8; DIGEST_BYTES]],
+    ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
+        let mut rng = flock_core::zk::ZkRng::from_entropy();
+        let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
+        self.prove_with_challenger(msgs, digests, &mut rng, &mut challenger)
+    }
+
+    #[cfg(feature = "veil")]
+    fn prove_with_challenger<Ch: Challenger + Clone + Send>(
         &self,
         msgs: &[[u8; MESSAGE_BYTES]],
         digests: &[[u8; DIGEST_BYTES]],
@@ -560,7 +700,7 @@ impl Blake3PreimageZkSetup {
             &random_words,
             ParamPinning::RootHash64,
         );
-        let lig_config = self.succinct_ligerito_prover_config();
+        let lig_config = self.ligerito_prover_config();
         absorb_statement(challenger, &statement);
         let statement_for_claim = statement.clone();
         Ok(crate::succinct_veil::prove_succinct_veil_r1cs(
@@ -575,19 +715,31 @@ impl Blake3PreimageZkSetup {
             rng,
             &mut |ch: &mut Ch| {
                 let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
-                vec![digest_claim(
-                    &statement_for_claim,
-                    self.r1cs.layout,
-                    &digest_challenges,
-                )]
+                vec![
+                    crate::succinct_veil::PublicPackedDirectClaim::from_public_statement(
+                        digest_claim(&statement_for_claim, self.r1cs.layout, &digest_challenges),
+                    ),
+                ]
             },
             None,
             challenger,
         )?)
     }
 
+    /// Verify with the pinned production SHA-256 Fiat--Shamir challenger.
     #[cfg(feature = "veil")]
-    pub fn verify_succinct<Ch: Challenger + Clone>(
+    pub fn verify(
+        &self,
+        commitment: &Commitment,
+        proof: &crate::succinct_veil::SuccinctVeilProof,
+        digests: &[[u8; DIGEST_BYTES]],
+    ) -> Result<(), SuccinctPreimageError> {
+        let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
+        self.verify_with_challenger(commitment, proof, digests, &mut challenger)
+    }
+
+    #[cfg(feature = "veil")]
+    fn verify_with_challenger<Ch: Challenger + Clone>(
         &self,
         commitment: &Commitment,
         proof: &crate::succinct_veil::SuccinctVeilProof,
@@ -603,7 +755,7 @@ impl Blake3PreimageZkSetup {
         }
         let statement = self.statement(digests);
         statement.validate();
-        let lig_config = self.succinct_ligerito_verifier_config();
+        let lig_config = self.ligerito_verifier_config();
         absorb_statement(challenger, &statement);
         let layout = self.r1cs.layout;
         crate::succinct_veil::verify_succinct_veil_r1cs(
@@ -615,10 +767,12 @@ impl Blake3PreimageZkSetup {
             &lig_config,
             &mut |ch: &mut Ch| {
                 let digest_challenges = DigestChallenges::sample(&statement, ch);
-                vec![(
-                    digest_claim_point(&statement, layout, &digest_challenges),
-                    digest_claim_value(&statement, &digest_challenges),
-                )]
+                vec![
+                    crate::succinct_veil::PublicPackedDirectClaimValue::from_public_statement(
+                        digest_claim_point(&statement, layout, &digest_challenges),
+                        digest_claim_value(&statement, &digest_challenges),
+                    ),
+                ]
             },
             challenger,
         )?;
@@ -626,17 +780,39 @@ impl Blake3PreimageZkSetup {
     }
 
     /// Programmable-ROM simulator for the succinct composition. The API has
-    /// no preimage parameter: it builds an unrelated pseudo-witness, patches
+    /// no preimage parameter: it builds a public-fiber representative, patches
     /// only its public digest cells, and simulates the zerocheck that would
-    /// otherwise reject that vector. Lincheck, the hiding PCS opening, and
-    /// the VEIL shifted-verifier proof all run through their production code.
+    /// otherwise reject that vector. The representative is used only for
+    /// linear processing covered by the joint masking theorem. The resulting
+    /// shifted VEIL circuit is genuinely satisfied by simulator-owned masks,
+    /// so the ordinary ZK VEIL prover is invoked only on a valid assignment.
     #[cfg(feature = "veil")]
-    pub fn simulate_succinct(
+    pub fn simulate(
+        &self,
+        digests: &[[u8; DIGEST_BYTES]],
+        oracle: crate::sim_oracle::SharedOracle,
+    ) -> Result<SimulatedSuccinctPreimage, SuccinctPreimageError> {
+        let mut rng = flock_core::zk::ZkRng::from_entropy();
+        self.simulate_with_rng(digests, oracle, &mut rng)
+    }
+
+    #[cfg(all(feature = "veil", test))]
+    fn simulate_with_seed(
         &self,
         digests: &[[u8; DIGEST_BYTES]],
         seed: [u8; 32],
         oracle: crate::sim_oracle::SharedOracle,
-        domain: &[u8],
+    ) -> Result<SimulatedSuccinctPreimage, SuccinctPreimageError> {
+        let mut rng = flock_core::zk::ZkRng::from_seed(seed);
+        self.simulate_with_rng(digests, oracle, &mut rng)
+    }
+
+    #[cfg(feature = "veil")]
+    fn simulate_with_rng(
+        &self,
+        digests: &[[u8; DIGEST_BYTES]],
+        oracle: crate::sim_oracle::SharedOracle,
+        rng: &mut flock_core::zk::ZkRng,
     ) -> Result<SimulatedSuccinctPreimage, SuccinctPreimageError> {
         if digests.len() != self.n_blocks {
             return Err(PreimageError::BatchSizeMismatch {
@@ -645,10 +821,13 @@ impl Blake3PreimageZkSetup {
             }
             .into());
         }
+        let oracle_checkpoint = oracle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .checkpoint();
         let statement = self.statement(digests);
         statement.validate();
-        let mut rng = flock_core::zk::ZkRng::from_seed(seed);
-        let mut message_rng = rng.fork(b"succinct-simulator-pseudo-messages");
+        let mut message_rng = rng.fork(b"veil-flock-simulator-public-fiber-messages");
         let mut message_words = vec![0u64; self.n_blocks * MESSAGE_BYTES / 8];
         message_rng.fill_u64s(&mut message_words);
         let own_messages = message_words
@@ -710,11 +889,12 @@ impl Blake3PreimageZkSetup {
         let b = self.r1cs.apply_b_packed(&z);
         let z_lincheck =
             flock_core::lincheck::pack_z_lincheck_from_packed(&z, self.r1cs.m, self.r1cs.k_log);
-        let lig_config = self.succinct_ligerito_prover_config();
-        let mut challenger = crate::sim_oracle::OracleChallenger::new(domain, oracle.clone());
+        let lig_config = self.ligerito_prover_config();
+        let mut challenger =
+            crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
         absorb_statement(&mut challenger, &statement);
-        let source_seed = *::blake3::keyed_hash(&seed, b"succinct-veil-zc-simulator").as_bytes();
-        let mut source = crate::succinct_veil::RomZerocheckSimulator::new(self.r1cs.m, source_seed);
+        let source_rng = rng.fork(b"succinct-veil-zc-simulator");
+        let mut source = crate::succinct_veil::RomZerocheckSimulator::new(self.r1cs.m, source_rng);
         let statement_for_claim = statement.clone();
         let (proof, commitment) = crate::succinct_veil::prove_succinct_veil_r1cs(
             &self.r1cs,
@@ -725,159 +905,41 @@ impl Blake3PreimageZkSetup {
             z_lincheck,
             self.r1cs.csc_lincheck_circuit(),
             &lig_config,
-            &mut rng,
+            rng,
             &mut |ch: &mut crate::sim_oracle::OracleChallenger| {
                 let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
-                vec![digest_claim(
-                    &statement_for_claim,
-                    self.r1cs.layout,
-                    &digest_challenges,
-                )]
+                vec![
+                    crate::succinct_veil::PublicPackedDirectClaim::from_public_statement(
+                        digest_claim(&statement_for_claim, self.r1cs.layout, &digest_challenges),
+                    ),
+                ]
             },
             Some(&mut source),
             &mut challenger,
         )?;
-        let programmed_points = oracle
-            .lock()
-            .unwrap_or_else(|error| error.into_inner())
-            .programmed_len();
+        let expected_programmed = 1 + self.r1cs.m - flock_core::zerocheck::K_SKIP;
+        let oracle_guard = oracle.lock().unwrap_or_else(|error| error.into_inner());
+        let programming_audit = oracle_guard.audit_programming(
+            &proof.proof_nonce,
+            expected_programmed,
+            &oracle_checkpoint,
+        );
+        let (protocol_oracle_queries, pow_oracle_queries) =
+            oracle_guard.answer_counts_since(&oracle_checkpoint);
+        drop(oracle_guard);
+        if !programming_audit.is_valid()
+            || protocol_oracle_queries > crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF
+        {
+            return Err(crate::succinct_veil::SuccinctVeilError::ProgrammingCollision.into());
+        }
         Ok(SimulatedSuccinctPreimage {
             proof,
             commitment,
-            programmed_points,
+            programmed_points: programming_audit.programmed_points,
+            programming_audit,
+            protocol_oracle_queries,
+            pow_oracle_queries,
         })
-    }
-
-    /// Prove, with masking, that the committed messages hash to `digests`.
-    #[cfg(feature = "zk")]
-    pub fn prove<Ch: Challenger + Clone>(
-        &self,
-        msgs: &[[u8; MESSAGE_BYTES]],
-        digests: &[[u8; DIGEST_BYTES]],
-        rng: &mut flock_core::zk::ZkRng,
-        challenger: &mut Ch,
-    ) -> Result<(crate::prover::R1csProofZkA1, Commitment), PreimageError> {
-        crate::zk_certificate::require_certified(
-            crate::zk_certificate::StatementFamily::Blake3Preimage,
-            self.n_blocks,
-            &self.r1cs,
-            &self.pcs_params,
-        )
-        .map_err(|_| PreimageError::Uncertified)?;
-
-        if digests.len() != self.n_blocks || msgs.len() != self.n_blocks {
-            return Err(PreimageError::BatchSizeMismatch {
-                expected: self.n_blocks,
-                got: digests.len().max(msgs.len()),
-            });
-        }
-        for (i, (m, d)) in msgs.iter().zip(digests).enumerate() {
-            if ::blake3::hash(m).as_bytes() != d {
-                return Err(PreimageError::DigestMismatch { index: i });
-            }
-        }
-        let stmt = self.statement(digests);
-        stmt.validate();
-        let layout = self.r1cs.zk.expect("zk setup carries a layout");
-
-        let mut wit_rng = rng.fork(b"preimage-witness-rand");
-        let mut mask_rng = rng.fork(b"preimage-masks");
-        let n_total = self.n_block_slots();
-        let mut rand_words =
-            vec![0u64; n_total * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)];
-        wit_rng.fill_u64s(&mut rand_words);
-
-        let blocks: Vec<Compression> = msgs.iter().map(message_compression).collect();
-        let (z_packed, a_packed, b_packed, z_lincheck) =
-            generate_witness_with_ab_packed_and_lincheck_zk_pinned(
-                &blocks,
-                self.n_blocks_log(),
-                &layout,
-                &rand_words,
-                ParamPinning::RootHash64,
-            );
-        let lc_circuit = self.r1cs.csc_lincheck_circuit();
-        let log_n = self.pcs_params.log_msg_len();
-        let lig_config = flock_core::pcs::ligerito::prover_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .expect("Ligerito prover config");
-
-        absorb_statement(challenger, &stmt);
-
-        let mut forks = crate::prover::A1MaskForks::from_rng(&mut mask_rng);
-        let proof_nonce = forks.proof_nonce;
-        let layout_kind = self.r1cs.layout;
-        let stmt_for_claim = stmt.clone();
-        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd_nonce(
-            &self.r1cs,
-            &self.pcs_params,
-            z_packed,
-            a_packed,
-            b_packed,
-            z_lincheck,
-            lc_circuit,
-            &lig_config,
-            forks.sources(),
-            &mut |ch: &mut Ch| {
-                let dch = DigestChallenges::sample(&stmt_for_claim, ch);
-                vec![digest_claim(&stmt_for_claim, layout_kind, &dch)]
-            },
-            None,
-            None,
-            proof_nonce,
-            challenger,
-        );
-        Ok((proof, comm))
-    }
-
-    /// Verify a masked preimage proof against the public digests.
-    #[cfg(feature = "zk")]
-    pub fn verify<Ch: Challenger + Clone>(
-        &self,
-        commitment: &Commitment,
-        proof: &crate::prover::R1csProofZkA1,
-        digests: &[[u8; DIGEST_BYTES]],
-        challenger: &mut Ch,
-    ) -> Result<(), flock_core::verifier::VerifyError> {
-        let ro = RoContext::native(proof.proof_nonce);
-        self.verify_with_ro(commitment, proof, digests, &ro, challenger)
-    }
-
-    /// Verify with an explicit point-oracle backend. The ROM simulator uses
-    /// this to give the unmodified verification logic the same oracle object
-    /// as its challenger and Merkle commitments.
-    #[cfg(feature = "zk")]
-    pub fn verify_with_ro<Ch: Challenger + Clone>(
-        &self,
-        commitment: &Commitment,
-        proof: &crate::prover::R1csProofZkA1,
-        digests: &[[u8; DIGEST_BYTES]],
-        ro: &RoContext,
-        challenger: &mut Ch,
-    ) -> Result<(), flock_core::verifier::VerifyError> {
-        let stmt = self.statement(digests);
-        stmt.validate();
-        absorb_statement(challenger, &stmt);
-        let layout_kind = self.r1cs.layout;
-        crate::prover::verify_r1cs_zk_a1_pd_ro(
-            &self.r1cs,
-            &self.pcs_params,
-            proof,
-            commitment,
-            self.r1cs.csc_lincheck_circuit(),
-            ro,
-            &mut |ch: &mut Ch| {
-                let dch = DigestChallenges::sample(&stmt, ch);
-                vec![(
-                    digest_claim_point(&stmt, layout_kind, &dch),
-                    digest_claim_value(&stmt, &dch),
-                )]
-            },
-            challenger,
-        )
     }
 }
 
@@ -895,19 +957,7 @@ pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &Diges
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::preimage_simulator::simulate;
-    use crate::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_zk_pinned;
-    use crate::r1cs_hashes::blake3::{ParamPinning, build_block_r1cs_pinned, generate_witness};
-    use crate::sim_game::{
-        OracleQueryCounts, PRODUCTION_ORACLE_QUERY_BOUND, SimGameLedger,
-        production_grinding_candidate_bound,
-    };
-    use crate::sim_oracle::OracleChallenger;
-    use crate::sim_oracle::shared_oracle;
-    use crate::sim_seal::{SealedStatement, SimCoins};
-    use crate::transcript_schema::{algebraic_vector, flatten_a1};
     use flock_core::challenger::FsChallenger;
-    use flock_core::zk::MaskSampler;
 
     /// The smallest batch with a registered Ligerito config: m = k_log +
     /// n_log = 14 + 8 = 22, the production shape.
@@ -927,6 +977,48 @@ mod tests {
             .collect()
     }
 
+    /// Exercises the largest accepted ZK shape, including its 6-bit outer blind
+    /// grind and the bounded UDR fold-grind schedule.
+    #[cfg(feature = "veil")]
+    #[test]
+    fn largest_supported_zk_shape_grinds_every_udr_fold_round() {
+        let blocks = MAX_ZK_PREIMAGE_BLOCKS;
+        let setup = Blake3PreimageZkSetup::new(blocks);
+        let messages = msgs_of(0x5EED, blocks);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+        let (proof, commitment) = setup.prove(&messages, &digests).expect("prove m27 shape");
+        setup
+            .verify(&commitment, &proof, &digests)
+            .expect("verify m27 shape");
+        let bundle =
+            crate::proof_io::VeilFlockProofBundle::new(digests.clone(), commitment, proof.clone());
+        let encoded = bundle.to_bytes().expect("serialize largest bundle");
+        assert!(
+            encoded.len() <= crate::proof_io::MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
+            "largest proof bundle is {} bytes",
+            encoded.len()
+        );
+        let decoded = crate::proof_io::VeilFlockProofBundle::from_bytes(&encoded)
+            .expect("decode largest bundle");
+        assert_eq!(decoded, bundle);
+        setup
+            .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
+            .expect("verify decoded m27 shape");
+        // Ligerito m27 Secure grinds at L0 (6 rounds), L1 (3) and L2 (3).
+        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 12);
+        assert!(
+            proof.pcs_open.ligerito.fold_grinding_nonces.len()
+                <= crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as usize
+        );
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    #[should_panic(expected = "n_blocks must be in 1..=")]
+    fn zk_setup_rejects_batches_above_current_certificate_ceiling() {
+        let _ = Blake3PreimageZkSetup::new(MAX_ZK_PREIMAGE_BLOCKS + 1);
+    }
+
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_veil_preimage_roundtrip_and_mutations() {
@@ -934,19 +1026,34 @@ mod tests {
         // at m=22, i.e. 256 BLAKE3 blocks.
         let n = N_TEST;
         let setup = Blake3PreimageZkSetup::new(n);
+        assert_eq!(
+            setup.pcs_params.profile,
+            flock_core::pcs::ligerito::LigeritoProfile::Secure
+        );
+        assert!(setup.ligerito_aggregate_soundness_bits() > 114.0);
+        let interactive = setup.interactive_soundness_bound().unwrap();
+        assert!(interactive.bits() > 106.0);
+        assert!(interactive.bits() < 110.0);
+        let rom = setup.rom_soundness_bound(64, 1).unwrap();
+        assert!(rom.bits() > 106.0);
+        let many_attempts = setup.rom_soundness_bound(64, 1u64 << 32).unwrap();
+        assert!(many_attempts.bits() < rom.bits());
         let mut messages = msgs_of(0x51_CC_1C_7, n);
         // Detect accidental raw-witness serialization.
         messages[0] = [0xA5; MESSAGE_BYTES];
         let digests = Blake3PreimageSetup::digests_of(&messages);
-        let mut rng = flock_core::zk::ZkRng::from_seed([0x51; 32]);
-        let mut prover_challenger = FsChallenger::new(b"succinct-veil-preimage-test");
         let (proof, commitment) = setup
-            .prove_succinct(&messages, &digests, &mut rng, &mut prover_challenger)
+            .prove(&messages, &digests)
             .expect("prove succinct VEIL");
 
-        let encoded = bincode::serialize(&(&commitment, &proof)).expect("serialize proof");
+        let bundle = crate::proof_io::VeilFlockProofBundle::new(
+            digests.clone(),
+            commitment.clone(),
+            proof.clone(),
+        );
+        let encoded = bundle.to_bytes().expect("serialize canonical bundle");
         assert!(
-            encoded.len() <= 700_000,
+            encoded.len() <= crate::proof_io::MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
             "succinct proof unexpectedly grew to {} bytes",
             encoded.len()
         );
@@ -957,23 +1064,26 @@ mod tests {
             "serialized proof contains the raw preimage marker"
         );
 
-        let mut verifier_challenger = FsChallenger::new(b"succinct-veil-preimage-test");
+        let decoded = crate::proof_io::VeilFlockProofBundle::from_bytes(&encoded)
+            .expect("canonical bundle roundtrip");
+        assert_eq!(decoded, bundle);
         setup
-            .verify_succinct(&commitment, &proof, &digests, &mut verifier_challenger)
+            .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
+            .expect("verify decoded bundle");
+        let mut trailing = encoded.clone();
+        trailing.push(0);
+        assert!(crate::proof_io::VeilFlockProofBundle::from_bytes(&trailing).is_err());
+
+        setup
+            .verify(&commitment, &proof, &digests)
             .expect("verify succinct VEIL");
 
-        let rejects = |candidate: &crate::succinct_veil::SuccinctVeilProof,
-                       candidate_commitment: &Commitment,
-                       candidate_digests: &[[u8; DIGEST_BYTES]]| {
-            let mut challenger = FsChallenger::new(b"succinct-veil-preimage-test");
+        let rejects = |proof_under_test: &crate::succinct_veil::SuccinctVeilProof,
+                       commitment_under_test: &Commitment,
+                       digests_under_test: &[[u8; DIGEST_BYTES]]| {
             assert!(
                 setup
-                    .verify_succinct(
-                        candidate_commitment,
-                        candidate,
-                        candidate_digests,
-                        &mut challenger,
-                    )
+                    .verify(commitment_under_test, proof_under_test, digests_under_test)
                     .is_err()
             );
         };
@@ -986,9 +1096,42 @@ mod tests {
         changed_lincheck.masked_lincheck.z_partial[0] += flock_core::field::F128::ONE;
         rejects(&changed_lincheck, &commitment, &digests);
 
-        let mut changed_claim = proof.clone();
-        changed_claim.ab_value += flock_core::field::F128::ONE;
-        rejects(&changed_claim, &commitment, &digests);
+        let mut changed_ring_claim = proof.clone();
+        changed_ring_claim.masked_ring_claims[0].witness[0] += flock_core::field::F128::ONE;
+        rejects(&changed_ring_claim, &commitment, &digests);
+
+        let mut changed_ring_blind = proof.clone();
+        changed_ring_blind.masked_ring_claims[1].blind[0] += flock_core::field::F128::ONE;
+        rejects(&changed_ring_blind, &commitment, &digests);
+
+        let mut changed_direct_blind = proof.clone();
+        changed_direct_blind.public_direct_blind_values[0] += flock_core::field::F128::ONE;
+        rejects(&changed_direct_blind, &commitment, &digests);
+
+        let mut oversized_blind_grind = proof.clone();
+        oversized_blind_grind.blind_grind_nonce = crate::succinct_veil::MAX_BLIND_GRIND_TRIALS;
+        rejects(&oversized_blind_grind, &commitment, &digests);
+
+        // The registered Secure shape is UDR, so L0 grinds its one
+        // fold-grind bit in every one of its six fold rounds.
+        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 6);
+        let mut oversized_ligerito_grind = proof.clone();
+        oversized_ligerito_grind
+            .pcs_open
+            .ligerito
+            .fold_grinding_nonces[0] = crate::succinct_veil::MAX_LIGERITO_GRIND_TRIALS;
+        rejects(&oversized_ligerito_grind, &commitment, &digests);
+
+        let mut changed_blinded_slice = proof.clone();
+        changed_blinded_slice.pcs_open.ring_switches[0].s_hat_v[0] += flock_core::field::F128::ONE;
+        rejects(&changed_blinded_slice, &commitment, &digests);
+
+        let mut changed_pcs_mode = proof.clone();
+        changed_pcs_mode.pcs_open.zk_blind = Some(flock_core::pcs::ZkBlindOpening {
+            y_g: flock_core::field::F128::ZERO,
+            c_grind_nonce: 0,
+        });
+        rejects(&changed_pcs_mode, &commitment, &digests);
 
         let mut changed_veil = proof.clone();
         changed_veil.veil.linear.rlc_vector[0] += flock_core::field::F128::ONE;
@@ -1003,9 +1146,33 @@ mod tests {
             flock_core::field::F128::ONE;
         rejects(&changed_pcs, &commitment, &digests);
 
+        let mut changed_pcs_salt = proof.clone();
+        changed_pcs_salt.pcs_open.ligerito.initial_proof.leaf_salts[0][0] ^= 1;
+        rejects(&changed_pcs_salt, &commitment, &digests);
+
+        let mut changed_linear_salt = proof.clone();
+        changed_linear_salt.veil.linear.opening.salts[0][0] ^= 1;
+        rejects(&changed_linear_salt, &commitment, &digests);
+
+        let mut changed_hadamard_salt = proof.clone();
+        changed_hadamard_salt.veil.hadamard.opening.salts[0][0] ^= 1;
+        rejects(&changed_hadamard_salt, &commitment, &digests);
+
         let mut changed_nonce = proof.clone();
         changed_nonce.proof_nonce[0] ^= 1;
         rejects(&changed_nonce, &commitment, &digests);
+
+        let mut changed_outer_tree_nonce = proof.clone();
+        changed_outer_tree_nonce.tree_nonces.outer[0] ^= 1;
+        rejects(&changed_outer_tree_nonce, &commitment, &digests);
+
+        let mut changed_linear_tree_nonce = proof.clone();
+        changed_linear_tree_nonce.tree_nonces.veil_linear[0] ^= 1;
+        rejects(&changed_linear_tree_nonce, &commitment, &digests);
+
+        let mut changed_hadamard_tree_nonce = proof.clone();
+        changed_hadamard_tree_nonce.tree_nonces.veil_hadamard[0] ^= 1;
+        rejects(&changed_hadamard_tree_nonce, &commitment, &digests);
 
         let mut changed_commitment = commitment.clone();
         changed_commitment.root[0] ^= 1;
@@ -1018,39 +1185,77 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_output_claims_move_with_fresh_randomizers() {
-        let setup = Blake3PreimageZkSetup::new_succinct(2);
+    fn succinct_ring_messages_use_fresh_masks() {
+        let setup = Blake3PreimageZkSetup::new(2);
         let messages = msgs_of(0x5A17, 2);
         let digests = Blake3PreimageSetup::digests_of(&messages);
-        let prove = |seed: u8| {
-            let mut rng = flock_core::zk::ZkRng::from_seed([seed; 32]);
-            let mut challenger = FsChallenger::new(b"succinct-veil-claim-mask-test");
-            setup
-                .prove_succinct(&messages, &digests, &mut rng, &mut challenger)
-                .expect("prove")
-                .0
-        };
-        let first = prove(0x31);
-        let second = prove(0x32);
-        assert_ne!(first.ab_value, second.ab_value);
-        assert_ne!(first.c_value, second.c_value);
+        let prove = || setup.prove(&messages, &digests).expect("prove");
+        let (first, first_commitment) = prove();
+        let (second, second_commitment) = prove();
+        assert_ne!(first.proof_nonce, second.proof_nonce);
+        assert_ne!(first.tree_nonces.outer, second.tree_nonces.outer);
+        assert_ne!(
+            first.tree_nonces.veil_linear,
+            second.tree_nonces.veil_linear
+        );
+        assert_ne!(
+            first.tree_nonces.veil_hadamard,
+            second.tree_nonces.veil_hadamard
+        );
+        assert_ne!(first.tree_nonces.outer, first.tree_nonces.veil_linear);
+        assert_ne!(first.tree_nonces.outer, first.tree_nonces.veil_hadamard);
+        assert_ne!(
+            first.tree_nonces.veil_linear,
+            first.tree_nonces.veil_hadamard
+        );
+        assert_ne!(first_commitment.root, second_commitment.root);
+        assert_ne!(
+            first.pcs_open.ligerito.initial_proof.leaf_salts,
+            second.pcs_open.ligerito.initial_proof.leaf_salts
+        );
+        assert_ne!(first.veil.linear.commitment, second.veil.linear.commitment);
+        assert_ne!(
+            first.veil.linear.opening.salts,
+            second.veil.linear.opening.salts
+        );
+        assert_ne!(
+            first.veil.hadamard.commitment,
+            second.veil.hadamard.commitment
+        );
+        assert_ne!(
+            first.veil.hadamard.opening.salts,
+            second.veil.hadamard.opening.salts
+        );
+        assert_ne!(
+            first.masked_ring_claims[0].witness,
+            second.masked_ring_claims[0].witness
+        );
+        assert_ne!(
+            first.masked_ring_claims[1].witness,
+            second.masked_ring_claims[1].witness
+        );
     }
 
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_veil_public_only_simulator_is_accepted() {
-        const DOMAIN: &[u8] = b"succinct-veil-public-only-simulator-test";
-        let setup = Blake3PreimageZkSetup::new_succinct(2);
+        let setup = Blake3PreimageZkSetup::new(2);
         // Arbitrary public targets; the simulator API receives no messages
         // and makes no attempt to invert them.
         let digests = vec![[0x42; DIGEST_BYTES], [0xA7; DIGEST_BYTES]];
         let oracle = crate::sim_oracle::shared_oracle();
         let simulated = setup
-            .simulate_succinct(&digests, [0x93; 32], oracle.clone(), DOMAIN)
+            .simulate(&digests, oracle.clone())
             .expect("simulate without a preimage");
         assert_eq!(
             simulated.programmed_points,
             1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
+        );
+        assert!(simulated.classical_prom_bound(64, 1).distinguishing_bits() > 126.0);
+        assert!(simulated.programming_audit.is_valid());
+        assert!(
+            simulated.protocol_oracle_queries
+                <= crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF
         );
         {
             let oracle = oracle.lock().unwrap_or_else(|error| error.into_inner());
@@ -1066,15 +1271,136 @@ mod tests {
             }
         }
 
-        let mut verifier = crate::sim_oracle::OracleChallenger::new(DOMAIN, oracle.clone());
+        let mut verifier =
+            crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
         setup
-            .verify_succinct(
+            .verify_with_challenger(
                 &simulated.commitment,
                 &simulated.proof,
                 &digests,
                 &mut verifier,
             )
             .expect("the generic verifier accepts the simulated proof");
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_simulator_composes_on_one_shared_oracle() {
+        let setup = Blake3PreimageZkSetup::new(2);
+        let oracle = crate::sim_oracle::shared_oracle();
+        let statements = [
+            vec![[0x11; DIGEST_BYTES], [0x22; DIGEST_BYTES]],
+            vec![[0x11; DIGEST_BYTES], [0x33; DIGEST_BYTES]],
+        ];
+        let mut simulations = Vec::new();
+
+        for digests in &statements {
+            let simulated = setup
+                .simulate(digests, oracle.clone())
+                .expect("sequential simulation on the shared oracle");
+            assert!(simulated.programming_audit.is_valid());
+            assert_eq!(
+                simulated.programmed_points,
+                1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
+            );
+            assert!(
+                simulated.protocol_oracle_queries
+                    <= crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF
+            );
+            simulations.push(simulated);
+        }
+
+        assert_ne!(
+            simulations[0].proof.proof_nonce,
+            simulations[1].proof.proof_nonce
+        );
+        for (simulated, digests) in simulations.iter().zip(&statements) {
+            let mut verifier =
+                crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+            setup
+                .verify_with_challenger(
+                    &simulated.commitment,
+                    &simulated.proof,
+                    digests,
+                    &mut verifier,
+                )
+                .expect("the generic verifier accepts each shared-oracle proof");
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_simulator_query_cap_covers_every_registered_shape() {
+        let oracle = crate::sim_oracle::shared_oracle();
+        // These are the smallest public batches selecting each registered shape.
+        for n_blocks in [1usize, 257, 513, 1025, 2049] {
+            let setup = Blake3PreimageZkSetup::new(n_blocks);
+            let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
+            let before = oracle
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .total_answer_count();
+            let simulated = setup
+                .simulate(&digests, oracle.clone())
+                .expect("simulate every registered shape");
+            assert!(simulated.programming_audit.is_valid());
+            assert_eq!(
+                simulated.programmed_points,
+                1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
+            );
+
+            let mut verifier =
+                crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+            setup
+                .verify_with_challenger(
+                    &simulated.commitment,
+                    &simulated.proof,
+                    &digests,
+                    &mut verifier,
+                )
+                .expect("verify every registered simulated shape");
+            let after = oracle
+                .lock()
+                .unwrap_or_else(|error| error.into_inner())
+                .total_answer_count();
+            assert!(
+                after - before <= crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF,
+                "registered shape m={} exceeded the per-proof oracle cap",
+                setup.r1cs.m
+            );
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_simulator_aborts_on_a_prequeried_programming_point() {
+        use flock_core::ro::ByteOracle;
+
+        let setup = Blake3PreimageZkSetup::new(2);
+        let digests = vec![[0x42; DIGEST_BYTES], [0xA7; DIGEST_BYTES]];
+        let seed = [0x94; 32];
+
+        let discovery_oracle = crate::sim_oracle::shared_oracle();
+        setup
+            .simulate_with_seed(&digests, seed, discovery_oracle.clone())
+            .expect("deterministic discovery simulation");
+        let programmed_point = discovery_oracle
+            .lock()
+            .unwrap_or_else(|error| error.into_inner())
+            .programmed_points()
+            .into_iter()
+            .next()
+            .expect("simulator programs at least one challenge point");
+
+        let attacked_oracle = crate::sim_oracle::shared_oracle();
+        let external = crate::sim_oracle::ProgrammableByteOracle::new(attacked_oracle.clone());
+        let _ = external.answer(&programmed_point);
+        assert!(matches!(
+            setup.simulate_with_seed(&digests, seed, attacked_oracle),
+            Err(SuccinctPreimageError::Protocol(
+                crate::succinct_veil::SuccinctVeilError::ProgrammingCollision
+            ))
+        ));
     }
 
     /// Honest proof round trip.
@@ -1186,373 +1512,6 @@ mod tests {
         assert!(
             setup.verify(&comm, &proof, &my_digests, &mut chv).is_err(),
             "a proof of other preimages must not verify against my digests"
-        );
-    }
-
-    /// The masked (zk-mode) path proves and verifies the same statement.
-    #[test]
-    fn zk_preimage_roundtrip() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        let msgs = msgs_of(0x2222_3333, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&msgs);
-        let mut rng = flock_core::zk::ZkRng::from_seed([7u8; 32]);
-        let mut ch = FsChallenger::new(b"b3-preimage-zk");
-        let (proof, comm) = setup
-            .prove(&msgs, &digests, &mut rng, &mut ch)
-            .expect("zk prove");
-        let mut chv = FsChallenger::new(b"b3-preimage-zk");
-        setup
-            .verify(&comm, &proof, &digests, &mut chv)
-            .expect("honest masked preimage proof must verify");
-    }
-
-    /// Masking is live on the zk path: two proofs of the SAME statement and
-    /// witness under different mask draws differ in their commitment and in
-    /// witness-dependent transcript values. (This is a freshness check, not a
-    /// zero-knowledge claim — see the type's docs.)
-    #[test]
-    fn zk_preimage_masks_are_fresh() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        let msgs = msgs_of(0x4444_5555, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&msgs);
-
-        let go = |seed: u8| {
-            let mut rng = flock_core::zk::ZkRng::from_seed([seed; 32]);
-            let mut ch = FsChallenger::new(b"b3-preimage-zk");
-            setup
-                .prove(&msgs, &digests, &mut rng, &mut ch)
-                .expect("prove")
-        };
-        let (p1, c1) = go(1);
-        let (p2, c2) = go(2);
-        assert_ne!(c1.root, c2.root, "fresh masks must move the commitment");
-        assert_ne!(
-            p1.zerocheck.final_a_eval, p2.zerocheck.final_a_eval,
-            "fresh masks must move the witness-dependent evaluations"
-        );
-        // Both still verify against the same public digests.
-        for (p, c) in [(&p1, &c1), (&p2, &c2)] {
-            let mut chv = FsChallenger::new(b"b3-preimage-zk");
-            setup.verify(c, p, &digests, &mut chv).expect("verify");
-        }
-    }
-
-    /// The zk path is bound to its digest list too.
-    #[test]
-    fn zk_wrong_digest_rejected() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        let msgs = msgs_of(0x6666_7777, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&msgs);
-        let mut rng = flock_core::zk::ZkRng::from_seed([9u8; 32]);
-        let mut ch = FsChallenger::new(b"b3-preimage-zk");
-        let (proof, comm) = setup
-            .prove(&msgs, &digests, &mut rng, &mut ch)
-            .expect("prove");
-        let mut tampered = digests.clone();
-        tampered[0][31] ^= 0x80;
-        let mut chv = FsChallenger::new(b"b3-preimage-zk");
-        assert!(
-            setup.verify(&comm, &proof, &tampered, &mut chv).is_err(),
-            "masked proof must not verify against a different digest list"
-        );
-    }
-
-    /// **The harness-faithfulness control.** A real proof, produced and
-    /// verified through the programmable-oracle challenger with NOTHING
-    /// programmed, must behave exactly as under plain Fiat–Shamir. Without
-    /// this, any later "the simulator's output verifies" result would be
-    /// meaningless — it could hold because the harness is a different
-    /// protocol rather than because the simulation works.
-    #[test]
-    fn oracle_harness_accepts_a_real_proof_unprogrammed() {
-        let setup = Blake3PreimageSetup::new(N_TEST);
-        let msgs = msgs_of(0x0AC1E_5EED, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&msgs);
-
-        let oracle = shared_oracle();
-        let mut ch = OracleChallenger::new(b"b3-preimage", oracle.clone());
-        let (proof, comm) = setup.prove(&msgs, &digests, &mut ch).expect("prove");
-        assert!(
-            oracle.lock().unwrap().is_empty(),
-            "the control must run with an unprogrammed oracle"
-        );
-
-        let mut chv = OracleChallenger::new(b"b3-preimage", oracle.clone());
-        setup
-            .verify(&comm, &proof, &digests, &mut chv)
-            .expect("a real proof must verify through the oracle harness");
-
-        // And the same proof verifies under plain Fiat–Shamir, so the harness
-        // is not merely self-consistent.
-        let mut chf = FsChallenger::new(b"b3-preimage");
-        setup
-            .verify(&comm, &proof, &digests, &mut chf)
-            .expect("the same proof must verify under plain Fiat-Shamir");
-
-        // The oracle recorded a query transcript — the object a straightline
-        // extractor reads.
-        assert!(oracle.lock().unwrap().query_count() > 0);
-    }
-
-    /// **The zero-knowledge result: a proof with no preimage behind it.**
-    ///
-    /// The simulator receives only the public digests. It never sees — and
-    /// never computes — a message hashing to any of them; the vector it
-    /// commits is an honest trace for messages of its own choosing whose
-    /// output region has been overwritten with the public digests, which is
-    /// not a satisfying assignment at all. The unmodified verifier accepts.
-    #[test]
-    fn simulator_produces_an_accepting_proof_without_any_preimage() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        // The statement: digests of messages the simulator will never see.
-        let secret = msgs_of(0x5EC1_5EC1, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&secret);
-        let sealed = SealedStatement::new(&setup, &digests).expect("public statement");
-        let oracle = shared_oracle();
-        let sim = simulate(&sealed, SimCoins::new(0xC0FFEE), &oracle, b"b3-preimage-zk")
-            .expect("simulation must succeed");
-
-        println!("simulator programmed {} oracle points", sim.programmed);
-
-        let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
-        let ro = crate::sim_oracle::ro_context(sim.proof.proof_nonce, oracle.clone());
-        setup
-            .verify_with_ro(&sim.commitment, &sim.proof, &digests, &ro, &mut chv)
-            .expect("the UNMODIFIED verifier must accept the simulated proof");
-    }
-
-    /// Record every production-shape oracle call made by the simulator and
-    /// verifier. The fixed assertions cover deterministic non-grinding
-    /// counts; the security ledger replaces the observed geometric PoW
-    /// attempts with an analytical 128-bit-tail budget.
-    #[test]
-    fn production_random_oracle_counts_match_registered_bounds() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        let secret = msgs_of(0xA11C_E5E5, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&secret);
-        let sealed = SealedStatement::new(&setup, &digests).expect("public statement");
-        let oracle = shared_oracle();
-        let sim = simulate(
-            &sealed,
-            SimCoins::new(0x51A7_E001),
-            &oracle,
-            b"b3-preimage-zk",
-        )
-        .expect("simulate");
-        assert_eq!(sim.programmed, 18);
-
-        let prover_points = oracle.lock().unwrap().queries().to_vec();
-        let prover = OracleQueryCounts::classify(&prover_points);
-        let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
-        let ro = crate::sim_oracle::ro_context(sim.proof.proof_nonce, oracle.clone());
-        setup
-            .verify_with_ro(&sim.commitment, &sim.proof, &digests, &ro, &mut chv)
-            .expect("simulated proof verifies");
-        let all_points = oracle.lock().unwrap().queries().to_vec();
-        let verifier = OracleQueryCounts::classify(&all_points[prover_points.len()..]);
-        assert_eq!(
-            verifier.pow_candidates,
-            crate::sim_game::PRODUCTION_PCS_OPENINGS
-                * crate::sim_game::PRODUCTION_GRIND_BITS_PER_OPENING.len() as u64,
-            "recorded verifier grind sites must match the production schedule",
-        );
-
-        println!("prover oracle counts: {prover:?}");
-        println!("verifier oracle counts: {verifier:?}");
-        let pow_bound = production_grinding_candidate_bound(128);
-        let protocol_bound = prover.non_pow_calls() + pow_bound + verifier.total_calls;
-        println!("pow candidate bound: {pow_bound}");
-        println!("protocol query bound: {protocol_bound}");
-        println!(
-            "final zk bits: {:.15}",
-            SimGameLedger::production(64, protocol_bound).final_bits()
-        );
-
-        assert_eq!(prover.total_calls, 50_149);
-        assert_eq!(prover.non_pow_calls(), 29_419);
-        assert_eq!(verifier.total_calls, 10_507);
-        assert_eq!(pow_bound, 957_910);
-        assert_eq!(protocol_bound, PRODUCTION_ORACLE_QUERY_BOUND);
-    }
-
-    /// **Control 1: the vector the simulator commits is not a witness.**
-    /// Overwriting the output region destroys the compression relation, so
-    /// the patched vector fails the R1CS — which is the whole reason the
-    /// zerocheck had to be simulated rather than run.
-    #[test]
-    fn the_simulators_committed_vector_is_not_a_valid_witness() {
-        let n_log = 3usize;
-        let r1cs = build_block_r1cs_pinned(n_log, ParamPinning::RootHash64);
-        let own = msgs_of(0x1111, 1);
-        let target = Blake3PreimageSetup::digests_of(&msgs_of(0x2222, 1));
-
-        let mut all: Vec<Compression> = own.iter().map(message_compression).collect();
-        all.resize(
-            1usize << n_log,
-            ParamPinning::RootHash64.padding_compression(),
-        );
-        let mut z = generate_witness(&all, n_log);
-        assert!(r1cs.satisfies(&z), "the unpatched trace is a valid witness");
-
-        // Patch out_lo of block 0 to the target digest.
-        for w in 0..8usize {
-            let word = u32::from_le_bytes(target[0][w * 4..w * 4 + 4].try_into().unwrap());
-            for b in 0..32usize {
-                z[256 + w * 32 + b] = (word >> b) & 1 == 1;
-            }
-        }
-        assert!(
-            !r1cs.satisfies(&z),
-            "patching the output region must break the R1CS — otherwise the \
-             simulator would not need to fabricate the zerocheck at all"
-        );
-    }
-
-    /// **Control 2: an honest prover cannot produce this proof.** Running the
-    /// real prover on the same patched vector — i.e. without simulating the
-    /// zerocheck — is rejected. So the simulator's acceptance comes from the
-    /// simulation, not from the patched vector being secretly acceptable.
-    #[test]
-    fn honest_prover_on_the_patched_vector_is_rejected() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        let secret = msgs_of(0x7777, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&secret);
-        let stmt = setup.statement(&digests);
-        let own = msgs_of(0x8888, N_TEST);
-
-        let layout = setup.r1cs.zk.expect("zk layout");
-        let mut zrng = flock_core::zk::ZkRng::from_seed([5u8; 32]);
-        let mut rand_words = vec![
-            0u64;
-            setup.n_block_slots()
-                * crate::r1cs_hashes::common::zk_rand_words_per_block(&layout)
-        ];
-        zrng.fill_u64s(&mut rand_words);
-        let blocks: Vec<Compression> = own.iter().map(message_compression).collect();
-        let (mut z, _a, _b, _l) = generate_witness_with_ab_packed_and_lincheck_zk_pinned(
-            &blocks,
-            setup.n_blocks_log(),
-            &layout,
-            &rand_words,
-            ParamPinning::RootHash64,
-        );
-        // Same patch the simulator applies.
-        let words_per_block = (1usize << 14) / 128;
-        for (i, d) in digests.iter().enumerate() {
-            for half in 0..2usize {
-                let mut w = flock_core::field::F128::ZERO;
-                for b in 0..128usize {
-                    let bit = half * 128 + b;
-                    if (d[bit / 8] >> (bit % 8)) & 1 == 1 {
-                        if b < 64 {
-                            w.lo |= 1u64 << b;
-                        } else {
-                            w.hi |= 1u64 << (b - 64);
-                        }
-                    }
-                }
-                z[i * words_per_block + 2 + half] = w;
-            }
-        }
-        let a = setup.r1cs.apply_a_packed(&z);
-        let b = setup.r1cs.apply_b_packed(&z);
-        let stripe =
-            flock_core::lincheck::pack_z_lincheck_from_packed(&z, setup.r1cs.m, setup.r1cs.k_log);
-
-        let lig = flock_core::pcs::ligerito::prover_config_for(
-            setup.pcs_params.log_msg_len(),
-            setup.pcs_params.log_batch_size,
-            setup.pcs_params.profile,
-        )
-        .unwrap();
-        let oracle = shared_oracle();
-        let mut ch = OracleChallenger::new(b"b3-preimage-zk", oracle.clone());
-        crate::r1cs_hashes::blake3_preimage::absorb_statement(&mut ch, &stmt);
-        let mut mrng = flock_core::zk::ZkRng::from_seed([6u8; 32]);
-        let mut forks = crate::prover::A1MaskForks::from_rng(&mut mrng);
-        let proof_nonce = forks.proof_nonce;
-        let layout_kind = setup.r1cs.layout;
-        let stmt2 = stmt.clone();
-        let (proof, comm, _) = crate::prover::prove_r1cs_zk_a1_with_masks_pd_nonce(
-            &setup.r1cs,
-            &setup.pcs_params,
-            z,
-            a,
-            b,
-            stripe,
-            setup.r1cs.csc_lincheck_circuit(),
-            &lig,
-            forks.sources(),
-            &mut |c: &mut OracleChallenger| {
-                let dch = crate::digest_bind::DigestChallenges::sample(&stmt2, c);
-                vec![crate::digest_bind::digest_claim(&stmt2, layout_kind, &dch)]
-            },
-            None, // honest zerocheck — no simulation
-            None,
-            proof_nonce,
-            &mut ch,
-        );
-        let mut chv = OracleChallenger::new(b"b3-preimage-zk", oracle);
-        assert!(
-            setup.verify(&comm, &proof, &digests, &mut chv).is_err(),
-            "an HONEST prover on the patched vector must be rejected; if this \
-             passed, the digest binding would not be enforcing anything"
-        );
-    }
-
-    /// **Measurement: how far is the simulated transcript from an honest one?**
-    ///
-    /// Acceptance is necessary, not sufficient — a simulator whose output
-    /// verifies but is distributed differently is still a broken simulator.
-    /// This compares, coordinate by coordinate, a simulated proof against an
-    /// honest one for the same statement, and reports which classes differ
-    /// *structurally* (always, in a way a distinguisher could test) rather
-    /// than merely by value (as fresh randomness would).
-    ///
-    /// It is a diagnostic, not a proof: it can find a discrepancy but cannot
-    /// certify the absence of one.
-    #[test]
-    #[ignore = "diagnostic; run explicitly"]
-    fn measure_simulated_vs_honest_transcript() {
-        let setup = Blake3PreimageZkSetup::new(N_TEST);
-        let secret = msgs_of(0xD1F_0001, N_TEST);
-        let digests = Blake3PreimageSetup::digests_of(&secret);
-
-        // Honest proof of the same statement (the party that knows the
-        // preimages).
-        let mut hrng = flock_core::zk::ZkRng::from_seed([21u8; 32]);
-        let mut hch = FsChallenger::new(b"b3-preimage-zk");
-        let (hproof, hcomm) = setup
-            .prove(&secret, &digests, &mut hrng, &mut hch)
-            .expect("honest prove");
-
-        // Simulated proof of the same public statement.
-        let sealed = SealedStatement::new(&setup, &digests).expect("public statement");
-        let oracle = shared_oracle();
-        let sim =
-            simulate(&sealed, SimCoins::new(0xD1FF), &oracle, b"b3-preimage-zk").expect("simulate");
-
-        let hv = algebraic_vector(&flatten_a1(&hcomm, &hproof));
-        let sv = algebraic_vector(&flatten_a1(&sim.commitment, &sim.proof));
-        assert_eq!(
-            hv.len(),
-            sv.len(),
-            "simulated and honest transcripts must have the SAME SHAPE — a \
-             length difference is a distinguisher on its own"
-        );
-        let differing = hv.iter().zip(&sv).filter(|(a, b)| a != b).count();
-        println!(
-            "transcript coordinates: {} total, {} differ by value \
-             (fresh randomness makes near-total difference expected)",
-            hv.len(),
-            differing
-        );
-        // Same shape is the checkable invariant here; per-class distribution
-        // equality needs the coverage certificates, not this diagnostic.
-        assert!(
-            differing > hv.len() / 2,
-            "an almost-identical transcript would mean the simulator is \
-             reproducing witness-dependent values, not masking them"
         );
     }
 }

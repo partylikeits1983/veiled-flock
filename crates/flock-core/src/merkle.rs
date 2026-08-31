@@ -455,6 +455,31 @@ pub fn merkle_tree_framed(
     tree
 }
 
+/// Framed Merkle tree with one independent 256-bit salt prepended to every
+/// leaf payload. Intended for initial witness-dependent commitments; recursive
+/// commitments whose entire input is already witness-independent use
+/// [`merkle_tree_framed`] directly.
+pub fn merkle_tree_framed_salted(
+    data: &[u8],
+    num_leaves: usize,
+    salts: &[[u8; 32]],
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Vec<Hash> {
+    assert_eq!(salts.len(), num_leaves, "one salt per Merkle leaf");
+    assert!(num_leaves > 0 && num_leaves.is_power_of_two());
+    assert_eq!(data.len() % num_leaves, 0);
+    let leaf_size = data.len() / num_leaves;
+    assert!(leaf_size > 0);
+    let mut salted = Vec::with_capacity(data.len() + 32 * num_leaves);
+    for (salt, leaf) in salts.iter().zip(data.chunks_exact(leaf_size)) {
+        salted.extend_from_slice(salt);
+        salted.extend_from_slice(leaf);
+    }
+    merkle_tree_framed(&salted, num_leaves, ctx, channel, tree_depth)
+}
+
 /// Verify a framed Merkle opening (single leaf), recomputing the root through
 /// the point-oracle framing. Mirrors [`verify_merkle_proof`] but tags each hash.
 pub fn verify_merkle_proof_framed(

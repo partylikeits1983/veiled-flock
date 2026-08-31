@@ -5,25 +5,20 @@
 //! transcript lives in `GF(2^128)`, whose multiplicative group has odd order,
 //! so this crate supplies the corresponding additive-domain code directly.
 
-pub mod block_r1cs;
 pub mod code;
 pub mod commitment;
 pub mod constraints;
 pub mod dot_product;
 pub mod hadamard;
 pub mod ntt;
-pub mod simulator;
-
-pub use block_r1cs::{
-    BlockR1csError, BlockR1csParameters, BlockR1csProof, PublicEquality, prove_block_r1cs,
-    verify_block_r1cs,
-};
 pub use code::{AdditiveRsCode, CodeError, CodeParameters};
 pub use commitment::{MerkleMatrix, MerkleMatrixOpening};
 pub use constraints::{
     ArithmeticCircuit, CircuitBuilder, ConstraintCommitment, ConstraintError, ConstraintParameters,
-    ConstraintProof, LinearCombination, commit_constraint_inputs, prove_constraints,
-    prove_constraints_from_commitment, prove_constraints_with_parameters, verify_constraints,
+    ConstraintProof, ConstraintSoundnessBound, LinearCombination,
+    SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS, certify_constraint_soundness, commit_constraint_inputs,
+    prove_constraints, prove_constraints_from_commitment, prove_constraints_with_parameters,
+    verify_constraints,
 };
 pub use dot_product::{
     DotProductError, DotProductProof, DotProductProverData, VectorParameters, commit_vectors,
@@ -35,6 +30,3 @@ pub use hadamard::{
     verify_hadamard_and_dots,
 };
 pub use ntt::AdditiveCosetNtt;
-pub use simulator::{
-    OracleProgrammer, OracleProgrammingError, SimulationError, simulate_block_r1cs,
-};

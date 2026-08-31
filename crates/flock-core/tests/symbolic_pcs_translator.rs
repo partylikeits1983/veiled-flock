@@ -5,7 +5,8 @@ use flock_core::linalg::F128Mat;
 use flock_core::pcs::commit::PcsParams;
 use flock_core::pcs::ligerito::{LigeritoProfile, ProverConfig, prover_config_for};
 use flock_core::pcs::symbolic_opening::{
-    certify_l0_query_rank, encode_zk_linear, l0_entropy_bound, translate_mask_for_queries,
+    PcsMaskTranslationError, certify_l0_query_rank, encode_zk_linear, l0_entropy_bound,
+    translate_joint_view_for_queries, translate_mask_for_queries,
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
@@ -31,6 +32,7 @@ fn tiny_config() -> ProverConfig {
         queries: vec![6, 4, 4],
         grinding_bits: vec![0; 3],
         fold_grinding_bits: vec![0; 3],
+        fold_grinding_taper: vec![false; 3],
         ood_samples: vec![0; 3],
     }
 }
@@ -116,8 +118,8 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
 
     let c = F128::new(0xd1ce_cafe_1234_5678, 0x900d_f00d_7766_5544);
     let queries = [1, 7, 11, 22, 39, 55];
-    let translation = translate_mask_for_queries(&params, c, &queries, &delta)
-        .expect("the L0 query equations must be solvable");
+    let translation = translate_joint_view_for_queries(&params, c, &queries, &delta, &[&basis])
+        .expect("the complete L0/direct-functional view must be jointly translatable");
     for index in 0..w {
         assert_eq!(
             translation.delta_mu[index] + c * translation.delta_g_lo[index],
@@ -128,6 +130,15 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
             F128::ZERO
         );
     }
+    assert_eq!(
+        translation
+            .delta_g_top
+            .iter()
+            .zip(&basis)
+            .fold(F128::ZERO, |acc, (value, weight)| acc + *value * *weight),
+        F128::ZERO,
+        "the public-functional blinder value is invariant under the coupling"
+    );
 
     let delta_g = translation
         .delta_g_lo
@@ -144,7 +155,16 @@ fn closed_form_translation_preserves_open_rows_and_combined_vector() {
                 .all(|value| *value == F128::ZERO)
         );
     }
-    assert!(translate_mask_for_queries(&params, F128::ZERO, &queries, &delta).is_none());
+    assert_eq!(
+        translate_mask_for_queries(&params, F128::ZERO, &queries, &delta),
+        Err(PcsMaskTranslationError::ZeroChallenge)
+    );
+    let mut non_public_basis = basis.clone();
+    non_public_basis[0] += F128::ONE;
+    assert_eq!(
+        translate_joint_view_for_queries(&params, c, &queries, &delta, &[&non_public_basis]),
+        Err(PcsMaskTranslationError::PublicFunctionalNotInKernel),
+    );
 }
 
 #[test]
@@ -159,7 +179,7 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
         m: 22,
         log_inv_rate: 1,
         log_batch_size: 6,
-        profile: LigeritoProfile::Fast,
+        profile: LigeritoProfile::Secure,
         zk: true,
     };
     let config = prover_config_for(
@@ -175,9 +195,8 @@ fn l0_entropy_counting_gate_holds_for_fixture_and_production() {
     let representative_queries = (0..config.queries[0]).collect::<Vec<_>>();
     let rank_certificate = certify_l0_query_rank(&production, &representative_queries)
         .expect("every registered distinct query set must satisfy the structural rank criterion");
-    assert_eq!(rank_certificate.opened_positions, 218);
+    assert_eq!(rank_certificate.opened_positions, 294);
     assert_eq!(rank_certificate.mask_symbols_per_lane, 512);
-
-    assert_eq!(bound.opened_positions, 218);
+    assert_eq!(bound.opened_positions, 294);
     assert_eq!(bound.conditional_bits_per_fresh_leaf, 16_384);
 }

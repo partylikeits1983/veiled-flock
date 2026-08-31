@@ -20,6 +20,18 @@ pub struct PcsMaskTranslation {
     pub delta_g_top: Vec<F128>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PcsMaskTranslationError {
+    ZeroChallenge,
+    InvalidQuerySet,
+    InvalidWitnessDeltaLength,
+    SingularMaskSystem,
+    OpenedRowsNotPreserved,
+    InvalidPublicFunctionalLength,
+    PublicFunctionalNotInKernel,
+    PublicFunctionalNotPreserved,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct L0EntropyBound {
     pub opened_positions: usize,
@@ -67,11 +79,13 @@ pub fn assert_proof_fields_classified(proof: &BatchOpeningProofLigerito) {
     } = ligerito;
     let RecursiveProof {
         opened_rows: _,
+        leaf_salts: _,
         merkle_proof: _,
     } = initial_proof;
     for recursive in recursive_proofs {
         let RecursiveProof {
             opened_rows: _,
+            leaf_salts: _,
             merkle_proof: _,
         } = recursive;
     }
@@ -136,19 +150,21 @@ fn selected_f_rows(params: &PcsParams, codeword: &[F128], queries: &[usize]) -> 
 /// Translate a claim-preserving witness-message delta into PCS mask deltas.
 /// The returned translation makes every selected raw L0 row invariant and
 /// makes the combined recursive vector `F = [mu || z] + c*g` invariant
-/// globally. Returns `None` for `c = 0` or an unsolvable query set.
+/// globally.
 pub fn translate_mask_for_queries(
     params: &PcsParams,
     c: F128,
     queries: &[usize],
     witness_delta: &[F128],
-) -> Option<PcsMaskTranslation> {
+) -> Result<PcsMaskTranslation, PcsMaskTranslationError> {
     if c == F128::ZERO {
-        return None;
+        return Err(PcsMaskTranslationError::ZeroChallenge);
     }
-    certify_l0_query_rank(params, queries)?;
+    certify_l0_query_rank(params, queries).ok_or(PcsMaskTranslationError::InvalidQuerySet)?;
     let w = 1usize << params.witness_log_msg_len();
-    assert_eq!(witness_delta.len(), w);
+    if witness_delta.len() != w {
+        return Err(PcsMaskTranslationError::InvalidWitnessDeltaLength);
+    }
     let zero_w = vec![F128::ZERO; w];
     let zero_g = vec![F128::ZERO; 2 * w];
 
@@ -167,7 +183,9 @@ pub fn translate_mask_for_queries(
             matrix_data[row * w + column] = value;
         }
     }
-    let delta_mu = F128Mat::new(equation_count, w, matrix_data).solve(&rhs)?;
+    let delta_mu = F128Mat::new(equation_count, w, matrix_data)
+        .solve(&rhs)
+        .ok_or(PcsMaskTranslationError::SingularMaskSystem)?;
     let c_inv = c.inv();
     let delta_g_lo = delta_mu.iter().map(|value| c_inv * *value).collect();
     let delta_g_top = witness_delta.iter().map(|value| c_inv * *value).collect();
@@ -190,9 +208,47 @@ pub fn translate_mask_for_queries(
             .iter()
             .any(|value| *value != F128::ZERO)
     }) {
-        return None;
+        return Err(PcsMaskTranslationError::OpenedRowsNotPreserved);
     }
-    Some(translation)
+    Ok(translation)
+}
+
+/// Joint VEIL coupling for the exact initial PCS view. In addition to the
+/// opened L0 rows and global blinded vector `F`, require every exposed direct
+/// functional to be public-statement-derived: its basis must annihilate the
+/// witness difference. The returned affine mask translation then preserves
+/// those blinder evaluations as well because
+/// `delta_g_top = c^-1 * witness_delta`.
+pub fn translate_joint_view_for_queries(
+    params: &PcsParams,
+    c: F128,
+    queries: &[usize],
+    witness_delta: &[F128],
+    public_functional_bases: &[&[F128]],
+) -> Result<PcsMaskTranslation, PcsMaskTranslationError> {
+    for basis in public_functional_bases {
+        if basis.len() != witness_delta.len() {
+            return Err(PcsMaskTranslationError::InvalidPublicFunctionalLength);
+        }
+        let delta_value = basis
+            .iter()
+            .zip(witness_delta)
+            .fold(F128::ZERO, |acc, (weight, value)| acc + *weight * *value);
+        if delta_value != F128::ZERO {
+            return Err(PcsMaskTranslationError::PublicFunctionalNotInKernel);
+        }
+    }
+    let translation = translate_mask_for_queries(params, c, queries, witness_delta)?;
+    if public_functional_bases.iter().any(|basis| {
+        basis
+            .iter()
+            .zip(&translation.delta_g_top)
+            .fold(F128::ZERO, |acc, (weight, value)| acc + *weight * *value)
+            != F128::ZERO
+    }) {
+        return Err(PcsMaskTranslationError::PublicFunctionalNotPreserved);
+    }
+    Ok(translation)
 }
 
 /// Certify full row rank of the low-mask evaluation system for an arbitrary

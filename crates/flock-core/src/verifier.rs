@@ -6,9 +6,10 @@
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::lincheck;
-use crate::pcs::{self, Commitment};
+use crate::pcs::{self, Commitment, PcsParams};
 use crate::proof::{R1csClaim, R1csProofLigerito, ZClaim};
 use crate::r1cs::BlockR1cs;
+use crate::ro::{RoChannel, RoContext};
 use crate::zerocheck;
 use std::sync::OnceLock;
 
@@ -113,8 +114,7 @@ pub fn verify_claims_ligerito<Ch: Challenger>(
 }
 
 /// [`verify_claims_ligerito`] with an explicit Ligerito verifier config, for
-/// audit fixtures at shapes outside the production config ladder (the A1′
-/// m=15 certificate fixture). Production callers use
+/// audit fixtures at shapes outside the production config ladder. Production callers use
 /// [`verify_claims_ligerito`], which derives the config from `pcs_params`.
 pub fn verify_claims_ligerito_with_config<Ch: Challenger>(
     commitment: &Commitment,
@@ -217,6 +217,67 @@ pub fn verify_claims_ligerito_with_config_pd_ro<Ch: Challenger>(
             Some(lig_v_config),
             ro,
             channel,
+            challenger,
+        )
+    })
+}
+
+/// Verify claims on the uniformly blinded witness `q = z + c·g_top`.
+pub struct PreblindedClaimVerification<'a> {
+    pub commitment: &'a Commitment,
+    pub claims: &'a [ZClaim],
+    pub packed_direct: &'a [pcs::PackedDirectClaimRef<'a>],
+    pub pcs_open: &'a pcs::BatchOpeningProofLigerito,
+    pub pcs_params: &'a PcsParams,
+    pub lig_v_config: &'a pcs::ligerito::VerifierConfig,
+    pub challenge: F128,
+    pub ro: &'a RoContext,
+    pub channel: RoChannel,
+}
+
+pub fn verify_claims_ligerito_with_config_pd_preblinded_ro<Ch: Challenger>(
+    verification: PreblindedClaimVerification<'_>,
+    challenger: &mut Ch,
+) -> Result<(), pcs::VerifyError> {
+    let PreblindedClaimVerification {
+        commitment,
+        claims,
+        packed_direct,
+        pcs_open,
+        pcs_params,
+        lig_v_config,
+        challenge,
+        ro,
+        channel,
+    } = verification;
+    verifier_pool().install(move || {
+        if commitment.params != *pcs_params {
+            return Err(pcs::VerifyError::Ligerito);
+        }
+        let z_skips: Vec<F128> = claims.iter().map(|claim| claim.point.z_skip).collect();
+        let values: Vec<F128> = claims.iter().map(|claim| claim.value).collect();
+        let x_fulls: Vec<Vec<F128>> = claims
+            .iter()
+            .map(|claim| {
+                let mut point = claim.point.x_inner_rest.clone();
+                point.extend_from_slice(&claim.point.x_outer);
+                point
+            })
+            .collect();
+        let x_refs: Vec<&[F128]> = x_fulls.iter().map(Vec::as_slice).collect();
+        pcs::verify_opening_batch_ligerito_mixed_preblinded_ro(
+            pcs::PreblindedOpeningVerification {
+                commitment,
+                claims: &values,
+                z_skips: &z_skips,
+                x_outers: &x_refs,
+                packed_direct,
+                proof: pcs_open,
+                lig_config: lig_v_config,
+                challenge,
+                ro,
+                channel,
+            },
             challenger,
         )
     })
