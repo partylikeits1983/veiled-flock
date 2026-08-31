@@ -53,7 +53,7 @@ noncomputable def smallFriendly (index : Fin 3) : GhashField :=
 
 theorem smallFriendlyBits_ne_one (index : Fin 3) :
     smallFriendlyBits index ≠ 1 := by
-  fin_cases index <;> native_decide
+  fin_cases index <;> decide
 
 theorem smallFriendly_ne_one (index : Fin 3) :
     smallFriendly index ≠ 1 :=
@@ -72,7 +72,7 @@ noncomputable def gammaPower (index : Fin 4) : GhashField :=
 
 theorem gammaPowerBits_ne_one (index : Fin 4) :
     gammaPowerBits index ≠ 1 := by
-  fin_cases index <;> native_decide
+  fin_cases index <;> decide
 
 theorem gammaPower_ne_one (index : Fin 4) : gammaPower index ≠ 1 :=
   mapped_ne_one_of_bits_ne_one _ (gammaPowerBits_ne_one index)
@@ -110,10 +110,10 @@ def firstFriendlyBits : Bits128 :=
   smallFriendlyBits 0
 
 theorem firstFriendlyBits_ne_zero : firstFriendlyBits ≠ 0 := by
-  native_decide
+  decide
 
 theorem firstFriendlyBits_ne_one : firstFriendlyBits ≠ 1 := by
-  native_decide
+  decide
 
 /-- The first production recursive equality coordinate, interpreted in the
 proved GHASH quotient field. -/
