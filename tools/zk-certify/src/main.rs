@@ -470,6 +470,10 @@ const SOURCE_CHECKS: &[(&str, SourceCheck)] = &[
         "source::no-superseded-zk-surface",
         check_no_superseded_zk_surface,
     ),
+    (
+        "source::no-tracked-shell-scripts",
+        check_no_tracked_shell_scripts,
+    ),
 ];
 
 fn workspace_root() -> PathBuf {
@@ -673,7 +677,7 @@ fn check_no_superseded_zk_surface(root: &Path) -> Result<(), String> {
         let path = root.join(rel);
         scan_files(&path, &mut |_| true, &mut |path, line_number, line| {
             let rel_path = relative_path(root, path);
-            if rel_path.starts_with(Path::new("crates/zk-certify")) {
+            if rel_path.starts_with(Path::new("tools/zk-certify")) {
                 return;
             }
 
@@ -688,6 +692,28 @@ fn check_no_superseded_zk_surface(root: &Path) -> Result<(), String> {
     }
 
     report_findings(findings, "superseded or versioned ZK surface found")
+}
+
+fn check_no_tracked_shell_scripts(root: &Path) -> Result<(), String> {
+    let output = Command::new("git")
+        .args(["ls-files", "*.sh"])
+        .current_dir(root)
+        .output()
+        .map_err(|err| format!("failed to enumerate tracked shell scripts: {err}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "failed to enumerate tracked shell scripts: {stderr}"
+        ));
+    }
+
+    let scripts = String::from_utf8_lossy(&output.stdout);
+    if scripts.trim().is_empty() {
+        Ok(())
+    } else {
+        print!("{scripts}");
+        Err("tracked shell scripts found".to_owned())
+    }
 }
 
 fn scan_files<F, G>(path: &Path, include: &mut F, visit: &mut G) -> Result<(), String>
