@@ -12,6 +12,14 @@ use std::{
 const CORE_FEATURES: &[&str] = &["zk", "symbolic"];
 const PROVER_FEATURES: &[&str] = &["veil"];
 const NO_FEATURES: &[&str] = &[];
+const DIRECT_SHA256_NEEDLES: &[&str] = &[
+    "use sha2::",
+    "sha2::compress",
+    "Sha256::digest",
+    "Sha256::new",
+];
+const SUPERSEDED_ZK_SURFACE_NEEDLES: &[&str] =
+    &["R1csProofZkA1", "prove_r1cs_zk_a1", "verify_r1cs_zk_a1"];
 
 const CERTIFICATES: &[Certificate] = &[
     // Framed random oracle, tree nonces/channels, and SIMD parity.
@@ -180,6 +188,11 @@ struct Args {
     manifest_path: Option<PathBuf>,
 }
 
+enum ParsedArgs {
+    Run(Args),
+    Help,
+}
+
 struct Finding {
     path: PathBuf,
     line_number: usize,
@@ -237,7 +250,7 @@ const fn prover_bin(target_name: &'static str, name: &'static str) -> Certificat
 }
 
 impl Args {
-    fn parse<I>(mut args: I) -> Result<Self, String>
+    fn parse<I>(mut args: I) -> Result<ParsedArgs, String>
     where
         I: Iterator<Item = OsString>,
     {
@@ -249,7 +262,7 @@ impl Args {
                     .ok_or_else(|| "missing path after --manifest".to_owned())?;
                 manifest_path = Some(PathBuf::from(path));
             } else if arg == "--help" || arg == "-h" {
-                return Err(Self::usage());
+                return Ok(ParsedArgs::Help);
             } else {
                 return Err(format!(
                     "unknown argument '{}'\n{}",
@@ -258,11 +271,11 @@ impl Args {
                 ));
             }
         }
-        Ok(Self { manifest_path })
+        Ok(ParsedArgs::Run(Self { manifest_path }))
     }
 
-    fn usage() -> String {
-        "usage: cargo run --locked --release -p zk-certify -- [--manifest PATH]".to_owned()
+    fn usage() -> &'static str {
+        "usage: cargo run --locked --release -p zk-certify -- [--manifest PATH]"
     }
 }
 
@@ -409,7 +422,11 @@ impl Manifest {
 
 fn main() -> ExitCode {
     let args = match Args::parse(env::args_os().skip(1)) {
-        Ok(args) => args,
+        Ok(ParsedArgs::Run(args)) => args,
+        Ok(ParsedArgs::Help) => {
+            println!("{}", Args::usage());
+            return ExitCode::SUCCESS;
+        }
         Err(message) => {
             eprintln!("{message}");
             return ExitCode::from(2);
@@ -649,14 +666,9 @@ fn check_no_direct_sha256(root: &Path) -> Result<(), String> {
                     return;
                 }
 
-                if [
-                    "use sha2::",
-                    "sha2::compress",
-                    "Sha256::digest",
-                    "Sha256::new",
-                ]
-                .iter()
-                .any(|needle| line.contains(needle))
+                if DIRECT_SHA256_NEEDLES
+                    .iter()
+                    .any(|needle| line.contains(needle))
                 {
                     findings.push(Finding {
                         path: rel_path.to_path_buf(),
@@ -776,7 +788,7 @@ fn relative_path<'a>(root: &'a Path, path: &'a Path) -> &'a Path {
 }
 
 fn contains_superseded_zk_surface(line: &str) -> bool {
-    ["R1csProofZkA1", "prove_r1cs_zk_a1", "verify_r1cs_zk_a1"]
+    SUPERSEDED_ZK_SURFACE_NEEDLES
         .iter()
         .any(|needle| line.contains(needle))
         || contains_versioned_veil_flock_domain(line)
@@ -801,4 +813,55 @@ fn contains_dash_v_digit(text: &str) -> bool {
     text.as_bytes()
         .windows(3)
         .any(|window| window[0] == b'-' && window[1] == b'v' && window[2].is_ascii_digit())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parser_treats_help_as_successful_mode() {
+        match Args::parse([OsString::from("--help")].into_iter()) {
+            Ok(ParsedArgs::Help) => {}
+            _ => panic!("expected help mode"),
+        }
+    }
+
+    #[test]
+    fn parser_accepts_manifest_path() {
+        match Args::parse(
+            [
+                OsString::from("--manifest"),
+                OsString::from("target/manifest"),
+            ]
+            .into_iter(),
+        ) {
+            Ok(ParsedArgs::Run(args)) => {
+                assert_eq!(args.manifest_path, Some(PathBuf::from("target/manifest")));
+            }
+            _ => panic!("expected runnable args"),
+        }
+    }
+
+    #[test]
+    fn parser_rejects_unknown_args() {
+        match Args::parse([OsString::from("--unknown")].into_iter()) {
+            Err(message) => assert!(message.contains("unknown argument")),
+            Ok(_) => panic!("expected parse error"),
+        }
+    }
+
+    #[test]
+    fn passed_count_uses_the_last_reported_test_result() {
+        let output = b"test result: ok. 0 passed; 0 failed\ntest result: ok. 3 passed; 0 failed\n";
+
+        assert_eq!(last_passed_count(output), 3);
+    }
+
+    #[test]
+    fn superseded_surface_detects_legacy_and_versioned_names() {
+        assert!(contains_superseded_zk_surface("pub struct R1csProofZkA1;"));
+        assert!(contains_superseded_zk_surface("\"veil-flock-v1\""));
+        assert!(!contains_superseded_zk_surface("\"veil-flock\""));
+    }
 }
