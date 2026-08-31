@@ -14,7 +14,8 @@ import VeiledFlock.Production.Merkle.ThreeTree
 These structures mirror the public Rust proof at the mathematical-value
 level.  Fixed production lengths use `Fin`-indexed families, so malformed
 vector lengths are not inhabitants of this model.  This is deliberately not
-a Rust/bincode refinement: the latter remains a separate theorem.
+a Rust/bincode refinement, and the main statistical-ZK theorem does not claim
+one.
 -/
 
 namespace VeiledFlock.ProductionNizkProof
@@ -333,13 +334,14 @@ structure ProductionStatement (_shape : BatchShape) where
 
 /-! ## Complete proof object of the formal production protocol
 
-The recursive Ligerito Rust structures above are the wire-level target of the
-later implementation-refinement theorem.  The cryptographic model already
-uses the stronger conservative PCS observation: the complete folded word,
-both raw L0 opening families, and all public-direct blinder evaluations.
-`FormalVeilFlockProof` is the exact joint output of those existing executable
-Lean components.  It deliberately exposes at least what the production
-verifier sees; no unmodeled Rust proof field is filled by an arbitrary value.
+The recursive Ligerito Rust structures above record the intended wire-level
+target for a separate future implementation-refinement theorem; no such
+refinement is claimed here.  The cryptographic model already uses the stronger
+conservative PCS observation: the complete folded word, both raw L0 opening
+families, and all public-direct blinder evaluations. `FormalVeilFlockProof` is
+the exact joint output of those existing executable Lean components. It
+deliberately exposes at least what the production verifier sees; no unmodeled
+Rust proof field is filled by an arbitrary value.
 -/
 
 /-- Complete FLOCK outer-PCS plus VEIL algebraic output at the registered
