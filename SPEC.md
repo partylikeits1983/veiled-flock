@@ -176,7 +176,9 @@ messages.
 The byte format is the five-byte `FLOCK` magic, flavor byte 5, and a bincode
 payload using fixed-width integer encoding. The payload contains bounded
 vectors and is not itself fixed-width. Decoding MUST enforce a 1 MiB limit,
-exact parameter shapes, no trailing bytes, and bounded vector lengths.
+known flavor, no trailing bytes, and bounded vector lengths. Verification MUST
+enforce exact parameter shapes and reject any proof-carried parameter mismatch
+before accepting.
 
 The verifier MUST reconstruct the pinned statement and shifted circuit, derive
 all claims itself, verify the one PCS opening and the VEIL proof, and reject any
