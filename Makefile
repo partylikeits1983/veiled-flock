@@ -2,6 +2,9 @@ CARGO ?= cargo
 RUSTUP ?= rustup
 LAKE ?= lake
 WORKSPACE_FLAGS = --locked --release --workspace --all-targets --all-features
+QUICKSTART_MESSAGES ?= messages.bin
+QUICKSTART_PROOF ?= proof.bin
+QUICKSTART_COUNT ?= 2
 EXAMPLE_SAMPLES ?= 5
 X86_64_RUSTFLAGS = -C target-cpu=x86-64-v3 -C target-feature=+pclmulqdq,+sha,+aes
 
@@ -14,11 +17,41 @@ X86_64_RUSTFLAGS_ENV = CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS
 endif
 
 .PHONY: test check format clippy clippy-x86 smoke-test formal-proof
+.PHONY: quickstart quickstart-demo quickstart-messages quickstart-prove
+.PHONY: quickstart-verify quickstart-roundtrip quickstart-clean
 .PHONY: examples veil-examples preimage-scaling mle-eval-bench chain-bench
 .PHONY: keccak-mid-density linear-sha-verifier keccak-chain-bench
 .PHONY: gen-ligerito-configs native-hash-benches
 
 test: check format clippy clippy-x86 smoke-test
+
+quickstart: quickstart-demo quickstart-roundtrip
+
+quickstart-demo:
+	$(CARGO) run --locked --release -p flock-prover --features veil \
+		--bin veiled_flock -- demo
+
+quickstart-messages:
+	dd if=/dev/zero of="$(QUICKSTART_MESSAGES)" bs=64 count=$(QUICKSTART_COUNT)
+
+quickstart-prove:
+	$(CARGO) run --locked --release -p flock-prover --features veil \
+		--bin veiled_flock -- prove --message "$(QUICKSTART_MESSAGES)" \
+		--out "$(QUICKSTART_PROOF)"
+
+quickstart-verify:
+	$(CARGO) run --locked --release -p flock-prover --features veil \
+		--bin veiled_flock -- verify --in "$(QUICKSTART_PROOF)"
+
+quickstart-roundtrip: quickstart-messages
+	$(CARGO) run --locked --release -p flock-prover --features veil \
+		--bin veiled_flock -- prove --message "$(QUICKSTART_MESSAGES)" \
+		--out "$(QUICKSTART_PROOF)"
+	$(CARGO) run --locked --release -p flock-prover --features veil \
+		--bin veiled_flock -- verify --in "$(QUICKSTART_PROOF)"
+
+quickstart-clean:
+	rm -f "$(QUICKSTART_MESSAGES)" "$(QUICKSTART_PROOF)"
 
 examples: veil-examples preimage-scaling mle-eval-bench chain-bench
 examples: keccak-mid-density linear-sha-verifier

@@ -46,32 +46,35 @@ make preimage-scaling
 
 ## Quickstart
 
-Run commands from the workspace root. The `veiled_flock` binary is gated behind
-the `veil` feature.
+Run commands from the workspace root. The Makefile targets wrap the locked
+Cargo invocation and the `veil` feature required by the `veiled_flock` binary.
 
 ```sh
-cargo run --locked --release -p flock-prover --features veil \
-  --bin veiled_flock -- demo
+make quickstart-demo
 ```
 
-To prove and verify your own batch, write one or more concatenated 64-byte
-messages to a file. This example creates two zero-valued messages:
+To prove and verify a generated sample batch:
 
 ```sh
-dd if=/dev/zero of=messages.bin bs=64 count=2
-
-cargo run --locked --release -p flock-prover --features veil \
-  --bin veiled_flock -- \
-  prove --message messages.bin --out proof.bin
-
-cargo run --locked --release -p flock-prover --features veil \
-  --bin veiled_flock -- \
-  verify --in proof.bin
+make quickstart-roundtrip
 ```
 
-`messages.bin` must contain one or more concatenated 64-byte messages. The
-proof bundle includes the ordered public digests. Full-ZK batches support up
-to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
+`make quickstart-roundtrip` writes two zero-valued 64-byte messages to
+`messages.bin`, writes the proof bundle to `proof.bin`, and verifies it. Use
+`QUICKSTART_MESSAGES`, `QUICKSTART_PROOF`, and `QUICKSTART_COUNT` to override
+those defaults.
+
+For an existing message file:
+
+```sh
+make quickstart-prove QUICKSTART_MESSAGES=messages.bin QUICKSTART_PROOF=proof.bin
+make quickstart-verify QUICKSTART_PROOF=proof.bin
+```
+
+`QUICKSTART_MESSAGES` must point to one or more concatenated 64-byte messages.
+The proof bundle includes the ordered public digests. Full-ZK batches support
+up to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit
+shapes.
 
 ## Running examples
 
