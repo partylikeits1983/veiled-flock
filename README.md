@@ -1,7 +1,13 @@
 # zk-FLOCK
 
+> **Warning:** This is draft work. No code review has been performed. Use at
+> your own risk. Do not use this repository for production secrets.
+
+## Overview
+
 VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for ordered batches
-of 64-byte BLAKE3 preimages.
+of 64-byte BLAKE3 preimages. The prover shows knowledge of one private
+64-byte message for each public BLAKE3 digest in the same order:
 
 ```text
 public:   ordered BLAKE3 digests y[0..b)
@@ -9,10 +15,25 @@ private:  64-byte messages x[0..b)
 claim:    BLAKE3(x[i]) = y[i] for 0 <= i < b
 ```
 
-## Draft status
+The proof bundle contains the ordered public digests, the witness commitment,
+and the VEIL proof, but never the private messages. The full-ZK path combines
+FLOCK's BLAKE3-preimage circuit, masked transcript values, hiding PCS openings,
+and the native `GF(2^128)` VEIL backend. See the
+[VEIL paper](https://eprint.iacr.org/2026/683) for the wrapper design and
+[SECURITY.md](docs/SECURITY.md) for this repository's exact security scope.
 
-This is draft work. No code review has been performed. Use at your own risk.
-Do not use this repository for production secrets.
+## Repository layout
+
+- **[crates/flock-core](crates/flock-core)** - FLOCK field, transcript,
+  polynomial, PCS, zerocheck, lincheck, and R1CS building blocks.
+- **[crates/flock-prover](crates/flock-prover)** - End-to-end proof systems,
+  BLAKE3 preimage relation, proof-bundle IO, CLI, examples, and benchmarks.
+- **[crates/veil-f128](crates/veil-f128)** - Native `GF(2^128)` VEIL
+  commitment and constraint backend.
+- **[examples](examples)** - Full-ZK examples of FLOCK's protocol layers using
+  the VEIL context.
+- **[tools/formal-proof](tools/formal-proof)** - Cargo wrapper for building the
+  Lean formalization and auditing theorem assumptions.
 
 ## Performance
 
@@ -76,7 +97,7 @@ The proof bundle includes the ordered public digests. Full-ZK batches support
 up to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit
 shapes.
 
-## Running examples
+## Examples
 
 Use release builds for the examples. Debug builds are useful for compiler
 checks, but the timing output is not meaningful. The Makefile targets below
@@ -94,6 +115,13 @@ own protocol layers:
 ```sh
 make veil-examples
 ```
+
+- **`mle_eval_zk`** - proves an MLE evaluation against a hiding PCS
+  commitment.
+- **`zerocheck_zk`** - proves that committed bit vectors satisfy
+  `a AND b = c` through FLOCK zerocheck plus ring-switched openings.
+- **`root_zk`** - proves knowledge of a selected root of a public polynomial as
+  a Boolean R1CS with zerocheck, lincheck, and ring-switched openings.
 
 See [examples/README.md](examples/README.md) for the statements, layers, oracle
 counts, and masking scope of those examples.
@@ -116,16 +144,18 @@ The native hash-chain baselines are Cargo benchmarks:
 make native-hash-benches
 ```
 
-## Verification
+## Building and testing
 
 ```sh
 make test
 make formal-proof
 ```
 
-`make formal-proof` builds the Lean proof libraries and audits the main theorem
-chain for non-standard axioms. See [SECURITY.md](docs/SECURITY.md) for the
-precise theorem and implementation scope.
+`make test` runs the locked release workspace checks, formatting check, clippy,
+the x86 clippy pass, and the BLAKE3 preimage smoke tests. `make formal-proof`
+builds the Lean proof libraries and audits the main theorem chain for
+non-standard axioms. See [SECURITY.md](docs/SECURITY.md) for the precise
+theorem and implementation scope.
 
 ## Documentation
 
