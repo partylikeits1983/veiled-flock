@@ -85,9 +85,10 @@ commitment produces one opening containing AB, C, and the public digest
 functional. Claim identifiers are canonical, duplicates are rejected, and the
 union of opened initial positions is checked against the code-padding budget.
 
-The public digest functional is derived only from the public statement. Equal
-public statements induce witness differences in the functional's kernel; the
-PCS translation tests check this condition for the registered construction.
+The public digest functional is derived from the public statement and
+Fiat-Shamir challenges sampled after the prefix is bound. Equal public
+statements induce witness differences in the functional's kernel; the PCS
+translation tests check this condition for the registered construction.
 
 ## Simulator Boundary
 
