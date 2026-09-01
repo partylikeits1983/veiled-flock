@@ -341,21 +341,18 @@ impl<'a> RoTreeHasher<'a> {
 
     /// Native SHA-256 hash after the caller has already charged the query.
     #[inline]
-    pub(crate) fn native_hash_unmetered(
-        &self,
-        level: u32,
-        index: u64,
-        payload: &[u8],
-    ) -> Option<Hash> {
+    pub(crate) fn native_hash_unmetered(&self, level: u32, index: u64, payload: &[u8]) -> Hash {
         match self {
             RoTreeHasher::Native { mid, .. } => {
                 let mut h = mid.clone();
                 h.update(level.to_le_bytes());
                 h.update(index.to_le_bytes());
                 h.update(payload);
-                Some(h.finalize().into())
+                h.finalize().into()
             }
-            RoTreeHasher::External { .. } => None,
+            RoTreeHasher::External { .. } => {
+                unreachable!("native_hash_unmetered requires a native tree hasher")
+            }
         }
     }
 

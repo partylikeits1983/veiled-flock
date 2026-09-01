@@ -363,9 +363,11 @@ pub fn try_merkle_tree_framed(
                         for (lane, (out, leaf)) in
                             outs.iter_mut().zip(leaves.chunks(leaf_size)).enumerate()
                         {
-                            *out = leaf_hasher
-                                .native_hash_unmetered(leaf_level, (base_index + lane) as u64, leaf)
-                                .expect("native context must hash leaves");
+                            *out = leaf_hasher.native_hash_unmetered(
+                                leaf_level,
+                                (base_index + lane) as u64,
+                                leaf,
+                            );
                         }
                     }
                 });
@@ -380,9 +382,7 @@ pub fn try_merkle_tree_framed(
                 .zip(data.par_chunks(leaf_size))
                 .enumerate()
                 .for_each(|(i, (out, leaf))| {
-                    *out = leaf_hasher
-                        .native_hash_unmetered(leaf_level, i as u64, leaf)
-                        .expect("native context must hash leaves");
+                    *out = leaf_hasher.native_hash_unmetered(leaf_level, i as u64, leaf);
                 });
         }
     } else {
@@ -406,19 +406,19 @@ pub fn try_merkle_tree_framed(
         let next_len = read_len >> 1;
         let (read, rest) = tree[read_start..].split_at_mut(read_len);
         let write = &mut rest[..next_len];
-        let hash_one = |i: usize| -> Result<Hash, OracleLimitError> {
+        let child_pair = |i: usize| -> [u8; 64] {
             let mut pair = [0u8; 64];
             pair[..32].copy_from_slice(&read[2 * i]);
             pair[32..].copy_from_slice(&read[2 * i + 1]);
+            pair
+        };
+        let hash_one = |i: usize| -> Result<Hash, OracleLimitError> {
+            let pair = child_pair(i);
             node_hasher.try_hash(node_level, i as u64, &pair)
         };
         let hash_one_native = |i: usize| -> Hash {
-            let mut pair = [0u8; 64];
-            pair[..32].copy_from_slice(&read[2 * i]);
-            pair[32..].copy_from_slice(&read[2 * i + 1]);
-            node_hasher
-                .native_hash_unmetered(node_level, i as u64, &pair)
-                .expect("native context must hash parent nodes")
+            let pair = child_pair(i);
+            node_hasher.native_hash_unmetered(node_level, i as u64, &pair)
         };
         if ctx.is_native() {
             node_hasher.try_charge(next_len as u64)?;
@@ -940,6 +940,7 @@ pub fn verify_merkle_multi_proof(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oracle_budget::{OracleLimitError, OracleQueryBudget};
     #[cfg(any(
         all(target_arch = "aarch64", target_feature = "sha2"),
         all(target_arch = "x86_64", target_feature = "sha")
@@ -947,6 +948,10 @@ mod tests {
     use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
     use crate::ro::{RecordingOracle, RoChannel, RoContext};
     use std::sync::Arc;
+
+    fn full_tree_query_count(n_leaves: usize) -> u64 {
+        (2 * n_leaves - 1) as u64
+    }
 
     #[test]
     fn two_leaves_matches_hand_computation() {
@@ -1258,7 +1263,7 @@ mod tests {
         for &(n_leaves, leaf_size) in &[(1usize, 7usize), (2, 9), (4, 17), (16, 64)] {
             let data = random_data(n_leaves, leaf_size, 0x4255_4447 ^ n_leaves as u64);
             let nonce = [0x44; 32];
-            let expected_queries = (2 * n_leaves - 1) as u64;
+            let expected_queries = full_tree_query_count(n_leaves);
             let unbudgeted = try_merkle_tree_framed(
                 &data,
                 n_leaves,
@@ -1268,7 +1273,7 @@ mod tests {
             )
             .unwrap();
 
-            let budget = crate::oracle_budget::OracleQueryBudget::new(expected_queries);
+            let budget = OracleQueryBudget::new(expected_queries);
             let budgeted = try_merkle_tree_framed(
                 &data,
                 n_leaves,
@@ -1280,7 +1285,7 @@ mod tests {
             assert_eq!(budgeted, unbudgeted);
             assert_eq!(budget.used(), expected_queries);
 
-            let too_small = crate::oracle_budget::OracleQueryBudget::new(expected_queries - 1);
+            let too_small = OracleQueryBudget::new(expected_queries - 1);
             let err = try_merkle_tree_framed(
                 &data,
                 n_leaves,
@@ -1289,10 +1294,7 @@ mod tests {
                 0,
             )
             .unwrap_err();
-            assert_eq!(
-                err,
-                crate::oracle_budget::OracleLimitError::QueryBudgetExceeded
-            );
+            assert_eq!(err, OracleLimitError::QueryBudgetExceeded);
             assert!(too_small.used() <= too_small.limit());
         }
     }
@@ -1306,7 +1308,7 @@ mod tests {
             assert!(remainder.is_empty());
             let salts = salt_chunks.to_vec();
             let nonce = [0x55; 32];
-            let expected_queries = (2 * n_leaves - 1) as u64;
+            let expected_queries = full_tree_query_count(n_leaves);
             let unbudgeted = try_merkle_tree_framed_salted(
                 &data,
                 n_leaves,
@@ -1317,7 +1319,7 @@ mod tests {
             )
             .unwrap();
 
-            let budget = crate::oracle_budget::OracleQueryBudget::new(expected_queries);
+            let budget = OracleQueryBudget::new(expected_queries);
             let budgeted = try_merkle_tree_framed_salted(
                 &data,
                 n_leaves,
