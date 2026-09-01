@@ -286,9 +286,9 @@ pub fn merkle_tree(data: &[u8], num_leaves: usize) -> Vec<Hash> {
 /// carries the per-proof nonce, and — when `ctx` is external — routes every
 /// hash through the recording/programmable oracle.
 ///
-/// Correctness-first: uses the scalar midstate hasher (`RoTreeHasher`) on every
-/// node. The 4-way SIMD midstate kernel is a follow-up optimization; digests
-/// are identical either way (both equal `SHA256` of the framed point).
+/// Native backends use the four-way midstate kernel where available, with any
+/// attached budget charged once per tree level. External backends serialize
+/// every framed point through the shared oracle.
 pub fn merkle_tree_framed(
     data: &[u8],
     num_leaves: usize,
@@ -327,7 +327,8 @@ pub fn try_merkle_tree_framed(
     // Leaves. Native backends use the four-way midstate kernel where available;
     // external backends serialize through the shared oracle.
     let leaf_hasher = RoTreeHasher::new(ctx, ROLE_LEAF, channel, tree_depth, leaf_size as u64);
-    if ctx.is_native() && !ctx.has_budget() {
+    if ctx.is_native() {
+        leaf_hasher.try_charge(num_leaves as u64)?;
         #[cfg(any(
             all(target_arch = "aarch64", target_feature = "sha2"),
             all(target_arch = "x86_64", target_feature = "sha")
@@ -362,7 +363,11 @@ pub fn try_merkle_tree_framed(
                         for (lane, (out, leaf)) in
                             outs.iter_mut().zip(leaves.chunks(leaf_size)).enumerate()
                         {
-                            *out = leaf_hasher.hash(leaf_level, (base_index + lane) as u64, leaf);
+                            *out = leaf_hasher.native_hash_unmetered(
+                                leaf_level,
+                                (base_index + lane) as u64,
+                                leaf,
+                            );
                         }
                     }
                 });
@@ -377,18 +382,9 @@ pub fn try_merkle_tree_framed(
                 .zip(data.par_chunks(leaf_size))
                 .enumerate()
                 .for_each(|(i, (out, leaf))| {
-                    *out = leaf_hasher.hash(leaf_level, i as u64, leaf);
+                    *out = leaf_hasher.native_hash_unmetered(leaf_level, i as u64, leaf);
                 });
         }
-    } else if ctx.is_native() {
-        tree[..num_leaves]
-            .par_iter_mut()
-            .zip(data.par_chunks(leaf_size))
-            .enumerate()
-            .try_for_each(|(i, (out, leaf))| -> Result<(), OracleLimitError> {
-                *out = leaf_hasher.try_hash(leaf_level, i as u64, leaf)?;
-                Ok(())
-            })?;
     } else {
         for (i, (out, leaf)) in tree[..num_leaves]
             .iter_mut()
@@ -410,13 +406,22 @@ pub fn try_merkle_tree_framed(
         let next_len = read_len >> 1;
         let (read, rest) = tree[read_start..].split_at_mut(read_len);
         let write = &mut rest[..next_len];
-        let hash_one = |i: usize| -> Result<Hash, OracleLimitError> {
+        let child_pair = |i: usize| -> [u8; 64] {
             let mut pair = [0u8; 64];
             pair[..32].copy_from_slice(&read[2 * i]);
             pair[32..].copy_from_slice(&read[2 * i + 1]);
+            pair
+        };
+        let hash_one = |i: usize| -> Result<Hash, OracleLimitError> {
+            let pair = child_pair(i);
             node_hasher.try_hash(node_level, i as u64, &pair)
         };
-        if ctx.is_native() && !ctx.has_budget() {
+        let hash_one_native = |i: usize| -> Hash {
+            let pair = child_pair(i);
+            node_hasher.native_hash_unmetered(node_level, i as u64, &pair)
+        };
+        if ctx.is_native() {
+            node_hasher.try_charge(next_len as u64)?;
             #[cfg(any(
                 all(target_arch = "aarch64", target_feature = "sha2"),
                 all(target_arch = "x86_64", target_feature = "sha")
@@ -452,8 +457,7 @@ pub fn try_merkle_tree_framed(
                             );
                         } else {
                             for (lane, out) in outs.iter_mut().enumerate() {
-                                *out = hash_one(base_index + lane)
-                                    .expect("point-oracle query budget exhausted");
+                                *out = hash_one_native(base_index + lane);
                             }
                         }
                     });
@@ -464,16 +468,9 @@ pub fn try_merkle_tree_framed(
             )))]
             {
                 write.par_iter_mut().enumerate().for_each(|(i, out)| {
-                    *out = hash_one(i).expect("point-oracle query budget exhausted")
+                    *out = hash_one_native(i);
                 });
             }
-        } else if ctx.is_native() {
-            write.par_iter_mut().enumerate().try_for_each(
-                |(i, out)| -> Result<(), OracleLimitError> {
-                    *out = hash_one(i)?;
-                    Ok(())
-                },
-            )?;
         } else {
             for (i, out) in write.iter_mut().enumerate() {
                 *out = hash_one(i)?;
@@ -943,6 +940,7 @@ pub fn verify_merkle_multi_proof(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::oracle_budget::{OracleLimitError, OracleQueryBudget};
     #[cfg(any(
         all(target_arch = "aarch64", target_feature = "sha2"),
         all(target_arch = "x86_64", target_feature = "sha")
@@ -950,6 +948,10 @@ mod tests {
     use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
     use crate::ro::{RecordingOracle, RoChannel, RoContext};
     use std::sync::Arc;
+
+    fn full_tree_query_count(n_leaves: usize) -> u64 {
+        (2 * n_leaves - 1) as u64
+    }
 
     #[test]
     fn two_leaves_matches_hand_computation() {
@@ -1253,6 +1255,82 @@ mod tests {
                 payload,
                 data[index as usize * leaf_size..(index as usize + 1) * leaf_size]
             );
+        }
+    }
+
+    #[test]
+    fn budgeted_native_framed_tree_matches_unbudgeted() {
+        for &(n_leaves, leaf_size) in &[(1usize, 7usize), (2, 9), (4, 17), (16, 64)] {
+            let data = random_data(n_leaves, leaf_size, 0x4255_4447 ^ n_leaves as u64);
+            let nonce = [0x44; 32];
+            let expected_queries = full_tree_query_count(n_leaves);
+            let unbudgeted = try_merkle_tree_framed(
+                &data,
+                n_leaves,
+                &RoContext::native(nonce),
+                RoChannel::Witness,
+                0,
+            )
+            .unwrap();
+
+            let budget = OracleQueryBudget::new(expected_queries);
+            let budgeted = try_merkle_tree_framed(
+                &data,
+                n_leaves,
+                &RoContext::native_with_budget(nonce, budget.clone()),
+                RoChannel::Witness,
+                0,
+            )
+            .unwrap();
+            assert_eq!(budgeted, unbudgeted);
+            assert_eq!(budget.used(), expected_queries);
+
+            let too_small = OracleQueryBudget::new(expected_queries - 1);
+            let err = try_merkle_tree_framed(
+                &data,
+                n_leaves,
+                &RoContext::native_with_budget(nonce, too_small.clone()),
+                RoChannel::Witness,
+                0,
+            )
+            .unwrap_err();
+            assert_eq!(err, OracleLimitError::QueryBudgetExceeded);
+            assert!(too_small.used() <= too_small.limit());
+        }
+    }
+
+    #[test]
+    fn budgeted_native_salted_framed_tree_matches_unbudgeted() {
+        for &(n_leaves, leaf_size) in &[(2usize, 11usize), (8, 33), (16, 64)] {
+            let data = random_data(n_leaves, leaf_size, 0x5341_4c54 ^ leaf_size as u64);
+            let salt_bytes = random_data(n_leaves, 32, 0x5341_4c54 ^ n_leaves as u64);
+            let (salt_chunks, remainder) = salt_bytes.as_chunks::<32>();
+            assert!(remainder.is_empty());
+            let salts = salt_chunks.to_vec();
+            let nonce = [0x55; 32];
+            let expected_queries = full_tree_query_count(n_leaves);
+            let unbudgeted = try_merkle_tree_framed_salted(
+                &data,
+                n_leaves,
+                &salts,
+                &RoContext::native(nonce),
+                RoChannel::MaskP,
+                3,
+            )
+            .unwrap();
+
+            let budget = OracleQueryBudget::new(expected_queries);
+            let budgeted = try_merkle_tree_framed_salted(
+                &data,
+                n_leaves,
+                &salts,
+                &RoContext::native_with_budget(nonce, budget.clone()),
+                RoChannel::MaskP,
+                3,
+            )
+            .unwrap();
+            assert_eq!(budgeted, unbudgeted);
+            assert_eq!(budget.used(), expected_queries);
         }
     }
 
