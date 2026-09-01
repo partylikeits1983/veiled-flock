@@ -135,6 +135,8 @@ pub use kernels::{
 };
 use rayon::prelude::*;
 
+const ORACLE_LIMIT_EXPECT: &str = "lincheck oracle query budget exhausted";
+
 /// Bench-only A/B toggle: when set, [`partial_fold_packed_z_best`] uses the legacy
 /// `i_inner`-partitioned `partial_fold_packed_z_neon_iblock_padded` instead of the
 /// default outer(tile)-partitioned `partial_fold_packed_z_neon_oblock_padded`. The
@@ -1198,8 +1200,7 @@ pub fn prove<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> (LincheckProof, LincheckClaim) {
-    try_prove(z_packed, m, k_log, k_skip, circuit, x_ab, challenger)
-        .expect("lincheck oracle query budget exhausted")
+    try_prove(z_packed, m, k_log, k_skip, circuit, x_ab, challenger).expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_prove<Ch: Challenger>(
@@ -1248,7 +1249,7 @@ pub fn prove_padded<Ch: Challenger>(
         x_ab,
         challenger,
     )
-    .expect("lincheck oracle query budget exhausted")
+    .expect(ORACLE_LIMIT_EXPECT)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1306,7 +1307,7 @@ pub fn prove_padded_capture_z_vec<Ch: Challenger>(
         x_ab,
         challenger,
     )
-    .expect("lincheck oracle query budget exhausted")
+    .expect(ORACLE_LIMIT_EXPECT)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1375,7 +1376,7 @@ pub fn prove_padded_masked_capture_z_vec<Ch: Challenger>(
         mask,
         challenger,
     )
-    .expect("lincheck oracle query budget exhausted")
+    .expect(ORACLE_LIMIT_EXPECT)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1659,22 +1660,7 @@ pub fn verify<Ch: Challenger>(
     proof: &LincheckProof,
     challenger: &mut Ch,
 ) -> Result<LincheckClaim, VerifyError> {
-    try_verify(m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, challenger)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn try_verify<Ch: Challenger>(
-    m: usize,
-    k_log: usize,
-    k_skip: usize,
-    circuit: &dyn LincheckCircuit,
-    x_ab: &QuirkyPoint,
-    v_a: F128,
-    v_b: F128,
-    proof: &LincheckProof,
-    challenger: &mut Ch,
-) -> Result<LincheckClaim, VerifyError> {
-    try_verify_masked(
+    verify_masked(
         m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, None, challenger,
     )
 }
@@ -1691,24 +1677,6 @@ pub fn try_verify<Ch: Challenger>(
 /// prover picks `s_eval` after `ρ` and the output claim is unconstrained.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_masked<Ch: Challenger>(
-    m: usize,
-    k_log: usize,
-    k_skip: usize,
-    circuit: &dyn LincheckCircuit,
-    x_ab: &QuirkyPoint,
-    v_a: F128,
-    v_b: F128,
-    proof: &LincheckProof,
-    mask: Option<(F128, F128)>,
-    challenger: &mut Ch,
-) -> Result<LincheckClaim, VerifyError> {
-    try_verify_masked(
-        m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, mask, challenger,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-pub fn try_verify_masked<Ch: Challenger>(
     m: usize,
     k_log: usize,
     k_skip: usize,
@@ -1903,6 +1871,11 @@ pub fn try_verify_masked<Ch: Challenger>(
 mod tests {
     use super::*;
     use crate::challenger::FsChallenger;
+    use crate::oracle_budget::{OracleLimitError, OracleQueryBudget};
+
+    fn query_budget_exceeded() -> VerifyError {
+        VerifyError::OracleLimit(OracleLimitError::QueryBudgetExceeded)
+    }
 
     /// SplitMix64 PRNG, deterministic.
     struct Rng(u64);
@@ -2068,7 +2041,7 @@ mod tests {
             rounds: vec![(F128::ZERO, F128::ZERO); k_log - k_skip],
             z_partial: vec![F128::ZERO; 1usize << k_skip],
         };
-        let budget = crate::oracle_budget::OracleQueryBudget::new(1);
+        let budget = OracleQueryBudget::new(1);
         let mut challenger = FsChallenger::new_budgeted(b"flock-test", budget);
         let err = verify(
             m,
@@ -2082,10 +2055,7 @@ mod tests {
             &mut challenger,
         )
         .unwrap_err();
-        assert_eq!(
-            err,
-            VerifyError::OracleLimit(crate::oracle_budget::OracleLimitError::QueryBudgetExceeded)
-        );
+        assert_eq!(err, query_budget_exceeded());
     }
 
     // ---- Unit tests for the kernels ----

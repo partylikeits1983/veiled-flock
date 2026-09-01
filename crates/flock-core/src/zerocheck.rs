@@ -46,6 +46,8 @@ pub const K_SKIP: usize = 6;
 /// zerocheck after the univariate skip.
 pub const N_INNER: usize = 7;
 
+const ORACLE_LIMIT_EXPECT: &str = "zerocheck oracle query budget exhausted";
+
 /// Derive the equality point shared by every zerocheck prover, verifier, and
 /// simulator. The multilinear recurrence reconstructs `G(0)` by dividing by
 /// `1 + r_i`, so sampled rest coordinates must exclude `1`.
@@ -429,8 +431,7 @@ pub fn prove_packed<C: Challenger>(
     m: usize,
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim) {
-    try_prove_packed(a_packed, b_packed, c_packed, m, challenger)
-        .expect("zerocheck oracle query budget exhausted")
+    try_prove_packed(a_packed, b_packed, c_packed, m, challenger).expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_prove_packed<C: Challenger>(
@@ -463,7 +464,7 @@ pub fn prove_packed_padded<C: Challenger>(
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim) {
     try_prove_packed_padded(a_packed, b_packed, c_packed, m, padding, challenger)
-        .expect("zerocheck oracle query budget exhausted")
+        .expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_prove_packed_padded<C: Challenger>(
@@ -495,7 +496,7 @@ pub fn prove_packed_padded_capture_s_hat_v_c<C: Challenger>(
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim, Vec<F128>) {
     try_prove_packed_padded_capture_s_hat_v_c(a_packed, b_packed, c_packed, m, padding, challenger)
-        .expect("zerocheck oracle query budget exhausted")
+        .expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_prove_packed_padded_capture_s_hat_v_c<C: Challenger>(
@@ -773,14 +774,6 @@ pub fn verify<C: Challenger>(
     proof: &ZerocheckProof,
     challenger: &mut C,
 ) -> Result<ZerocheckClaim, VerifyError> {
-    try_verify(log_n, proof, challenger)
-}
-
-pub fn try_verify<C: Challenger>(
-    log_n: usize,
-    proof: &ZerocheckProof,
-    challenger: &mut C,
-) -> Result<ZerocheckClaim, VerifyError> {
     let m = log_n;
     let k_skip = K_SKIP;
 
@@ -1006,7 +999,7 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     try_prove_packed_padded_zk(
         a_packed, b_packed, c_packed, p_small, m, padding, challenger,
     )
-    .expect("zerocheck oracle query budget exhausted")
+    .expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_prove_packed_padded_zk<C: Challenger>(
@@ -1047,7 +1040,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     try_prove_packed_padded_zk_masked(
         a_packed, b_packed, c_packed, p_small, m, padding, mask, challenger,
     )
-    .expect("zerocheck oracle query budget exhausted")
+    .expect(ORACLE_LIMIT_EXPECT)
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1364,7 +1357,7 @@ pub fn mask_round_pairs<C: Challenger>(
     m: usize,
     challenger: &mut C,
 ) -> Vec<(F128, F128)> {
-    try_mask_round_pairs(p_small, m, challenger).expect("zerocheck oracle query budget exhausted")
+    try_mask_round_pairs(p_small, m, challenger).expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_mask_round_pairs<C: Challenger>(
@@ -1413,15 +1406,7 @@ pub fn verify_zk<C: Challenger>(
     proof: &ZkZerocheckProof,
     challenger: &mut C,
 ) -> Result<ZerocheckClaim, VerifyError> {
-    try_verify_zk(log_n, proof, challenger)
-}
-
-pub fn try_verify_zk<C: Challenger>(
-    log_n: usize,
-    proof: &ZkZerocheckProof,
-    challenger: &mut C,
-) -> Result<ZerocheckClaim, VerifyError> {
-    try_verify_zk_masked(log_n, proof, None, challenger)
+    verify_zk_masked(log_n, proof, None, challenger)
 }
 
 /// [`verify_zk`] with the optional round-1 mask engaged.
@@ -1432,15 +1417,6 @@ pub fn try_verify_zk<C: Challenger>(
 /// c-claim point, or a prover picks them after `z` and both derived values
 /// are unconstrained.
 pub fn verify_zk_masked<C: Challenger>(
-    log_n: usize,
-    proof: &ZkZerocheckProof,
-    mask: Option<(F128, F128)>,
-    challenger: &mut C,
-) -> Result<ZerocheckClaim, VerifyError> {
-    try_verify_zk_masked(log_n, proof, mask, challenger)
-}
-
-pub fn try_verify_zk_masked<C: Challenger>(
     log_n: usize,
     proof: &ZkZerocheckProof,
     mask: Option<(F128, F128)>,

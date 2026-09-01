@@ -74,6 +74,7 @@ use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::univariate_skip::{SplitEqGhash, build_eq};
 
 const DOMAIN: &[u8] = b"flock-perm";
+const ORACLE_LIMIT_EXPECT: &str = "permutation oracle query budget exhausted";
 
 // ---------------------------------------------------------------------------
 // Proof / claim / error types
@@ -347,7 +348,17 @@ fn try_open_v<C: Challenger>(
     )
 }
 
-/// Verify an [`open_v`] opening.
+fn map_pcs_open_error(err: pcs::VerifyError) -> VerifyError {
+    match err {
+        pcs::VerifyError::OracleLimit(err) => VerifyError::OracleLimit(err),
+        pcs::VerifyError::RingSwitch(pcs::ring_switch::VerifyError::OracleLimit(err)) => {
+            VerifyError::OracleLimit(err)
+        }
+        other => VerifyError::PcsOpen(other),
+    }
+}
+
+/// Verify a [`try_open_v`] opening.
 fn verify_v<C: Challenger>(
     commitment: &Commitment,
     claims: &[PackedDirectClaimRef<'_>],
@@ -357,13 +368,7 @@ fn verify_v<C: Challenger>(
     let num_vars = commitment.params.log_msg_len();
     let cfg = ligerito_verifier_config(num_vars);
     pcs::verify_opening_batch_ligerito_mixed(commitment, &[], &[], &[], claims, open, &cfg, ch)
-        .map_err(|err| match err {
-            pcs::VerifyError::OracleLimit(err) => VerifyError::OracleLimit(err),
-            pcs::VerifyError::RingSwitch(pcs::ring_switch::VerifyError::OracleLimit(err)) => {
-                VerifyError::OracleLimit(err)
-            }
-            other => VerifyError::PcsOpen(other),
-        })
+        .map_err(map_pcs_open_error)
 }
 
 /// The five evaluation points of `v` (each length `μ+1`) that the PCS opens, in
@@ -491,7 +496,7 @@ pub fn prove<C: Challenger>(
     sigma: &[usize],
     ch: &mut C,
 ) -> (PermutationProof, PermutationClaim) {
-    try_prove(f, g, sigma, ch).expect("permutation oracle query budget exhausted")
+    try_prove(f, g, sigma, ch).expect(ORACLE_LIMIT_EXPECT)
 }
 
 pub fn try_prove<C: Challenger>(
@@ -679,14 +684,6 @@ pub fn verify<C: Challenger>(
     proof: &PermutationProof,
     ch: &mut C,
 ) -> Result<PermutationClaim, VerifyError> {
-    try_verify(mu, proof, ch)
-}
-
-pub fn try_verify<C: Challenger>(
-    mu: usize,
-    proof: &PermutationProof,
-    ch: &mut C,
-) -> Result<PermutationClaim, VerifyError> {
     if proof.rounds.len() != mu {
         return Err(VerifyError::BadRoundLength {
             expected: mu,
@@ -798,6 +795,7 @@ fn observe_evals<C: Challenger>(ch: &mut C, evals: &[F128; 7]) {
 mod tests {
     use super::*;
     use crate::challenger::FsChallenger;
+    use crate::oracle_budget::{OracleLimitError, OracleQueryBudget};
 
     // SplitMix64, matching the repo's test RNG convention.
     struct Rng(u64);
@@ -871,19 +869,20 @@ mod tests {
         verify(mu, proof, &mut ch)
     }
 
+    fn query_budget_exceeded() -> VerifyError {
+        VerifyError::OracleLimit(OracleLimitError::QueryBudgetExceeded)
+    }
+
     #[test]
     fn verify_returns_oracle_limit_when_budget_exhausted() {
         let mu = 7;
         let (f, g, sigma) = honest_instance(mu, 0xBADC_0FFE);
         let (proof, _) = run_prove(&f, &g, &sigma);
-        let budget = crate::oracle_budget::OracleQueryBudget::new(1);
+        let budget = OracleQueryBudget::new(1);
         let mut ch = FsChallenger::new_budgeted(b"perm-test", budget);
         bind(&mut ch, &f, &g, &sigma);
         let err = verify(mu, &proof, &mut ch).unwrap_err();
-        assert_eq!(
-            err,
-            VerifyError::OracleLimit(crate::oracle_budget::OracleLimitError::QueryBudgetExceeded)
-        );
+        assert_eq!(err, query_budget_exceeded());
     }
 
     #[test]
