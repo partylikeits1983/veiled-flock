@@ -58,8 +58,9 @@
 //! `s_hat_v` has 128 entries indexed by the 7-bit prefix.
 
 use crate::bits::transpose_8x8_bits;
-use crate::challenger::Challenger;
+use crate::challenger::{Challenger, sample_f128_scalars};
 use crate::field::F128;
+use crate::oracle_budget::OracleLimitError;
 use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::multilinear::lagrange_weights_naive;
 use crate::zerocheck::univariate_skip::build_eq;
@@ -2197,6 +2198,13 @@ impl RsEqInd {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerifyError {
     ClaimMismatch,
+    OracleLimit(OracleLimitError),
+}
+
+impl From<OracleLimitError> for VerifyError {
+    fn from(err: OracleLimitError) -> Self {
+        Self::OracleLimit(err)
+    }
 }
 
 /// Prover side of the ring-switching reduction.
@@ -2213,6 +2221,15 @@ pub fn prove<Ch: Challenger>(
     x_outer: &[F128],
     challenger: &mut Ch,
 ) -> (RingSwitchProof, RingSwitchOutput) {
+    try_prove(packed_witness, x_outer, challenger)
+        .expect("ring-switch oracle query budget exhausted")
+}
+
+pub fn try_prove<Ch: Challenger>(
+    packed_witness: &[F128],
+    x_outer: &[F128],
+    challenger: &mut Ch,
+) -> Result<(RingSwitchProof, RingSwitchOutput), OracleLimitError> {
     assert!(
         !x_outer.is_empty(),
         "x_outer must contain at least 1 coord (the 7th-bit factor)"
@@ -2252,7 +2269,7 @@ pub fn prove<Ch: Challenger>(
     challenger.observe_f128_slice(&s_hat_v);
 
     // Sample row-batching r''.
-    let r_dprime = challenger.sample_f128_vec(LOG_PACKING);
+    let r_dprime = challenger.try_sample_f128_vec(LOG_PACKING)?;
     let eq_r_dprime = build_eq(&r_dprime);
 
     // Compute BaseFold target: T = ⟨transpose(s_hat_v), eq(r'')⟩.
@@ -2269,13 +2286,13 @@ pub fn prove<Ch: Challenger>(
         );
     }
 
-    (
+    Ok((
         RingSwitchProof { s_hat_v },
         RingSwitchOutput {
             rs_eq_ind,
             sumcheck_claim,
         },
-    )
+    ))
 }
 
 /// Batched prover: produce ring-switching proofs for `x_outers.len()` opening
@@ -2287,8 +2304,17 @@ pub fn prove_batched<Ch: Challenger>(
     x_outers: &[&[F128]],
     challenger: &mut Ch,
 ) -> (Vec<(RingSwitchProof, RingSwitchBatchOutput)>, Vec<F128>) {
+    try_prove_batched(packed_witness, x_outers, challenger)
+        .expect("ring-switch oracle query budget exhausted")
+}
+
+pub fn try_prove_batched<Ch: Challenger>(
+    packed_witness: &[F128],
+    x_outers: &[&[F128]],
+    challenger: &mut Ch,
+) -> Result<(Vec<(RingSwitchProof, RingSwitchBatchOutput)>, Vec<F128>), OracleLimitError> {
     let m = LOG_PACKING + (packed_witness.len().trailing_zeros() as usize);
-    prove_batched_padded(packed_witness, x_outers, &PaddingSpec::dense(m), challenger)
+    try_prove_batched_padded(packed_witness, x_outers, &PaddingSpec::dense(m), challenger)
 }
 
 /// Padding-aware variant of [`prove_batched`]. Threads `padding` into
@@ -2306,7 +2332,17 @@ pub fn prove_batched_padded<Ch: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut Ch,
 ) -> (Vec<(RingSwitchProof, RingSwitchBatchOutput)>, Vec<F128>) {
-    prove_batched_padded_with_precomputed(packed_witness, x_outers, &[], padding, challenger)
+    try_prove_batched_padded(packed_witness, x_outers, padding, challenger)
+        .expect("ring-switch oracle query budget exhausted")
+}
+
+pub fn try_prove_batched_padded<Ch: Challenger>(
+    packed_witness: &[F128],
+    x_outers: &[&[F128]],
+    padding: &PaddingSpec,
+    challenger: &mut Ch,
+) -> Result<(Vec<(RingSwitchProof, RingSwitchBatchOutput)>, Vec<F128>), OracleLimitError> {
+    try_prove_batched_padded_with_precomputed(packed_witness, x_outers, &[], padding, challenger)
 }
 
 /// Variant of [`prove_batched_padded`] that accepts an optional precomputed
@@ -2332,6 +2368,23 @@ pub fn prove_batched_padded_with_precomputed<Ch: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut Ch,
 ) -> (Vec<(RingSwitchProof, RingSwitchBatchOutput)>, Vec<F128>) {
+    try_prove_batched_padded_with_precomputed(
+        packed_witness,
+        x_outers,
+        precomputed_s_hat_v,
+        padding,
+        challenger,
+    )
+    .expect("ring-switch oracle query budget exhausted")
+}
+
+pub fn try_prove_batched_padded_with_precomputed<Ch: Challenger>(
+    packed_witness: &[F128],
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    padding: &PaddingSpec,
+    challenger: &mut Ch,
+) -> Result<(Vec<(RingSwitchProof, RingSwitchBatchOutput)>, Vec<F128>), OracleLimitError> {
     assert!(!x_outers.is_empty());
     let trace = std::env::var("PCS_TRACE").is_ok();
     let n = x_outers.len();
@@ -2525,7 +2578,7 @@ pub fn prove_batched_padded_with_precomputed<Ch: Challenger>(
             Kind::Sparse(s) => sparse_s_hat_v[s].clone(),
         };
         challenger.observe_f128_slice(&s_hat_v);
-        let r_dprime = challenger.sample_f128_vec(LOG_PACKING);
+        let r_dprime = challenger.try_sample_f128_vec(LOG_PACKING)?;
         let eq_r_dprime = build_eq(&r_dprime);
 
         let s_hat_u = tensor_algebra_transpose(&s_hat_v);
@@ -2541,7 +2594,7 @@ pub fn prove_batched_padded_with_precomputed<Ch: Challenger>(
     // γ_rs sampled after all RS observations — sound. Each γ_rs[k] is then
     // baked into eq_r_dprime[k] before building the Φ byte table, so the
     // fold output is γ_k · B_k directly. pcs combine just adds.
-    let gammas_rs: Vec<F128> = (0..n).map(|_| challenger.sample_f128()).collect();
+    let gammas_rs = sample_f128_scalars(challenger, n)?;
 
     let results: Vec<(RingSwitchProof, RingSwitchBatchOutput)> = work
         .into_iter()
@@ -2589,7 +2642,7 @@ pub fn prove_batched_padded_with_precomputed<Ch: Challenger>(
         );
     }
 
-    (results, gammas_rs)
+    Ok((results, gammas_rs))
 }
 
 /// Verifier side of the ring-switching reduction.
@@ -2626,7 +2679,7 @@ pub fn verify<Ch: Challenger>(
     }
 
     // Sample r''.
-    let r_dprime = challenger.sample_f128_vec(LOG_PACKING);
+    let r_dprime = challenger.try_sample_f128_vec(LOG_PACKING)?;
     let eq_r_dprime = build_eq(&r_dprime);
 
     // Compute BaseFold target.
@@ -2681,7 +2734,7 @@ pub fn verify_succinct<Ch: Challenger>(
         return Err(VerifyError::ClaimMismatch);
     }
 
-    let r_dprime = challenger.sample_f128_vec(LOG_PACKING);
+    let r_dprime = challenger.try_sample_f128_vec(LOG_PACKING)?;
     let eq_r_dprime = build_eq(&r_dprime);
 
     let s_hat_u = tensor_algebra_transpose(&proof.s_hat_v);

@@ -15,9 +15,10 @@
 //! is tested on honest witnesses; verify also rejects byte-mutated proofs and
 //! shape-corrupted ones.
 
-use crate::challenger::Challenger;
+use crate::challenger::{Challenger, sample_f128_vec_matching};
 use crate::field::{F8, F128};
 use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
+use crate::oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS};
 use serde::{Deserialize, Serialize};
 
 pub mod multilinear;
@@ -49,19 +50,26 @@ pub const N_INNER: usize = 7;
 /// simulator. The multilinear recurrence reconstructs `G(0)` by dividing by
 /// `1 + r_i`, so sampled rest coordinates must exclude `1`.
 pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128> {
+    sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)
+        .expect("zerocheck equality-point sampler exhausted")
+}
+
+/// Fallible bounded equality-point sampler used by production proof paths.
+pub fn sample_eq_point_bounded<C: Challenger>(
+    m: usize,
+    challenger: &mut C,
+    max_trials: usize,
+) -> Result<Vec<F128>, OracleLimitError> {
     assert!(
         m >= K_SKIP + N_INNER,
         "zerocheck equality point is too short"
     );
 
-    let r_skip = challenger.sample_f128_vec(K_SKIP);
+    let r_skip = challenger.try_sample_f128_vec(K_SKIP)?;
     let outer_len = m - K_SKIP - N_INNER;
-    let r_outer = loop {
-        let sampled_point = challenger.sample_f128_vec(outer_len);
-        if sampled_point.iter().all(|value| *value != F128::ONE) {
-            break sampled_point;
-        }
-    };
+    let r_outer = sample_f128_vec_matching(challenger, outer_len, max_trials, |point| {
+        point.iter().all(|value| *value != F128::ONE)
+    })?;
 
     let small = small_challenges_ghash();
     let medium = medium_challenges_ghash();
@@ -72,7 +80,7 @@ pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128>
     r[K_SKIP..K_SKIP + 3].copy_from_slice(&small);
     r[K_SKIP + 3..K_SKIP + N_INNER].copy_from_slice(&medium);
     r[K_SKIP + N_INNER..].copy_from_slice(&r_outer);
-    r
+    Ok(r)
 }
 
 /// Linear weights taking `(running, G(1), G(∞))` to `G(rho)` for one

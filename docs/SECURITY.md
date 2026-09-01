@@ -57,13 +57,17 @@ P*J*Q_H/2^256
 + P*Q_P*Q_H/2^256
 + (Q_H + P*Q_P)^2/2^257
 + 4*P*(P-1)/2^257
-+ P*((63/64)^8192 + 16*(31/32)^4096).
++ P*((63/64)^8192 + 16*(31/32)^4096)
++ P*(5*(1/2^128)^4096 + (2/2^128)^4096 + (13/2^128)^4096)
++ P*(outer-position aborts + VEIL-position aborts).
 ```
 
 The terms respectively cover challenge prequeries, hidden initial-Merkle
 inputs, oracle collisions, collisions in any of the four nonce domains (one
 Fiat--Shamir proof nonce plus three initial-tree nonces), and failure of the
-bounded outer or Ligerito grinds. `ClassicalPromZkBound` computes this sum.
+bounded outer/Ligerito grinds, bounded scalar/equality rejection samplers, and
+bounded distinct-position samplers. `ClassicalPromZkBound` computes this sum;
+the exact rational expression is mirrored in Lean's `SecurityLedger.zkBound`.
 
 The proved model requires fresh independent proof nonces, witness-code padding,
 masking rows, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts
@@ -146,11 +150,10 @@ order, the exact 256/512/1024/2048/4096 schedules are `6×1`,
 `6×5 + 3×4 + 3×2` bits; the corresponding preblinded L0 grinds use
 2/3/4/5/6 bits.
 
-The Rust prover and simulator currently check returned grind nonces against
-these caps, but their underlying search and rejection loops are not themselves
-bounded. The executable must enforce both the per-loop caps and the cumulative
-oracle-call budget during execution before those quantities can be treated as
-deterministic implementation bounds.
+The Rust prover, verifier, and simulator enforce the per-loop caps and the
+cumulative one-million oracle-call budget during execution. Cap exhaustion is a
+fail-closed protocol error rather than an unbounded search or a post-hoc audit
+failure.
 
 Lean also pins the complete embedded Secure-profile ladders, not only their
 L0 hiding budgets.  Each tuple below is

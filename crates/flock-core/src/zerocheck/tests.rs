@@ -7,7 +7,7 @@ use crate::{
 
 mod helpers;
 
-use helpers::{Rng, ScriptedEqChallenger};
+use helpers::{AlwaysRejectEqChallenger, Rng, ScriptedEqChallenger};
 
 const TEST_DOMAIN: &[u8] = b"flock-zerocheck-test";
 const ZK_TEST_DOMAIN: &[u8] = b"flock-zerocheck-zk-test";
@@ -20,6 +20,25 @@ fn equality_point_rejects_noninvertible_outer_coordinates() {
     assert_eq!(challenger.vector_calls, 3);
     assert_eq!(point.last(), Some(&F128::new(2, 0)));
     assert!(point[K_SKIP..].iter().all(|value| *value != F128::ONE));
+}
+
+#[test]
+fn equality_point_sampler_exhausts_exact_trial_cap() {
+    let mut challenger = AlwaysRejectEqChallenger { vector_calls: 0 };
+    let err = sample_eq_point_bounded(
+        K_SKIP + N_INNER + 1,
+        &mut challenger,
+        crate::oracle_budget::REJECTION_SAMPLING_TRIALS,
+    )
+    .unwrap_err();
+    assert_eq!(
+        err,
+        crate::oracle_budget::OracleLimitError::RejectionSamplingLimitExceeded
+    );
+    assert_eq!(
+        challenger.vector_calls,
+        1 + crate::oracle_budget::REJECTION_SAMPLING_TRIALS
+    );
 }
 
 #[test]

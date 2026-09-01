@@ -44,6 +44,8 @@
 use flock_core::challenger::Challenger;
 #[cfg(feature = "veil")]
 use flock_core::challenger::FsChallenger;
+#[cfg(feature = "veil")]
+use flock_core::oracle_budget::{OracleLimitError, OracleQueryBudget};
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
@@ -655,7 +657,8 @@ impl Blake3PreimageZkSetup {
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
         let mut rng = flock_core::zk::ZkRng::from_entropy();
-        let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
+        let mut challenger =
+            FsChallenger::new_budgeted(VEIL_FLOCK_FS_DOMAIN, OracleQueryBudget::per_proof());
         self.prove_with_challenger(msgs, digests, &mut rng, &mut challenger)
     }
 
@@ -714,12 +717,12 @@ impl Blake3PreimageZkSetup {
             &lig_config,
             rng,
             &mut |ch: &mut Ch| {
-                let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
-                vec![
+                let digest_challenges = DigestChallenges::try_sample(&statement_for_claim, ch)?;
+                Ok(vec![
                     crate::succinct_veil::PublicPackedDirectClaim::from_public_statement(
                         digest_claim(&statement_for_claim, self.r1cs.layout, &digest_challenges),
                     ),
-                ]
+                ])
             },
             None,
             challenger,
@@ -734,7 +737,8 @@ impl Blake3PreimageZkSetup {
         proof: &crate::succinct_veil::SuccinctVeilProof,
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(), SuccinctPreimageError> {
-        let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
+        let mut challenger =
+            FsChallenger::new_budgeted(VEIL_FLOCK_FS_DOMAIN, OracleQueryBudget::per_proof());
         self.verify_with_challenger(commitment, proof, digests, &mut challenger)
     }
 
@@ -766,13 +770,13 @@ impl Blake3PreimageZkSetup {
             self.r1cs.csc_lincheck_circuit(),
             &lig_config,
             &mut |ch: &mut Ch| {
-                let digest_challenges = DigestChallenges::sample(&statement, ch);
-                vec![
+                let digest_challenges = DigestChallenges::try_sample(&statement, ch)?;
+                Ok(vec![
                     crate::succinct_veil::PublicPackedDirectClaimValue::from_public_statement(
                         digest_claim_point(&statement, layout, &digest_challenges),
                         digest_claim_value(&statement, &digest_challenges),
                     ),
-                ]
+                ])
             },
             challenger,
         )?;
@@ -890,8 +894,11 @@ impl Blake3PreimageZkSetup {
         let z_lincheck =
             flock_core::lincheck::pack_z_lincheck_from_packed(&z, self.r1cs.m, self.r1cs.k_log);
         let lig_config = self.ligerito_prover_config();
-        let mut challenger =
-            crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+        let mut challenger = crate::sim_oracle::OracleChallenger::new_budgeted(
+            VEIL_FLOCK_FS_DOMAIN,
+            oracle.clone(),
+            OracleQueryBudget::per_proof(),
+        );
         absorb_statement(&mut challenger, &statement);
         let source_rng = rng.fork(b"succinct-veil-zc-simulator");
         let mut source = crate::succinct_veil::RomZerocheckSimulator::new(self.r1cs.m, source_rng);
@@ -907,12 +914,12 @@ impl Blake3PreimageZkSetup {
             &lig_config,
             rng,
             &mut |ch: &mut crate::sim_oracle::OracleChallenger| {
-                let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
-                vec![
+                let digest_challenges = DigestChallenges::try_sample(&statement_for_claim, ch)?;
+                Ok(vec![
                     crate::succinct_veil::PublicPackedDirectClaim::from_public_statement(
                         digest_claim(&statement_for_claim, self.r1cs.layout, &digest_challenges),
                     ),
-                ]
+                ])
             },
             Some(&mut source),
             &mut challenger,
@@ -927,10 +934,14 @@ impl Blake3PreimageZkSetup {
         let (protocol_oracle_queries, pow_oracle_queries) =
             oracle_guard.answer_counts_since(&oracle_checkpoint);
         drop(oracle_guard);
-        if !programming_audit.is_valid()
-            || protocol_oracle_queries > crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF
-        {
+        if !programming_audit.is_valid() {
             return Err(crate::succinct_veil::SuccinctVeilError::ProgrammingCollision.into());
+        }
+        if protocol_oracle_queries > crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF {
+            return Err(crate::succinct_veil::SuccinctVeilError::OracleLimit(
+                OracleLimitError::QueryBudgetExceeded,
+            )
+            .into());
         }
         Ok(SimulatedSuccinctPreimage {
             proof,

@@ -31,7 +31,10 @@
 //! extractor (Phase 5) reconstruct the committed leaves from an adversary's
 //! query transcript.
 
-use crate::merkle::Hash;
+use crate::{
+    merkle::Hash,
+    oracle_budget::{OracleLimitError, OracleQueryBudget},
+};
 use sha2::{Digest, Sha256};
 
 /// Fixed magic distinguishing this framing from any other 7-byte-tagged data.
@@ -83,6 +86,7 @@ impl RoChannel {
 pub struct RoContext {
     nonce: [u8; 32],
     backend: RoBackend,
+    budget: Option<OracleQueryBudget>,
 }
 
 /// How point hashes are answered.
@@ -101,6 +105,17 @@ impl RoContext {
         Self {
             nonce,
             backend: RoBackend::Native,
+            budget: None,
+        }
+    }
+
+    /// A production context that charges every framed point-oracle answer to
+    /// the supplied per-proof budget.
+    pub fn native_with_budget(nonce: [u8; 32], budget: OracleQueryBudget) -> Self {
+        Self {
+            nonce,
+            backend: RoBackend::Native,
+            budget: Some(budget),
         }
     }
 
@@ -110,6 +125,7 @@ impl RoContext {
         Self {
             nonce: [0u8; 32],
             backend: RoBackend::Native,
+            budget: None,
         }
     }
 
@@ -118,7 +134,16 @@ impl RoContext {
         Self {
             nonce,
             backend: RoBackend::External(oracle),
+            budget: None,
         }
+    }
+
+    /// Attach a query budget to this context. Native contexts charge directly.
+    /// External contexts still rely on their [`ByteOracle`] implementation to
+    /// enforce any budget so calls are not double-counted.
+    pub fn with_budget(mut self, budget: OracleQueryBudget) -> Self {
+        self.budget = Some(budget);
+        self
     }
 
     #[inline]
@@ -129,6 +154,11 @@ impl RoContext {
     #[inline]
     pub fn is_native(&self) -> bool {
         matches!(self.backend, RoBackend::Native)
+    }
+
+    #[inline]
+    pub(crate) fn has_budget(&self) -> bool {
+        self.budget.is_some()
     }
 }
 
@@ -203,7 +233,13 @@ pub fn encode_pow_point(state: &[u8; 32], pow_nonce: u64) -> [u8; 41] {
 pub trait ByteOracle: Send + Sync {
     /// Answer (and observe) a framed point. Must equal `SHA256(point)` unless
     /// the point has been explicitly programmed.
-    fn answer(&self, point: &[u8]) -> Hash;
+    fn try_answer(&self, point: &[u8]) -> Result<Hash, OracleLimitError>;
+
+    /// Infallible compatibility wrapper for unbudgeted legacy call sites.
+    fn answer(&self, point: &[u8]) -> Hash {
+        self.try_answer(point)
+            .expect("point-oracle query budget exhausted")
+    }
 }
 
 /// Native random-oracle answer for an already encoded point.
@@ -222,6 +258,7 @@ pub enum RoTreeHasher<'a> {
         mid: Sha256,
         mid_words: [u32; 8],
         header: [u8; 64],
+        budget: Option<OracleQueryBudget>,
     },
     /// External: full framed points are handed to the oracle.
     External {
@@ -251,6 +288,7 @@ impl<'a> RoTreeHasher<'a> {
                     mid,
                     mid_words,
                     header,
+                    budget: ctx.budget.clone(),
                 }
             }
             RoBackend::External(oracle) => RoTreeHasher::External {
@@ -263,16 +301,31 @@ impl<'a> RoTreeHasher<'a> {
     /// Hash one framed node at `(level, index)` over `payload`.
     #[inline]
     pub fn hash(&self, level: u32, index: u64, payload: &[u8]) -> Hash {
+        self.try_hash(level, index, payload)
+            .expect("point-oracle query budget exhausted")
+    }
+
+    /// Fallible form of [`Self::hash`] for budgeted execution.
+    #[inline]
+    pub fn try_hash(
+        &self,
+        level: u32,
+        index: u64,
+        payload: &[u8],
+    ) -> Result<Hash, OracleLimitError> {
         match self {
-            RoTreeHasher::Native { mid, .. } => {
+            RoTreeHasher::Native { mid, budget, .. } => {
+                if let Some(budget) = budget {
+                    budget.try_charge(1)?;
+                }
                 let mut h = mid.clone();
                 h.update(level.to_le_bytes());
                 h.update(index.to_le_bytes());
                 h.update(payload);
-                h.finalize().into()
+                Ok(h.finalize().into())
             }
             RoTreeHasher::External { oracle, header } => {
-                oracle.answer(&encode_point(header, level, index, payload))
+                oracle.try_answer(&encode_point(header, level, index, payload))
             }
         }
     }
@@ -357,12 +410,12 @@ impl Default for RecordingOracle {
 }
 
 impl ByteOracle for RecordingOracle {
-    fn answer(&self, point: &[u8]) -> Hash {
+    fn try_answer(&self, point: &[u8]) -> Result<Hash, OracleLimitError> {
         let digest = hash_point(point);
         if self.record {
             self.log.lock().unwrap().push((point.to_vec(), digest));
         }
-        digest
+        Ok(digest)
     }
 }
 

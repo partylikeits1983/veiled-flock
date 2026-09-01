@@ -20,7 +20,10 @@
 //! should prepend `0x00`/`0x01` (or equivalent) to distinguish the two
 //! pre-images and avoid second-preimage attacks via interpretation collision.
 
-use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
+use crate::{
+    oracle_budget::OracleLimitError,
+    ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher},
+};
 use rayon::prelude::*;
 #[cfg(feature = "hash-count")]
 use std::sync::atomic::Ordering::Relaxed;
@@ -293,6 +296,18 @@ pub fn merkle_tree_framed(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> Vec<Hash> {
+    try_merkle_tree_framed(data, num_leaves, ctx, channel, tree_depth)
+        .expect("point-oracle query budget exhausted")
+}
+
+/// Fallible form of [`merkle_tree_framed`] for budgeted execution.
+pub fn try_merkle_tree_framed(
+    data: &[u8],
+    num_leaves: usize,
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Result<Vec<Hash>, OracleLimitError> {
     assert!(
         num_leaves.is_power_of_two() && num_leaves > 0,
         "num_leaves must be power of 2"
@@ -312,7 +327,7 @@ pub fn merkle_tree_framed(
     // Leaves. Native backends use the four-way midstate kernel where available;
     // external backends serialize through the shared oracle.
     let leaf_hasher = RoTreeHasher::new(ctx, ROLE_LEAF, channel, tree_depth, leaf_size as u64);
-    if ctx.is_native() {
+    if ctx.is_native() && !ctx.has_budget() {
         #[cfg(any(
             all(target_arch = "aarch64", target_feature = "sha2"),
             all(target_arch = "x86_64", target_feature = "sha")
@@ -365,13 +380,22 @@ pub fn merkle_tree_framed(
                     *out = leaf_hasher.hash(leaf_level, i as u64, leaf);
                 });
         }
+    } else if ctx.is_native() {
+        tree[..num_leaves]
+            .par_iter_mut()
+            .zip(data.par_chunks(leaf_size))
+            .enumerate()
+            .try_for_each(|(i, (out, leaf))| -> Result<(), OracleLimitError> {
+                *out = leaf_hasher.try_hash(leaf_level, i as u64, leaf)?;
+                Ok(())
+            })?;
     } else {
         for (i, (out, leaf)) in tree[..num_leaves]
             .iter_mut()
             .zip(data.chunks(leaf_size))
             .enumerate()
         {
-            *out = leaf_hasher.hash(leaf_level, i as u64, leaf);
+            *out = leaf_hasher.try_hash(leaf_level, i as u64, leaf)?;
         }
     }
 
@@ -386,13 +410,13 @@ pub fn merkle_tree_framed(
         let next_len = read_len >> 1;
         let (read, rest) = tree[read_start..].split_at_mut(read_len);
         let write = &mut rest[..next_len];
-        let hash_one = |i: usize| -> Hash {
+        let hash_one = |i: usize| -> Result<Hash, OracleLimitError> {
             let mut pair = [0u8; 64];
             pair[..32].copy_from_slice(&read[2 * i]);
             pair[32..].copy_from_slice(&read[2 * i + 1]);
-            node_hasher.hash(node_level, i as u64, &pair)
+            node_hasher.try_hash(node_level, i as u64, &pair)
         };
-        if ctx.is_native() {
+        if ctx.is_native() && !ctx.has_budget() {
             #[cfg(any(
                 all(target_arch = "aarch64", target_feature = "sha2"),
                 all(target_arch = "x86_64", target_feature = "sha")
@@ -428,7 +452,8 @@ pub fn merkle_tree_framed(
                             );
                         } else {
                             for (lane, out) in outs.iter_mut().enumerate() {
-                                *out = hash_one(base_index + lane);
+                                *out = hash_one(base_index + lane)
+                                    .expect("point-oracle query budget exhausted");
                             }
                         }
                     });
@@ -438,21 +463,27 @@ pub fn merkle_tree_framed(
                 all(target_arch = "x86_64", target_feature = "sha")
             )))]
             {
-                write
-                    .par_iter_mut()
-                    .enumerate()
-                    .for_each(|(i, out)| *out = hash_one(i));
+                write.par_iter_mut().enumerate().for_each(|(i, out)| {
+                    *out = hash_one(i).expect("point-oracle query budget exhausted")
+                });
             }
+        } else if ctx.is_native() {
+            write.par_iter_mut().enumerate().try_for_each(
+                |(i, out)| -> Result<(), OracleLimitError> {
+                    *out = hash_one(i)?;
+                    Ok(())
+                },
+            )?;
         } else {
             for (i, out) in write.iter_mut().enumerate() {
-                *out = hash_one(i);
+                *out = hash_one(i)?;
             }
         }
         read_start += read_len;
         read_len = next_len;
     }
 
-    tree
+    Ok(tree)
 }
 
 /// Framed Merkle tree with one independent 256-bit salt prepended to every
@@ -467,6 +498,19 @@ pub fn merkle_tree_framed_salted(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> Vec<Hash> {
+    try_merkle_tree_framed_salted(data, num_leaves, salts, ctx, channel, tree_depth)
+        .expect("point-oracle query budget exhausted")
+}
+
+/// Fallible form of [`merkle_tree_framed_salted`] for budgeted execution.
+pub fn try_merkle_tree_framed_salted(
+    data: &[u8],
+    num_leaves: usize,
+    salts: &[[u8; 32]],
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Result<Vec<Hash>, OracleLimitError> {
     assert_eq!(salts.len(), num_leaves, "one salt per Merkle leaf");
     assert!(num_leaves > 0 && num_leaves.is_power_of_two());
     assert_eq!(data.len() % num_leaves, 0);
@@ -477,7 +521,7 @@ pub fn merkle_tree_framed_salted(
         salted.extend_from_slice(salt);
         salted.extend_from_slice(leaf);
     }
-    merkle_tree_framed(&salted, num_leaves, ctx, channel, tree_depth)
+    try_merkle_tree_framed(&salted, num_leaves, ctx, channel, tree_depth)
 }
 
 /// Verify a framed Merkle opening (single leaf), recomputing the root through
@@ -492,12 +536,36 @@ pub fn verify_merkle_proof_framed(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> bool {
+    try_verify_merkle_proof_framed(
+        root,
+        leaf_payload,
+        index,
+        num_leaves,
+        proof,
+        ctx,
+        channel,
+        tree_depth,
+    )
+    .unwrap_or(false)
+}
+
+/// Fallible form of [`verify_merkle_proof_framed`] for budgeted execution.
+pub fn try_verify_merkle_proof_framed(
+    root: &Hash,
+    leaf_payload: &[u8],
+    index: usize,
+    num_leaves: usize,
+    proof: &[Hash],
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Result<bool, OracleLimitError> {
     if !num_leaves.is_power_of_two() || num_leaves == 0 || index >= num_leaves {
-        return false;
+        return Ok(false);
     }
     let leaf_level = num_leaves.trailing_zeros();
     if proof.len() != leaf_level as usize {
-        return false;
+        return Ok(false);
     }
     let leaf_hasher = RoTreeHasher::new(
         ctx,
@@ -507,7 +575,7 @@ pub fn verify_merkle_proof_framed(
         leaf_payload.len() as u64,
     );
     let node_hasher = RoTreeHasher::new(ctx, ROLE_NODE, channel, tree_depth, 64);
-    let mut acc = leaf_hasher.hash(leaf_level, index as u64, leaf_payload);
+    let mut acc = leaf_hasher.try_hash(leaf_level, index as u64, leaf_payload)?;
     let mut idx = index;
     let mut node_level = leaf_level;
     for sibling in proof {
@@ -520,10 +588,10 @@ pub fn verify_merkle_proof_framed(
         let mut pair = [0u8; 64];
         pair[..32].copy_from_slice(&left);
         pair[32..].copy_from_slice(&right);
-        acc = node_hasher.hash(node_level, (idx >> 1) as u64, &pair);
+        acc = node_hasher.try_hash(node_level, (idx >> 1) as u64, &pair)?;
         idx >>= 1;
     }
-    &acc == root
+    Ok(&acc == root)
 }
 
 /// Verify a framed Merkle multi-proof produced by [`merkle_multi_proof`].
@@ -542,14 +610,38 @@ pub fn verify_merkle_multi_proof_framed(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> bool {
+    try_verify_merkle_multi_proof_framed(
+        root,
+        num_leaves,
+        sorted_unique_positions,
+        leaf_payloads,
+        proof,
+        ctx,
+        channel,
+        tree_depth,
+    )
+    .unwrap_or(false)
+}
+
+/// Fallible form of [`verify_merkle_multi_proof_framed`] for budgeted execution.
+pub fn try_verify_merkle_multi_proof_framed(
+    root: &Hash,
+    num_leaves: usize,
+    sorted_unique_positions: &[usize],
+    leaf_payloads: &[&[u8]],
+    proof: &[Hash],
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Result<bool, OracleLimitError> {
     if !num_leaves.is_power_of_two() || num_leaves == 0 {
-        return false;
+        return Ok(false);
     }
     if sorted_unique_positions.len() != leaf_payloads.len() {
-        return false;
+        return Ok(false);
     }
     if sorted_unique_positions.is_empty() {
-        return proof.is_empty();
+        return Ok(proof.is_empty());
     }
     let leaf_len = leaf_payloads[0].len();
     if leaf_len == 0
@@ -557,14 +649,14 @@ pub fn verify_merkle_multi_proof_framed(
             .iter()
             .any(|payload| payload.len() != leaf_len)
     {
-        return false;
+        return Ok(false);
     }
     for (i, &position) in sorted_unique_positions.iter().enumerate() {
         if position >= num_leaves {
-            return false;
+            return Ok(false);
         }
         if i > 0 && sorted_unique_positions[i - 1] >= position {
-            return false;
+            return Ok(false);
         }
     }
 
@@ -576,15 +668,14 @@ pub fn verify_merkle_multi_proof_framed(
         .copied()
         .zip(leaf_payloads.iter().copied())
         .map(|(position, payload)| {
-            (
-                position,
-                leaf_hasher.hash(leaf_level, position as u64, payload),
-            )
+            leaf_hasher
+                .try_hash(leaf_level, position as u64, payload)
+                .map(|hash| (position, hash))
         })
-        .collect();
+        .collect::<Result<_, _>>()?;
 
     if num_leaves == 1 {
-        return proof.is_empty() && active[0].1 == *root;
+        return Ok(proof.is_empty() && active[0].1 == *root);
     }
 
     let mut proof_iter = proof.iter().copied();
@@ -599,14 +690,14 @@ pub fn verify_merkle_multi_proof_framed(
             let (left, right) = if sibling_active {
                 let sibling_hash = active[i + 1].1;
                 if position & 1 != 0 {
-                    return false;
+                    return Ok(false);
                 }
                 i += 2;
                 (hash, sibling_hash)
             } else {
                 let sibling = match proof_iter.next() {
                     Some(sibling) => sibling,
-                    None => return false,
+                    None => return Ok(false),
                 };
                 i += 1;
                 if position & 1 == 0 {
@@ -621,13 +712,13 @@ pub fn verify_merkle_multi_proof_framed(
             let parent_index = position >> 1;
             next.push((
                 parent_index,
-                node_hasher.hash(node_level, parent_index as u64, &pair),
+                node_hasher.try_hash(node_level, parent_index as u64, &pair)?,
             ));
         }
         active = next;
     }
 
-    proof_iter.next().is_none() && active.len() == 1 && active[0].1 == *root
+    Ok(proof_iter.next().is_none() && active.len() == 1 && active[0].1 == *root)
 }
 
 /// Sequential (single-threaded) version of [`merkle_tree`]. Used for

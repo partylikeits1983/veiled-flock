@@ -5,12 +5,11 @@
 //! random linear combination, and proximity-test that combination at Merkle
 //! committed codeword coordinates.
 
-use std::collections::BTreeSet;
-
 use flock_core::{
-    challenger::Challenger,
+    challenger::{Challenger, sample_distinct_positions, sample_f128_matching},
     field::F128,
     merkle::Hash,
+    oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS},
     ro::{RoChannel, RoContext},
     zk::MaskSampler,
 };
@@ -124,11 +123,18 @@ pub enum DotProductError {
     InvalidMerkleOpening,
     RevealedCodewordMismatch(usize),
     Code(CodeError),
+    OracleLimit(OracleLimitError),
 }
 
 impl From<CodeError> for DotProductError {
     fn from(value: CodeError) -> Self {
         Self::Code(value)
+    }
+}
+
+impl From<OracleLimitError> for DotProductError {
+    fn from(value: OracleLimitError) -> Self {
+        Self::OracleLimit(value)
     }
 }
 
@@ -163,7 +169,7 @@ pub fn commit_vectors<R: MaskSampler + ?Sized>(
         messages.push(message);
     }
     let codewords = parameters.code().encode_batch(&messages)?;
-    let commitment = MerkleMatrix::new(&codewords, rng, ctx, channel);
+    let commitment = MerkleMatrix::try_new(&codewords, rng, ctx, channel)?;
 
     Ok(DotProductProverData {
         parameters,
@@ -208,7 +214,7 @@ pub fn prove_dot_product<C: Challenger>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger)?;
 
     let rlc_vector = (0..parameters.vector_length)
         .map(|index| {
@@ -235,7 +241,7 @@ pub fn prove_dot_product<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )?;
     let opening = commitment.open(&positions);
 
     Ok(DotProductProof {
@@ -284,7 +290,7 @@ pub fn verify_dot_product<C: Challenger>(
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);
     challenger.observe_bytes(&proof.commitment);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger)?;
 
     let expected_dot = proof
         .claimed_dot_products
@@ -302,17 +308,17 @@ pub fn verify_dot_product<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )?;
     if positions != proof.opening.positions {
         return Err(DotProductError::WrongProofShape);
     }
-    if !proof.opening.verify(
+    if !proof.opening.try_verify(
         &proof.commitment,
         parameters.code_length,
         parameters.commitment_width(),
         ctx,
         channel,
-    ) {
+    )? {
         return Err(DotProductError::InvalidMerkleOpening);
     }
 
@@ -339,38 +345,29 @@ pub(crate) fn sample_unique_positions<C: Challenger>(
     challenger: &mut C,
     code_length: usize,
     count: usize,
-) -> Vec<usize> {
+) -> Result<Vec<usize>, OracleLimitError> {
     assert!(code_length.is_power_of_two());
     assert!(count <= code_length);
-    let mask = code_length - 1;
-    let mut positions = BTreeSet::new();
-    while positions.len() < count {
-        positions.insert((challenger.sample_f128().lo as usize) & mask);
-    }
-    positions.into_iter().collect()
+    sample_distinct_positions(challenger, code_length, count, REJECTION_SAMPLING_TRIALS)
 }
 
 /// Sample uniformly from `F128 \ {0}`. The last proximity-generator
 /// coefficient must be non-zero: at zero the additive masking vector drops
 /// out and the revealed linear combination is the witness itself.
-pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
-        let value = challenger.sample_f128();
-        if !value.is_zero() {
-            return value;
-        }
-    }
+pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Result<F128, OracleLimitError> {
+    sample_f128_matching(challenger, REJECTION_SAMPLING_TRIALS, |value| {
+        !value.is_zero()
+    })
 }
 
 /// Sample uniformly from `F128 \ {0, 1}`. VEIL's six-value multiplication
 /// padding is invertible only away from these two exceptional challenges.
-pub(crate) fn sample_not_zero_or_one<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
-        let value = challenger.sample_f128();
-        if !value.is_zero() && value != F128::ONE {
-            return value;
-        }
-    }
+pub(crate) fn sample_not_zero_or_one<C: Challenger>(
+    challenger: &mut C,
+) -> Result<F128, OracleLimitError> {
+    sample_f128_matching(challenger, REJECTION_SAMPLING_TRIALS, |value| {
+        !value.is_zero() && value != F128::ONE
+    })
 }
 
 pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
@@ -382,9 +379,31 @@ pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
 
 #[cfg(test)]
 mod tests {
-    use flock_core::{challenger::FsChallenger, zk::ZkRng};
+    use flock_core::{
+        challenger::{Challenger, FsChallenger},
+        oracle_budget::OracleLimitError,
+        zk::ZkRng,
+    };
 
     use super::*;
+
+    struct ConstantChallenger {
+        value: F128,
+        scalar_calls: usize,
+    }
+
+    impl Challenger for ConstantChallenger {
+        fn observe_f128(&mut self, _value: F128) {}
+
+        fn sample_f128(&mut self) -> F128 {
+            self.try_sample_f128().unwrap()
+        }
+
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.scalar_calls += 1;
+            Ok(self.value)
+        }
+    }
 
     fn vector(length: usize, offset: u64) -> Vec<F128> {
         (0..length)
@@ -462,5 +481,44 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn bounded_nonzero_sampler_exhausts_exact_trial_cap() {
+        let mut challenger = ConstantChallenger {
+            value: F128::ZERO,
+            scalar_calls: 0,
+        };
+        assert_eq!(
+            sample_nonzero(&mut challenger),
+            Err(OracleLimitError::RejectionSamplingLimitExceeded)
+        );
+        assert_eq!(challenger.scalar_calls, REJECTION_SAMPLING_TRIALS);
+    }
+
+    #[test]
+    fn bounded_not_zero_or_one_sampler_exhausts_exact_trial_cap() {
+        let mut challenger = ConstantChallenger {
+            value: F128::ONE,
+            scalar_calls: 0,
+        };
+        assert_eq!(
+            sample_not_zero_or_one(&mut challenger),
+            Err(OracleLimitError::RejectionSamplingLimitExceeded)
+        );
+        assert_eq!(challenger.scalar_calls, REJECTION_SAMPLING_TRIALS);
+    }
+
+    #[test]
+    fn bounded_position_sampler_exhausts_exact_trial_cap() {
+        let mut challenger = ConstantChallenger {
+            value: F128::ZERO,
+            scalar_calls: 0,
+        };
+        assert_eq!(
+            sample_unique_positions(&mut challenger, 8, 2),
+            Err(OracleLimitError::PositionSamplingLimitExceeded)
+        );
+        assert_eq!(challenger.scalar_calls, REJECTION_SAMPLING_TRIALS);
     }
 }

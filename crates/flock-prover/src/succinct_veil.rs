@@ -11,9 +11,10 @@
 //! sampled, and `M_c` is invertible for non-zero `c`.
 
 use flock_core::{
-    challenger::Challenger,
+    challenger::{Challenger, sample_f128_matching},
     field::F128,
     lincheck::{self, LincheckCircuit, LincheckProof},
+    oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS},
     pcs::{self, Commitment, PcsParams},
     proof::{ZClaim, bind_statement},
     r1cs::BlockR1cs,
@@ -105,7 +106,7 @@ pub const MAX_BLIND_GRIND_TRIALS: u64 = 8192;
 /// Every Ligerito query/fold grind is bounded for the same reason. Supported
 /// shapes use at most a five-bit live fold grind.
 pub const MAX_LIGERITO_GRINDING_BITS: usize = 5;
-pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 4096;
+pub const MAX_LIGERITO_GRIND_TRIALS: u64 = pcs::ligerito::MAX_LIGERITO_GRIND_TRIALS;
 pub const MAX_LIGERITO_GRIND_SITES: u64 = 16;
 
 fn supported_blake3_r1cs_shape(r1cs: &BlockR1cs) -> Option<SupportedBlake3R1csShape> {
@@ -217,6 +218,7 @@ pub enum SuccinctVeilError {
     DegenerateSimulation,
     ProgrammingCollision,
     GrindingLimitExceeded,
+    OracleLimit(OracleLimitError),
 }
 
 pub struct SuccinctZerocheckInputs<'a> {
@@ -316,7 +318,8 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
         }
 
         challenger.observe_label(b"flock-zerocheck");
-        let r = zerocheck::sample_eq_point(inputs.m, challenger);
+        let r =
+            zerocheck::sample_eq_point_bounded(inputs.m, challenger, REJECTION_SAMPLING_TRIALS)?;
 
         // Reuse the shipped terminal evaluator with zero mask channels; only
         // its a/b/c outputs are relevant to the standard zerocheck.
@@ -406,7 +409,7 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
         if challenger.program_next_scalar(self.z).is_none() {
             return Err(SuccinctVeilError::ProgrammingCollision);
         }
-        let z = challenger.sample_f128();
+        let z = challenger.try_sample_f128()?;
 
         let combined = round1_ab
             .iter()
@@ -452,7 +455,7 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
             if challenger.program_next_scalar(rho).is_none() {
                 return Err(SuccinctVeilError::ProgrammingCollision);
             }
-            let sampled = challenger.sample_f128();
+            let sampled = challenger.try_sample_f128()?;
             running = g0 * one_plus_rho + g1 * rho + g_inf * rho * one_plus_rho;
             debug_assert_eq!(sampled, rho);
         }
@@ -492,13 +495,28 @@ impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZeroche
 
 impl From<ConstraintError> for SuccinctVeilError {
     fn from(value: ConstraintError) -> Self {
-        Self::Veil(value)
+        match value {
+            ConstraintError::OracleLimit(err) => Self::OracleLimit(err),
+            other => Self::Veil(other),
+        }
     }
 }
 
 impl From<pcs::VerifyError> for SuccinctVeilError {
     fn from(value: pcs::VerifyError) -> Self {
-        Self::Pcs(value)
+        match value {
+            pcs::VerifyError::OracleLimit(err) => Self::OracleLimit(err),
+            pcs::VerifyError::RingSwitch(pcs::ring_switch::VerifyError::OracleLimit(err)) => {
+                Self::OracleLimit(err)
+            }
+            other => Self::Pcs(other),
+        }
+    }
+}
+
+impl From<OracleLimitError> for SuccinctVeilError {
+    fn from(value: OracleLimitError) -> Self {
+        Self::OracleLimit(value)
     }
 }
 
@@ -881,16 +899,37 @@ impl<C: Challenger> Challenger for MaskingChallenger<'_, C> {
         self.inner.sample_f128()
     }
 
+    fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+        self.inner.try_sample_f128()
+    }
+
     fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
         self.inner.sample_f128_vec(n)
+    }
+
+    fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+        self.inner.try_sample_f128_vec(n)
     }
 
     fn grind_pow(&mut self, bits: u32) -> u64 {
         self.inner.grind_pow(bits)
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
+        self.inner.grind_pow_bounded(bits, max_trials)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         self.inner.verify_pow(nonce, bits)
+    }
+
+    fn verify_pow_bounded(
+        &mut self,
+        nonce: u64,
+        bits: u32,
+        max_trials: u64,
+    ) -> Result<bool, OracleLimitError> {
+        self.inner.verify_pow_bounded(nonce, bits, max_trials)
     }
 }
 
@@ -1011,13 +1050,10 @@ fn observe_blinded_ring_claims<C: Challenger>(challenger: &mut C, slices: &[Vec<
     }
 }
 
-fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
-        let value = challenger.sample_f128();
-        if !value.is_zero() {
-            return value;
-        }
-    }
+fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Result<F128, OracleLimitError> {
+    sample_f128_matching(challenger, REJECTION_SAMPLING_TRIALS, |value| {
+        !value.is_zero()
+    })
 }
 
 fn scale_ring_expressions(
@@ -1084,7 +1120,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     let mut expressions = ExpressionCursor::new(mask_count);
 
     challenger.observe_label(b"flock-zerocheck");
-    let r = zerocheck::sample_eq_point(r1cs.m, challenger);
+    let r = zerocheck::sample_eq_point_bounded(r1cs.m, challenger, REJECTION_SAMPLING_TRIALS)?;
 
     let round1_ab = zc
         .round1_ab
@@ -1098,7 +1134,7 @@ fn shifted_verifier_circuit<C: Challenger>(
         .collect::<Vec<_>>();
     challenger.observe_f128_slice(&zc.round1_ab);
     challenger.observe_f128_slice(&zc.round1_c);
-    let z = challenger.sample_f128();
+    let z = challenger.try_sample_f128()?;
 
     let c_weights = zerocheck::multilinear::lagrange_weights_lambda_naive(zerocheck::K_SKIP, z);
     let computed_c = dot(&round1_c, &c_weights);
@@ -1119,7 +1155,7 @@ fn shifted_verifier_circuit<C: Challenger>(
 
         challenger.observe_f128(*masked_1);
         challenger.observe_f128(*masked_inf);
-        let rho = challenger.sample_f128();
+        let rho = challenger.try_sample_f128()?;
         mlv_challenges.push(rho);
         let [running_weight, one_weight, infinity_weight] =
             zerocheck::sumcheck_round_weights(r_eq, rho).ok_or(SuccinctVeilError::InvalidShape(
@@ -1138,12 +1174,12 @@ fn shifted_verifier_circuit<C: Challenger>(
 
     let x_ab = r1cs.x_ab_from_mlv(z, &mlv_challenges);
     challenger.observe_label(b"flock-lincheck");
-    let alpha = challenger.sample_f128();
+    let alpha = challenger.try_sample_f128()?;
     let eq_inner = lincheck::build_quirky_eq_table(x_ab.z_skip, &x_ab.x_inner_rest, r1cs.k_skip);
     let mut comb_vec = lincheck_circuit.fold_alpha_batched(alpha, &eq_inner);
     let mut lc_running = final_a.scale(alpha).add(&final_b);
     if let Some(column) = lincheck_circuit.const_pin_col() {
-        let beta = challenger.sample_f128();
+        let beta = challenger.try_sample_f128()?;
         comb_vec[column] += beta;
         lc_running = lc_running.add(&LinearCombination::constant(beta));
     }
@@ -1154,7 +1190,7 @@ fn shifted_verifier_circuit<C: Challenger>(
         let einf = expressions.unmask(*masked_inf);
         challenger.observe_f128(*masked_1);
         challenger.observe_f128(*masked_inf);
-        let rho = challenger.sample_f128();
+        let rho = challenger.try_sample_f128()?;
         let e0 = lc_running.add(&e1);
         let c1 = e0.add(&e1).add(&einf);
         lc_running = einf.scale(rho * rho).add(&c1.scale(rho)).add(&e0);
@@ -1169,7 +1205,7 @@ fn shifted_verifier_circuit<C: Challenger>(
     challenger.observe_f128_slice(&lc.z_partial);
     builder.assert_zero(&lc_running.add(&dot(&z_partial, &comb_vec)));
 
-    let r_inner_skip = challenger.sample_f128();
+    let r_inner_skip = challenger.try_sample_f128()?;
     let lambda = lincheck::build_quirky_eq_table(r_inner_skip, &[], r1cs.k_skip);
     let w = dot(&z_partial, &lambda);
 
@@ -1254,7 +1290,10 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     lincheck_circuit: &dyn LincheckCircuit,
     lig_config: &pcs::ligerito::ProverConfig,
     rng: &mut ZkRng,
-    public_packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<PublicPackedDirectClaim>,
+    public_packed_direct: &mut dyn FnMut(
+        &mut Ch,
+    )
+        -> Result<Vec<PublicPackedDirectClaim>, SuccinctVeilError>,
     zerocheck_source: Option<&mut dyn SuccinctZerocheckSource<Ch>>,
     challenger: &mut Ch,
 ) -> Result<(SuccinctVeilProof, Commitment), SuccinctVeilError> {
@@ -1295,13 +1334,13 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         &veil_linear_ro,
     )?;
     let mut witness_rng = rng.fork(b"succinct-veil-witness-pcs");
-    let (commitment, prover_data) = pcs::commit::commit_zk_with_ro(
+    let (commitment, prover_data) = pcs::commit::try_commit_zk_with_ro(
         &z_packed,
         pcs_params,
         &mut witness_rng,
         &outer_ro,
         RoChannel::Witness,
-    );
+    )?;
 
     bind_statement(challenger, r1cs, &commitment, &proof_nonce);
     observe_tree_nonces(challenger, &tree_nonces);
@@ -1431,7 +1470,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     );
     observe_masked_ring_claims(challenger, &masked_ring_claims);
 
-    let mut pd = public_packed_direct(challenger)
+    let mut pd = public_packed_direct(challenger)?
         .into_iter()
         .map(|claim| claim.0)
         .collect::<Vec<_>>();
@@ -1449,11 +1488,8 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
         return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
     }
-    let blind_grind_nonce = challenger.grind_pow(blind_bits);
-    if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
-        return Err(SuccinctVeilError::GrindingLimitExceeded);
-    }
-    let blind_challenge = sample_nonzero(challenger);
+    let blind_grind_nonce = challenger.grind_pow_bounded(blind_bits, MAX_BLIND_GRIND_TRIALS)?;
+    let blind_challenge = sample_nonzero(challenger)?;
 
     let q_slices = witness_slices
         .iter()
@@ -1510,7 +1546,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         .collect::<Vec<_>>();
     let (pcs_open, veil) = rayon::join(
         || {
-            pcs::open_batch_mixed_ligerito_preblinded_ro(
+            pcs::try_open_batch_mixed_ligerito_preblinded_ro(
                 pcs::PreblindedOpening {
                     q_packed,
                     prover_data: &prover_data,
@@ -1537,6 +1573,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             )
         },
     );
+    let pcs_open = pcs_open?;
     if !ligerito_grinding_is_bounded(&pcs_open.ligerito) {
         return Err(SuccinctVeilError::GrindingLimitExceeded);
     }
@@ -1565,7 +1602,12 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     commitment: &Commitment,
     lincheck_circuit: &dyn LincheckCircuit,
     lig_config: &pcs::ligerito::VerifierConfig,
-    public_packed_direct: &mut dyn FnMut(&mut Ch) -> Vec<PublicPackedDirectClaimValue>,
+    public_packed_direct: &mut dyn FnMut(
+        &mut Ch,
+    ) -> Result<
+        Vec<PublicPackedDirectClaimValue>,
+        SuccinctVeilError,
+    >,
     challenger: &mut Ch,
 ) -> Result<(), SuccinctVeilError> {
     validate_succinct_parameters(r1cs, pcs_params)?;
@@ -1607,7 +1649,7 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         return Err(SuccinctVeilError::InvalidShape("ring claim count"));
     }
     observe_masked_ring_claims(challenger, &proof.masked_ring_claims);
-    let pd = public_packed_direct(challenger);
+    let pd = public_packed_direct(challenger)?;
     if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT
         || proof.public_direct_blind_values.len() != PUBLIC_DIRECT_CLAIM_COUNT
     {
@@ -1619,11 +1661,15 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
     if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits)
         || proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
-        || !challenger.verify_pow(proof.blind_grind_nonce, blind_bits)
+        || !challenger.verify_pow_bounded(
+            proof.blind_grind_nonce,
+            blind_bits,
+            MAX_BLIND_GRIND_TRIALS,
+        )?
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    let blind_challenge = sample_nonzero(challenger);
+    let blind_challenge = sample_nonzero(challenger)?;
 
     let q_slices = proof
         .pcs_open

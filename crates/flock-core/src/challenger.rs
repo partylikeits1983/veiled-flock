@@ -20,9 +20,14 @@
 //!   the previous one (Merlin-style duplex). SHA-256 is also used for the
 //!   Merkle commitments, so the whole system rests on a single hash.
 
-use crate::{field::F128, ro::RoContext};
+use crate::{
+    field::F128,
+    oracle_budget::{OracleLimitError, OracleQueryBudget, oracle_blocks_for_bytes},
+    ro::RoContext,
+};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};
+use std::collections::BTreeSet;
 
 // `Send` supertrait: the verifier runs its PIOP/PCS replay inside a dedicated
 // single-thread rayon pool (see `verifier::verifier_pool`), so the challenger
@@ -60,9 +65,19 @@ pub trait Challenger: Send {
     /// Produce one F128 challenge.
     fn sample_f128(&mut self) -> F128;
 
+    /// Fallible form of [`Self::sample_f128`] for budgeted execution.
+    fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+        Ok(self.sample_f128())
+    }
+
     /// Produce `n` F128 challenges, in order.
     fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
         (0..n).map(|_| self.sample_f128()).collect()
+    }
+
+    /// Fallible form of [`Self::sample_f128_vec`] for budgeted execution.
+    fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+        Ok(self.sample_f128_vec(n))
     }
 
     /// Prover-side PoW grinding: snapshot the current transcript state,
@@ -79,6 +94,13 @@ pub trait Challenger: Send {
         0
     }
 
+    /// Bounded prover-side PoW grinding. Implementations must try only nonces
+    /// in `0..max_trials`, absorb the first successful nonce, and fail closed
+    /// without absorbing if no such nonce exists.
+    fn grind_pow_bounded(&mut self, bits: u32, _max_trials: u64) -> Result<u64, OracleLimitError> {
+        Ok(self.grind_pow(bits))
+    }
+
     /// Verifier-side mirror of [`Self::grind_pow`]: check that `nonce`
     /// satisfies the `bits`-leading-zeros PoW against the current transcript
     /// state, then absorb the nonce so the running state stays in lockstep
@@ -90,6 +112,112 @@ pub trait Challenger: Send {
     fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
         true
     }
+
+    /// Bounded verifier-side PoW check. Nonces outside `0..max_trials` are
+    /// rejected before the PoW point is queried.
+    fn verify_pow_bounded(
+        &mut self,
+        nonce: u64,
+        bits: u32,
+        _max_trials: u64,
+    ) -> Result<bool, OracleLimitError> {
+        Ok(self.verify_pow(nonce, bits))
+    }
+}
+
+/// Byte length of `n` transcript-encoded `F128` elements.
+pub fn f128_vec_byte_len(n: usize) -> Result<usize, OracleLimitError> {
+    n.checked_mul(F128::BYTE_LEN)
+        .ok_or(OracleLimitError::QueryBudgetExceeded)
+}
+
+/// Decode a whole byte stream of `F128` elements in transcript byte order.
+pub fn f128_vec_from_le_bytes(bytes: &[u8]) -> Vec<F128> {
+    let (chunks, remainder) = bytes.as_chunks::<{ F128::BYTE_LEN }>();
+    assert!(
+        remainder.is_empty(),
+        "F128 byte stream length must be a multiple of 16"
+    );
+    chunks
+        .iter()
+        .map(|chunk| F128::from_le_bytes(*chunk))
+        .collect()
+}
+
+/// Draw `n` scalar challenges, preserving scalar transcript tags.
+pub fn sample_f128_scalars<C: Challenger>(
+    challenger: &mut C,
+    n: usize,
+) -> Result<Vec<F128>, OracleLimitError> {
+    (0..n).map(|_| challenger.try_sample_f128()).collect()
+}
+
+/// Draw a scalar challenge until `predicate` accepts or `max_trials` is exhausted.
+pub fn sample_f128_matching<C, P>(
+    challenger: &mut C,
+    max_trials: usize,
+    mut predicate: P,
+) -> Result<F128, OracleLimitError>
+where
+    C: Challenger,
+    P: FnMut(F128) -> bool,
+{
+    for _ in 0..max_trials {
+        let value = challenger.try_sample_f128()?;
+        if predicate(value) {
+            return Ok(value);
+        }
+    }
+    Err(OracleLimitError::RejectionSamplingLimitExceeded)
+}
+
+/// Draw vector challenges until `predicate` accepts or `max_trials` is exhausted.
+pub fn sample_f128_vec_matching<C, P>(
+    challenger: &mut C,
+    len: usize,
+    max_trials: usize,
+    mut predicate: P,
+) -> Result<Vec<F128>, OracleLimitError>
+where
+    C: Challenger,
+    P: FnMut(&[F128]) -> bool,
+{
+    for _ in 0..max_trials {
+        let values = challenger.try_sample_f128_vec(len)?;
+        if predicate(&values) {
+            return Ok(values);
+        }
+    }
+    Err(OracleLimitError::RejectionSamplingLimitExceeded)
+}
+
+/// Draw `count` distinct positions in `0..domain`, returning them sorted.
+pub fn sample_distinct_positions<C: Challenger>(
+    challenger: &mut C,
+    domain: usize,
+    count: usize,
+    max_trials: usize,
+) -> Result<Vec<usize>, OracleLimitError> {
+    assert!(
+        count <= domain,
+        "cannot sample {count} distinct positions from a domain of size {domain}"
+    );
+    if count == 0 {
+        return Ok(Vec::new());
+    }
+    assert!(domain > 0, "position-sampling domain must be non-empty");
+
+    let mut positions = BTreeSet::new();
+    for _ in 0..max_trials {
+        if positions.len() == count {
+            break;
+        }
+        positions.insert((challenger.try_sample_f128()?.lo as usize) % domain);
+    }
+    if positions.len() != count {
+        return Err(OracleLimitError::PositionSamplingLimitExceeded);
+    }
+    Ok(positions.into_iter().collect())
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +318,7 @@ pub mod fs_count {
 #[derive(Clone)]
 pub struct FsChallenger {
     hasher: Sha256,
+    budget: Option<OracleQueryBudget>,
     /// Running total of absorbed transcript bytes, for the `hash-count`
     /// instrumentation (read only under that feature).
     #[allow(dead_code)]
@@ -204,12 +333,50 @@ impl FsChallenger {
     pub fn new(domain: &[u8]) -> Self {
         let mut c = Self {
             hasher: Sha256::new(),
+            budget: None,
             n_absorbed: 0,
         };
         c.absorb(&[OP_DOMAIN]);
         c.absorb(&(domain.len() as u64).to_le_bytes());
         c.absorb(domain);
         c
+    }
+
+    pub fn new_budgeted(domain: &[u8], budget: OracleQueryBudget) -> Self {
+        let mut c = Self::new(domain);
+        c.budget = Some(budget);
+        c
+    }
+
+    pub fn with_query_budget(mut self, budget: OracleQueryBudget) -> Self {
+        self.budget = Some(budget);
+        self
+    }
+
+    pub fn query_budget(&self) -> Option<OracleQueryBudget> {
+        self.budget.clone()
+    }
+
+    fn charge_queries(&self, amount: u64) -> Result<(), OracleLimitError> {
+        if let Some(budget) = &self.budget {
+            budget.try_charge(amount)?;
+        }
+        Ok(())
+    }
+
+    fn try_pow_state_digest(&self) -> Result<[u8; 32], OracleLimitError> {
+        self.charge_queries(1)?;
+        Ok(fs_pow_state_digest(&self.hasher))
+    }
+
+    fn try_pow_candidate(
+        &self,
+        state_digest: &[u8; 32],
+        nonce: u64,
+        bits: u32,
+    ) -> Result<bool, OracleLimitError> {
+        self.charge_queries(1)?;
+        Ok(sha256_has_leading_zero_bits(state_digest, nonce, bits))
     }
 
     /// Absorb bytes into the running transcript state.
@@ -221,8 +388,7 @@ impl FsChallenger {
 
     #[inline]
     fn absorb_f128(&mut self, v: F128) {
-        self.absorb(&v.lo.to_le_bytes());
-        self.absorb(&v.hi.to_le_bytes());
+        self.absorb(&v.to_le_bytes());
     }
 
     /// Squeeze `out.len()` pseudorandom bytes from the current transcript
@@ -252,6 +418,13 @@ impl FsChallenger {
 }
 
 impl Challenger for FsChallenger {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        match &self.budget {
+            Some(budget) => RoContext::native_with_budget(nonce, budget.clone()),
+            None => RoContext::native(nonce),
+        }
+    }
+
     fn observe_label(&mut self, label: &[u8]) {
         self.absorb(&[OP_LABEL]);
         self.absorb(&(label.len() as u64).to_le_bytes());
@@ -278,6 +451,12 @@ impl Challenger for FsChallenger {
     }
 
     fn sample_f128(&mut self) -> F128 {
+        self.try_sample_f128()
+            .expect("Fiat-Shamir oracle query budget exhausted")
+    }
+
+    fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+        self.charge_queries(1)?;
         #[cfg(feature = "hash-count")]
         fs_count::SQUEEZES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.absorb(&[OP_SQUEEZE, KIND_SCALAR]);
@@ -285,74 +464,51 @@ impl Challenger for FsChallenger {
         self.squeeze_into(&mut buf);
         // Re-absorb the squeezed bytes so subsequent ops bind to this challenge.
         self.absorb(&buf);
-        let lo = u64::from_le_bytes(buf[..8].try_into().unwrap());
-        let hi = u64::from_le_bytes(buf[8..].try_into().unwrap());
-        F128 { lo, hi }
+        Ok(F128::from_le_bytes(buf))
     }
 
     fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+        self.try_sample_f128_vec(n)
+            .expect("Fiat-Shamir oracle query budget exhausted")
+    }
+
+    fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+        let bytes = f128_vec_byte_len(n)?;
+        self.charge_queries(oracle_blocks_for_bytes(bytes)?)?;
         #[cfg(feature = "hash-count")]
         fs_count::SQUEEZES.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         self.absorb(&[OP_SQUEEZE, KIND_SLICE]);
         self.absorb(&(n as u64).to_le_bytes());
-        let mut buf = vec![0u8; n * 16];
+        let mut buf = vec![0u8; bytes];
         self.squeeze_into(&mut buf);
         self.absorb(&buf);
-        buf.as_chunks::<16>()
-            .0
-            .iter()
-            .map(|c| F128 {
-                lo: u64::from_le_bytes(c[..8].try_into().unwrap()),
-                hi: u64::from_le_bytes(c[8..].try_into().unwrap()),
-            })
-            .collect()
+        Ok(f128_vec_from_le_bytes(&buf))
     }
 
     fn grind_pow(&mut self, bits: u32) -> u64 {
-        let state_digest = fs_pow_state_digest(&self.hasher);
-        // Aggregate-aware parallelism: decide on the grind's *expected hash
-        // work* (`2^bits`), not a raw bit threshold. Fold-challenge grinds are
-        // individually modest — e.g. 2^15 at L0 under the per-round profiles —
-        // but the prover issues one per lane fold (6× at L0, 3× per recursive
-        // level), so the per-level aggregate (~2^17–2^18 hashes) lands on the
-        // multi-threaded critical path. We go parallel once a single grind
-        // clears the rayon dispatch break-even (~2^13 hashes); the genuinely
-        // tiny deep-level grinds (2^3–2^11) stay sequential, where the serial
-        // loop beats parallel-dispatch overhead. `find_first` returns the
-        // globally smallest satisfying nonce, so the result is identical to the
-        // sequential search (deterministic proofs) regardless of this choice.
-        const PARALLEL_GRIND_MIN_HASHES: u64 = 1 << 13;
         let nonce = if bits == 0 {
             0
-        } else if (1u64 << bits.min(63)) < PARALLEL_GRIND_MIN_HASHES {
-            // Sequential search: try u64 nonces until
-            // SHA256(ROLE_POW || state_digest || nonce_le) has `bits` leading
-            // zeros.
-            let mut nonce: u64 = 0;
-            loop {
-                if sha256_has_leading_zero_bits(&state_digest, nonce, bits) {
-                    break nonce;
-                }
-                nonce = nonce.wrapping_add(1);
-            }
         } else {
-            // Block-parallel search. Blocks are scanned in order and
-            // `find_first` returns the smallest match within a block, so the
-            // result is deterministic (the globally smallest satisfying nonce).
-            // Block ≈ 2× the expected attempts: large enough that the match
-            // usually falls inside one block (so all threads do useful
-            // pre-match work), small enough to avoid the 4× over-scan the old
-            // `+2` block caused (which left ~¾ of threads doing cancelled work).
-            let block: u64 = 1 << (bits.min(24) + 1);
-            let mut start: u64 = 0;
-            loop {
-                if let Some(n) = (start..start.saturating_add(block))
-                    .into_par_iter()
-                    .find_first(|&n| sha256_has_leading_zero_bits(&state_digest, n, bits))
-                {
-                    break n;
+            assert!(
+                bits <= 256,
+                "PoW grinding bits cannot exceed SHA-256 output length"
+            );
+            if self.budget.is_none() {
+                grind_pow_unbudgeted(&self.hasher, bits)
+            } else {
+                let state_digest = self
+                    .try_pow_state_digest()
+                    .expect("Fiat-Shamir oracle query budget exhausted");
+                let mut nonce: u64 = 0;
+                loop {
+                    if self
+                        .try_pow_candidate(&state_digest, nonce, bits)
+                        .expect("Fiat-Shamir oracle query budget exhausted")
+                    {
+                        break nonce;
+                    }
+                    nonce = nonce.wrapping_add(1);
                 }
-                start = start.saturating_add(block);
             }
         };
         // Absorb the nonce so subsequent transcript state binds to it.
@@ -361,8 +517,26 @@ impl Challenger for FsChallenger {
         nonce
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
+        if bits == 0 {
+            let nonce = 0u64;
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(0);
+        }
+        let state_digest = self.try_pow_state_digest()?;
+        let mut found = None;
+        for nonce in 0..max_trials {
+            if self.try_pow_candidate(&state_digest, nonce, bits)? {
+                found = Some(nonce);
+                break;
+            }
+        }
+        let nonce = found.ok_or(OracleLimitError::GrindingLimitExceeded)?;
+        self.observe_bytes(&nonce.to_le_bytes());
+        Ok(nonce)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
-        let state_digest = fs_pow_state_digest(&self.hasher);
         let ok = if bits == 0 {
             // No PoW required here. An honest prover emits the canonical nonce
             // 0 (see `grind_pow`), so reject any non-zero value: it can only be
@@ -374,13 +548,38 @@ impl Challenger for FsChallenger {
             // proofs canonical / non-malleable at zero-bit grinding sites.
             nonce == 0
         } else {
-            sha256_has_leading_zero_bits(&state_digest, nonce, bits)
+            let state_digest = self
+                .try_pow_state_digest()
+                .expect("Fiat-Shamir oracle query budget exhausted");
+            self.try_pow_candidate(&state_digest, nonce, bits)
+                .expect("Fiat-Shamir oracle query budget exhausted")
         };
         // Absorb regardless of `ok` so the transcript stays byte-identical to
         // the prover's (an honest prover always reaches this with the same
         // nonce); a failed check rejects the proof at the call site anyway.
         self.observe_bytes(&nonce.to_le_bytes());
         ok
+    }
+
+    fn verify_pow_bounded(
+        &mut self,
+        nonce: u64,
+        bits: u32,
+        max_trials: u64,
+    ) -> Result<bool, OracleLimitError> {
+        if bits == 0 {
+            let ok = nonce == 0;
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(ok);
+        }
+        if nonce >= max_trials {
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(false);
+        }
+        let state_digest = self.try_pow_state_digest()?;
+        let ok = self.try_pow_candidate(&state_digest, nonce, bits)?;
+        self.observe_bytes(&nonce.to_le_bytes());
+        Ok(ok)
     }
 }
 
@@ -394,10 +593,39 @@ fn fs_pow_state_digest(hasher: &Sha256) -> [u8; 32] {
     hasher.clone().finalize().into()
 }
 
+fn grind_pow_unbudgeted(hasher: &Sha256, bits: u32) -> u64 {
+    let state_digest = fs_pow_state_digest(hasher);
+    const PARALLEL_GRIND_MIN_HASHES: u64 = 1 << 13;
+    if (1u64 << bits.min(63)) < PARALLEL_GRIND_MIN_HASHES {
+        let mut nonce: u64 = 0;
+        loop {
+            if sha256_has_leading_zero_bits(&state_digest, nonce, bits) {
+                break nonce;
+            }
+            nonce = nonce.wrapping_add(1);
+        }
+    } else {
+        let block: u64 = 1 << (bits.min(24) + 1);
+        let mut start: u64 = 0;
+        loop {
+            if let Some(n) = (start..start.saturating_add(block))
+                .into_par_iter()
+                .find_first(|&n| sha256_has_leading_zero_bits(&state_digest, n, bits))
+            {
+                break n;
+            }
+            start = start.saturating_add(block);
+        }
+    }
+}
+
 /// Check whether the domain-separated PoW point has at least `bits` leading
 /// zero bits. Uses the same injective framing as external oracle challengers.
 #[inline]
 fn sha256_has_leading_zero_bits(state_digest: &[u8; 32], nonce: u64, bits: u32) -> bool {
+    if bits > 256 {
+        return false;
+    }
     #[cfg(feature = "hash-count")]
     fs_count::POW_SHA256.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let h: [u8; 32] = Sha256::digest(crate::ro::encode_pow_point(state_digest, nonce)).into();
@@ -597,6 +825,31 @@ mod tests {
         let mut c1 = FsChallenger::new(b"flock");
         let mut c2 = FsChallenger::new(b"flock");
         assert_ne!(c1.sample_f128(), c2.sample_f128_vec(1)[0]);
+    }
+
+    #[test]
+    fn fs_challenger_budgeted_vector_charges_exact_blocks() {
+        let budget = OracleQueryBudget::new(2);
+        let mut challenger = FsChallenger::new_budgeted(b"budget", budget.clone());
+        assert!(challenger.try_sample_f128_vec(3).is_ok());
+        assert_eq!(budget.used(), 2);
+        assert_eq!(
+            challenger.try_sample_f128(),
+            Err(OracleLimitError::QueryBudgetExceeded)
+        );
+        assert_eq!(budget.used(), 2);
+    }
+
+    #[test]
+    fn fs_challenger_bounded_grind_exhausts_exact_trial_cap() {
+        let budget = OracleQueryBudget::new(4);
+        let mut challenger = FsChallenger::new_budgeted(b"pow-budget", budget.clone());
+        challenger.observe_bytes(b"prefix");
+        assert_eq!(
+            challenger.grind_pow_bounded(257, 3),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(budget.used(), 4);
     }
 
     #[test]

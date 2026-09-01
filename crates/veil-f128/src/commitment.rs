@@ -3,8 +3,10 @@
 use flock_core::{
     field::F128,
     merkle::{
-        Hash, merkle_multi_proof, merkle_tree_framed_salted, verify_merkle_multi_proof_framed,
+        Hash, merkle_multi_proof, try_merkle_tree_framed_salted,
+        try_verify_merkle_multi_proof_framed,
     },
+    oracle_budget::OracleLimitError,
     ro::{RoChannel, RoContext},
     zk::MaskSampler,
 };
@@ -34,6 +36,15 @@ impl MerkleMatrix {
         ctx: &RoContext,
         channel: RoChannel,
     ) -> Self {
+        Self::try_new(columns, rng, ctx, channel).expect("point-oracle query budget exhausted")
+    }
+
+    pub fn try_new<R: MaskSampler + ?Sized>(
+        columns: &[Vec<F128>],
+        rng: &mut R,
+        ctx: &RoContext,
+        channel: RoChannel,
+    ) -> Result<Self, OracleLimitError> {
         assert!(
             !columns.is_empty(),
             "commitment must contain at least one column"
@@ -52,14 +63,14 @@ impl MerkleMatrix {
         }
         let salts = sample_leaf_salts(rows, rng);
         let bytes = matrix_bytes(&values);
-        let tree = merkle_tree_framed_salted(&bytes, rows, &salts, ctx, channel, 0);
-        Self {
+        let tree = try_merkle_tree_framed_salted(&bytes, rows, &salts, ctx, channel, 0)?;
+        Ok(Self {
             rows,
             columns: column_count,
             values,
             salts,
             tree,
-        }
+        })
     }
 
     pub fn root(&self) -> Hash {
@@ -112,11 +123,23 @@ impl MerkleMatrixOpening {
         ctx: &RoContext,
         channel: RoChannel,
     ) -> bool {
+        self.try_verify(root, num_rows, num_columns, ctx, channel)
+            .unwrap_or(false)
+    }
+
+    pub fn try_verify(
+        &self,
+        root: &Hash,
+        num_rows: usize,
+        num_columns: usize,
+        ctx: &RoContext,
+        channel: RoChannel,
+    ) -> Result<bool, OracleLimitError> {
         if !num_rows.is_power_of_two()
             || self.rows.len() != self.positions.len().saturating_mul(num_columns)
             || self.salts.len() != self.positions.len()
         {
-            return false;
+            return Ok(false);
         }
         let bytes = self
             .rows
@@ -130,7 +153,7 @@ impl MerkleMatrixOpening {
             })
             .collect::<Vec<_>>();
         let leaves = bytes.iter().map(Vec::as_slice).collect::<Vec<_>>();
-        verify_merkle_multi_proof_framed(
+        try_verify_merkle_multi_proof_framed(
             root,
             num_rows,
             &self.positions,
@@ -161,20 +184,17 @@ pub(crate) fn sample_leaf_salts<R: MaskSampler + ?Sized>(
         .iter()
         .map(|pair| {
             let mut salt = [0u8; 32];
-            salt[..8].copy_from_slice(&pair[0].lo.to_le_bytes());
-            salt[8..16].copy_from_slice(&pair[0].hi.to_le_bytes());
-            salt[16..24].copy_from_slice(&pair[1].lo.to_le_bytes());
-            salt[24..].copy_from_slice(&pair[1].hi.to_le_bytes());
+            salt[..F128::BYTE_LEN].copy_from_slice(&pair[0].to_le_bytes());
+            salt[F128::BYTE_LEN..].copy_from_slice(&pair[1].to_le_bytes());
             salt
         })
         .collect()
 }
 
 fn matrix_bytes(values: &[F128]) -> Vec<u8> {
-    let mut bytes = Vec::with_capacity(values.len() * 16);
+    let mut bytes = Vec::with_capacity(values.len() * F128::BYTE_LEN);
     for value in values {
-        bytes.extend_from_slice(&value.lo.to_le_bytes());
-        bytes.extend_from_slice(&value.hi.to_le_bytes());
+        bytes.extend_from_slice(&value.to_le_bytes());
     }
     bytes
 }

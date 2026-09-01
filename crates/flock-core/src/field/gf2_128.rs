@@ -27,6 +27,8 @@ pub struct F128 {
 }
 
 impl F128 {
+    /// Canonical byte length of an `F128` element in little-endian limb order.
+    pub const BYTE_LEN: usize = 16;
     pub const ZERO: Self = Self { lo: 0, hi: 0 };
     pub const ONE: Self = Self { lo: 1, hi: 0 };
 
@@ -44,6 +46,24 @@ impl F128 {
     #[inline]
     pub const fn is_zero(self) -> bool {
         self.lo == 0 && self.hi == 0
+    }
+
+    /// Serialize as `lo || hi`, each limb little-endian.
+    #[inline]
+    pub fn to_le_bytes(self) -> [u8; Self::BYTE_LEN] {
+        let mut bytes = [0u8; Self::BYTE_LEN];
+        bytes[..8].copy_from_slice(&self.lo.to_le_bytes());
+        bytes[8..].copy_from_slice(&self.hi.to_le_bytes());
+        bytes
+    }
+
+    /// Deserialize from `lo || hi`, each limb little-endian.
+    #[inline]
+    pub fn from_le_bytes(bytes: [u8; Self::BYTE_LEN]) -> Self {
+        Self {
+            lo: u64::from_le_bytes(bytes[..8].try_into().unwrap()),
+            hi: u64::from_le_bytes(bytes[8..].try_into().unwrap()),
+        }
     }
 
     /// 256-bit unreduced product `(self · rhs)`. Caller XORs many of these into
