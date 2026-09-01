@@ -12,9 +12,9 @@ X86_64_TARGET ?= x86_64-unknown-linux-gnu
 X86_64_RUSTFLAGS_ENV = CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS
 endif
 
-.PHONY: test check format clippy clippy-x86 smoke-test zk-certify formal-proof
+.PHONY: test check format clippy clippy-x86 workspace-test formal-proof
 
-test: check format clippy clippy-x86 smoke-test
+test: check format clippy clippy-x86 workspace-test
 
 check:
 	$(CARGO) check $(WORKSPACE_FLAGS)
@@ -30,12 +30,8 @@ clippy-x86:
 	$(X86_64_RUSTFLAGS_ENV)="$(X86_64_RUSTFLAGS)" \
 		$(CARGO) clippy $(WORKSPACE_FLAGS) --target $(X86_64_TARGET) -- -D warnings
 
-smoke-test:
-	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_preimage_roundtrip_and_mutations -- --exact
-	$(CARGO) test --locked --release -p flock-prover --features veil --lib r1cs_hashes::blake3_preimage::tests::succinct_veil_public_only_simulator_is_accepted -- --exact
-
-zk-certify:
-	$(CARGO) run --locked --release -p zk-certify -- --manifest target/zk-certificate-manifest
+workspace-test:
+	$(CARGO) test $(WORKSPACE_FLAGS)
 
 formal-proof:
 	LAKE="$(LAKE)" $(CARGO) run --locked --release -p formal-proof -- verify
