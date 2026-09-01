@@ -184,6 +184,17 @@ const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
 const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
 pub const MAX_LIGERITO_GRIND_TRIALS: u64 = REJECTION_SAMPLING_TRIALS as u64;
 
+#[inline]
+fn verify_ligerito_pow_or_reject<Ch: Challenger>(
+    challenger: &mut Ch,
+    nonce: u64,
+    bits: u32,
+) -> bool {
+    challenger
+        .verify_pow_bounded(nonce, bits, MAX_LIGERITO_GRIND_TRIALS)
+        .unwrap_or(false)
+}
+
 /// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
 /// Johnson levels taper by round; UDR levels use the full level width.
 fn fold_round_grind_bits(
@@ -4720,14 +4731,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
             }
-            if !challenger
-                .verify_pow_bounded(
-                    proof.fold_grinding_nonces[fold_nonce_idx],
-                    bits,
-                    MAX_LIGERITO_GRIND_TRIALS,
-                )
-                .unwrap_or(false)
-            {
+            if !verify_ligerito_pow_or_reject(
+                challenger,
+                proof.fold_grinding_nonces[fold_nonce_idx],
+                bits,
+            ) {
                 return false;
             }
             fold_nonce_idx += 1;
@@ -4781,14 +4789,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     if nonce_idx >= proof.grinding_nonces.len() {
         return false;
     }
-    if !challenger
-        .verify_pow_bounded(
-            proof.grinding_nonces[nonce_idx],
-            config.grinding_bits[0] as u32,
-            MAX_LIGERITO_GRIND_TRIALS,
-        )
-        .unwrap_or(false)
-    {
+    if !verify_ligerito_pow_or_reject(
+        challenger,
+        proof.grinding_nonces[nonce_idx],
+        config.grinding_bits[0] as u32,
+    ) {
         return false;
     }
     nonce_idx += 1;
@@ -4862,14 +4867,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
                 }
-                if !challenger
-                    .verify_pow_bounded(
-                        proof.fold_grinding_nonces[fold_nonce_idx],
-                        bits,
-                        MAX_LIGERITO_GRIND_TRIALS,
-                    )
-                    .unwrap_or(false)
-                {
+                if !verify_ligerito_pow_or_reject(
+                    challenger,
+                    proof.fold_grinding_nonces[fold_nonce_idx],
+                    bits,
+                ) {
                     return false;
                 }
                 fold_nonce_idx += 1;
@@ -4909,14 +4911,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if nonce_idx >= proof.grinding_nonces.len() {
                 return false;
             }
-            if !challenger
-                .verify_pow_bounded(
-                    proof.grinding_nonces[nonce_idx],
-                    config.grinding_bits[i + 1] as u32,
-                    MAX_LIGERITO_GRIND_TRIALS,
-                )
-                .unwrap_or(false)
-            {
+            if !verify_ligerito_pow_or_reject(
+                challenger,
+                proof.grinding_nonces[nonce_idx],
+                config.grinding_bits[i + 1] as u32,
+            ) {
                 return false;
             }
             // (last nonce — nonce_idx is not advanced past it)
@@ -5032,14 +5031,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         if nonce_idx >= proof.grinding_nonces.len() {
             return false;
         }
-        if !challenger
-            .verify_pow_bounded(
-                proof.grinding_nonces[nonce_idx],
-                config.grinding_bits[i + 1] as u32,
-                MAX_LIGERITO_GRIND_TRIALS,
-            )
-            .unwrap_or(false)
-        {
+        if !verify_ligerito_pow_or_reject(
+            challenger,
+            proof.grinding_nonces[nonce_idx],
+            config.grinding_bits[i + 1] as u32,
+        ) {
             return false;
         }
         nonce_idx += 1;
@@ -5847,7 +5843,7 @@ pub fn recursive_verifier<Ch: Challenger>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::challenger::Challenger;
+    use crate::challenger::{Challenger, FsChallenger};
     use std::time::Instant;
 
     struct ConstantChallenger {
@@ -5869,13 +5865,13 @@ mod tests {
     }
 
     struct BoundedPowOnlyChallenger {
-        inner: crate::challenger::FsChallenger,
+        inner: FsChallenger,
     }
 
     impl BoundedPowOnlyChallenger {
         fn new(domain: &[u8]) -> Self {
             Self {
-                inner: crate::challenger::FsChallenger::new(domain),
+                inner: FsChallenger::new(domain),
             }
         }
     }
