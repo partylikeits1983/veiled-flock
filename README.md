@@ -41,8 +41,7 @@ proofs, plus the public digest list, add more bytes.
 Reproduce the benchmark with:
 
 ```sh
-cargo run --locked --release -p flock-prover --features veil \
-  --example preimage_scaling -- 5
+make preimage-scaling
 ```
 
 ## Quickstart
@@ -77,15 +76,20 @@ to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
 ## Running examples
 
 Use release builds for the examples. Debug builds are useful for compiler
-checks, but the timing output is not meaningful.
+checks, but the timing output is not meaningful. The Makefile targets below
+wrap the required Cargo package, feature, and example flags.
+
+To run the regular non-mutating examples:
+
+```sh
+make examples
+```
 
 The `veil-examples` package contains full zero-knowledge examples for FLOCK's
 own protocol layers:
 
 ```sh
-cargo run --locked --release -p veil-examples --example mle_eval_zk
-cargo run --locked --release -p veil-examples --example zerocheck_zk
-cargo run --locked --release -p veil-examples --example root_zk
+make veil-examples
 ```
 
 See [examples/README.md](examples/README.md) for the statements, layers, oracle
@@ -93,21 +97,20 @@ counts, and masking scope of those examples.
 
 The `flock-prover` crate also has benchmark and development examples:
 
-| Example | Command | Notes |
+| Target | Example | Notes |
 |---|---|---|
-| `preimage_scaling` | `cargo run --locked --release -p flock-prover --features veil --example preimage_scaling -- 5` | Reproduces the performance table with five samples. |
-| `mle_eval_bench` | `cargo run --locked --release -p flock-prover --example mle_eval_bench` | Compares naive and Remark 1.7 MLE folding. |
-| `chain_bench` | `cargo run --locked --release -p flock-prover --features unsound-challenger --example chain_bench` | Isolates hash-chain shift sumcheck cost with the insecure test challenger. |
-| `keccak_chain_bench` | `cargo run --locked --release -p flock-prover --example keccak_chain_bench` | Runs full Keccak chain proofs and can take many minutes and gigabytes of memory. |
-| `keccak_mid_density` | `cargo run --locked --release -p flock-prover --example keccak_mid_density` | Reports midpoint Keccak R1CS row density. |
-| `linear_sha_verifier` | `cargo run --locked --release -p flock-prover --example linear_sha_verifier` | Compares the fused SHA-256 verifier walk with sparse matrix folding. |
-| `gen_ligerito_configs` | `cargo run --locked --release -p flock-prover --example gen_ligerito_configs` | Regenerates embedded Ligerito configs; review the generated diff before committing. |
+| `make preimage-scaling` | `preimage_scaling` | Reproduces the performance table with `EXAMPLE_SAMPLES ?= 5`. |
+| `make mle-eval-bench` | `mle_eval_bench` | Compares naive and Remark 1.7 MLE folding. |
+| `make chain-bench` | `chain_bench` | Isolates hash-chain shift sumcheck cost with the insecure test challenger. |
+| `make keccak-mid-density` | `keccak_mid_density` | Reports midpoint Keccak R1CS row density. |
+| `make linear-sha-verifier` | `linear_sha_verifier` | Compares the fused SHA-256 verifier walk with sparse matrix folding. |
+| `make keccak-chain-bench` | `keccak_chain_bench` | Runs full Keccak chain proofs and can take many minutes and gigabytes of memory. |
+| `make gen-ligerito-configs` | `gen_ligerito_configs` | Regenerates embedded Ligerito configs; review the generated diff before committing. |
 
 The native hash-chain baselines are Cargo benchmarks:
 
 ```sh
-cargo bench --locked -p flock-prover --features veil --bench blake3_native_chain
-cargo bench --locked -p flock-prover --features veil --bench keccak_native_chain
+make native-hash-benches
 ```
 
 ## Verification
