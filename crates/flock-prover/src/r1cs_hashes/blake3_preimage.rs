@@ -72,6 +72,8 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the registered full-ZK circuit and PCS certificates.
 /// Smaller batches are padded to the next power-of-two shape.
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
+#[cfg(feature = "veil")]
+const MIN_ZK_PREIMAGE_BLOCK_LOG: usize = 8;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -115,6 +117,8 @@ pub struct Blake3PreimageSetup {
 /// Why a preimage proof was refused before any cryptography ran.
 #[derive(Debug, PartialEq, Eq)]
 pub enum PreimageError {
+    /// The public ZK batch size is outside the certified range.
+    InvalidBatchSize { got: usize, max: usize },
     /// The supplied preimages do not hash to the stated digests. Caught by the
     /// prover so a caller learns it has the wrong witness, rather than
     /// producing a proof that silently fails to verify.
@@ -129,6 +133,9 @@ pub enum PreimageError {
 impl std::fmt::Display for PreimageError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::InvalidBatchSize { got, max } => {
+                write!(f, "zk setup supports 1..={max} preimage blocks, got {got}")
+            }
             Self::DigestMismatch { index } => write!(
                 f,
                 "preimage {index} does not hash to the stated digest — wrong witness"
@@ -502,25 +509,65 @@ pub struct Blake3PreimageZkSetup {
     pub pcs_params: PcsParams,
 }
 
+#[cfg(feature = "veil")]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ZkSetupMode {
+    Prover,
+    Verifier,
+}
+
+#[cfg(feature = "veil")]
+impl ZkSetupMode {
+    fn prewarms_prover(self) -> bool {
+        matches!(self, Self::Prover)
+    }
+}
+
+#[cfg(feature = "veil")]
+fn validate_zk_batch_size(n_blocks: usize) -> Result<(), PreimageError> {
+    if (1..=MAX_ZK_PREIMAGE_BLOCKS).contains(&n_blocks) {
+        Ok(())
+    } else {
+        Err(PreimageError::InvalidBatchSize {
+            got: n_blocks,
+            max: MAX_ZK_PREIMAGE_BLOCKS,
+        })
+    }
+}
+
 impl Blake3PreimageZkSetup {
     /// VEIL setup padded to the hiding-Ligerito production floor.
     /// This lets applications prove a short list while the public statement
     /// deterministically fills the remaining slots with the fixed padding
     /// digest.
     #[cfg(feature = "veil")]
-    pub fn new(n_blocks: usize) -> Self {
-        assert!(
-            (1..=MAX_ZK_PREIMAGE_BLOCKS).contains(&n_blocks),
-            "n_blocks must be in 1..={MAX_ZK_PREIMAGE_BLOCKS}"
-        );
-        Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
+    pub fn new(n_blocks: usize) -> Result<Self, PreimageError> {
+        Self::new_for_mode(n_blocks, ZkSetupMode::Prover)
+    }
+
+    /// VEIL setup for verification-only callers.
+    #[cfg(feature = "veil")]
+    pub fn new_for_verifier(n_blocks: usize) -> Result<Self, PreimageError> {
+        Self::new_for_mode(n_blocks, ZkSetupMode::Verifier)
     }
 
     #[cfg(feature = "veil")]
-    fn with_outer_log(n_blocks: usize, n_log: usize) -> Self {
+    fn new_for_mode(n_blocks: usize, mode: ZkSetupMode) -> Result<Self, PreimageError> {
+        validate_zk_batch_size(n_blocks)?;
+        Ok(Self::with_outer_log(
+            n_blocks,
+            min_n_blocks_log(n_blocks).max(MIN_ZK_PREIMAGE_BLOCK_LOG),
+            mode,
+        ))
+    }
+
+    #[cfg(feature = "veil")]
+    fn with_outer_log(n_blocks: usize, n_log: usize, mode: ZkSetupMode) -> Self {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
-        flock_core::scratch::prewarm_prover(r1cs.m);
+        if mode.prewarms_prover() {
+            flock_core::scratch::prewarm_prover(r1cs.m);
+        }
         let pcs_params = PcsParams {
             m: r1cs.m,
             log_inv_rate: 1,
@@ -977,13 +1024,32 @@ mod tests {
             .collect()
     }
 
+    #[cfg(feature = "veil")]
+    fn zk_setup(n_blocks: usize) -> Blake3PreimageZkSetup {
+        Blake3PreimageZkSetup::new(n_blocks).expect("valid zk setup")
+    }
+
+    #[cfg(feature = "veil")]
+    fn assert_invalid_zk_batch_size(
+        result: Result<Blake3PreimageZkSetup, PreimageError>,
+        got: usize,
+    ) {
+        assert_eq!(
+            result.unwrap_err(),
+            PreimageError::InvalidBatchSize {
+                got,
+                max: MAX_ZK_PREIMAGE_BLOCKS,
+            }
+        );
+    }
+
     /// Exercises the largest accepted ZK shape, including its 6-bit outer blind
     /// grind and the bounded UDR fold-grind schedule.
     #[cfg(feature = "veil")]
     #[test]
     fn largest_supported_zk_shape_grinds_every_udr_fold_round() {
         let blocks = MAX_ZK_PREIMAGE_BLOCKS;
-        let setup = Blake3PreimageZkSetup::new(blocks);
+        let setup = zk_setup(blocks);
         let messages = msgs_of(0x5EED, blocks);
         let digests = Blake3PreimageSetup::digests_of(&messages);
         let (proof, commitment) = setup.prove(&messages, &digests).expect("prove m27 shape");
@@ -1014,9 +1080,16 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    #[should_panic(expected = "n_blocks must be in 1..=")]
     fn zk_setup_rejects_batches_above_current_certificate_ceiling() {
-        let _ = Blake3PreimageZkSetup::new(MAX_ZK_PREIMAGE_BLOCKS + 1);
+        assert_invalid_zk_batch_size(
+            Blake3PreimageZkSetup::new(MAX_ZK_PREIMAGE_BLOCKS + 1),
+            MAX_ZK_PREIMAGE_BLOCKS + 1,
+        );
+        assert_invalid_zk_batch_size(Blake3PreimageZkSetup::new(0), 0);
+        assert_invalid_zk_batch_size(
+            Blake3PreimageZkSetup::new_for_verifier(MAX_ZK_PREIMAGE_BLOCKS + 1),
+            MAX_ZK_PREIMAGE_BLOCKS + 1,
+        );
     }
 
     #[cfg(feature = "veil")]
@@ -1025,7 +1098,7 @@ mod tests {
         // The hiding Ligerito layer's registered production geometry starts
         // at m=22, i.e. 256 BLAKE3 blocks.
         let n = N_TEST;
-        let setup = Blake3PreimageZkSetup::new(n);
+        let setup = zk_setup(n);
         assert_eq!(
             setup.pcs_params.profile,
             flock_core::pcs::ligerito::LigeritoProfile::Secure
@@ -1186,7 +1259,7 @@ mod tests {
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_ring_messages_use_fresh_masks() {
-        let setup = Blake3PreimageZkSetup::new(2);
+        let setup = zk_setup(2);
         let messages = msgs_of(0x5A17, 2);
         let digests = Blake3PreimageSetup::digests_of(&messages);
         let prove = || setup.prove(&messages, &digests).expect("prove");
@@ -1239,7 +1312,7 @@ mod tests {
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_veil_public_only_simulator_is_accepted() {
-        let setup = Blake3PreimageZkSetup::new(2);
+        let setup = zk_setup(2);
         // Arbitrary public targets; the simulator API receives no messages
         // and makes no attempt to invert them.
         let digests = vec![[0x42; DIGEST_BYTES], [0xA7; DIGEST_BYTES]];
@@ -1286,7 +1359,7 @@ mod tests {
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_simulator_composes_on_one_shared_oracle() {
-        let setup = Blake3PreimageZkSetup::new(2);
+        let setup = zk_setup(2);
         let oracle = crate::sim_oracle::shared_oracle();
         let statements = [
             vec![[0x11; DIGEST_BYTES], [0x22; DIGEST_BYTES]],
@@ -1334,7 +1407,7 @@ mod tests {
         let oracle = crate::sim_oracle::shared_oracle();
         // These are the smallest public batches selecting each registered shape.
         for n_blocks in [1usize, 257, 513, 1025, 2049] {
-            let setup = Blake3PreimageZkSetup::new(n_blocks);
+            let setup = zk_setup(n_blocks);
             let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
             let before = oracle
                 .lock()
@@ -1376,7 +1449,7 @@ mod tests {
     fn succinct_simulator_aborts_on_a_prequeried_programming_point() {
         use flock_core::ro::ByteOracle;
 
-        let setup = Blake3PreimageZkSetup::new(2);
+        let setup = zk_setup(2);
         let digests = vec![[0x42; DIGEST_BYTES], [0xA7; DIGEST_BYTES]];
         let seed = [0x94; 32];
 

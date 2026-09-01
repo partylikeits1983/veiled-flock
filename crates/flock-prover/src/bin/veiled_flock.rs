@@ -106,7 +106,8 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
         .iter()
         .map(|message| *blake3::hash(message).as_bytes())
         .collect::<Vec<_>>();
-    let setup = Blake3PreimageZkSetup::new(messages.len());
+    let setup = Blake3PreimageZkSetup::new(messages.len())
+        .map_err(|error| format!("invalid proof setup: {error}"))?;
     let started = Instant::now();
     let (proof, commitment) = setup
         .prove(&messages, &digests)
@@ -119,7 +120,8 @@ fn verify(bundle: &Bundle) -> Result<(), String> {
     if bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
         return Err("invalid bundle statement shape".to_string());
     }
-    let setup = Blake3PreimageZkSetup::new(bundle.digests.len());
+    let setup = Blake3PreimageZkSetup::new_for_verifier(bundle.digests.len())
+        .map_err(|error| format!("invalid verifier setup: {error}"))?;
     let started = Instant::now();
     setup
         .verify(&bundle.commitment, &bundle.proof, &bundle.digests)

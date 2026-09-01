@@ -57,7 +57,7 @@ fn benchmark_size(size: usize, samples: usize) {
     print_samples(size, "FLOCK-non-ZK-Secure", &mut flock_samples);
     drop(flock);
 
-    let zk = Blake3PreimageZkSetup::new(size);
+    let zk = Blake3PreimageZkSetup::new(size).expect("valid ZK setup");
     let _warm_up = sample_zk(&zk, &messages, &digests);
     let mut zk_samples = (0..samples)
         .map(|_| sample_zk(&zk, &messages, &digests))
