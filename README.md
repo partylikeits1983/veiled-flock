@@ -42,6 +42,8 @@ and the native `GF(2^128)` VEIL backend. See the
   the VEIL context.
 - **[tools/formal-proof](tools/formal-proof)** - Cargo wrapper for building the
   Lean formalization and auditing theorem assumptions.
+- **[tools/zk-certify](tools/zk-certify)** - Rust certificate registry for the
+  full-ZK implementation surface.
 
 ## Performance
 
@@ -150,14 +152,16 @@ cargo bench --locked -p flock-prover --features veil --bench keccak_native_chain
 
 ```sh
 make test
+make zk-certify
 make formal-proof
 ```
 
 `make test` runs the locked release workspace checks, formatting check, clippy,
-the x86 clippy pass, and the BLAKE3 preimage smoke tests. `make formal-proof`
-builds the Lean proof libraries and audits the main theorem chain for
-non-standard axioms. See [SECURITY.md](docs/SECURITY.md) for the precise
-theorem and implementation scope.
+the x86 clippy pass, and the BLAKE3 preimage smoke tests. `make zk-certify`
+runs the Rust certificate registry and random-oracle surface checks.
+`make formal-proof` builds the Lean proof libraries and audits the main theorem
+chain for non-standard axioms. See [SECURITY.md](docs/SECURITY.md) for the
+precise theorem and implementation scope.
 
 ## Documentation
 
