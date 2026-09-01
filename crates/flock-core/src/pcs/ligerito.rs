@@ -224,9 +224,7 @@ fn verify_ligerito_pow_or_reject<Ch: Challenger>(
     nonce: u64,
     bits: u32,
 ) -> bool {
-    challenger
-        .verify_pow_bounded(nonce, bits, MAX_LIGERITO_GRIND_TRIALS)
-        .unwrap_or(false)
+    verify_ligerito_pow(challenger, nonce, bits).unwrap_or(false)
 }
 
 /// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
