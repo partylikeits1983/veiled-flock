@@ -58,6 +58,9 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
 proof bundle includes a transport copy of the ordered public digests. The
 verifier must supply the expected digest list separately as whitespace-separated
 64-character hex digests; verification rejects if the bundle copy differs.
+`--digest-out` is only a local/demo convenience for deriving that file from
+trusted input messages. When verifying an untrusted proof, pin or obtain the
+expected digests independently of the prover and proof bundle.
 Full-ZK batches support up to 4096 messages and use registered
 256/512/1024/2048/4096-slot circuit shapes.
 
