@@ -190,18 +190,55 @@ fn fold_round_grind_bits(
     lvl: usize,
     j: usize,
 ) -> u32 {
-    debug_assert_eq!(
+    assert_eq!(
         fold_grinding_bits.len(),
         fold_grinding_taper.len(),
         "fold grind width and taper flag must cover the same levels"
     );
-    let bits = fold_grinding_bits.get(lvl).copied().unwrap_or(0);
-    let bits = if fold_grinding_taper.get(lvl).copied().unwrap_or(false) {
+    let bits = fold_grinding_bits[lvl];
+    let bits = if fold_grinding_taper[lvl] {
         bits.saturating_sub(j)
     } else {
         bits
     };
     bits.try_into().unwrap_or(u32::MAX)
+}
+
+fn prover_config_schedules_are_well_formed(config: &ProverConfig) -> bool {
+    let Some(level_count) = config.recursive_steps.checked_add(1) else {
+        return false;
+    };
+    config.recursive_steps >= 1
+        && config.log_inv_rates.len() == level_count
+        && config.recursive_log_msg_cols.len() == config.recursive_steps
+        && config.recursive_ks.len() == config.recursive_steps
+        && config.queries.len() == level_count
+        && config.grinding_bits.len() == level_count
+        && config.fold_grinding_bits.len() == level_count
+        && config.fold_grinding_taper.len() == level_count
+        && config.ood_samples.len() == level_count
+}
+
+fn verifier_config_schedules_are_well_formed(config: &VerifierConfig) -> bool {
+    let Some(level_count) = config.recursive_steps.checked_add(1) else {
+        return false;
+    };
+    config.recursive_steps >= 1
+        && config.log_inv_rates.len() == level_count
+        && config.recursive_log_msg_cols.len() == config.recursive_steps
+        && config.recursive_ks.len() == config.recursive_steps
+        && config.queries.len() == level_count
+        && config.grinding_bits.len() == level_count
+        && config.fold_grinding_bits.len() == level_count
+        && config.fold_grinding_taper.len() == level_count
+        && config.ood_samples.len() == level_count
+}
+
+fn assert_prover_config_schedules_are_well_formed(config: &ProverConfig) {
+    assert!(
+        prover_config_schedules_are_well_formed(config),
+        "Ligerito prover config schedules must cover exactly recursive_steps + 1 levels"
+    );
 }
 
 /// PoW bits shared by hiding L0 `c` and outer blind challenges.
@@ -3020,18 +3057,11 @@ pub fn recursive_prover<Ch: Challenger>(
     let t_sumcheck = std::time::Duration::ZERO;
     let t_opens = std::time::Duration::ZERO;
     let log_n = poly.len().trailing_zeros() as usize;
-    let r = config.recursive_steps;
     let initial_k = config.initial_k;
 
+    assert_prover_config_schedules_are_well_formed(config);
     assert_eq!(poly.len(), 1usize << log_n);
     assert_eq!(eval_point.len(), log_n);
-    assert_eq!(config.recursive_ks.len(), r);
-    assert_eq!(
-        config.log_inv_rates.len(),
-        r + 1,
-        "log_inv_rates must have R+1 entries"
-    );
-    assert!(r >= 1, "recursive_steps must be ≥ 1");
 
     challenger.observe_label(b"flock-ligerito");
     challenger.observe_f128(claimed_value);
@@ -3091,20 +3121,16 @@ pub fn recursive_prover_with_l0<Ch: Challenger>(
     let t_opens = std::time::Duration::ZERO;
 
     let log_n = poly.len().trailing_zeros() as usize;
-    let r = config.recursive_steps;
     let initial_k = config.initial_k;
-    let log_inv_rate_0 = config.log_inv_rates[0];
-    let log_msg_cols_0 = log_n - initial_k;
 
+    assert_prover_config_schedules_are_well_formed(config);
     assert_eq!(poly.len(), 1usize << log_n);
     assert_eq!(eval_point.len(), log_n);
-    assert_eq!(config.recursive_ks.len(), r);
-    assert_eq!(config.log_inv_rates.len(), r + 1);
-    assert!(r >= 1, "recursive_steps must be ≥ 1");
 
+    let log_inv_rate_0 = config.log_inv_rates[0];
+    let log_msg_cols_0 = log_n - initial_k;
     let block_len = 1usize << (log_msg_cols_0 + log_inv_rate_0);
     let num_interleaved = 1usize << initial_k;
-    let _ = r; // used implicitly via config in inner
     assert_eq!(
         l0_codeword.len(),
         block_len * num_interleaved,
@@ -3358,11 +3384,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let r = config.recursive_steps;
     let initial_k = config.initial_k;
 
+    assert_prover_config_schedules_are_well_formed(config);
     assert_eq!(packed_witness.len(), 1usize << log_n);
     assert_eq!(b_initial.len(), 1usize << log_n);
-    assert_eq!(config.recursive_ks.len(), r);
-    assert_eq!(config.log_inv_rates.len(), r + 1);
-    assert!(r >= 1);
 
     let log_inv_rate_0 = config.log_inv_rates[0];
     let log_msg_cols_0 = log_n - initial_k;
@@ -3890,7 +3914,7 @@ where
 
     let initial_k = config.initial_k;
     let r = config.recursive_steps;
-    if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
+    if !verifier_config_schedules_are_well_formed(config) {
         return false;
     }
     if !proof_has_expected_recursive_shape(proof, r) || !recursive_proof_salts_are_empty(proof) {
@@ -4484,7 +4508,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     let initial_k = config.initial_k;
     let r = config.recursive_steps;
 
-    if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
+    if !verifier_config_schedules_are_well_formed(config) {
         return false;
     }
     if !proof_has_expected_recursive_shape(proof, r) || !all_proof_salts_are_empty(proof) {
@@ -5342,7 +5366,7 @@ pub fn recursive_verifier<Ch: Challenger>(
     let initial_k = config.initial_k;
     let r = config.recursive_steps;
 
-    if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
+    if !verifier_config_schedules_are_well_formed(config) {
         return false;
     }
     // The legacy (non-basis) path predates OOD binding and fold grinding.
@@ -7539,6 +7563,74 @@ mod tests {
             ood_samples,
         };
         (p, v)
+    }
+
+    #[test]
+    fn recursive_verifier_rejects_truncated_fold_grind_schedule() {
+        let log_n = 12;
+        let initial_k = 2;
+        let ks = [2usize];
+        let (p_cfg, v_cfg) = ood_test_configs(log_n, initial_k, &ks, vec![0, 0], vec![0, 0]);
+
+        let mut rng = crate::challenger::RandomChallenger::new(0x5C4E_DA1E);
+        let poly: Vec<F128> = (0..(1usize << log_n)).map(|_| rng.sample_f128()).collect();
+        let z: Vec<F128> = (0..log_n).map(|_| rng.sample_f128()).collect();
+        let b = build_eq_table(&z);
+        let target: F128 = poly
+            .iter()
+            .zip(b.iter())
+            .map(|(&a, &c)| a * c)
+            .fold(F128::ZERO, |a, x| a + x);
+
+        let log_msg_cols_0 = log_n - initial_k;
+        let ntt_0 = AdditiveNttF128::standard(log_msg_cols_0 + 1);
+        let wtns_0 = ligero_commit(&poly, log_msg_cols_0, initial_k, 1, &ntt_0);
+        let initial_root = wtns_0.root();
+
+        let mut p_ch = crate::challenger::FsChallenger::new(b"short-grind-schedule");
+        let proof = recursive_prover_with_basis(
+            &p_cfg,
+            poly,
+            b.clone(),
+            target,
+            &wtns_0.mat,
+            &wtns_0.tree,
+            &mut p_ch,
+        );
+
+        let mut valid_ch = crate::challenger::FsChallenger::new(b"short-grind-schedule");
+        assert!(recursive_verifier_with_basis(
+            &v_cfg,
+            &proof,
+            &b,
+            target,
+            &initial_root,
+            &mut valid_ch
+        ));
+
+        let mut short_bits = v_cfg.clone();
+        short_bits.fold_grinding_bits.pop();
+        let mut short_bits_ch = crate::challenger::FsChallenger::new(b"short-grind-schedule");
+        assert!(!recursive_verifier_with_basis(
+            &short_bits,
+            &proof,
+            &b,
+            target,
+            &initial_root,
+            &mut short_bits_ch
+        ));
+
+        let mut short_taper = v_cfg;
+        short_taper.fold_grinding_taper.pop();
+        let mut short_taper_ch = crate::challenger::FsChallenger::new(b"short-grind-schedule");
+        assert!(!recursive_verifier_with_basis(
+            &short_taper,
+            &proof,
+            &b,
+            target,
+            &initial_root,
+            &mut short_taper_ch
+        ));
     }
 
     /// JohnsonOod OOD/fold-grind path round-trips through both verifiers.
