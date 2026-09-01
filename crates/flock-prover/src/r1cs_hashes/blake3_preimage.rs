@@ -988,6 +988,26 @@ mod tests {
             .collect()
     }
 
+    #[cfg(feature = "veil")]
+    #[test]
+    fn succinct_prove_returns_oracle_limit_when_budget_exhausted() {
+        let setup = Blake3PreimageZkSetup::new(1);
+        let messages = msgs_of(0xBADC_0FFE, 1);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+        let mut rng = flock_core::zk::ZkRng::from_seed([0x92; 32]);
+        let budget = OracleQueryBudget::new(1);
+        let mut challenger = FsChallenger::new_budgeted(VEIL_FLOCK_FS_DOMAIN, budget);
+        let err = setup
+            .prove_with_challenger(&messages, &digests, &mut rng, &mut challenger)
+            .unwrap_err();
+        assert_eq!(
+            err,
+            SuccinctPreimageError::Protocol(crate::succinct_veil::SuccinctVeilError::OracleLimit(
+                OracleLimitError::QueryBudgetExceeded
+            ))
+        );
+    }
+
     /// Exercises the largest accepted ZK shape, including its 6-bit outer blind
     /// grind and the bounded UDR fold-grind schedule.
     #[cfg(feature = "veil")]

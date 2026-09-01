@@ -64,6 +64,7 @@ use serde::{Deserialize, Serialize};
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::merkle::Hash;
+use crate::oracle_budget::OracleLimitError;
 use crate::pcs::ligerito::{ProverConfig, VerifierConfig};
 use crate::pcs::{
     self, Commitment, DirectEqInd, LOG_PACKING, PackedDirectClaim, PackedDirectClaimRef, PcsParams,
@@ -118,12 +119,23 @@ pub struct PermutationClaim {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerifyError {
+    /// Random-oracle budget or bounded sampling was exhausted while replaying
+    /// the transcript.
+    OracleLimit(OracleLimitError),
+    /// The proof has the wrong number of sumcheck rounds for `mu`.
+    BadRoundLength { expected: usize, got: usize },
     /// Final sumcheck consistency `c_running == F(ρ)` failed.
     SumcheckFinalFailed,
     /// Claimed grand product was not `1`.
     RootNotOne,
     /// The PCS opening of `v` failed to verify.
     PcsOpen(pcs::VerifyError),
+}
+
+impl From<OracleLimitError> for VerifyError {
+    fn from(err: OracleLimitError) -> Self {
+        Self::OracleLimit(err)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -312,17 +324,17 @@ fn ligerito_verifier_config(num_vars: usize) -> VerifierConfig {
 /// Open `poly` (length `2^num_vars`, already committed as `commitment`) at the
 /// packed-direct `claims` via Ligerito. `poly` is consumed (Ligerito's prover
 /// takes it by value).
-fn open_v<C: Challenger>(
+fn try_open_v<C: Challenger>(
     poly: Vec<F128>,
     prover_data: &ProverData,
     commitment: &Commitment,
     claims: &[PackedDirectClaim],
     ch: &mut C,
-) -> pcs::BatchOpeningProofLigerito {
+) -> Result<pcs::BatchOpeningProofLigerito, OracleLimitError> {
     let num_vars = commitment.params.log_msg_len();
     let padding = PaddingSpec::dense(commitment.params.m);
     let cfg = ligerito_prover_config(num_vars);
-    pcs::open_batch_mixed_ligerito_with_precomputed_s_hat_v(
+    pcs::try_open_batch_mixed_ligerito_with_precomputed_s_hat_v(
         poly,
         prover_data,
         commitment,
@@ -345,7 +357,13 @@ fn verify_v<C: Challenger>(
     let num_vars = commitment.params.log_msg_len();
     let cfg = ligerito_verifier_config(num_vars);
     pcs::verify_opening_batch_ligerito_mixed(commitment, &[], &[], &[], claims, open, &cfg, ch)
-        .map_err(VerifyError::PcsOpen)
+        .map_err(|err| match err {
+            pcs::VerifyError::OracleLimit(err) => VerifyError::OracleLimit(err),
+            pcs::VerifyError::RingSwitch(pcs::ring_switch::VerifyError::OracleLimit(err)) => {
+                VerifyError::OracleLimit(err)
+            }
+            other => VerifyError::PcsOpen(other),
+        })
 }
 
 /// The five evaluation points of `v` (each length `μ+1`) that the PCS opens, in
@@ -473,6 +491,15 @@ pub fn prove<C: Challenger>(
     sigma: &[usize],
     ch: &mut C,
 ) -> (PermutationProof, PermutationClaim) {
+    try_prove(f, g, sigma, ch).expect("permutation oracle query budget exhausted")
+}
+
+pub fn try_prove<C: Challenger>(
+    f: &[F128],
+    g: &[F128],
+    sigma: &[usize],
+    ch: &mut C,
+) -> Result<(PermutationProof, PermutationClaim), OracleLimitError> {
     let n = f.len();
     assert_eq!(g.len(), n);
     assert_eq!(sigma.len(), n);
@@ -493,8 +520,8 @@ pub fn prove<C: Challenger>(
     };
 
     ch.observe_label(DOMAIN);
-    let beta = ch.sample_f128();
-    let gamma = ch.sample_f128();
+    let beta = ch.try_sample_f128()?;
+    let gamma = ch.try_sample_f128()?;
 
     // Tags and the fractional leaves. `s_id_vec[x]` (the field element whose bit
     // pattern is `x`) is built by doubling in O(N) — each entry is one XOR from a
@@ -549,8 +576,8 @@ pub fn prove<C: Challenger>(
     tp("commit(v)");
     ch.observe_bytes(&commitment_v.root);
     ch.observe_f128(claimed_product);
-    let alpha = ch.sample_f128();
-    let r = ch.sample_f128_vec(mu);
+    let alpha = ch.try_sample_f128()?;
+    let r = ch.try_sample_f128_vec(mu)?;
 
     // `s_id` is affine, so it is NOT folded as a working vector: its eq-weighted
     // contribution to each round's `G(1)` has the closed form
@@ -578,7 +605,7 @@ pub fn prove<C: Challenger>(
         let g1 = g1_core + beta * ((c_prefix + basis[i]) + sid_suffix[i + 1]);
         ch.observe_f128(g1);
         ch.observe_f128(g_inf);
-        let rho_i = ch.sample_f128();
+        let rho_i = ch.try_sample_f128()?;
         rho.push(rho_i);
         rounds.push((g1, g_inf));
         c_prefix += basis[i] * rho_i;
@@ -611,7 +638,7 @@ pub fn prove<C: Challenger>(
             eq_ind: DirectEqInd::Dense(build_eq(point)),
         })
         .collect();
-    let v_open = open_v(v, &pdata_v, &commitment_v, &v_claims, ch);
+    let v_open = try_open_v(v, &pdata_v, &commitment_v, &v_claims, ch)?;
     tp("open(v)");
 
     let proof = PermutationProof {
@@ -638,7 +665,7 @@ pub fn prove<C: Challenger>(
         v_1x,
         v_0x,
     };
-    (proof, claim)
+    Ok((proof, claim))
 }
 
 // ---------------------------------------------------------------------------
@@ -652,11 +679,24 @@ pub fn verify<C: Challenger>(
     proof: &PermutationProof,
     ch: &mut C,
 ) -> Result<PermutationClaim, VerifyError> {
-    assert_eq!(proof.rounds.len(), mu);
+    try_verify(mu, proof, ch)
+}
+
+pub fn try_verify<C: Challenger>(
+    mu: usize,
+    proof: &PermutationProof,
+    ch: &mut C,
+) -> Result<PermutationClaim, VerifyError> {
+    if proof.rounds.len() != mu {
+        return Err(VerifyError::BadRoundLength {
+            expected: mu,
+            got: proof.rounds.len(),
+        });
+    }
 
     ch.observe_label(DOMAIN);
-    let beta = ch.sample_f128();
-    let gamma = ch.sample_f128();
+    let beta = ch.try_sample_f128()?;
+    let gamma = ch.try_sample_f128()?;
 
     // Rebuild the `v` commitment from the proof root + params derived from μ, and
     // observe the root at the same transcript position the prover committed.
@@ -666,8 +706,8 @@ pub fn verify<C: Challenger>(
     };
     ch.observe_bytes(&commitment_v.root);
     ch.observe_f128(proof.claimed_product);
-    let alpha = ch.sample_f128();
-    let r = ch.sample_f128_vec(mu);
+    let alpha = ch.try_sample_f128()?;
+    let r = ch.try_sample_f128_vec(mu)?;
 
     // eq-trick sumcheck chain (mirrors zerocheck.rs): running claim is the bare
     // inner value, ending at F(ρ). Initial zerocheck target is 0.
@@ -682,7 +722,7 @@ pub fn verify<C: Challenger>(
 
         ch.observe_f128(g1);
         ch.observe_f128(g_inf);
-        let rho_i = ch.sample_f128();
+        let rho_i = ch.try_sample_f128()?;
         rho.push(rho_i);
 
         let one_plus_rho = F128::ONE + rho_i;
@@ -829,6 +869,21 @@ mod tests {
         let mut ch = FsChallenger::new(b"perm-test");
         bind(&mut ch, f, g, sigma);
         verify(mu, proof, &mut ch)
+    }
+
+    #[test]
+    fn verify_returns_oracle_limit_when_budget_exhausted() {
+        let mu = 7;
+        let (f, g, sigma) = honest_instance(mu, 0xBADC_0FFE);
+        let (proof, _) = run_prove(&f, &g, &sigma);
+        let budget = crate::oracle_budget::OracleQueryBudget::new(1);
+        let mut ch = FsChallenger::new_budgeted(b"perm-test", budget);
+        bind(&mut ch, &f, &g, &sigma);
+        let err = verify(mu, &proof, &mut ch).unwrap_err();
+        assert_eq!(
+            err,
+            VerifyError::OracleLimit(crate::oracle_budget::OracleLimitError::QueryBudgetExceeded)
+        );
     }
 
     #[test]

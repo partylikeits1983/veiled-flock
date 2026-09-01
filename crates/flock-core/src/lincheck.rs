@@ -118,6 +118,7 @@
 
 use crate::challenger::Challenger;
 use crate::field::F128;
+use crate::oracle_budget::OracleLimitError;
 use crate::r1cs::SparseBinaryMatrix;
 use crate::zerocheck::multilinear::lagrange_weights_naive;
 use serde::{Deserialize, Serialize};
@@ -476,6 +477,9 @@ pub struct LincheckMaskTranscript {
 /// Reasons the verifier may reject.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerifyError {
+    /// Random-oracle budget or bounded sampling was exhausted while replaying
+    /// the transcript.
+    OracleLimit(OracleLimitError),
     /// One of the proof vectors has the wrong length (expected `2^k_log`).
     BadVectorLength {
         which: &'static str,
@@ -508,6 +512,12 @@ pub enum VerifyError {
     /// The scalar consistency check failed for one of (A, B, C).
     /// Detected: `Σ_{i_inner} M̂_0_quirky(z_skip, x_inner_rest, i_inner) · z_x_vec[i_inner] ≠ v`.
     ConsistencyFailed { which: &'static str },
+}
+
+impl From<OracleLimitError> for VerifyError {
+    fn from(err: OracleLimitError) -> Self {
+        Self::OracleLimit(err)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1188,7 +1198,20 @@ pub fn prove<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> (LincheckProof, LincheckClaim) {
-    prove_padded(
+    try_prove(z_packed, m, k_log, k_skip, circuit, x_ab, challenger)
+        .expect("lincheck oracle query budget exhausted")
+}
+
+pub fn try_prove<Ch: Challenger>(
+    z_packed: &[u8],
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    challenger: &mut Ch,
+) -> Result<(LincheckProof, LincheckClaim), OracleLimitError> {
+    try_prove_padded(
         z_packed,
         m,
         k_log,
@@ -1215,7 +1238,31 @@ pub fn prove_padded<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> (LincheckProof, LincheckClaim) {
-    let (proof, claim, _, _) = prove_padded_inner(
+    try_prove_padded(
+        z_packed,
+        m,
+        k_log,
+        k_skip,
+        useful_bits,
+        circuit,
+        x_ab,
+        challenger,
+    )
+    .expect("lincheck oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_prove_padded<Ch: Challenger>(
+    z_packed: &[u8],
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    useful_bits: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    challenger: &mut Ch,
+) -> Result<(LincheckProof, LincheckClaim), OracleLimitError> {
+    let (proof, claim, _, _) = try_prove_padded_inner(
         z_packed,
         m,
         k_log,
@@ -1226,8 +1273,8 @@ pub fn prove_padded<Ch: Challenger>(
         false,
         None,
         challenger,
-    );
-    (proof, claim)
+    )?;
+    Ok((proof, claim))
 }
 
 /// Variant of [`prove_padded`] that also returns the **pre-sumcheck** z_vec
@@ -1249,7 +1296,31 @@ pub fn prove_padded_capture_z_vec<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> (LincheckProof, LincheckClaim, Vec<F128>) {
-    let (proof, claim, captured, _) = prove_padded_inner(
+    try_prove_padded_capture_z_vec(
+        z_packed,
+        m,
+        k_log,
+        k_skip,
+        useful_bits,
+        circuit,
+        x_ab,
+        challenger,
+    )
+    .expect("lincheck oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_prove_padded_capture_z_vec<Ch: Challenger>(
+    z_packed: &[u8],
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    useful_bits: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    challenger: &mut Ch,
+) -> Result<(LincheckProof, LincheckClaim, Vec<F128>), OracleLimitError> {
+    let (proof, claim, captured, _) = try_prove_padded_inner(
         z_packed,
         m,
         k_log,
@@ -1260,12 +1331,12 @@ pub fn prove_padded_capture_z_vec<Ch: Challenger>(
         true,
         None,
         challenger,
-    );
-    (
+    )?;
+    Ok((
         proof,
         claim,
         captured.expect("capture=true must produce z_vec"),
-    )
+    ))
 }
 
 /// [`prove_padded_capture_z_vec`] with the amendment-A2 mask channel engaged.
@@ -1293,7 +1364,41 @@ pub fn prove_padded_masked_capture_z_vec<Ch: Challenger>(
     Vec<F128>,
     LincheckMaskTranscript,
 ) {
-    let (proof, claim, captured, mask_transcript) = prove_padded_inner(
+    try_prove_padded_masked_capture_z_vec(
+        z_packed,
+        m,
+        k_log,
+        k_skip,
+        useful_bits,
+        circuit,
+        x_ab,
+        mask,
+        challenger,
+    )
+    .expect("lincheck oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_prove_padded_masked_capture_z_vec<Ch: Challenger>(
+    z_packed: &[u8],
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    useful_bits: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    mask: LincheckMask<'_>,
+    challenger: &mut Ch,
+) -> Result<
+    (
+        LincheckProof,
+        LincheckClaim,
+        Vec<F128>,
+        LincheckMaskTranscript,
+    ),
+    OracleLimitError,
+> {
+    let (proof, claim, captured, mask_transcript) = try_prove_padded_inner(
         z_packed,
         m,
         k_log,
@@ -1304,17 +1409,17 @@ pub fn prove_padded_masked_capture_z_vec<Ch: Challenger>(
         true,
         Some(mask),
         challenger,
-    );
-    (
+    )?;
+    Ok((
         proof,
         claim,
         captured.expect("capture=true must produce z_vec"),
         mask_transcript.expect("mask=Some must produce a mask transcript"),
-    )
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prove_padded_inner<Ch: Challenger>(
+fn try_prove_padded_inner<Ch: Challenger>(
     z_packed: &[u8],
     m: usize,
     k_log: usize,
@@ -1325,12 +1430,15 @@ fn prove_padded_inner<Ch: Challenger>(
     capture_z_vec: bool,
     mask: Option<LincheckMask<'_>>,
     challenger: &mut Ch,
-) -> (
-    LincheckProof,
-    LincheckClaim,
-    Option<Vec<F128>>,
-    Option<LincheckMaskTranscript>,
-) {
+) -> Result<
+    (
+        LincheckProof,
+        LincheckClaim,
+        Option<Vec<F128>>,
+        Option<LincheckMaskTranscript>,
+    ),
+    OracleLimitError,
+> {
     let k = 1usize << k_log;
     let n_log = m - k_log;
     assert!(m >= k_log);
@@ -1346,7 +1454,7 @@ fn prove_padded_inner<Ch: Challenger>(
 
     // 1. Sample α (matches verifier's order). Used to batch the two scalar
     //    consistency checks v_a, v_b into a single sumcheck.
-    let alpha = challenger.sample_f128();
+    let alpha = challenger.try_sample_f128()?;
 
     // 2. Build the α-batched comb_vec via the circuit's per-block fold. For
     //    the sparse-matrix default this is the fused single-pass row-fold;
@@ -1385,7 +1493,7 @@ fn prove_padded_inner<Ch: Challenger>(
     //     entry update. β is sampled after α; the verifier mirrors both. See
     //     docs/const-wire-pin.md.
     if let Some(col) = circuit.const_pin_col() {
-        let beta = challenger.sample_f128();
+        let beta = challenger.try_sample_f128()?;
         comb_vec[col] += beta;
     }
 
@@ -1432,7 +1540,7 @@ fn prove_padded_inner<Ch: Challenger>(
         let s_vec = partial_fold_packed_z_best(mask.s_packed, m, k_log, useful_bits, &eq_x_outer);
         let sigma_lc = inner_product(&comb_vec, &s_vec);
         challenger.observe_f128(sigma_lc);
-        let gamma_lc = challenger.sample_f128();
+        let gamma_lc = challenger.try_sample_f128()?;
         for (z, s) in z_vec.iter_mut().zip(s_vec.iter()) {
             *z += gamma_lc * *s;
         }
@@ -1461,7 +1569,7 @@ fn prove_padded_inner<Ch: Challenger>(
         for t in 0..inner_rest_len {
             challenger.observe_f128(e1);
             challenger.observe_f128(einf);
-            let r = challenger.sample_f128();
+            let r = challenger.try_sample_f128()?;
             rounds.push((e1, einf));
             r_rounds.push(r);
             if t + 1 < inner_rest_len {
@@ -1490,7 +1598,7 @@ fn prove_padded_inner<Ch: Challenger>(
 
     // 7. Sample fresh z_skip AFTER observing z_partial — gives Schwartz-Zippel
     //    soundness on the φ8 (univariate-skip) dim.
-    let r_inner_skip = challenger.sample_f128();
+    let r_inner_skip = challenger.try_sample_f128()?;
 
     // 8. Output claim's value: φ8 Lagrange combination of z_partial at z_skip.
     //    Equals ẑ_φ8(z_skip, r_rest, x_outer) when z_partial is honest; the
@@ -1534,7 +1642,7 @@ fn prove_padded_inner<Ch: Challenger>(
         r_inner_rest,
         w,
     };
-    (proof, claim, captured_z_vec, mask_transcript)
+    Ok((proof, claim, captured_z_vec, mask_transcript))
 }
 
 /// Verify a lincheck proof. Walks the challenger in lockstep with `prove`,
@@ -1551,7 +1659,22 @@ pub fn verify<Ch: Challenger>(
     proof: &LincheckProof,
     challenger: &mut Ch,
 ) -> Result<LincheckClaim, VerifyError> {
-    verify_masked(
+    try_verify(m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, challenger)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_verify<Ch: Challenger>(
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    v_a: F128,
+    v_b: F128,
+    proof: &LincheckProof,
+    challenger: &mut Ch,
+) -> Result<LincheckClaim, VerifyError> {
+    try_verify_masked(
         m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, None, challenger,
     )
 }
@@ -1568,6 +1691,24 @@ pub fn verify<Ch: Challenger>(
 /// prover picks `s_eval` after `ρ` and the output claim is unconstrained.
 #[allow(clippy::too_many_arguments)]
 pub fn verify_masked<Ch: Challenger>(
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    v_a: F128,
+    v_b: F128,
+    proof: &LincheckProof,
+    mask: Option<(F128, F128)>,
+    challenger: &mut Ch,
+) -> Result<LincheckClaim, VerifyError> {
+    try_verify_masked(
+        m, k_log, k_skip, circuit, x_ab, v_a, v_b, proof, mask, challenger,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_verify_masked<Ch: Challenger>(
     m: usize,
     k_log: usize,
     k_skip: usize,
@@ -1638,7 +1779,7 @@ pub fn verify_masked<Ch: Challenger>(
     };
 
     // 1. Sample α (matches prover's order).
-    let alpha = challenger.sample_f128();
+    let alpha = challenger.try_sample_f128()?;
 
     // 2. Build α-batched comb_vec via the circuit's per-block fold (same call
     //    the prover made — sparse default delegates to the fused row-fold;
@@ -1669,25 +1810,27 @@ pub fn verify_masked<Ch: Challenger>(
     // all-ones constant column folds to 1. See docs/const-wire-pin.md.
     let mut target = alpha * v_a + v_b;
     if let Some(col) = circuit.const_pin_col() {
-        let beta = challenger.sample_f128();
+        let beta = challenger.try_sample_f128()?;
         comb_vec[col] += beta;
         target += beta;
     }
     // A2 mirror: absorb σ_lc, re-derive γ_lc, and batch the mask's claim into
     // the initial target. The prover ran the sumcheck on `z + γ_lc·S`, so the
     // claim it proves is `target + γ_lc·σ_lc`.
-    let mask_gamma = mask.map(|(sigma_lc, _)| {
+    let mask_gamma = if let Some((sigma_lc, _)) = mask {
         challenger.observe_f128(sigma_lc);
-        let gamma_lc = challenger.sample_f128();
+        let gamma_lc = challenger.try_sample_f128()?;
         target += gamma_lc * sigma_lc;
-        gamma_lc
-    });
+        Some(gamma_lc)
+    } else {
+        None
+    };
     let mut running = target;
     let mut r_rounds = Vec::with_capacity(inner_rest_len);
     for &(e1, einf) in &proof.rounds {
         challenger.observe_f128(e1);
         challenger.observe_f128(einf);
-        let r = challenger.sample_f128();
+        let r = challenger.try_sample_f128()?;
         // q(0) = claim + q(1) in char 2; q(X) = einf·X² + c1·X + e0.
         let e0 = running + e1;
         let c1 = e0 + e1 + einf;
@@ -1719,7 +1862,7 @@ pub fn verify_masked<Ch: Challenger>(
     }
 
     // 6. Sample fresh z_skip AFTER z_partial — gives SZ on the φ8 dim.
-    let r_inner_skip = challenger.sample_f128();
+    let r_inner_skip = challenger.try_sample_f128()?;
 
     // 7. Derive output claim value via φ8 Lagrange on z_partial at z_skip.
     //    Equals ẑ_φ8(z_skip, r_rest, x_outer) when z_partial is honest;
@@ -1910,6 +2053,39 @@ mod tests {
             num_cols: k,
             rows,
         }
+    }
+
+    #[test]
+    fn verify_returns_oracle_limit_when_budget_exhausted() {
+        let (m, k_log, k_skip) = (10usize, 4usize, 2usize);
+        let k = 1usize << k_log;
+        let mut rng = Rng::new(0xBADC_0FFE);
+        let a_0 = random_sparse_matrix(k, k, &mut rng);
+        let b_0 = random_sparse_matrix(k, k, &mut rng);
+        let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
+        let x_ab = random_quirky_point(m, k_log, k_skip, &mut rng);
+        let proof = LincheckProof {
+            rounds: vec![(F128::ZERO, F128::ZERO); k_log - k_skip],
+            z_partial: vec![F128::ZERO; 1usize << k_skip],
+        };
+        let budget = crate::oracle_budget::OracleQueryBudget::new(1);
+        let mut challenger = FsChallenger::new_budgeted(b"flock-test", budget);
+        let err = verify(
+            m,
+            k_log,
+            k_skip,
+            &circuit,
+            &x_ab,
+            F128::ZERO,
+            F128::ZERO,
+            &proof,
+            &mut challenger,
+        )
+        .unwrap_err();
+        assert_eq!(
+            err,
+            VerifyError::OracleLimit(crate::oracle_budget::OracleLimitError::QueryBudgetExceeded)
+        );
     }
 
     // ---- Unit tests for the kernels ----

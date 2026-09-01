@@ -42,6 +42,48 @@ fn equality_point_sampler_exhausts_exact_trial_cap() {
 }
 
 #[test]
+fn verify_returns_oracle_limit_when_budget_exhausted() {
+    let m = K_SKIP + N_INNER;
+    let proof = ZerocheckProof {
+        round1_ab: vec![F128::ZERO; 1usize << K_SKIP],
+        round1_c: vec![F128::ZERO; 1usize << K_SKIP],
+        multilinear_rounds: vec![(F128::ZERO, F128::ZERO); m - K_SKIP],
+        final_a_eval: F128::ZERO,
+        final_b_eval: F128::ZERO,
+        final_c_eval: F128::ZERO,
+    };
+    let budget = crate::oracle_budget::OracleQueryBudget::new(1);
+    let mut challenger = FsChallenger::new_budgeted(TEST_DOMAIN, budget);
+    let err = verify(m, &proof, &mut challenger).unwrap_err();
+    assert_eq!(
+        err,
+        VerifyError::OracleLimit(crate::oracle_budget::OracleLimitError::QueryBudgetExceeded)
+    );
+}
+
+#[test]
+fn verify_zk_masked_returns_oracle_limit_when_budget_exhausted() {
+    let m = K_SKIP + N_INNER;
+    let proof = ZkZerocheckProof {
+        round1_ab: vec![F128::ZERO; 1usize << K_SKIP],
+        round1_c: vec![F128::ZERO; 1usize << K_SKIP],
+        mask_init: F128::ZERO,
+        multilinear_rounds: vec![(F128::ZERO, F128::ZERO); m - K_SKIP],
+        final_a_eval: F128::ZERO,
+        final_b_eval: F128::ZERO,
+        final_c_eval: F128::ZERO,
+        final_p_eval: F128::ZERO,
+    };
+    let budget = crate::oracle_budget::OracleQueryBudget::new(1);
+    let mut challenger = FsChallenger::new_budgeted(ZK_TEST_DOMAIN, budget);
+    let err = verify_zk_masked(m, &proof, None, &mut challenger).unwrap_err();
+    assert_eq!(
+        err,
+        VerifyError::OracleLimit(crate::oracle_budget::OracleLimitError::QueryBudgetExceeded)
+    );
+}
+
+#[test]
 fn shared_round_weights_match_quadratic_reconstruction() {
     let running = F128::new(3, 5);
     let msg_1 = F128::new(7, 11);
