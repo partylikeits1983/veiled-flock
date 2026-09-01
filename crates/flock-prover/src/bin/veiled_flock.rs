@@ -10,10 +10,11 @@ use flock_prover::{
 };
 
 const MAX_MESSAGES: usize = MAX_ZK_PREIMAGE_BLOCKS;
-// Bound file reads and decoder allocation for untrusted proof bundles.
 const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
-const MAX_DIGEST_FILE_BYTES: u64 = (MAX_MESSAGES * (DIGEST_BYTES * 2 + 1)) as u64;
+const DIGEST_HEX_BYTES: usize = DIGEST_BYTES * 2;
+const MAX_DIGEST_FILE_BYTES: u64 = (MAX_MESSAGES * (DIGEST_HEX_BYTES + 2)) as u64;
 type Bundle = VeilFlockProofBundle;
+type Digest = [u8; DIGEST_BYTES];
 
 fn usage() -> String {
     format!(
@@ -51,51 +52,13 @@ fn run() -> Result<(), String> {
     match args.next().as_deref() {
         Some("prove") => {
             let parsed = parse_paths(args)?;
-            let message_path = parsed.message.ok_or("prove: --message is required")?;
-            let output = parsed.output.ok_or("prove: --out is required")?;
-            let bytes = fs::read(&message_path)
-                .map_err(|error| format!("cannot read {message_path}: {error}"))?;
-            if bytes.is_empty() || !bytes.len().is_multiple_of(MESSAGE_BYTES) {
-                return Err(format!(
-                    "message file must be a non-empty multiple of {MESSAGE_BYTES} bytes; got {}",
-                    bytes.len()
-                ));
-            }
-            let messages = bytes.as_chunks::<MESSAGE_BYTES>().0.to_vec();
-            let bundle = prove(messages)?;
-            let encoded = encode_bundle(&bundle)?;
-            fs::write(&output, &encoded)
-                .map_err(|error| format!("cannot write {output}: {error}"))?;
-            eprintln!("wrote {} bytes to {output}", encoded.len());
-            Ok(())
+            run_prove(parsed)
         }
         Some("verify") => {
             let parsed = parse_paths(args)?;
-            let input = parsed.input.ok_or("verify: --in is required")?;
-            let digest_path = parsed.digests.ok_or("verify: --digests is required")?;
-            let bytes = read_bundle(&input)?;
-            let bundle = decode_bundle(&bytes)?;
-            let expected_digests = read_digests(&digest_path)?;
-            verify_expected_digests(&bundle.digests, &expected_digests)?;
-            verify(&bundle)?;
-            eprintln!("verified {input} ({} bytes)", bytes.len());
-            print_digests(&bundle.digests);
-            Ok(())
+            run_verify(parsed)
         }
-        Some("demo") => {
-            if args.next().is_some() {
-                return Err("demo takes no arguments".to_string());
-            }
-            let messages = vec![
-                std::array::from_fn(|index| index as u8),
-                std::array::from_fn(|index| (255 - index) as u8),
-            ];
-            let bundle = prove(messages)?;
-            verify(&bundle)?;
-            let bytes = encode_bundle(&bundle)?;
-            eprintln!("demo complete: proof bundle is {} bytes", bytes.len());
-            Ok(())
-        }
+        Some("demo") => run_demo(args),
         Some("help" | "--help" | "-h") => {
             let usage = usage();
             print!("{usage}");
@@ -104,6 +67,53 @@ fn run() -> Result<(), String> {
         Some(command) => Err(format!("unknown command '{command}'")),
         None => Err("missing command".to_string()),
     }
+}
+
+fn run_prove(paths: Paths) -> Result<(), String> {
+    let message_path = paths.message.ok_or("prove: --message is required")?;
+    let output = paths.output.ok_or("prove: --out is required")?;
+    let bytes =
+        fs::read(&message_path).map_err(|error| format!("cannot read {message_path}: {error}"))?;
+    if bytes.is_empty() || !bytes.len().is_multiple_of(MESSAGE_BYTES) {
+        return Err(format!(
+            "message file must be a non-empty multiple of {MESSAGE_BYTES} bytes; got {}",
+            bytes.len()
+        ));
+    }
+    let messages = bytes.as_chunks::<MESSAGE_BYTES>().0.to_vec();
+    let bundle = prove(messages)?;
+    let encoded = encode_bundle(&bundle)?;
+    fs::write(&output, &encoded).map_err(|error| format!("cannot write {output}: {error}"))?;
+    eprintln!("wrote {} bytes to {output}", encoded.len());
+    Ok(())
+}
+
+fn run_verify(paths: Paths) -> Result<(), String> {
+    let input = paths.input.ok_or("verify: --in is required")?;
+    let digest_path = paths.digests.ok_or("verify: --digests is required")?;
+    let bytes = read_bundle(&input)?;
+    let bundle = decode_bundle(&bytes)?;
+    let expected_digests = read_digests(&digest_path)?;
+    verify_expected_digests(&bundle.digests, &expected_digests)?;
+    verify(&bundle)?;
+    eprintln!("verified {input} ({} bytes)", bytes.len());
+    print_digests(&bundle.digests);
+    Ok(())
+}
+
+fn run_demo(mut args: impl Iterator<Item = String>) -> Result<(), String> {
+    if args.next().is_some() {
+        return Err("demo takes no arguments".to_string());
+    }
+    let messages = vec![
+        std::array::from_fn(|index| index as u8),
+        std::array::from_fn(|index| (255 - index) as u8),
+    ];
+    let bundle = prove(messages)?;
+    verify(&bundle)?;
+    let bytes = encode_bundle(&bundle)?;
+    eprintln!("demo complete: proof bundle is {} bytes", bytes.len());
+    Ok(())
 }
 
 fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
@@ -124,9 +134,7 @@ fn prove(messages: Vec<[u8; MESSAGE_BYTES]>) -> Result<Bundle, String> {
 }
 
 fn verify(bundle: &Bundle) -> Result<(), String> {
-    if bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
-        return Err("invalid bundle statement shape".to_string());
-    }
+    validate_digest_count(bundle.digests.len(), "bundle digest list")?;
     let setup = Blake3PreimageZkSetup::new(bundle.digests.len());
     let started = Instant::now();
     setup
@@ -137,17 +145,7 @@ fn verify(bundle: &Bundle) -> Result<(), String> {
 }
 
 fn read_bundle(path: &str) -> Result<Vec<u8>, String> {
-    let file = fs::File::open(path).map_err(|error| format!("cannot read {path}: {error}"))?;
-    let mut bytes = Vec::new();
-    file.take(MAX_BUNDLE_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("cannot read {path}: {error}"))?;
-    if bytes.len() as u64 > MAX_BUNDLE_BYTES {
-        return Err(format!(
-            "proof bundle exceeds the {MAX_BUNDLE_BYTES}-byte limit"
-        ));
-    }
-    Ok(bytes)
+    read_limited_file(path, MAX_BUNDLE_BYTES, "proof bundle")
 }
 
 fn encode_bundle(bundle: &Bundle) -> Result<Vec<u8>, String> {
@@ -157,65 +155,92 @@ fn encode_bundle(bundle: &Bundle) -> Result<Vec<u8>, String> {
 }
 
 fn decode_bundle(bytes: &[u8]) -> Result<Bundle, String> {
-    if bytes.len() as u64 > MAX_BUNDLE_BYTES {
-        return Err(format!(
-            "proof bundle exceeds the {MAX_BUNDLE_BYTES}-byte limit"
-        ));
-    }
+    ensure_size_limit(bytes.len(), MAX_BUNDLE_BYTES, "proof bundle")?;
     Bundle::from_bytes(bytes).map_err(|error| format!("cannot decode proof bundle: {error}"))
 }
 
-fn read_digests(path: &str) -> Result<Vec<[u8; DIGEST_BYTES]>, String> {
-    let file =
-        fs::File::open(path).map_err(|error| format!("cannot read digest file {path}: {error}"))?;
-    let mut bytes = Vec::new();
-    file.take(MAX_DIGEST_FILE_BYTES + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("cannot read digest file {path}: {error}"))?;
-    if bytes.len() as u64 > MAX_DIGEST_FILE_BYTES {
-        return Err(format!(
-            "digest file exceeds the {MAX_DIGEST_FILE_BYTES}-byte limit"
-        ));
-    }
+fn read_digests(path: &str) -> Result<Vec<Digest>, String> {
+    let bytes = read_limited_file(path, MAX_DIGEST_FILE_BYTES, "digest file")?;
     let text = std::str::from_utf8(&bytes)
         .map_err(|error| format!("digest file {path} is not UTF-8: {error}"))?;
     parse_digests_text(text)
 }
 
-fn parse_digests_text(text: &str) -> Result<Vec<[u8; DIGEST_BYTES]>, String> {
-    let mut digests = Vec::new();
-    for (index, token) in text.split_whitespace().enumerate() {
-        if token.len() != DIGEST_BYTES * 2 {
-            return Err(format!(
-                "digest {} must be {} hex characters, got {}",
-                index,
-                DIGEST_BYTES * 2,
-                token.len()
-            ));
-        }
-        let mut digest = [0u8; DIGEST_BYTES];
-        for byte_index in 0..DIGEST_BYTES {
-            let start = byte_index * 2;
-            digest[byte_index] = parse_hex_byte(&token[start..start + 2])
-                .map_err(|error| format!("digest {index}: {error}"))?;
-        }
-        digests.push(digest);
+fn read_limited_file(path: &str, limit: u64, label: &str) -> Result<Vec<u8>, String> {
+    let file =
+        fs::File::open(path).map_err(|error| format!("cannot read {label} {path}: {error}"))?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("cannot read {label} {path}: {error}"))?;
+    ensure_size_limit(bytes.len(), limit, label)?;
+    Ok(bytes)
+}
+
+fn ensure_size_limit(len: usize, limit: u64, label: &str) -> Result<(), String> {
+    if len as u64 > limit {
+        return Err(format!("{label} exceeds the {limit}-byte limit"));
     }
-    if digests.is_empty() || digests.len() > MAX_MESSAGES {
-        return Err(format!(
-            "digest file must contain 1..={MAX_MESSAGES} digests"
-        ));
-    }
+    Ok(())
+}
+
+fn parse_digests_text(text: &str) -> Result<Vec<Digest>, String> {
+    let digests = text
+        .split_whitespace()
+        .enumerate()
+        .map(|(index, token)| parse_digest_hex(index, token))
+        .collect::<Result<Vec<_>, _>>()?;
+    validate_digest_count(digests.len(), "digest file")?;
     Ok(digests)
 }
 
-fn parse_hex_byte(hex: &str) -> Result<u8, String> {
-    u8::from_str_radix(hex, 16).map_err(|_| format!("invalid hex byte '{hex}'"))
+fn validate_digest_count(count: usize, label: &str) -> Result<(), String> {
+    if !(1..=MAX_MESSAGES).contains(&count) {
+        return Err(format!("{label} must contain 1..={MAX_MESSAGES} digests"));
+    }
+    Ok(())
+}
+
+fn parse_digest_hex(index: usize, token: &str) -> Result<Digest, String> {
+    let hex = token.as_bytes();
+    if hex.len() != DIGEST_HEX_BYTES {
+        return Err(format!(
+            "digest {index} must be {DIGEST_HEX_BYTES} hex characters, got {}",
+            token.len()
+        ));
+    }
+
+    let mut digest = [0u8; DIGEST_BYTES];
+    let (hex_bytes, remainder) = hex.as_chunks::<2>();
+    debug_assert!(remainder.is_empty());
+    for (byte, hex_byte) in digest.iter_mut().zip(hex_bytes) {
+        *byte = parse_hex_byte(hex_byte).map_err(|error| format!("digest {index}: {error}"))?;
+    }
+    Ok(digest)
+}
+
+fn parse_hex_byte(hex: &[u8; 2]) -> Result<u8, String> {
+    let high = hex_value(hex[0]).ok_or_else(|| invalid_hex_byte(hex))?;
+    let low = hex_value(hex[1]).ok_or_else(|| invalid_hex_byte(hex))?;
+    Ok((high << 4) | low)
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+fn invalid_hex_byte(hex: &[u8]) -> String {
+    format!("invalid hex byte '{}'", String::from_utf8_lossy(hex))
 }
 
 fn verify_expected_digests(
-    bundle_digests: &[[u8; DIGEST_BYTES]],
-    expected_digests: &[[u8; DIGEST_BYTES]],
+    bundle_digests: &[Digest],
+    expected_digests: &[Digest],
 ) -> Result<(), String> {
     if bundle_digests.len() != expected_digests.len() {
         return Err(format!(
@@ -224,29 +249,29 @@ fn verify_expected_digests(
             expected_digests.len()
         ));
     }
-    for (index, (bundle_digest, expected_digest)) in
-        bundle_digests.iter().zip(expected_digests).enumerate()
+    if let Some(index) = bundle_digests
+        .iter()
+        .zip(expected_digests)
+        .position(|(bundle_digest, expected_digest)| bundle_digest != expected_digest)
     {
-        if bundle_digest != expected_digest {
-            return Err(format!(
-                "bundle digest {index} does not match expected digest file"
-            ));
-        }
+        return Err(format!(
+            "bundle digest {index} does not match expected digest file"
+        ));
     }
     Ok(())
 }
 
-fn print_digests(digests: &[[u8; DIGEST_BYTES]]) {
+fn print_digests(digests: &[Digest]) {
     eprintln!("verified digests:");
     for digest in digests {
         eprintln!("{}", digest_hex(digest));
     }
 }
 
-fn digest_hex(digest: &[u8; DIGEST_BYTES]) -> String {
+fn digest_hex(digest: &Digest) -> String {
     use std::fmt::Write as _;
 
-    let mut out = String::with_capacity(DIGEST_BYTES * 2);
+    let mut out = String::with_capacity(DIGEST_HEX_BYTES);
     for byte in digest {
         write!(&mut out, "{byte:02x}").expect("write to string");
     }
@@ -268,14 +293,21 @@ fn parse_paths(mut args: impl Iterator<Item = String>) -> Result<Paths, String> 
             .next()
             .ok_or_else(|| format!("{flag} requires a path"))?;
         match flag.as_str() {
-            "--message" => paths.message = Some(value),
-            "--out" => paths.output = Some(value),
-            "--in" => paths.input = Some(value),
-            "--digests" => paths.digests = Some(value),
+            "--message" => set_path(&mut paths.message, &flag, value)?,
+            "--out" => set_path(&mut paths.output, &flag, value)?,
+            "--in" => set_path(&mut paths.input, &flag, value)?,
+            "--digests" => set_path(&mut paths.digests, &flag, value)?,
             _ => return Err(format!("unknown flag '{flag}'")),
         }
     }
     Ok(paths)
+}
+
+fn set_path(slot: &mut Option<String>, flag: &str, value: String) -> Result<(), String> {
+    if slot.replace(value).is_some() {
+        return Err(format!("{flag} was provided more than once"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

@@ -29,7 +29,7 @@ fn decoder_rejects_an_unbounded_digest_vector() {
 fn digest_text_parser_accepts_hex_lines() {
     let first = [0x12; DIGEST_BYTES];
     let second = [0xAB; DIGEST_BYTES];
-    let text = format!("{}\n{}\n", digest_hex(&first), digest_hex(&second));
+    let text = format!("{}\r\n{}\n", digest_hex(&first), digest_hex(&second));
 
     assert_eq!(parse_digests_text(&text).unwrap(), vec![first, second]);
 }
@@ -41,6 +41,9 @@ fn digest_text_parser_rejects_empty_and_malformed_inputs() {
 
     let invalid_hex = format!("{}zz", "00".repeat(DIGEST_BYTES - 1));
     assert!(parse_digests_text(&invalid_hex).is_err());
+
+    let non_ascii = "é".repeat(DIGEST_BYTES);
+    assert!(parse_digests_text(&non_ascii).is_err());
 }
 
 #[test]
@@ -64,4 +67,15 @@ fn parser_accepts_expected_digest_path() {
 
     assert_eq!(paths.input.as_deref(), Some("proof.bin"));
     assert_eq!(paths.digests.as_deref(), Some("expected-digests.hex"));
+}
+
+#[test]
+fn parser_rejects_duplicate_paths() {
+    let result = parse_paths(
+        ["--in", "first.bin", "--in", "second.bin"]
+            .into_iter()
+            .map(String::from),
+    );
+
+    assert!(result.is_err());
 }
