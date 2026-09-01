@@ -218,6 +218,17 @@ fn verify_ligerito_pow<Ch: Challenger>(
     challenger.verify_pow_bounded(nonce, bits, ligerito_grind_trials_for_bits(bits))
 }
 
+#[inline]
+fn verify_ligerito_pow_or_reject<Ch: Challenger>(
+    challenger: &mut Ch,
+    nonce: u64,
+    bits: u32,
+) -> bool {
+    challenger
+        .verify_pow_bounded(nonce, bits, MAX_LIGERITO_GRIND_TRIALS)
+        .unwrap_or(false)
+}
+
 /// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
 /// Johnson levels taper by round; UDR levels use the full level width.
 fn fold_round_grind_bits(
@@ -4747,7 +4758,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
             }
-            if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
+            if !verify_ligerito_pow_or_reject(
+                challenger,
+                proof.fold_grinding_nonces[fold_nonce_idx],
+                bits,
+            ) {
                 return false;
             }
             fold_nonce_idx += 1;
@@ -4801,7 +4816,8 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     if nonce_idx >= proof.grinding_nonces.len() {
         return false;
     }
-    if !challenger.verify_pow(
+    if !verify_ligerito_pow_or_reject(
+        challenger,
         proof.grinding_nonces[nonce_idx],
         config.grinding_bits[0] as u32,
     ) {
@@ -4878,7 +4894,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
                 }
-                if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
+                if !verify_ligerito_pow_or_reject(
+                    challenger,
+                    proof.fold_grinding_nonces[fold_nonce_idx],
+                    bits,
+                ) {
                     return false;
                 }
                 fold_nonce_idx += 1;
@@ -4918,7 +4938,8 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if nonce_idx >= proof.grinding_nonces.len() {
                 return false;
             }
-            if !challenger.verify_pow(
+            if !verify_ligerito_pow_or_reject(
+                challenger,
                 proof.grinding_nonces[nonce_idx],
                 config.grinding_bits[i + 1] as u32,
             ) {
@@ -5037,7 +5058,8 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         if nonce_idx >= proof.grinding_nonces.len() {
             return false;
         }
-        if !challenger.verify_pow(
+        if !verify_ligerito_pow_or_reject(
+            challenger,
             proof.grinding_nonces[nonce_idx],
             config.grinding_bits[i + 1] as u32,
         ) {
@@ -5848,7 +5870,7 @@ pub fn recursive_verifier<Ch: Challenger>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::challenger::Challenger;
+    use crate::challenger::{Challenger, FsChallenger};
     use std::time::Instant;
 
     struct ConstantChallenger {
@@ -5866,6 +5888,81 @@ mod tests {
         fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
             self.scalar_calls += 1;
             Ok(self.value)
+        }
+    }
+
+    struct BoundedPowOnlyChallenger {
+        inner: FsChallenger,
+    }
+
+    impl BoundedPowOnlyChallenger {
+        fn new(domain: &[u8]) -> Self {
+            Self {
+                inner: FsChallenger::new(domain),
+            }
+        }
+    }
+
+    impl Challenger for BoundedPowOnlyChallenger {
+        fn ro_context(&self, nonce: [u8; 32]) -> crate::ro::RoContext {
+            self.inner.ro_context(nonce)
+        }
+
+        fn observe_label(&mut self, label: &[u8]) {
+            self.inner.observe_label(label);
+        }
+
+        fn observe_f128(&mut self, value: F128) {
+            self.inner.observe_f128(value);
+        }
+
+        fn observe_f128_slice(&mut self, values: &[F128]) {
+            self.inner.observe_f128_slice(values);
+        }
+
+        fn observe_bytes(&mut self, bytes: &[u8]) {
+            self.inner.observe_bytes(bytes);
+        }
+
+        fn sample_f128(&mut self) -> F128 {
+            self.inner.sample_f128()
+        }
+
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.inner.try_sample_f128()
+        }
+
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.inner.sample_f128_vec(n)
+        }
+
+        fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+            self.inner.try_sample_f128_vec(n)
+        }
+
+        fn grind_pow(&mut self, bits: u32) -> u64 {
+            self.inner.grind_pow(bits)
+        }
+
+        fn grind_pow_bounded(
+            &mut self,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<u64, OracleLimitError> {
+            self.inner.grind_pow_bounded(bits, max_trials)
+        }
+
+        fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+            panic!("dense Ligerito verifier must use bounded PoW checks")
+        }
+
+        fn verify_pow_bounded(
+            &mut self,
+            nonce: u64,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<bool, OracleLimitError> {
+            self.inner.verify_pow_bounded(nonce, bits, max_trials)
         }
     }
 
@@ -6284,6 +6381,14 @@ mod tests {
         assert!(
             ok,
             "verifier should accept proof with valid grinding nonces"
+        );
+
+        let mut v_ch = BoundedPowOnlyChallenger::new(b"pow-test");
+        let ok =
+            recursive_verifier_with_basis(&v_cfg, &proof, &b, target, &initial_root, &mut v_ch);
+        assert!(
+            ok,
+            "dense verifier must mirror the succinct verifier's bounded PoW checks"
         );
 
         // Tampering with the nonce flips the PoW check.
