@@ -205,6 +205,10 @@ PCS profile, code geometry, query budget, and VEIL parameters. The canonical
 bundle has a 1 MiB decode limit, rejects trailing bytes, and rejects any
 parameter mismatch.
 
+The older public R1CS and chain Ligerito bundle APIs use hardened v2 flavor
+bytes, fixed-int bincode, 64 MiB per-flavor decode caps, bounded file reads,
+and retired-flavor rejection for the pre-hardening unbounded formats.
+
 No alternate or legacy ZK proof flavor is exported. The public ZK API is:
 
 ```text
