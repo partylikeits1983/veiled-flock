@@ -71,25 +71,19 @@ pub trait Challenger: Send {
     /// least `bits` leading zero bits, then absorb the nonce into the
     /// transcript so subsequent challenges bind to it.
     ///
-    /// Default implementation is a no-op (returns 0). Real implementations
-    /// — e.g. [`FsChallenger`] — do the actual grind work and absorb the
-    /// nonce. `bits = 0` means "no PoW required"; still absorbs the 0 nonce
-    /// so the verifier mirror is byte-identical.
-    fn grind_pow(&mut self, _bits: u32) -> u64 {
-        0
-    }
+    /// Implementations must make an explicit choice here. Production
+    /// challengers grind and absorb the nonce; test-only challengers may choose
+    /// an explicit no-op.
+    fn grind_pow(&mut self, bits: u32) -> u64;
 
     /// Verifier-side mirror of [`Self::grind_pow`]: check that `nonce`
     /// satisfies the `bits`-leading-zeros PoW against the current transcript
     /// state, then absorb the nonce so the running state stays in lockstep
     /// with the prover.
     ///
-    /// Default implementation accepts unconditionally (no-op). Real
-    /// implementations must check the PoW; an honest verifier rejects the
-    /// proof if this returns `false`.
-    fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
-        true
-    }
+    /// Implementations must check the PoW or explicitly document why they do
+    /// not. An honest verifier rejects the proof if this returns `false`.
+    fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool;
 }
 
 // ---------------------------------------------------------------------------
@@ -127,6 +121,14 @@ impl Challenger for RandomChallenger {
         let lo = splitmix64(&mut self.state);
         let hi = splitmix64(&mut self.state);
         F128 { lo, hi }
+    }
+
+    fn grind_pow(&mut self, _bits: u32) -> u64 {
+        0
+    }
+
+    fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+        true
     }
 }
 
