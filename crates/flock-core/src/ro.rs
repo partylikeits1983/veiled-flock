@@ -31,6 +31,9 @@
 //! extractor (Phase 5) reconstruct the committed leaves from an adversary's
 //! query transcript.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::merkle::Hash;
 use sha2::{Digest, Sha256};
 

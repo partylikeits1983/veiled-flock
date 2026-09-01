@@ -29,6 +29,9 @@
 //!    b. Last step: send remaining poly + open f^i.
 //!    c. Else: commit f^{i+2}, open f^{i+1}, induce next basis, glue.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::lincheck::build_eq_table;
@@ -424,19 +427,10 @@ pub fn prover_config_for(
     profile: LigeritoProfile,
 ) -> Result<ProverConfig, String> {
     let m = log_n + crate::pcs::LOG_PACKING;
-    let toml = embedded_security_config(m, profile).ok_or_else(|| {
-        format!(
-            "no security config registered for (m={m}, profile={}). \
-             Add a TOML at configs/ligerito/m{m}_{}.toml and register it in \
-             EMBEDDED_CONFIGS, or call default_config explicitly for ad-hoc shapes.",
-            profile.as_str(),
-            profile.as_str(),
-        )
-    })?;
-    let sec = LigeritoSecurityConfig::from_toml_str(toml)?;
+    let sec = security_config_for(m, profile)?;
     if sec.initial_k != log_batch_size {
         return Err(format!(
-            "embedded config for (m={m}, profile={}) has \
+            "security config for (m={m}, profile={}) has \
              initial_k={} but caller requested log_batch_size={log_batch_size}",
             profile.as_str(),
             sec.initial_k
@@ -453,16 +447,10 @@ pub fn verifier_config_for(
     profile: LigeritoProfile,
 ) -> Result<VerifierConfig, String> {
     let m = log_n + crate::pcs::LOG_PACKING;
-    let toml = embedded_security_config(m, profile).ok_or_else(|| {
-        format!(
-            "no security config registered for (m={m}, profile={})",
-            profile.as_str()
-        )
-    })?;
-    let sec = LigeritoSecurityConfig::from_toml_str(toml)?;
+    let sec = security_config_for(m, profile)?;
     if sec.initial_k != log_batch_size {
         return Err(format!(
-            "embedded config for (m={m}, profile={}) has \
+            "security config for (m={m}, profile={}) has \
              initial_k={} but caller requested log_batch_size={log_batch_size}",
             profile.as_str(),
             sec.initial_k
@@ -470,6 +458,29 @@ pub fn verifier_config_for(
     }
     let (_, vc) = sec.to_prover_verifier_configs()?;
     Ok(vc)
+}
+
+fn security_config_for(
+    m: usize,
+    profile: LigeritoProfile,
+) -> Result<LigeritoSecurityConfig, String> {
+    #[cfg(feature = "std")]
+    {
+        let toml = embedded_security_config(m, profile).ok_or_else(|| {
+            format!(
+                "no security config registered for (m={m}, profile={}). \
+                 Add a TOML at configs/ligerito/m{m}_{}.toml and register it in \
+                 EMBEDDED_CONFIGS, or call default_config explicitly for ad-hoc shapes.",
+                profile.as_str(),
+                profile.as_str(),
+            )
+        })?;
+        LigeritoSecurityConfig::from_toml_str(toml)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        LigeritoSecurityConfig::derive_profile(m, profile)
+    }
 }
 
 /// Verifier-side counterpart to [`default_config`].
@@ -1524,6 +1535,7 @@ impl LigeritoSecurityConfig {
     /// The caller is expected to embed the file contents via
     /// `include_str!("../../configs/ligerito/m29_fast.toml")` (for compile-time
     /// configs) or read it via `std::fs` (for runtime configs).
+    #[cfg(feature = "std")]
     pub fn from_toml_str(s: &str) -> Result<Self, String> {
         let cfg: Self = toml::from_str(s).map_err(|e| format!("toml parse: {e}"))?;
         cfg.validate()?;
@@ -1532,6 +1544,7 @@ impl LigeritoSecurityConfig {
 
     /// Serialize the config back out to TOML. Round-trip-stable with
     /// [`from_toml_str`].
+    #[cfg(feature = "std")]
     pub fn to_toml_string(&self) -> Result<String, String> {
         toml::to_string_pretty(self).map_err(|e| format!("toml serialize: {e}"))
     }

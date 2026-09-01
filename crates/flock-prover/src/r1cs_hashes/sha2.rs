@@ -45,6 +45,9 @@
 //!   each Ch / Maj AND row would blow up to thousands of terms.
 //! - `H_out[w]` — the public output of the compression.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use super::common::{BitRecord, add_carry_parts, or_bit_at, or_u32_at_bit};
 use flock_core::field::F128;
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix};

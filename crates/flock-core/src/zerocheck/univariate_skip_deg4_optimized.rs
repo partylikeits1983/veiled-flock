@@ -46,6 +46,9 @@
 //! All of these are direct ports of the degree-2 versions and are pure
 //! perf-engineering — the math is settled by the tests in this file.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use std::sync::OnceLock;
 
 use crate::field::gf2_8::gf8_reduce;

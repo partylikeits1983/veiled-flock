@@ -1,6 +1,9 @@
 //! Small exact linear-algebra utilities used by the ZK coverage, symbolic,
 //! replacement, and extractor certificates.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 
 #[derive(Clone, Debug, PartialEq, Eq)]

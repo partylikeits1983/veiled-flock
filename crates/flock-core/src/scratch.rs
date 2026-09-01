@@ -17,7 +17,11 @@
 //! the m = 29 prove set). Call [`clear`] to release everything to the OS,
 //! e.g. after the last prove of a batch.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
+#[cfg(feature = "std")]
 use rayon::prelude::*;
 use std::sync::Mutex;
 
@@ -107,6 +111,7 @@ pub fn give_f128(v: Vec<F128>) {
 /// z/a/b, zerocheck tail ping-pong ×2, open-stage transients, rs_eq_ind ×2,
 /// b_combined → 11 buffers. ~1.1 GB resident at m = 29; release with
 /// [`clear`].
+#[cfg(feature = "std")]
 pub fn prewarm_prover(m: usize) {
     if m < 7 {
         return;
@@ -132,6 +137,9 @@ pub fn prewarm_prover(m: usize) {
         give_f128(b);
     }
 }
+
+#[cfg(not(feature = "std"))]
+pub fn prewarm_prover(_: usize) {}
 
 /// Release every pooled buffer back to the OS.
 pub fn clear() {

@@ -1,5 +1,8 @@
 //! Merkle commitment to a row-major matrix of `F128` codeword evaluations.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::{
     field::F128,
     merkle::{

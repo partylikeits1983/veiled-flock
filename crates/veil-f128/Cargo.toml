@@ -6,10 +6,16 @@ license.workspace = true
 authors.workspace = true
 description = "Native GF(2^128) VEIL backend for the veiled-FLOCK prover."
 
+[features]
+default = ["std", "parallel"]
+std = ["flock-core/std", "serde/std"]
+parallel = ["dep:rayon", "flock-core/parallel"]
+wasm = ["flock-core/wasm"]
+
 [dependencies]
-flock-core = { path = "../flock-core", features = ["zk"] }
+flock-core = { path = "../flock-core", default-features = false, features = ["zk"] }
 serde = { workspace = true }
-rayon = { workspace = true }
+rayon = { workspace = true, optional = true }
 
 [lints]
 workspace = true

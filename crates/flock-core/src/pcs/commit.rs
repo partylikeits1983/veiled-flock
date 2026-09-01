@@ -14,6 +14,9 @@
 //! The codeword is a flat sequence of `2^k_code` F_{2^128} elements. Each
 //! Merkle leaf is **one** F_{2^128} element = 16 bytes.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 use crate::merkle::{self, Hash};
 use crate::ntt::AdditiveNttF128;
@@ -471,7 +474,7 @@ fn finalize_commit(
 /// strongly prefers efficiency (E) cores — ideal for the fault/bandwidth-bound
 /// codeword pre-fault, which we want OFF the performance cores running witness
 /// generation. No-op on other platforms.
-#[cfg(target_os = "macos")]
+#[cfg(all(feature = "std", target_os = "macos"))]
 fn set_background_qos() {
     // QOS_CLASS_BACKGROUND = 0x09. Declared inline to avoid a libc dependency.
     unsafe extern "C" {
@@ -481,7 +484,7 @@ fn set_background_qos() {
         let _ = pthread_set_qos_class_self_np(0x09, 0);
     }
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(feature = "std", not(target_os = "macos")))]
 fn set_background_qos() {}
 
 /// Allocate + zero-fill (pre-fault) the codeword buffer that [`commit_into`]
@@ -496,6 +499,7 @@ fn set_background_qos() {}
 /// thread (i.e. `RAYON_NUM_THREADS=1`), this spawns **zero** OS threads — it
 /// runs `gen` and returns `None`, leaving [`commit`] to allocate inline. The
 /// whole offload is therefore invisible to truly-serial runs.
+#[cfg(feature = "std")]
 pub fn prefault_codeword_during<R>(
     params: &PcsParams,
     generate: impl FnOnce() -> R,
@@ -527,6 +531,14 @@ pub fn prefault_codeword_during<R>(
         let r = generate();
         (Some(h.join().unwrap()), r)
     })
+}
+
+#[cfg(not(feature = "std"))]
+pub fn prefault_codeword_during<R>(
+    _params: &PcsParams,
+    generate: impl FnOnce() -> R,
+) -> (Option<Vec<F128>>, R) {
+    (None, generate())
 }
 
 #[cfg(test)]
