@@ -9,6 +9,7 @@ use flock_core::{
     challenger::Challenger,
     field::F128,
     merkle::Hash,
+    oracle_budget::OracleLimitError,
     ro::{RoChannel, RoContext},
     zk::MaskSampler,
 };
@@ -58,11 +59,18 @@ pub enum HadamardError {
     ProductCodewordMismatch(usize),
     DotCodewordMismatch(usize),
     Code(CodeError),
+    OracleLimit(OracleLimitError),
 }
 
 impl From<CodeError> for HadamardError {
     fn from(value: CodeError) -> Self {
         Self::Code(value)
+    }
+}
+
+impl From<OracleLimitError> for HadamardError {
+    fn from(value: OracleLimitError) -> Self {
+        Self::OracleLimit(value)
     }
 }
 
@@ -116,7 +124,7 @@ pub fn commit_hadamard<R: MaskSampler + ?Sized>(
     rng.fill_f128(&mut product_mask_coefficients);
     let product_mask_intermediate = code.square_from_coefficients(&product_mask_coefficients)?;
     codewords.push(code.encode_square(&product_mask_intermediate)?);
-    let commitment = MerkleMatrix::new(&codewords, rng, ctx, channel);
+    let commitment = MerkleMatrix::try_new(&codewords, rng, ctx, channel)?;
 
     Ok(HadamardProverData {
         parameters,
@@ -155,14 +163,14 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
 
     challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&root);
-    let evaluation_point = challenger.sample_f128();
+    let evaluation_point = challenger.try_sample_f128()?;
     let product_mask_reduced = code.square_to_base(&product_mask_intermediate)?;
     let gamma = dot_product(
         &powers(evaluation_point, parameters.vector_length),
         &product_mask_reduced[..parameters.vector_length],
     );
     challenger.observe_f128(gamma);
-    let product_mask_coefficient = sample_nonzero(challenger);
+    let product_mask_coefficient = sample_nonzero(challenger)?;
 
     let product_word = (0..parameters.code_length)
         .map(|index| {
@@ -184,7 +192,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
     challenger.observe_f128_slice(&claimed_dot_products);
     challenger.observe_f128(mask_dot_product);
     challenger.observe_bytes(&root);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger)?;
 
     let rlc_vector = (0..parameters.vector_length)
         .map(|index| a[index] + rho * (b[index] + rho * (c[index] + rho * additive_mask[index])))
@@ -202,7 +210,7 @@ pub fn prove_hadamard_and_dots<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )?;
     let opening = commitment.open(&positions);
 
     Ok(HadamardProof {
@@ -238,9 +246,9 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
 
     challenger.observe_label(b"veil-f128-hadamard");
     challenger.observe_bytes(&proof.commitment);
-    let evaluation_point = challenger.sample_f128();
+    let evaluation_point = challenger.try_sample_f128()?;
     challenger.observe_f128(proof.gamma);
-    let product_mask_coefficient = sample_nonzero(challenger);
+    let product_mask_coefficient = sample_nonzero(challenger)?;
     challenger.observe_f128_slice(&proof.phi);
 
     let phi_reduced = code.square_to_base(&proof.phi)?;
@@ -256,7 +264,7 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
     challenger.observe_f128_slice(&proof.claimed_dot_products);
     challenger.observe_f128(proof.mask_dot_product);
     challenger.observe_bytes(&proof.commitment);
-    let rho = sample_nonzero(challenger);
+    let rho = sample_nonzero(challenger)?;
     let expected_dot = proof
         .claimed_dot_products
         .iter()
@@ -273,13 +281,13 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
         challenger,
         parameters.code_length,
         parameters.padding_length,
-    );
+    )?;
     if positions != proof.opening.positions {
         return Err(HadamardError::WrongProofShape);
     }
     if !proof
         .opening
-        .verify(&proof.commitment, parameters.code_length, 5, ctx, channel)
+        .try_verify(&proof.commitment, parameters.code_length, 5, ctx, channel)?
     {
         return Err(HadamardError::InvalidMerkleOpening);
     }

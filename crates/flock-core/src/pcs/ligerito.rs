@@ -29,11 +29,12 @@
 //!    b. Last step: send remaining poly + open f^i.
 //!    c. Else: commit f^{i+2}, open f^{i+1}, induce next basis, glue.
 
-use crate::challenger::Challenger;
+use crate::challenger::{Challenger, sample_distinct_positions};
 use crate::field::F128;
 use crate::lincheck::build_eq_table;
 use crate::merkle::{self, Hash};
 use crate::ntt::additive_ntt_f128::AdditiveNttF128;
+use crate::oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS};
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -181,6 +182,50 @@ const UDR_MIN_RADIUS_DISTANCE_DIVISOR: f64 = 3.0;
 const UDR_DISTANCE_FLOOR_FACTOR: f64 = 3.0;
 const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
 const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
+pub const MAX_LIGERITO_GRIND_TRIALS: u64 = REJECTION_SAMPLING_TRIALS as u64;
+const LIGERITO_GRIND_TRIAL_OVERHEAD_BITS: u32 = 7;
+
+/// PoW trial cap for generic Ligerito profiles.
+///
+/// A `bits`-wide proof-of-work search succeeds with probability `2^-bits` per
+/// candidate. The cap gives each site 128 expected windows, so cap exhaustion is
+/// an exceptional fail-closed event instead of the common outcome for honest
+/// fast/slim profiles. For the succinct VEIL maximum of five live fold-grind
+/// bits this still returns 4096, preserving the audited VEIL bound.
+pub fn ligerito_grind_trials_for_bits(bits: u32) -> u64 {
+    match bits {
+        0 => 1,
+        bits => 1u64
+            .checked_shl(bits.saturating_add(LIGERITO_GRIND_TRIAL_OVERHEAD_BITS))
+            .unwrap_or(u64::MAX),
+    }
+}
+
+#[inline]
+fn grind_ligerito_pow<Ch: Challenger>(
+    challenger: &mut Ch,
+    bits: u32,
+) -> Result<u64, OracleLimitError> {
+    challenger.grind_pow_bounded(bits, ligerito_grind_trials_for_bits(bits))
+}
+
+#[inline]
+fn verify_ligerito_pow<Ch: Challenger>(
+    challenger: &mut Ch,
+    nonce: u64,
+    bits: u32,
+) -> Result<bool, OracleLimitError> {
+    challenger.verify_pow_bounded(nonce, bits, ligerito_grind_trials_for_bits(bits))
+}
+
+#[inline]
+fn verify_ligerito_pow_or_reject<Ch: Challenger>(
+    challenger: &mut Ch,
+    nonce: u64,
+    bits: u32,
+) -> bool {
+    verify_ligerito_pow(challenger, nonce, bits).unwrap_or(false)
+}
 
 /// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
 /// Johnson levels taper by round; UDR levels use the full level width.
@@ -2514,6 +2559,30 @@ pub(crate) fn ligero_commit_with_ro(
     channel: crate::ro::RoChannel,
     tree_depth: u8,
 ) -> LigeroWitness {
+    try_ligero_commit_with_ro(
+        poly,
+        log_msg_cols,
+        log_num_interleaved,
+        log_inv_rate,
+        ntt,
+        ro,
+        channel,
+        tree_depth,
+    )
+    .expect("point-oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn try_ligero_commit_with_ro(
+    poly: &[F128],
+    log_msg_cols: usize,
+    log_num_interleaved: usize,
+    log_inv_rate: usize,
+    ntt: &AdditiveNttF128,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) -> Result<LigeroWitness, OracleLimitError> {
     let msg_cols = 1usize << log_msg_cols;
     let num_interleaved = 1usize << log_num_interleaved;
     let block_len = msg_cols << log_inv_rate;
@@ -2542,14 +2611,14 @@ pub(crate) fn ligero_commit_with_ro(
         )
     };
     debug_assert_eq!(data_bytes.len(), block_len * leaf_size_bytes);
-    let tree = merkle::merkle_tree_framed(data_bytes, block_len, ro, channel, tree_depth);
+    let tree = merkle::try_merkle_tree_framed(data_bytes, block_len, ro, channel, tree_depth)?;
 
-    LigeroWitness {
+    Ok(LigeroWitness {
         mat,
         tree,
         block_len,
         num_interleaved,
-    }
+    })
 }
 
 // ===================================================================
@@ -2969,21 +3038,20 @@ fn sample_distinct_queries<Ch: Challenger>(
     block_len: usize,
     count: usize,
 ) -> Vec<usize> {
+    try_sample_distinct_queries(challenger, block_len, count)
+        .expect("Ligerito query-position sampler exhausted")
+}
+
+fn try_sample_distinct_queries<Ch: Challenger>(
+    challenger: &mut Ch,
+    block_len: usize,
+    count: usize,
+) -> Result<Vec<usize>, OracleLimitError> {
     assert!(
         count <= block_len,
         "sample_distinct_queries: count ({count}) > block_len ({block_len}) — config is too thin for this query count"
     );
-    let mut seen = std::collections::HashSet::new();
-    let mut out = Vec::with_capacity(count);
-    while out.len() < count {
-        let v = challenger.sample_f128();
-        let q = (v.lo as usize) % block_len;
-        if seen.insert(q) {
-            out.push(q);
-        }
-    }
-    out.sort_unstable();
-    out
+    sample_distinct_positions(challenger, block_len, count, REJECTION_SAMPLING_TRIALS)
 }
 
 /// Build a single octopus multi-proof for all `queries` against `tree`.
@@ -3179,6 +3247,7 @@ pub fn recursive_prover_with_basis<Ch: Challenger>(
         crate::ro::RoChannel::Witness,
         challenger,
     )
+    .expect("Ligerito oracle/query cap exhausted")
 }
 
 /// zk-L0 context for the hiding commitment: the L0 codeword carries wide
@@ -3228,6 +3297,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
         crate::ro::RoChannel::Witness,
         challenger,
     )
+    .expect("Ligerito oracle/query cap exhausted")
 }
 
 /// zk basis prover with explicit point-oracle context and commitment channel.
@@ -3247,6 +3317,40 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> LigeritoProof {
+    try_recursive_prover_with_basis_precomputed_round0_zk_with_ro(
+        config,
+        f_blinded,
+        b_initial,
+        target,
+        l0_codeword,
+        l0_tree,
+        l0_leaf_salts,
+        round0_uv,
+        zk_l0,
+        ro,
+        channel,
+        challenger,
+    )
+    .expect("Ligerito oracle/query cap exhausted")
+}
+
+/// Fallible form of [`recursive_prover_with_basis_precomputed_round0_zk_with_ro`].
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub fn try_recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>(
+    config: &ProverConfig,
+    f_blinded: Vec<F128>,
+    b_initial: Vec<F128>,
+    target: F128,
+    l0_codeword: &[F128],
+    l0_tree: &[Hash],
+    l0_leaf_salts: &[[u8; 32]],
+    round0_uv: (F128, F128),
+    zk_l0: ZkL0,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<LigeritoProof, OracleLimitError> {
     recursive_prover_with_basis_impl(
         config,
         f_blinded,
@@ -3302,6 +3406,7 @@ pub fn recursive_prover_with_basis_precomputed_round0<Ch: Challenger>(
         crate::ro::RoChannel::Witness,
         challenger,
     )
+    .expect("Ligerito oracle/query cap exhausted")
 }
 
 /// Basis prover with explicit point-oracle context and commitment channel.
@@ -3318,6 +3423,35 @@ pub fn recursive_prover_with_basis_precomputed_round0_with_ro<Ch: Challenger>(
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> LigeritoProof {
+    try_recursive_prover_with_basis_precomputed_round0_with_ro(
+        config,
+        packed_witness,
+        b_initial,
+        target,
+        l0_codeword,
+        l0_tree,
+        round0_uv,
+        ro,
+        channel,
+        challenger,
+    )
+    .expect("Ligerito oracle/query cap exhausted")
+}
+
+/// Fallible form of [`recursive_prover_with_basis_precomputed_round0_with_ro`].
+#[allow(clippy::too_many_arguments)]
+pub fn try_recursive_prover_with_basis_precomputed_round0_with_ro<Ch: Challenger>(
+    config: &ProverConfig,
+    packed_witness: Vec<F128>,
+    b_initial: Vec<F128>,
+    target: F128,
+    l0_codeword: &[F128],
+    l0_tree: &[Hash],
+    round0_uv: (F128, F128),
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<LigeritoProof, OracleLimitError> {
     recursive_prover_with_basis_impl(
         config,
         packed_witness,
@@ -3353,7 +3487,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
-) -> LigeritoProof {
+) -> Result<LigeritoProof, OracleLimitError> {
     let log_n = packed_witness.len().trailing_zeros() as usize;
     let r = config.recursive_steps;
     let initial_k = config.initial_k;
@@ -3441,9 +3575,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         // Johnson levels taper by round; UDR levels grind full width.
         let bits = fold_round_bits(0, j);
         if bits > 0 {
-            fold_grinding_nonces.push(challenger.grind_pow(bits));
+            fold_grinding_nonces.push(grind_ligerito_pow(challenger, bits)?);
         }
-        let r = challenger.sample_f128();
+        let r = challenger.try_sample_f128()?;
         let msg = sc_prover.fold(r);
         challenger.observe_f128(msg.u_0);
         challenger.observe_f128(msg.u_2);
@@ -3463,7 +3597,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let ntt_1 = AdditiveNttF128::standard(log_msg_cols_1 + log_inv_rate_1);
     let f1 = sc_prover.f().to_vec();
     let wtns_1 = if framed {
-        ligero_commit_with_ro(
+        try_ligero_commit_with_ro(
             &f1,
             log_msg_cols_1,
             log_num_interleaved_1,
@@ -3472,7 +3606,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
             ro,
             channel,
             1,
-        )
+        )?
     } else {
         ligero_commit(
             &f1,
@@ -3495,7 +3629,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     {
         let _t = std::time::Instant::now();
         for _ in 0..ood_count(1) {
-            let z = challenger.sample_f128_vec(n1);
+            let z = challenger.try_sample_f128_vec(n1)?;
             // Build eq(z, ·) once and fuse the MLE eval `y = f̂1(z)` into the
             // introduce round message (single pass over f1 + eq_z), instead of
             // a separate `mle_eval_inline` fold.
@@ -3505,7 +3639,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
             ood_values.push(y);
             challenger.observe_f128(intro.u_0);
             challenger.observe_f128(intro.u_2);
-            let beta = challenger.sample_f128();
+            let beta = challenger.try_sample_f128()?;
             sc_prover.glue(beta);
         }
         if trace {
@@ -3518,13 +3652,14 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     // bits here). Verifier mirror checks the nonce; both then proceed to
     // sample query positions. (The proximity-gap shortfall is covered
     // separately by the fold-challenge grinds above.)
-    let pow_nonce_0 = challenger.grind_pow(config.grinding_bits[0] as u32);
+    let grinding_bits_0 = config.grinding_bits[0] as u32;
+    let pow_nonce_0 = grind_ligerito_pow(challenger, grinding_bits_0)?;
     let mut grinding_nonces: Vec<u64> = vec![pow_nonce_0];
 
     // Open L0; lane-fold weights = r_lane_fold.
     let num_queries_0 = config.queries[0];
-    let queries_0 = sample_distinct_queries(challenger, l0_block_len, num_queries_0);
-    let alpha_0 = challenger.sample_f128_vec(ceil_log2(num_queries_0));
+    let queries_0 = try_sample_distinct_queries(challenger, l0_block_len, num_queries_0)?;
+    let alpha_0 = challenger.try_sample_f128_vec(ceil_log2(num_queries_0))?;
     let _t = std::time::Instant::now();
     let opened_rows_0: Vec<Vec<F128>> = queries_0.iter().map(|&q| l0_row(q).to_vec()).collect();
     let merkle_proof_0 = merkle_multi_proof_for(l0_tree, l0_block_len, &queries_0);
@@ -3580,7 +3715,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let intro_msg_0 = sc_prover.introduce_new(basis_0_induced, enforced_sum_0);
     challenger.observe_f128(intro_msg_0.u_0);
     challenger.observe_f128(intro_msg_0.u_2);
-    let beta_0 = challenger.sample_f128();
+    let beta_0 = challenger.try_sample_f128()?;
     sc_prover.glue(beta_0);
     if trace {
         t_intro_glue += _t.elapsed();
@@ -3601,9 +3736,9 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
             // in the Johnson regime (see L0 loop).
             let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
-                fold_grinding_nonces.push(challenger.grind_pow(bits));
+                fold_grinding_nonces.push(grind_ligerito_pow(challenger, bits)?);
             }
-            let ri = challenger.sample_f128();
+            let ri = challenger.try_sample_f128()?;
             let msg = sc_prover.fold(ri);
             challenger.observe_f128(msg.u_0);
             challenger.observe_f128(msg.u_2);
@@ -3619,11 +3754,12 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
                 challenger.observe_f128(*v);
             }
             // PoW grinding for the last level before sampling its queries.
-            let nonce_last = challenger.grind_pow(config.grinding_bits[i + 1] as u32);
+            let grinding_bits_last = config.grinding_bits[i + 1] as u32;
+            let nonce_last = grind_ligerito_pow(challenger, grinding_bits_last)?;
             grinding_nonces.push(nonce_last);
             let num_queries_last = config.queries[i + 1];
             let queries_last =
-                sample_distinct_queries(challenger, wtns_prev.block_len, num_queries_last);
+                try_sample_distinct_queries(challenger, wtns_prev.block_len, num_queries_last)?;
             let _t = std::time::Instant::now();
             let opened_rows_last: Vec<Vec<F128>> = queries_last
                 .iter()
@@ -3669,7 +3805,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
                     );
                 }
             }
-            return LigeritoProof {
+            return Ok(LigeritoProof {
                 initial_root,
                 initial_proof,
                 recursive_roots,
@@ -3683,7 +3819,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
                 grinding_nonces,
                 ood_values,
                 fold_grinding_nonces,
-            };
+            });
         }
 
         let n_next = sc_prover.f().len().trailing_zeros() as usize;
@@ -3695,7 +3831,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         let ntt_next = AdditiveNttF128::standard(log_msg_cols_next + log_inv_rate_next);
         let f_evals = sc_prover.f().to_vec();
         let wtns_next = if framed {
-            ligero_commit_with_ro(
+            try_ligero_commit_with_ro(
                 &f_evals,
                 log_msg_cols_next,
                 log_num_interleaved_next,
@@ -3704,7 +3840,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
                 ro,
                 channel,
                 (i + 2) as u8,
-            )
+            )?
         } else {
             ligero_commit(
                 &f_evals,
@@ -3725,14 +3861,14 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         {
             let _t = std::time::Instant::now();
             for _ in 0..ood_count(i + 2) {
-                let z = challenger.sample_f128_vec(n_next);
+                let z = challenger.try_sample_f128_vec(n_next)?;
                 let eq_z = build_eq_table(&z);
                 let (intro, y) = sc_prover.introduce_new_with_eval(eq_z);
                 challenger.observe_f128(y);
                 ood_values.push(y);
                 challenger.observe_f128(intro.u_0);
                 challenger.observe_f128(intro.u_2);
-                let beta = challenger.sample_f128();
+                let beta = challenger.try_sample_f128()?;
                 sc_prover.glue(beta);
             }
             if trace {
@@ -3741,11 +3877,13 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         }
 
         // PoW grinding for this iteration's query phase.
-        let nonce_i = challenger.grind_pow(config.grinding_bits[i + 1] as u32);
+        let grinding_bits_i = config.grinding_bits[i + 1] as u32;
+        let nonce_i = grind_ligerito_pow(challenger, grinding_bits_i)?;
         grinding_nonces.push(nonce_i);
         let num_queries_i = config.queries[i + 1];
-        let queries_i = sample_distinct_queries(challenger, wtns_prev.block_len, num_queries_i);
-        let alpha_i = challenger.sample_f128_vec(ceil_log2(num_queries_i));
+        let queries_i =
+            try_sample_distinct_queries(challenger, wtns_prev.block_len, num_queries_i)?;
+        let alpha_i = challenger.try_sample_f128_vec(ceil_log2(num_queries_i))?;
         let _t = std::time::Instant::now();
         let opened_rows_i: Vec<Vec<F128>> = queries_i
             .iter()
@@ -3780,7 +3918,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         let intro_msg_i = sc_prover.introduce_new(basis_i_induced, enforced_sum_i);
         challenger.observe_f128(intro_msg_i.u_0);
         challenger.observe_f128(intro_msg_i.u_2);
-        let beta_i = challenger.sample_f128();
+        let beta_i = challenger.try_sample_f128()?;
         sc_prover.glue(beta_i);
         if trace {
             t_intro_glue += _t.elapsed();
@@ -3820,6 +3958,34 @@ where
     // (e.g. ring_switch::eval_rs_eq_prefix + finish_from_prefix).
     F: Fn(&[F128], usize) -> Vec<F128>,
 {
+    try_recursive_verifier_with_basis_succinct(
+        config,
+        proof,
+        log_n,
+        target,
+        expected_initial_root,
+        eval_b_residual,
+        zk_l0,
+        challenger,
+    )
+    .unwrap_or(false)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_recursive_verifier_with_basis_succinct<Ch, F>(
+    config: &VerifierConfig,
+    proof: &LigeritoProof,
+    log_n: usize,
+    target: F128,
+    expected_initial_root: &Hash,
+    eval_b_residual: F,
+    zk_l0: Option<ZkL0>,
+    challenger: &mut Ch,
+) -> Result<bool, OracleLimitError>
+where
+    Ch: Challenger,
+    F: Fn(&[F128], usize) -> Vec<F128>,
+{
     recursive_verifier_with_basis_succinct_impl(
         config,
         proof,
@@ -3851,6 +4017,41 @@ where
     Ch: Challenger,
     F: Fn(&[F128], usize) -> Vec<F128>,
 {
+    try_recursive_verifier_with_basis_succinct_with_ro(
+        config,
+        proof,
+        log_n,
+        target,
+        expected_initial_root,
+        eval_b_residual,
+        zk_l0,
+        ro,
+        channel,
+        challenger,
+    )
+    .unwrap_or(false)
+}
+
+/// Fallible succinct basis verifier with an explicit point-oracle context and
+/// channel. Returns `Ok(false)` for invalid proofs and `Err` only when an
+/// oracle cap is exhausted before the verifier can finish replaying.
+#[allow(clippy::too_many_arguments)]
+pub fn try_recursive_verifier_with_basis_succinct_with_ro<Ch, F>(
+    config: &VerifierConfig,
+    proof: &LigeritoProof,
+    log_n: usize,
+    target: F128,
+    expected_initial_root: &Hash,
+    eval_b_residual: F,
+    zk_l0: Option<ZkL0>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<bool, OracleLimitError>
+where
+    Ch: Challenger,
+    F: Fn(&[F128], usize) -> Vec<F128>,
+{
     recursive_verifier_with_basis_succinct_impl(
         config,
         proof,
@@ -3875,7 +4076,7 @@ fn recursive_verifier_with_basis_succinct_impl<Ch, F>(
     zk_l0: Option<ZkL0>,
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     challenger: &mut Ch,
-) -> bool
+) -> Result<bool, OracleLimitError>
 where
     Ch: Challenger,
     F: Fn(&[F128], usize) -> Vec<F128>,
@@ -3891,13 +4092,13 @@ where
     let initial_k = config.initial_k;
     let r = config.recursive_steps;
     if r < 1 || config.recursive_ks.len() != r || config.log_inv_rates.len() != r + 1 {
-        return false;
+        return Ok(false);
     }
     if !proof_has_expected_recursive_shape(proof, r) || !recursive_proof_salts_are_empty(proof) {
-        return false;
+        return Ok(false);
     }
     if &proof.initial_root != expected_initial_root {
-        return false;
+        return Ok(false);
     }
 
     challenger.observe_label(b"flock-ligerito-basis");
@@ -3912,7 +4113,7 @@ where
     let mut t_r = target;
     let mut tx_idx = 0usize;
     if tx_idx >= proof.sumcheck_transcript.len() {
-        return false;
+        return Ok(false);
     }
     let start_msg = proof.sumcheck_transcript[tx_idx];
     tx_idx += 1;
@@ -3930,7 +4131,7 @@ where
     };
     let ood_count = |lvl: usize| -> usize { config.ood_samples.get(lvl).copied().unwrap_or(0) };
     if config.ood_samples.first().copied().unwrap_or(0) != 0 {
-        return false; // L0 must be bound by the opening's own eval claim
+        return Ok(false); // L0 must be bound by the opening's own eval claim
     }
     let mut fold_nonce_idx = 0usize;
     let mut ood_idx = 0usize;
@@ -3950,18 +4151,18 @@ where
         let bits = fold_round_bits(0, j);
         if bits > 0 {
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
-                return false;
+                return Ok(false);
             }
-            if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
-                return false;
+            if !verify_ligerito_pow(challenger, proof.fold_grinding_nonces[fold_nonce_idx], bits)? {
+                return Ok(false);
             }
             fold_nonce_idx += 1;
         }
-        let ri = challenger.sample_f128();
+        let ri = challenger.try_sample_f128()?;
         r_lane_fold.push(ri);
         t_r = running_quad.eval(ri);
         if tx_idx >= proof.sumcheck_transcript.len() {
-            return false;
+            return Ok(false);
         }
         let msg = proof.sumcheck_transcript[tx_idx];
         tx_idx += 1;
@@ -3971,7 +4172,7 @@ where
     }
 
     if proof.recursive_roots.is_empty() {
-        return false;
+        return Ok(false);
     }
     let root_1 = proof.recursive_roots[0];
     challenger.observe_bytes(&root_1);
@@ -3980,22 +4181,22 @@ where
     // evaluation from the proof, and glue the claim into the running
     // sumcheck exactly like the prover.
     for _ in 0..ood_count(1) {
-        let z = challenger.sample_f128_vec(log_n - initial_k);
+        let z = challenger.try_sample_f128_vec(log_n - initial_k)?;
         if ood_idx >= proof.ood_values.len() {
-            return false;
+            return Ok(false);
         }
         let y = proof.ood_values[ood_idx];
         ood_idx += 1;
         challenger.observe_f128(y);
         if tx_idx >= proof.sumcheck_transcript.len() {
-            return false;
+            return Ok(false);
         }
         let intro_msg = proof.sumcheck_transcript[tx_idx];
         tx_idx += 1;
         challenger.observe_f128(intro_msg.u_0);
         challenger.observe_f128(intro_msg.u_2);
         let intro_quad = RoundQuad::from_msg(intro_msg, y);
-        let beta = challenger.sample_f128();
+        let beta = challenger.try_sample_f128()?;
         running_quad = RoundQuad::fold(&running_quad, &intro_quad, beta);
         t_r += beta * y;
         ood_ctxs.push(OodCtx {
@@ -4010,36 +4211,38 @@ where
     // prover side).
     let mut nonce_idx = 0usize;
     if nonce_idx >= proof.grinding_nonces.len() {
-        return false;
+        return Ok(false);
     }
-    if !challenger.verify_pow(
+    let grinding_bits_0 = config.grinding_bits[0] as u32;
+    if !verify_ligerito_pow(
+        challenger,
         proof.grinding_nonces[nonce_idx],
-        config.grinding_bits[0] as u32,
-    ) {
-        return false;
+        grinding_bits_0,
+    )? {
+        return Ok(false);
     }
     nonce_idx += 1;
 
     let num_queries_0 = config.queries[0];
     let _t = std::time::Instant::now();
-    let queries_0 = sample_distinct_queries(challenger, block_len_0, num_queries_0);
+    let queries_0 = try_sample_distinct_queries(challenger, block_len_0, num_queries_0)?;
     if trace {
         t_sample_q += _t.elapsed();
     }
-    let alpha_0 = challenger.sample_f128_vec(ceil_log2(num_queries_0));
+    let alpha_0 = challenger.try_sample_f128_vec(ceil_log2(num_queries_0))?;
     let l0_salt_domain = if zk_l0.is_some() {
         LevelOpenSaltDomain::Salted
     } else {
         LevelOpenSaltDomain::Unsalted
     };
     if zk_l0.is_some() && proof.initial_proof.leaf_salts.len() != queries_0.len() {
-        return false;
+        return Ok(false);
     }
     let _t = std::time::Instant::now();
     // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
     // rows, then combine each into an F-row with c for the enforced sum.
     let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
-    if !verify_level_opens_maybe_ro(
+    if !try_verify_level_opens_maybe_ro(
         &proof.initial_root,
         block_len_0,
         &queries_0,
@@ -4050,8 +4253,8 @@ where
         l0_salt_domain,
         ro_context,
         0,
-    ) {
-        return false;
+    )? {
+        return Ok(false);
     }
     if trace {
         t_merkle += _t.elapsed();
@@ -4086,14 +4289,14 @@ where
     }
 
     if tx_idx >= proof.sumcheck_transcript.len() {
-        return false;
+        return Ok(false);
     }
     let intro_msg_0 = proof.sumcheck_transcript[tx_idx];
     tx_idx += 1;
     challenger.observe_f128(intro_msg_0.u_0);
     challenger.observe_f128(intro_msg_0.u_2);
     let intro_quad_0 = RoundQuad::from_msg(intro_msg_0, enforced_sum_0);
-    let beta_0 = challenger.sample_f128();
+    let beta_0 = challenger.try_sample_f128()?;
     running_quad = RoundQuad::fold(&running_quad, &intro_quad_0, beta_0);
     t_r += beta_0 * enforced_sum_0;
 
@@ -4125,7 +4328,7 @@ where
     for i in 0..r {
         let k_i = config.recursive_ks[i];
         if n_current < k_i {
-            return false;
+            return Ok(false);
         }
         let mut level_rs = Vec::with_capacity(k_i);
         for j in 0..k_i {
@@ -4134,19 +4337,23 @@ where
             let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
-                    return false;
+                    return Ok(false);
                 }
-                if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
-                    return false;
+                if !verify_ligerito_pow(
+                    challenger,
+                    proof.fold_grinding_nonces[fold_nonce_idx],
+                    bits,
+                )? {
+                    return Ok(false);
                 }
                 fold_nonce_idx += 1;
             }
-            let ri = challenger.sample_f128();
+            let ri = challenger.try_sample_f128()?;
             ris.push(ri);
             level_rs.push(ri);
             t_r = running_quad.eval(ri);
             if tx_idx >= proof.sumcheck_transcript.len() {
-                return false;
+                return Ok(false);
             }
             let msg = proof.sumcheck_transcript[tx_idx];
             tx_idx += 1;
@@ -4158,29 +4365,31 @@ where
 
         if i == r - 1 {
             if tx_idx != proof.sumcheck_transcript.len() {
-                return false;
+                return Ok(false);
             }
             if ood_idx != proof.ood_values.len()
                 || fold_nonce_idx != proof.fold_grinding_nonces.len()
             {
-                return false;
+                return Ok(false);
             }
             let yr = &proof.final_proof.yr;
             if yr.len() != 1 << n_current {
-                return false;
+                return Ok(false);
             }
             for v in yr {
                 challenger.observe_f128(*v);
             }
             // PoW grinding check for last level's query phase.
             if nonce_idx >= proof.grinding_nonces.len() {
-                return false;
+                return Ok(false);
             }
-            if !challenger.verify_pow(
+            let grinding_bits_last = config.grinding_bits[i + 1] as u32;
+            if !verify_ligerito_pow(
+                challenger,
                 proof.grinding_nonces[nonce_idx],
-                config.grinding_bits[i + 1] as u32,
-            ) {
-                return false;
+                grinding_bits_last,
+            )? {
+                return Ok(false);
             }
             // (last nonce — nonce_idx is not advanced past it)
 
@@ -4189,17 +4398,17 @@ where
             let num_queries_last = config.queries[i + 1];
             let _t = std::time::Instant::now();
             let queries_last =
-                sample_distinct_queries(challenger, prev_block_len, num_queries_last);
+                try_sample_distinct_queries(challenger, prev_block_len, num_queries_last)?;
             // Basis-induction challenge for the LAST commitment. Sampled here —
             // after `yr` was observed (top of this branch) and the queries are
             // fixed — so a forged `yr` cannot be adapted to it. Mirrors `alpha_i`
             // at every non-final level (see ~line 3377).
-            let alpha_last = challenger.sample_f128_vec(ceil_log2(num_queries_last));
+            let alpha_last = challenger.try_sample_f128_vec(ceil_log2(num_queries_last))?;
             if trace {
                 t_sample_q += _t.elapsed();
             }
             let _t = std::time::Instant::now();
-            if !verify_level_opens_maybe_ro(
+            if !try_verify_level_opens_maybe_ro(
                 &prev_root,
                 prev_block_len,
                 &queries_last,
@@ -4210,8 +4419,8 @@ where
                 LevelOpenSaltDomain::Unsalted,
                 ro_context,
                 (i + 1) as u8,
-            ) {
-                return false;
+            )? {
+                return Ok(false);
             }
             if trace {
                 t_merkle += _t.elapsed();
@@ -4236,7 +4445,7 @@ where
                 &queries_last,
                 &alpha_last,
             );
-            let beta_last = challenger.sample_f128();
+            let beta_last = challenger.try_sample_f128()?;
             t_r += beta_last * enforced_sum_last;
             level_ctxs.push(LevelCtx {
                 log_msg_cols: n_current,
@@ -4273,7 +4482,7 @@ where
             }
             for resid in &induced_residuals {
                 if resid.len() != yr_len {
-                    return false;
+                    return Ok(false);
                 }
             }
 
@@ -4284,7 +4493,7 @@ where
             let mut ood_residuals: Vec<Vec<F128>> = Vec::with_capacity(ood_ctxs.len());
             for ctx in &ood_ctxs {
                 if ctx.z.len() < yr_log_n || ctx.ris_start + (ctx.z.len() - yr_log_n) > ris.len() {
-                    return false;
+                    return Ok(false);
                 }
                 let folded = ctx.z.len() - yr_log_n;
                 let mut scalar = ctx.beta;
@@ -4306,7 +4515,7 @@ where
                 t_evalb += _te.elapsed();
             }
             if evb_vec.len() != yr_len {
-                return false;
+                return Ok(false);
             }
             let mut inner = F128::ZERO;
             let _t = std::time::Instant::now();
@@ -4347,11 +4556,11 @@ where
                     t_evalb.as_secs_f64() * 1e3
                 );
             }
-            return inner == t_r;
+            return Ok(inner == t_r);
         }
 
         if next_root_idx >= proof.recursive_roots.len() {
-            return false;
+            return Ok(false);
         }
         let root_next = proof.recursive_roots[next_root_idx];
         next_root_idx += 1;
@@ -4359,22 +4568,22 @@ where
 
         // OOD binding mirror for the L_{i+2} commit.
         for _ in 0..ood_count(i + 2) {
-            let z = challenger.sample_f128_vec(n_current);
+            let z = challenger.try_sample_f128_vec(n_current)?;
             if ood_idx >= proof.ood_values.len() {
-                return false;
+                return Ok(false);
             }
             let y = proof.ood_values[ood_idx];
             ood_idx += 1;
             challenger.observe_f128(y);
             if tx_idx >= proof.sumcheck_transcript.len() {
-                return false;
+                return Ok(false);
             }
             let intro_msg = proof.sumcheck_transcript[tx_idx];
             tx_idx += 1;
             challenger.observe_f128(intro_msg.u_0);
             challenger.observe_f128(intro_msg.u_2);
             let intro_quad = RoundQuad::from_msg(intro_msg, y);
-            let beta = challenger.sample_f128();
+            let beta = challenger.try_sample_f128()?;
             running_quad = RoundQuad::fold(&running_quad, &intro_quad, beta);
             t_r += beta * y;
             ood_ctxs.push(OodCtx {
@@ -4386,13 +4595,15 @@ where
 
         // PoW grinding check for this iteration's query phase.
         if nonce_idx >= proof.grinding_nonces.len() {
-            return false;
+            return Ok(false);
         }
-        if !challenger.verify_pow(
+        let grinding_bits_i = config.grinding_bits[i + 1] as u32;
+        if !verify_ligerito_pow(
+            challenger,
             proof.grinding_nonces[nonce_idx],
-            config.grinding_bits[i + 1] as u32,
-        ) {
-            return false;
+            grinding_bits_i,
+        )? {
+            return Ok(false);
         }
         nonce_idx += 1;
 
@@ -4400,18 +4611,18 @@ where
         let prev_num_interleaved = 1usize << prev_log_num_interleaved;
         let num_queries_i = config.queries[i + 1];
         let _t = std::time::Instant::now();
-        let queries_i = sample_distinct_queries(challenger, prev_block_len, num_queries_i);
+        let queries_i = try_sample_distinct_queries(challenger, prev_block_len, num_queries_i)?;
         if trace {
             t_sample_q += _t.elapsed();
         }
-        let alpha_i = challenger.sample_f128_vec(ceil_log2(num_queries_i));
+        let alpha_i = challenger.try_sample_f128_vec(ceil_log2(num_queries_i))?;
         if recursive_proof_idx >= proof.recursive_proofs.len() {
-            return false;
+            return Ok(false);
         }
         let rp = &proof.recursive_proofs[recursive_proof_idx];
         recursive_proof_idx += 1;
         let _t = std::time::Instant::now();
-        if !verify_level_opens_maybe_ro(
+        if !try_verify_level_opens_maybe_ro(
             &prev_root,
             prev_block_len,
             &queries_i,
@@ -4422,8 +4633,8 @@ where
             LevelOpenSaltDomain::Unsalted,
             ro_context,
             (i + 1) as u8,
-        ) {
-            return false;
+        )? {
+            return Ok(false);
         }
         if trace {
             t_merkle += _t.elapsed();
@@ -4437,14 +4648,14 @@ where
         }
 
         if tx_idx >= proof.sumcheck_transcript.len() {
-            return false;
+            return Ok(false);
         }
         let intro_msg_i = proof.sumcheck_transcript[tx_idx];
         tx_idx += 1;
         challenger.observe_f128(intro_msg_i.u_0);
         challenger.observe_f128(intro_msg_i.u_2);
         let intro_quad_i = RoundQuad::from_msg(intro_msg_i, enforced_sum_i);
-        let beta_i = challenger.sample_f128();
+        let beta_i = challenger.try_sample_f128()?;
         running_quad = RoundQuad::fold(&running_quad, &intro_quad_i, beta_i);
         t_r += beta_i * enforced_sum_i;
         level_ctxs.push(LevelCtx {
@@ -4458,7 +4669,7 @@ where
         prev_root = root_next;
         let k_next = config.recursive_ks[i + 1];
         if n_current < k_next {
-            return false;
+            return Ok(false);
         }
         prev_log_num_interleaved = k_next;
         prev_log_msg_cols = n_current - k_next;
@@ -4545,7 +4756,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
             }
-            if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
+            if !verify_ligerito_pow_or_reject(
+                challenger,
+                proof.fold_grinding_nonces[fold_nonce_idx],
+                bits,
+            ) {
                 return false;
             }
             fold_nonce_idx += 1;
@@ -4599,7 +4814,8 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     if nonce_idx >= proof.grinding_nonces.len() {
         return false;
     }
-    if !challenger.verify_pow(
+    if !verify_ligerito_pow_or_reject(
+        challenger,
         proof.grinding_nonces[nonce_idx],
         config.grinding_bits[0] as u32,
     ) {
@@ -4676,7 +4892,11 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
                 }
-                if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
+                if !verify_ligerito_pow_or_reject(
+                    challenger,
+                    proof.fold_grinding_nonces[fold_nonce_idx],
+                    bits,
+                ) {
                     return false;
                 }
                 fold_nonce_idx += 1;
@@ -4716,7 +4936,8 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if nonce_idx >= proof.grinding_nonces.len() {
                 return false;
             }
-            if !challenger.verify_pow(
+            if !verify_ligerito_pow_or_reject(
+                challenger,
                 proof.grinding_nonces[nonce_idx],
                 config.grinding_bits[i + 1] as u32,
             ) {
@@ -4835,7 +5056,8 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         if nonce_idx >= proof.grinding_nonces.len() {
             return false;
         }
-        if !challenger.verify_pow(
+        if !verify_ligerito_pow_or_reject(
+            challenger,
             proof.grinding_nonces[nonce_idx],
             config.grinding_bits[i + 1] as u32,
         ) {
@@ -5160,7 +5382,7 @@ fn verify_level_opens(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn verify_level_opens_with_ro(
+fn try_verify_level_opens_with_ro(
     root: &Hash,
     block_len: usize,
     queries: &[usize],
@@ -5170,18 +5392,18 @@ fn verify_level_opens_with_ro(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
     tree_depth: u8,
-) -> bool {
+) -> Result<bool, OracleLimitError> {
     if queries.len() != opened_rows.len() {
-        return false;
+        return Ok(false);
     }
     let mut leaf_payloads: Vec<&[u8]> = Vec::with_capacity(opened_rows.len());
     for row in opened_rows {
         if row.len() != expected_num_interleaved {
-            return false;
+            return Ok(false);
         }
         leaf_payloads.push(f128_row_bytes(row));
     }
-    merkle::verify_merkle_multi_proof_framed(
+    merkle::try_verify_merkle_multi_proof_framed(
         root,
         block_len,
         queries,
@@ -5216,7 +5438,7 @@ fn salted_opening_payloads(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn verify_salted_level_opens_with_ro(
+fn try_verify_salted_level_opens_with_ro(
     root: &Hash,
     block_len: usize,
     queries: &[usize],
@@ -5227,16 +5449,16 @@ fn verify_salted_level_opens_with_ro(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
     tree_depth: u8,
-) -> bool {
+) -> Result<bool, OracleLimitError> {
     if queries.len() != opened_rows.len() {
-        return false;
+        return Ok(false);
     }
     let Some(payloads) = salted_opening_payloads(opened_rows, leaf_salts, expected_num_interleaved)
     else {
-        return false;
+        return Ok(false);
     };
     let refs = payloads.iter().map(Vec::as_slice).collect::<Vec<_>>();
-    merkle::verify_merkle_multi_proof_framed(
+    merkle::try_verify_merkle_multi_proof_framed(
         root,
         block_len,
         queries,
@@ -5255,6 +5477,7 @@ enum LevelOpenSaltDomain {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 fn verify_level_opens_maybe_ro(
     root: &Hash,
     block_len: usize,
@@ -5267,13 +5490,41 @@ fn verify_level_opens_maybe_ro(
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     tree_depth: u8,
 ) -> bool {
+    try_verify_level_opens_maybe_ro(
+        root,
+        block_len,
+        queries,
+        opened_rows,
+        leaf_salts,
+        expected_num_interleaved,
+        multi_proof,
+        salt_domain,
+        ro_context,
+        tree_depth,
+    )
+    .unwrap_or(false)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn try_verify_level_opens_maybe_ro(
+    root: &Hash,
+    block_len: usize,
+    queries: &[usize],
+    opened_rows: &[Vec<F128>],
+    leaf_salts: &[[u8; 32]],
+    expected_num_interleaved: usize,
+    multi_proof: &[Hash],
+    salt_domain: LevelOpenSaltDomain,
+    ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
+    tree_depth: u8,
+) -> Result<bool, OracleLimitError> {
     match salt_domain {
         LevelOpenSaltDomain::Unsalted => {
             if !leaf_salts.is_empty() {
-                return false;
+                return Ok(false);
             }
             match ro_context {
-                Some((ro, channel)) => verify_level_opens_with_ro(
+                Some((ro, channel)) => try_verify_level_opens_with_ro(
                     root,
                     block_len,
                     queries,
@@ -5284,18 +5535,18 @@ fn verify_level_opens_maybe_ro(
                     channel,
                     tree_depth,
                 ),
-                None => verify_level_opens(
+                None => Ok(verify_level_opens(
                     root,
                     block_len,
                     queries,
                     opened_rows,
                     expected_num_interleaved,
                     multi_proof,
-                ),
+                )),
             }
         }
         LevelOpenSaltDomain::Salted => match ro_context {
-            Some((ro, channel)) => verify_salted_level_opens_with_ro(
+            Some((ro, channel)) => try_verify_salted_level_opens_with_ro(
                 root,
                 block_len,
                 queries,
@@ -5307,7 +5558,7 @@ fn verify_level_opens_maybe_ro(
                 channel,
                 tree_depth,
             ),
-            None => false,
+            None => Ok(false),
         },
     }
 }
@@ -5617,8 +5868,123 @@ pub fn recursive_verifier<Ch: Challenger>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::challenger::Challenger;
+    use crate::challenger::{Challenger, FsChallenger};
     use std::time::Instant;
+
+    struct ConstantChallenger {
+        value: F128,
+        scalar_calls: usize,
+    }
+
+    impl Challenger for ConstantChallenger {
+        fn observe_f128(&mut self, _value: F128) {}
+
+        fn sample_f128(&mut self) -> F128 {
+            self.try_sample_f128().unwrap()
+        }
+
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.scalar_calls += 1;
+            Ok(self.value)
+        }
+    }
+
+    struct BoundedPowOnlyChallenger {
+        inner: FsChallenger,
+    }
+
+    impl BoundedPowOnlyChallenger {
+        fn new(domain: &[u8]) -> Self {
+            Self {
+                inner: FsChallenger::new(domain),
+            }
+        }
+    }
+
+    impl Challenger for BoundedPowOnlyChallenger {
+        fn ro_context(&self, nonce: [u8; 32]) -> crate::ro::RoContext {
+            self.inner.ro_context(nonce)
+        }
+
+        fn observe_label(&mut self, label: &[u8]) {
+            self.inner.observe_label(label);
+        }
+
+        fn observe_f128(&mut self, value: F128) {
+            self.inner.observe_f128(value);
+        }
+
+        fn observe_f128_slice(&mut self, values: &[F128]) {
+            self.inner.observe_f128_slice(values);
+        }
+
+        fn observe_bytes(&mut self, bytes: &[u8]) {
+            self.inner.observe_bytes(bytes);
+        }
+
+        fn sample_f128(&mut self) -> F128 {
+            self.inner.sample_f128()
+        }
+
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.inner.try_sample_f128()
+        }
+
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.inner.sample_f128_vec(n)
+        }
+
+        fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+            self.inner.try_sample_f128_vec(n)
+        }
+
+        fn grind_pow(&mut self, bits: u32) -> u64 {
+            self.inner.grind_pow(bits)
+        }
+
+        fn grind_pow_bounded(
+            &mut self,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<u64, OracleLimitError> {
+            self.inner.grind_pow_bounded(bits, max_trials)
+        }
+
+        fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+            panic!("dense Ligerito verifier must use bounded PoW checks")
+        }
+
+        fn verify_pow_bounded(
+            &mut self,
+            nonce: u64,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<bool, OracleLimitError> {
+            self.inner.verify_pow_bounded(nonce, bits, max_trials)
+        }
+    }
+
+    #[test]
+    fn ligerito_distinct_query_sampler_exhausts_exact_trial_cap() {
+        let mut challenger = ConstantChallenger {
+            value: F128::ZERO,
+            scalar_calls: 0,
+        };
+        assert_eq!(
+            try_sample_distinct_queries(&mut challenger, 8, 2),
+            Err(OracleLimitError::PositionSamplingLimitExceeded)
+        );
+        assert_eq!(challenger.scalar_calls, REJECTION_SAMPLING_TRIALS);
+    }
+
+    #[test]
+    fn ligerito_grind_trial_cap_scales_with_pow_bits() {
+        assert_eq!(ligerito_grind_trials_for_bits(0), 1);
+        assert_eq!(ligerito_grind_trials_for_bits(5), MAX_LIGERITO_GRIND_TRIALS);
+        assert_eq!(ligerito_grind_trials_for_bits(16), 1 << 23);
+        assert_eq!(ligerito_grind_trials_for_bits(22), 1 << 29);
+        assert_eq!(ligerito_grind_trials_for_bits(57), u64::MAX);
+    }
 
     /// Worked example: `LigeritoSecurityConfig` for BLAKE3 m=29 at rate 1/2.
     /// Paper-compatible m=29 fast example, mechanically derived in the
@@ -6013,6 +6379,14 @@ mod tests {
         assert!(
             ok,
             "verifier should accept proof with valid grinding nonces"
+        );
+
+        let mut v_ch = BoundedPowOnlyChallenger::new(b"pow-test");
+        let ok =
+            recursive_verifier_with_basis(&v_cfg, &proof, &b, target, &initial_root, &mut v_ch);
+        assert!(
+            ok,
+            "dense verifier must mirror the succinct verifier's bounded PoW checks"
         );
 
         // Tampering with the nonce flips the PoW check.

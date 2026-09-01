@@ -17,6 +17,7 @@
 use crate::field::F128;
 use crate::merkle::{self, Hash};
 use crate::ntt::AdditiveNttF128;
+use crate::oracle_budget::OracleLimitError;
 use crate::pcs::pack::LOG_PACKING;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -293,6 +294,20 @@ pub fn commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
 ) -> (Commitment, ProverData) {
+    try_commit_zk_with_ro(z_packed, params, rng, ro, channel)
+        .expect("zk PCS commit point-oracle query budget exhausted")
+}
+
+/// Fallible [`commit_zk_with_ro`] that stops before exceeding the per-proof
+/// point-oracle query budget.
+#[cfg(feature = "zk")]
+pub fn try_commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
+    z_packed: &[F128],
+    params: &PcsParams,
+    rng: &mut R,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> Result<(Commitment, ProverData), OracleLimitError> {
     params.validate();
     assert!(params.zk, "commit_zk requires PcsParams.zk");
     assert_eq!(z_packed.len(), 1usize << params.witness_log_msg_len());
@@ -310,20 +325,19 @@ pub fn commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
         .iter()
         .map(|pair| {
             let mut salt = [0u8; 32];
-            salt[..8].copy_from_slice(&pair[0].lo.to_le_bytes());
-            salt[8..16].copy_from_slice(&pair[0].hi.to_le_bytes());
-            salt[16..24].copy_from_slice(&pair[1].lo.to_le_bytes());
-            salt[24..].copy_from_slice(&pair[1].hi.to_le_bytes());
+            salt[..F128::BYTE_LEN].copy_from_slice(&pair[0].to_le_bytes());
+            salt[F128::BYTE_LEN..].copy_from_slice(&pair[1].to_le_bytes());
             salt
         })
         .collect::<Vec<_>>();
 
     let mut codeword = crate::scratch::take_f128(params.codeword_len_f128());
     replicate_message_fill_zk(&mut codeword, &mask, z_packed, &blind, params.num_ntts());
-    let (commitment, mut pd) = finalize_commit(codeword, params, ro, channel, initial_leaf_salts);
+    let (commitment, mut pd) =
+        try_finalize_commit(codeword, params, ro, channel, initial_leaf_salts)?;
     pd.zk_mask = mask;
     pd.zk_blind = blind;
-    (commitment, pd)
+    Ok((commitment, pd))
 }
 
 /// Fill the wide zk codeword buffer with the replicated interleaved message —
@@ -391,12 +405,23 @@ pub(crate) fn replicate_message_fill(codeword: &mut [F128], msg: &[F128]) {
 /// Shared tail of [`commit`] / [`commit_into`]: interleaved forward additive
 /// NTT (RS-encode every lane) then the initial Merkle tree over codeword rows.
 fn finalize_commit(
-    mut codeword: Vec<F128>,
+    codeword: Vec<F128>,
     params: &PcsParams,
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
     initial_leaf_salts: Vec<[u8; 32]>,
 ) -> (Commitment, ProverData) {
+    try_finalize_commit(codeword, params, ro, channel, initial_leaf_salts)
+        .expect("PCS commit point-oracle query budget exhausted")
+}
+
+fn try_finalize_commit(
+    mut codeword: Vec<F128>,
+    params: &PcsParams,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    initial_leaf_salts: Vec<[u8; 32]>,
+) -> Result<(Commitment, ProverData), OracleLimitError> {
     let timing = std::env::var_os("FLOCK_COMMIT_TIMING").is_some();
     let t_ntt = std::time::Instant::now();
     // ---- Interleaved forward additive NTT: 2^log_batch_size independent
@@ -433,16 +458,16 @@ fn finalize_commit(
     // row-batch lanes (num_ntts F_{2^128} values = 2^log_batch_size). This is
     // Ligerito's L0 commitment.
     let merkle_tree = if initial_leaf_salts.is_empty() {
-        merkle::merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0)
+        merkle::try_merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0)?
     } else {
-        merkle::merkle_tree_framed_salted(
+        merkle::try_merkle_tree_framed_salted(
             codeword_bytes,
             params.n_leaves(),
             &initial_leaf_salts,
             ro,
             channel,
             0,
-        )
+        )?
     };
     let root = *merkle_tree.last().expect("merkle tree non-empty");
     if timing {
@@ -452,7 +477,7 @@ fn finalize_commit(
         );
     }
 
-    (
+    Ok((
         Commitment {
             root,
             params: params.clone(),
@@ -464,7 +489,7 @@ fn finalize_commit(
             zk_mask: Vec::new(),
             zk_blind: Vec::new(),
         },
-    )
+    ))
 }
 
 /// Tag the current thread as background QoS. On macOS the scheduler then

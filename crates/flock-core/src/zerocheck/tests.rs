@@ -3,15 +3,20 @@ use crate::zerocheck::univariate_skip::pack_bits;
 use crate::{
     challenger::{FsChallenger, RandomChallenger},
     ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8},
+    oracle_budget::{OracleLimitError, OracleQueryBudget, REJECTION_SAMPLING_TRIALS},
 };
 
 mod helpers;
 
-use helpers::{Rng, ScriptedEqChallenger};
+use helpers::{AlwaysRejectEqChallenger, Rng, ScriptedEqChallenger};
 
 const TEST_DOMAIN: &[u8] = b"flock-zerocheck-test";
 const ZK_TEST_DOMAIN: &[u8] = b"flock-zerocheck-zk-test";
 const ORDERING_TEST_DOMAIN: &[u8] = b"flock-zerocheck-ordering-test";
+
+fn query_budget_exceeded() -> VerifyError {
+    VerifyError::OracleLimit(OracleLimitError::QueryBudgetExceeded)
+}
 
 #[test]
 fn equality_point_rejects_noninvertible_outer_coordinates() {
@@ -20,6 +25,55 @@ fn equality_point_rejects_noninvertible_outer_coordinates() {
     assert_eq!(challenger.vector_calls, 3);
     assert_eq!(point.last(), Some(&F128::new(2, 0)));
     assert!(point[K_SKIP..].iter().all(|value| *value != F128::ONE));
+}
+
+#[test]
+fn equality_point_sampler_exhausts_exact_trial_cap() {
+    let mut challenger = AlwaysRejectEqChallenger { vector_calls: 0 };
+    let err = sample_eq_point_bounded(
+        K_SKIP + N_INNER + 1,
+        &mut challenger,
+        REJECTION_SAMPLING_TRIALS,
+    )
+    .unwrap_err();
+    assert_eq!(err, OracleLimitError::RejectionSamplingLimitExceeded);
+    assert_eq!(challenger.vector_calls, 1 + REJECTION_SAMPLING_TRIALS);
+}
+
+#[test]
+fn verify_returns_oracle_limit_when_budget_exhausted() {
+    let m = K_SKIP + N_INNER;
+    let proof = ZerocheckProof {
+        round1_ab: vec![F128::ZERO; 1usize << K_SKIP],
+        round1_c: vec![F128::ZERO; 1usize << K_SKIP],
+        multilinear_rounds: vec![(F128::ZERO, F128::ZERO); m - K_SKIP],
+        final_a_eval: F128::ZERO,
+        final_b_eval: F128::ZERO,
+        final_c_eval: F128::ZERO,
+    };
+    let budget = OracleQueryBudget::new(1);
+    let mut challenger = FsChallenger::new_budgeted(TEST_DOMAIN, budget);
+    let err = verify(m, &proof, &mut challenger).unwrap_err();
+    assert_eq!(err, query_budget_exceeded());
+}
+
+#[test]
+fn verify_zk_masked_returns_oracle_limit_when_budget_exhausted() {
+    let m = K_SKIP + N_INNER;
+    let proof = ZkZerocheckProof {
+        round1_ab: vec![F128::ZERO; 1usize << K_SKIP],
+        round1_c: vec![F128::ZERO; 1usize << K_SKIP],
+        mask_init: F128::ZERO,
+        multilinear_rounds: vec![(F128::ZERO, F128::ZERO); m - K_SKIP],
+        final_a_eval: F128::ZERO,
+        final_b_eval: F128::ZERO,
+        final_c_eval: F128::ZERO,
+        final_p_eval: F128::ZERO,
+    };
+    let budget = OracleQueryBudget::new(1);
+    let mut challenger = FsChallenger::new_budgeted(ZK_TEST_DOMAIN, budget);
+    let err = verify_zk_masked(m, &proof, None, &mut challenger).unwrap_err();
+    assert_eq!(err, query_budget_exceeded());
 }
 
 #[test]

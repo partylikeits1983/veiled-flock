@@ -1,4 +1,6 @@
-use crate::{challenger::Challenger, field::F128, zerocheck::SmallMaskSpec};
+use crate::{
+    challenger::Challenger, field::F128, oracle_budget::OracleLimitError, zerocheck::SmallMaskSpec,
+};
 
 pub(super) struct ScriptedEqChallenger {
     pub(super) vector_calls: usize,
@@ -19,6 +21,32 @@ impl Challenger for ScriptedEqChallenger {
             3 => vec![F128::new(2, 0); n],
             _ => panic!("unexpected vector challenge request"),
         }
+    }
+}
+
+pub(super) struct AlwaysRejectEqChallenger {
+    pub(super) vector_calls: usize,
+}
+
+impl Challenger for AlwaysRejectEqChallenger {
+    fn observe_f128(&mut self, _value: F128) {}
+
+    fn sample_f128(&mut self) -> F128 {
+        panic!("sample_eq_point uses framed vector sampling")
+    }
+
+    fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+        self.try_sample_f128_vec(n).unwrap()
+    }
+
+    fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+        self.vector_calls += 1;
+        let value = if self.vector_calls == 1 {
+            F128::ZERO
+        } else {
+            F128::ONE
+        };
+        Ok(vec![value; n])
     }
 }
 

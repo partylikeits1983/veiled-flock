@@ -42,8 +42,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use flock_core::challenger::Challenger;
+use flock_core::challenger::{Challenger, f128_vec_byte_len, f128_vec_from_le_bytes};
 use flock_core::field::F128;
+use flock_core::oracle_budget::{OracleLimitError, OracleQueryBudget, oracle_blocks_for_bytes};
 use flock_core::ro::{ByteOracle, RoContext, encode_pow_point};
 
 // Transcript op tags — must match `flock_core::challenger`'s encoding, since
@@ -83,6 +84,7 @@ pub struct ProgrammingAudit {
 
 /// Private snapshot used to attribute programming and oracle work to one
 /// proof while several adaptive proofs share the same oracle table.
+#[cfg(feature = "veil")]
 #[derive(Clone, Debug)]
 pub(crate) struct OracleCheckpoint {
     programmed_points: Vec<Vec<u8>>,
@@ -178,6 +180,7 @@ impl ProgrammableOracle {
         points
     }
 
+    #[cfg(feature = "veil")]
     pub(crate) fn checkpoint(&self) -> OracleCheckpoint {
         OracleCheckpoint {
             programmed_points: self.programmed_points(),
@@ -202,6 +205,7 @@ impl ProgrammableOracle {
     /// Verify that every point programmed since `checkpoint` contains the
     /// injectively framed fresh proof nonce absorbed before any simulated
     /// challenge.
+    #[cfg(feature = "veil")]
     pub(crate) fn audit_programming(
         &self,
         proof_nonce: &[u8; 32],
@@ -236,6 +240,7 @@ impl ProgrammableOracle {
         }
     }
 
+    #[cfg(feature = "veil")]
     pub(crate) fn answer_counts_since(&self, checkpoint: &OracleCheckpoint) -> (u64, u64) {
         (
             self.total_answers.saturating_sub(checkpoint.total_answers),
@@ -303,6 +308,7 @@ pub fn shared_oracle() -> SharedOracle {
 pub struct ProgrammableByteOracle {
     oracle: SharedOracle,
     retain_points: bool,
+    budget: Option<OracleQueryBudget>,
 }
 
 impl ProgrammableByteOracle {
@@ -310,6 +316,15 @@ impl ProgrammableByteOracle {
         Self {
             oracle,
             retain_points: true,
+            budget: None,
+        }
+    }
+
+    pub fn new_budgeted(oracle: SharedOracle, budget: OracleQueryBudget) -> Self {
+        Self {
+            oracle,
+            retain_points: true,
+            budget: Some(budget),
         }
     }
 
@@ -317,13 +332,25 @@ impl ProgrammableByteOracle {
         Self {
             oracle,
             retain_points: false,
+            budget: None,
+        }
+    }
+
+    fn answering_only_with_budget(oracle: SharedOracle, budget: OracleQueryBudget) -> Self {
+        Self {
+            oracle,
+            retain_points: false,
+            budget: Some(budget),
         }
     }
 }
 
 impl ByteOracle for ProgrammableByteOracle {
-    fn answer(&self, point: &[u8]) -> [u8; 32] {
-        lock_oracle(&self.oracle).answer(point, self.retain_points)
+    fn try_answer(&self, point: &[u8]) -> Result<[u8; 32], OracleLimitError> {
+        if let Some(budget) = &self.budget {
+            budget.try_charge(1)?;
+        }
+        Ok(lock_oracle(&self.oracle).answer(point, self.retain_points))
     }
 }
 
@@ -353,6 +380,7 @@ fn answering_only_ro_context(nonce: [u8; 32], oracle: SharedOracle) -> RoContext
 pub struct OracleChallenger {
     absorbed: Vec<u8>,
     oracle: SharedOracle,
+    budget: Option<OracleQueryBudget>,
 }
 
 impl OracleChallenger {
@@ -360,6 +388,7 @@ impl OracleChallenger {
         let mut c = Self {
             absorbed: Vec::new(),
             oracle,
+            budget: None,
         };
         c.absorb(&[OP_DOMAIN]);
         c.absorb(&(domain.len() as u64).to_le_bytes());
@@ -367,8 +396,28 @@ impl OracleChallenger {
         c
     }
 
+    pub fn new_budgeted(domain: &[u8], oracle: SharedOracle, budget: OracleQueryBudget) -> Self {
+        Self::new(domain, oracle).with_query_budget(budget)
+    }
+
+    pub fn with_query_budget(mut self, budget: OracleQueryBudget) -> Self {
+        self.budget = Some(budget);
+        self
+    }
+
     pub fn oracle(&self) -> &SharedOracle {
         &self.oracle
+    }
+
+    pub fn query_budget(&self) -> Option<OracleQueryBudget> {
+        self.budget.clone()
+    }
+
+    fn charge_queries(&self, amount: u64) -> Result<(), OracleLimitError> {
+        if let Some(budget) = &self.budget {
+            budget.try_charge(amount)?;
+        }
+        Ok(())
     }
 
     #[inline]
@@ -378,8 +427,7 @@ impl OracleChallenger {
 
     #[inline]
     fn absorb_f128(&mut self, v: F128) {
-        self.absorb(&v.lo.to_le_bytes());
-        self.absorb(&v.hi.to_le_bytes());
+        self.absorb(&v.to_le_bytes());
     }
 
     /// The exact bytes the honest challenger hashes for squeeze block `ctr`:
@@ -395,19 +443,22 @@ impl OracleChallenger {
 
     /// One domain-separated proof-of-work query, routed
     /// through the oracle so grind queries appear in its transcript.
-    fn pow_answer(&self, state: &[u8; 32], nonce: u64) -> [u8; 32] {
+    fn try_pow_answer(&self, state: &[u8; 32], nonce: u64) -> Result<[u8; 32], OracleLimitError> {
+        self.charge_queries(1)?;
         let point = encode_pow_point(state, nonce);
-        lock_oracle(&self.oracle).answer(&point, true)
+        Ok(lock_oracle(&self.oracle).answer(&point, true))
     }
 
     /// The proof-of-work state digest, mirroring `FsChallenger`, but routed
     /// through the programmable oracle so no point query bypasses the game.
-    fn pow_state_digest(&self) -> [u8; 32] {
-        lock_oracle(&self.oracle).answer(&self.absorbed, true)
+    fn try_pow_state_digest(&self) -> Result<[u8; 32], OracleLimitError> {
+        self.charge_queries(1)?;
+        Ok(lock_oracle(&self.oracle).answer(&self.absorbed, true))
     }
 
     /// Squeeze through the oracle, mirroring `FsChallenger::squeeze_into`.
-    fn squeeze_into(&self, out: &mut [u8]) {
+    fn try_squeeze_into(&self, out: &mut [u8]) -> Result<(), OracleLimitError> {
+        self.charge_queries(oracle_blocks_for_bytes(out.len())?)?;
         let mut off = 0usize;
         let mut ctr: u64 = 0;
         while off < out.len() {
@@ -418,32 +469,24 @@ impl OracleChallenger {
             off += take;
             ctr = ctr.wrapping_add(1);
         }
+        Ok(())
     }
 
-    /// Program the *next* scalar squeeze to `value`, and return the point
-    /// programmed. Call immediately before the `sample_f128` it should
-    /// govern: the point depends on everything absorbed so far, so ordering
-    /// is load-bearing.
-    ///
-    /// Returns `None` — having programmed nothing — if the point was already
-    /// queried, which is the bad event of the security argument. Callers
-    /// should treat `None` as a simulation failure rather than continuing.
-    /// Program the *next* vector squeeze of length `n` to `values`. Same
-    /// contract as [`Self::program_next_scalar`]: call immediately before the
-    /// `sample_f128_vec` it governs.
+    /// Program the *next* vector squeeze to `values`.
     ///
     /// A vector squeeze spans `ceil(n·16 / 32)` oracle blocks, so this
-    /// programs each block of the stream.
+    /// programs each block of the stream. Returns `None` if any point was
+    /// already queried, which is the bad event of the security argument.
     pub fn program_next_vec(&mut self, values: &[F128]) -> Option<Vec<Vec<u8>>> {
         let mut probe = self.clone();
         probe.absorb(&[OP_SQUEEZE, KIND_SLICE]);
         probe.absorb(&(values.len() as u64).to_le_bytes());
 
         // The byte stream the squeeze must produce.
-        let mut stream = Vec::with_capacity(values.len() * 16);
+        let stream_len = f128_vec_byte_len(values.len()).expect("programmed vector too large");
+        let mut stream = Vec::with_capacity(stream_len);
         for v in values {
-            stream.extend_from_slice(&v.lo.to_le_bytes());
-            stream.extend_from_slice(&v.hi.to_le_bytes());
+            stream.extend_from_slice(&v.to_le_bytes());
         }
 
         let mut points = Vec::new();
@@ -470,6 +513,12 @@ impl OracleChallenger {
         Some(points)
     }
 
+    /// Program the *next* scalar squeeze to `value`, and return the point
+    /// programmed. Call immediately before the `sample_f128` it should
+    /// govern: the point depends on everything absorbed so far, so ordering
+    /// is load-bearing.
+    ///
+    /// Returns `None` if the point was already queried.
     pub fn program_next_scalar(&mut self, value: F128) -> Option<Vec<u8>> {
         // Mirror what `sample_f128` absorbs before squeezing.
         let mut probe = self.clone();
@@ -478,8 +527,7 @@ impl OracleChallenger {
         // `sample_f128` consumes only half of this oracle block. The other
         // half must remain uniform in the programmed-oracle experiment.
         let mut block = flock_core::ro::hash_point(&point);
-        block[..8].copy_from_slice(&value.lo.to_le_bytes());
-        block[8..16].copy_from_slice(&value.hi.to_le_bytes());
+        block[..F128::BYTE_LEN].copy_from_slice(&value.to_le_bytes());
         let mut oracle = lock_oracle(&self.oracle);
         if !oracle.program_fresh(point.clone(), block) {
             return None;
@@ -490,7 +538,17 @@ impl OracleChallenger {
 
 impl Challenger for OracleChallenger {
     fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
-        answering_only_ro_context(nonce, self.oracle.clone())
+        if let Some(budget) = &self.budget {
+            RoContext::external(
+                nonce,
+                Arc::new(ProgrammableByteOracle::answering_only_with_budget(
+                    self.oracle.clone(),
+                    budget.clone(),
+                )),
+            )
+        } else {
+            answering_only_ro_context(nonce, self.oracle.clone())
+        }
     }
 
     fn observe_label(&mut self, label: &[u8]) {
@@ -519,69 +577,101 @@ impl Challenger for OracleChallenger {
     }
 
     fn sample_f128(&mut self) -> F128 {
-        self.absorb(&[OP_SQUEEZE, KIND_SCALAR]);
+        self.try_sample_f128()
+            .expect("programmable oracle query budget exhausted")
+    }
+
+    fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+        let mut probe = self.clone();
         let mut buf = [0u8; 16];
-        self.squeeze_into(&mut buf);
-        self.absorb(&buf);
-        F128 {
-            lo: u64::from_le_bytes(buf[..8].try_into().unwrap()),
-            hi: u64::from_le_bytes(buf[8..].try_into().unwrap()),
-        }
+        probe.absorb(&[OP_SQUEEZE, KIND_SCALAR]);
+        probe.try_squeeze_into(&mut buf)?;
+        probe.absorb(&buf);
+        *self = probe;
+        Ok(F128::from_le_bytes(buf))
     }
 
     fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
-        self.absorb(&[OP_SQUEEZE, KIND_SLICE]);
-        self.absorb(&(n as u64).to_le_bytes());
-        let mut buf = vec![0u8; n * 16];
-        self.squeeze_into(&mut buf);
-        self.absorb(&buf);
-        buf.as_chunks::<16>()
-            .0
-            .iter()
-            .map(|c| F128 {
-                lo: u64::from_le_bytes(c[..8].try_into().unwrap()),
-                hi: u64::from_le_bytes(c[8..].try_into().unwrap()),
-            })
-            .collect()
+        self.try_sample_f128_vec(n)
+            .expect("programmable oracle query budget exhausted")
+    }
+
+    fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+        let mut probe = self.clone();
+        probe.absorb(&[OP_SQUEEZE, KIND_SLICE]);
+        probe.absorb(&(n as u64).to_le_bytes());
+        let bytes = f128_vec_byte_len(n)?;
+        let mut buf = vec![0u8; bytes];
+        probe.try_squeeze_into(&mut buf)?;
+        probe.absorb(&buf);
+        *self = probe;
+        Ok(f128_vec_from_le_bytes(&buf))
     }
 
     fn grind_pow(&mut self, bits: u32) -> u64 {
+        if bits != 0 {
+            assert!(
+                bits <= 256,
+                "PoW grinding bits cannot exceed SHA-256 output length"
+            );
+        }
+        self.grind_pow_bounded(bits, u64::MAX)
+            .expect("programmable oracle query budget exhausted")
+    }
+
+    fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
         // Grinding queries the oracle at fresh points, exactly as the honest
         // challenger does. It is NOT programmed: the simulator grinds
         // honestly on its programmed prefix, which is why programming and
         // grinding have to interleave rather than the former completing
         // first.
-        let state = self.pow_state_digest();
         let nonce = if bits == 0 {
             // Canonical nonce at zero-bit sites, matching `FsChallenger` —
             // which rejects any other value to keep proofs non-malleable.
             0
         } else {
-            let mut n = 0u64;
-            loop {
-                let out = self.pow_answer(&state, n);
+            let state = self.try_pow_state_digest()?;
+            let mut found = None;
+            for n in 0..max_trials {
+                let out = self.try_pow_answer(&state, n)?;
                 if leading_zero_bits(&out) >= bits {
-                    break n;
+                    found = Some(n);
+                    break;
                 }
-                n = n.wrapping_add(1);
             }
+            found.ok_or(OracleLimitError::GrindingLimitExceeded)?
         };
         // Absorbed through the TAGGED byte observation, exactly as the honest
         // challenger does — a raw absorb here would silently desynchronize
         // every later challenge.
         self.observe_bytes(&nonce.to_le_bytes());
-        nonce
+        Ok(nonce)
     }
 
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
-        let state = self.pow_state_digest();
-        let ok = if bits == 0 {
-            nonce == 0
-        } else {
-            leading_zero_bits(&self.pow_answer(&state, nonce)) >= bits
-        };
+        self.verify_pow_bounded(nonce, bits, u64::MAX)
+            .expect("programmable oracle query budget exhausted")
+    }
+
+    fn verify_pow_bounded(
+        &mut self,
+        nonce: u64,
+        bits: u32,
+        max_trials: u64,
+    ) -> Result<bool, OracleLimitError> {
+        if bits == 0 {
+            let ok = nonce == 0;
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(ok);
+        }
+        if nonce >= max_trials {
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(false);
+        }
+        let state = self.try_pow_state_digest()?;
+        let ok = leading_zero_bits(&self.try_pow_answer(&state, nonce)?) >= bits;
         self.observe_bytes(&nonce.to_le_bytes());
-        ok
+        Ok(ok)
     }
 }
 
@@ -780,5 +870,19 @@ mod tests {
                 && point[0] == flock_core::ro::ROLE_POW
                 && point[1..33] == programmed_state
         }));
+    }
+
+    #[test]
+    fn bounded_oracle_grind_exhausts_exact_trial_cap() {
+        let oracle = shared_oracle();
+        let budget = OracleQueryBudget::new(4);
+        let mut ch = OracleChallenger::new_budgeted(b"pow-budget", oracle.clone(), budget.clone());
+        ch.observe_bytes(b"prefix");
+        let err = ch.grind_pow_bounded(257, 3).unwrap_err();
+        assert_eq!(err, OracleLimitError::GrindingLimitExceeded);
+        assert_eq!(budget.used(), 4);
+        let guard = oracle.lock().unwrap();
+        assert_eq!(guard.total_answer_count(), 4);
+        assert_eq!(guard.pow_answer_count(), 3);
     }
 }

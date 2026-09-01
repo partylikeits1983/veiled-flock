@@ -56,11 +56,16 @@ P*J*Q_H/2^256
 + (Q_H + P*Q_P)^2/2^257
 + 4*P*(P-1)/2^257
 + P*((63/64)^8192 + 16*(31/32)^4096)
++ P*(5*(1/2^128)^4096 + (2/2^128)^4096 + (13/2^128)^4096)
++ P*(outer-position aborts + VEIL-position aborts).
 ```
 
-The terms cover challenge prequeries, hidden initial-Merkle inputs, oracle
-collisions, collisions in the four nonce domains, and bounded-grinding failure.
-`ClassicalPromZkBound` computes this sum.
+The terms respectively cover challenge prequeries, hidden initial-Merkle
+inputs, oracle collisions, collisions in any of the four nonce domains (one
+Fiat--Shamir proof nonce plus three initial-tree nonces), and failure of the
+bounded outer/Ligerito grinds, bounded scalar/equality rejection samplers, and
+bounded distinct-position samplers. `ClassicalPromZkBound` computes this sum;
+the exact rational expression is mirrored in Lean's `SecurityLedger.zkBound`.
 
 Every proof needs fresh proof nonces, randomizer witness rows, witness-code
 padding, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts. The
@@ -123,7 +128,22 @@ transcript.
 
 Outer blinding grinding is modeled as first success within 8192 attempts. Each
 positive Ligerito fold grind is modeled as first success within 4096 attempts,
-with sixteen reserved grind sites. Registered schedules are:
+with sixteen reserved grind sites. At most three levels of a registered full-ZK
+shape carry a positive fold grind, and such a shape emits at most twelve
+positive fold-grind nonces. In slot order, the exact
+256/512/1024/2048/4096 schedules are `6x1`, `6x2 + 3x1`, `6x3 + 3x2`,
+`6x4 + 3x3 + 3x1`, and `6x5 + 3x4 + 3x2` bits; the corresponding preblinded
+L0 grinds use 2/3/4/5/6 bits.
+
+The Rust prover, verifier, and simulator enforce the per-loop caps and the
+cumulative one-million oracle-call budget during execution. Cap exhaustion is a
+fail-closed protocol error rather than an unbounded search or a post-hoc audit
+failure.
+
+Lean also pins the complete embedded Secure-profile ladders, not only their
+L0 hiding budgets.  Each tuple below is
+`(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`;
+query-phase grinding, tapering, and OOD sampling are zero throughout.
 
 | Slots | Rust profile | Levels | Final `yr_log_n` |
 |---:|---|---|---:|
@@ -137,11 +157,13 @@ Each level tuple is
 `(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`.
 Query-phase grinding, tapering, and OOD sampling are zero in these profiles.
 
-The Rust prover and simulator currently check returned grind nonces against
-the caps, but some search and rejection loops are not bounded while they run.
-The executable must enforce per-loop caps and the cumulative oracle-call budget
-during execution before those values can be treated as deterministic
-implementation bounds.
+The Secure profile is in the unique-decoding regime, where the fold-challenge
+grind is flat: every fold round of a level grinds the full
+`fold_grinding_bits`. The Johnson profiles taper the grind by one bit per fold
+round, because their row-union factor makes each later round one bit stronger.
+`LigeritoSecurityConfig::aggregate_soundness_bound` charges the worst-round
+proximity error and the full grind in every round, so both regimes match the
+ledger exactly.
 
 The public prove and verify methods instantiate the pinned SHA-256 transcript
 domain internally; the test-only random challenger is not part of their API.
