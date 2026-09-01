@@ -49,5 +49,9 @@ harness = false
 name = "chain_bench"
 required-features = ["unsound-challenger"]
 
+[[example]]
+name = "preimage_scaling"
+required-features = ["veil"]
+
 [lints]
 workspace = true

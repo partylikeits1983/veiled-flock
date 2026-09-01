@@ -1,3 +1,0 @@
-core ok 17s
-veil ok 0s
-prover ok 7s

@@ -1,5 +1,11 @@
 [workspace]
-members = ["crates/flock-core", "crates/flock-prover", "crates/veil-f128", "examples"]
+members = [
+    "crates/flock-core",
+    "crates/flock-prover",
+    "crates/veil-f128",
+    "examples",
+    "tools/formal-proof",
+]
 resolver = "2"
 
 [workspace.package]

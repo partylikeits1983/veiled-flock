@@ -1,7 +1,7 @@
 import Flockzk.Masking
 
 /-!
-Surjective / composed masking, for the amended zk-Flock protocol (A1′).
+Surjective and composed masking for a degree-two product-mask channel.
 
 The WS-0 certificate shows the transcript splits into two kinds of
 coordinates at fixed challenges:
@@ -9,15 +9,15 @@ coordinates at fixed challenges:
   * **affine classes** — everything except the zerocheck round pairs — are
     affine in the existing masks with a witness-independent linear part, and
     the mask image *covers* every witness-difference direction there;
-  * **zerocheck round pairs** — under amendment A1′ these get a degree-2
-    committed mask channel `γ·P·Q` whose contribution is affine in `P` at
+  * **zerocheck round pairs** — these use a degree-2 committed mask channel
+    `γ·P·Q` whose contribution is affine in `P` at
     fixed `Q` and (for a uniform `Q`) **surjective** onto the entire
     round-pair coordinate block, carrying no witness.
 
 `Flockzk.Masking` already proves that an affine transcript `A u + f w` with
 `f w − f w' ∈ Image A` (for equal public inputs) is witness-independent and
-exactly simulatable. This file adds the two facts A1′ needs to *discharge*
-that coverage hypothesis:
+exactly simulatable. This file adds the two facts needed to discharge that
+coverage hypothesis:
 
   * `transcript_witness_indep_of_surjective` / `pmf_*` — if the mask map is
     surjective onto the value space, no coset condition is needed: the
@@ -29,9 +29,8 @@ that coverage hypothesis:
     compose into full coverage of the joint map, feeding
     `transcript_witness_indep` directly.
 
-Together with `Masking.lean`, these reduce the *entire* amended transcript to
-the single-map masking theorem — the mixture/triangular development
-(`MaskingMixture.lean`) is only the fallback for the unamended protocol.
+Together with `Masking.lean`, these reduce the composed transcript to the
+single-map masking theorem.
 -/
 namespace FlockZk
 
@@ -48,8 +47,8 @@ variable [AddCommGroup U] [AddCommGroup V] [AddCommGroup U₁] [AddCommGroup U�
 /-- **Surjective mask ⇒ unconditional witness independence.** If the mask map
 `A` is surjective, every witness-difference lies in its image automatically,
 so the transcript distribution is the same for *every* pair of witnesses
-(no equal-public-input condition needed). This is the round-pair block under
-A1′: the `γ·P·Q` channel is surjective onto that block. -/
+(no equal-public-input condition needed). The `γ·P·Q` channel supplies this
+surjectivity for the round-pair block. -/
 theorem transcript_witness_indep_of_surjective (A : U →+ V) (f : W → V)
     (hA : Function.Surjective A) (w w' : W) (y : V) :
     (univ.filter fun u => A u + f w = y).card
@@ -76,10 +75,10 @@ end PMF
 `g₂ : U₂ →+ V` into the same value space, the coproduct
 `g₁ ⊞ g₂ : U₁ × U₂ →+ V`, `(u₁,u₂) ↦ g₁ u₁ + g₂ u₂`, has as its range the
 sumset of the two ranges. Hence a value that is `d₁ + d₂` with `dᵢ ∈ range gᵢ`
-is in the range of the joint map. Under A1′: `g₂` = the `P·Q` channel
-(covering the round-pair block), `g₁` = the existing masks (covering the
-affine classes); any witness-difference decomposes as such a sum, so it lies
-in the joint image and `transcript_witness_indep` applies. -/
+is in the range of the joint map. Taking `g₂` as the `P·Q` channel covering
+the round-pair block and `g₁` as the affine mask channel makes every
+witness-difference decompose as such a sum, so it lies in the joint image and
+`transcript_witness_indep` applies. -/
 theorem mem_range_coprod {g₁ : U₁ →+ V} {g₂ : U₂ →+ V} {d d₁ d₂ : V}
     (h₁ : d₁ ∈ Set.range g₁) (h₂ : d₂ ∈ Set.range g₂) (hd : d = d₁ + d₂) :
     d ∈ Set.range (g₁.coprod g₂) := by
