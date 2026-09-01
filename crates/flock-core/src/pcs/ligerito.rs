@@ -4720,7 +4720,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return false;
             }
-            if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
+            if !challenger
+                .verify_pow_bounded(
+                    proof.fold_grinding_nonces[fold_nonce_idx],
+                    bits,
+                    MAX_LIGERITO_GRIND_TRIALS,
+                )
+                .unwrap_or(false)
+            {
                 return false;
             }
             fold_nonce_idx += 1;
@@ -4774,10 +4781,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     if nonce_idx >= proof.grinding_nonces.len() {
         return false;
     }
-    if !challenger.verify_pow(
-        proof.grinding_nonces[nonce_idx],
-        config.grinding_bits[0] as u32,
-    ) {
+    if !challenger
+        .verify_pow_bounded(
+            proof.grinding_nonces[nonce_idx],
+            config.grinding_bits[0] as u32,
+            MAX_LIGERITO_GRIND_TRIALS,
+        )
+        .unwrap_or(false)
+    {
         return false;
     }
     nonce_idx += 1;
@@ -4851,7 +4862,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return false;
                 }
-                if !challenger.verify_pow(proof.fold_grinding_nonces[fold_nonce_idx], bits) {
+                if !challenger
+                    .verify_pow_bounded(
+                        proof.fold_grinding_nonces[fold_nonce_idx],
+                        bits,
+                        MAX_LIGERITO_GRIND_TRIALS,
+                    )
+                    .unwrap_or(false)
+                {
                     return false;
                 }
                 fold_nonce_idx += 1;
@@ -4891,10 +4909,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if nonce_idx >= proof.grinding_nonces.len() {
                 return false;
             }
-            if !challenger.verify_pow(
-                proof.grinding_nonces[nonce_idx],
-                config.grinding_bits[i + 1] as u32,
-            ) {
+            if !challenger
+                .verify_pow_bounded(
+                    proof.grinding_nonces[nonce_idx],
+                    config.grinding_bits[i + 1] as u32,
+                    MAX_LIGERITO_GRIND_TRIALS,
+                )
+                .unwrap_or(false)
+            {
                 return false;
             }
             // (last nonce — nonce_idx is not advanced past it)
@@ -5010,10 +5032,14 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         if nonce_idx >= proof.grinding_nonces.len() {
             return false;
         }
-        if !challenger.verify_pow(
-            proof.grinding_nonces[nonce_idx],
-            config.grinding_bits[i + 1] as u32,
-        ) {
+        if !challenger
+            .verify_pow_bounded(
+                proof.grinding_nonces[nonce_idx],
+                config.grinding_bits[i + 1] as u32,
+                MAX_LIGERITO_GRIND_TRIALS,
+            )
+            .unwrap_or(false)
+        {
             return false;
         }
         nonce_idx += 1;
@@ -5842,6 +5868,81 @@ mod tests {
         }
     }
 
+    struct BoundedPowOnlyChallenger {
+        inner: crate::challenger::FsChallenger,
+    }
+
+    impl BoundedPowOnlyChallenger {
+        fn new(domain: &[u8]) -> Self {
+            Self {
+                inner: crate::challenger::FsChallenger::new(domain),
+            }
+        }
+    }
+
+    impl Challenger for BoundedPowOnlyChallenger {
+        fn ro_context(&self, nonce: [u8; 32]) -> crate::ro::RoContext {
+            self.inner.ro_context(nonce)
+        }
+
+        fn observe_label(&mut self, label: &[u8]) {
+            self.inner.observe_label(label);
+        }
+
+        fn observe_f128(&mut self, value: F128) {
+            self.inner.observe_f128(value);
+        }
+
+        fn observe_f128_slice(&mut self, values: &[F128]) {
+            self.inner.observe_f128_slice(values);
+        }
+
+        fn observe_bytes(&mut self, bytes: &[u8]) {
+            self.inner.observe_bytes(bytes);
+        }
+
+        fn sample_f128(&mut self) -> F128 {
+            self.inner.sample_f128()
+        }
+
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.inner.try_sample_f128()
+        }
+
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.inner.sample_f128_vec(n)
+        }
+
+        fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+            self.inner.try_sample_f128_vec(n)
+        }
+
+        fn grind_pow(&mut self, bits: u32) -> u64 {
+            self.inner.grind_pow(bits)
+        }
+
+        fn grind_pow_bounded(
+            &mut self,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<u64, OracleLimitError> {
+            self.inner.grind_pow_bounded(bits, max_trials)
+        }
+
+        fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+            panic!("dense Ligerito verifier must use bounded PoW checks")
+        }
+
+        fn verify_pow_bounded(
+            &mut self,
+            nonce: u64,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<bool, OracleLimitError> {
+            self.inner.verify_pow_bounded(nonce, bits, max_trials)
+        }
+    }
+
     #[test]
     fn ligerito_distinct_query_sampler_exhausts_exact_trial_cap() {
         let mut challenger = ConstantChallenger {
@@ -6248,6 +6349,14 @@ mod tests {
         assert!(
             ok,
             "verifier should accept proof with valid grinding nonces"
+        );
+
+        let mut v_ch = BoundedPowOnlyChallenger::new(b"pow-test");
+        let ok =
+            recursive_verifier_with_basis(&v_cfg, &proof, &b, target, &initial_root, &mut v_ch);
+        assert!(
+            ok,
+            "dense verifier must mirror the succinct verifier's bounded PoW checks"
         );
 
         // Tampering with the nonce flips the PoW check.
