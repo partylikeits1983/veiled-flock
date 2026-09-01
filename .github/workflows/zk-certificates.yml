@@ -1,9 +1,8 @@
 # Offline exact ZK certificates: the expensive image-coverage / conditional
 # joint-coverage jobs (tens of thousands of real prover runs) plus the m=22
 # end-to-end A1' runs. Too heavy for the per-PR Test workflow; runs weekly
-# and on demand. scripts/zk-certify.sh is the single source of truth for
-# what counts as certificate evidence — its manifest must list exactly the
-# tests named in the ZkCertificate registry's `evidence` field.
+# and on demand. The Rust zk-certify registry is the single source of truth for
+# what counts as certificate evidence.
 
 name: ZK certificates
 
@@ -37,13 +36,6 @@ jobs:
       - name: Checkout sources
         uses: actions/checkout@v6
 
-      - name: Get stable toolchain date (cache key)
-        id: rust-version
-        shell: bash
-        run: |
-          STABLE_DATE=$(curl -sS https://static.rust-lang.org/dist/channel-rust-stable-date.txt)
-          echo "date=$STABLE_DATE" >> $GITHUB_OUTPUT
-
       - name: rust-cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684
         with:
@@ -51,29 +43,19 @@ jobs:
             ~/.cargo/registry/index/
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
-            ~/.rustup/
             target/
-          key: flock-cert-${{ runner.arch }}-${{ runner.os }}-${{ steps.rust-version.outputs.date }}-${{ hashFiles('Cargo.lock') }}
+          key: flock-cert-${{ runner.arch }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
           restore-keys: |
-            flock-cert-${{ runner.arch }}-${{ runner.os }}-${{ steps.rust-version.outputs.date }}-
+            flock-cert-${{ runner.arch }}-${{ runner.os }}-
 
       - name: Install Rust (stable)
-        shell: bash
-        run: |
-          if ! command -v rustup &> /dev/null; then
-            curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
-            echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
-            export PATH="$HOME/.cargo/bin:$PATH"
-          fi
-          rustup toolchain install stable
-          rustup default stable
-          rustc --version
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Run certificates
-        run: scripts/zk-certify.sh
+        run: cargo run --locked --release -p zk-certify -- --manifest target/zk-certificate-manifest
 
       - name: Upload manifest
         uses: actions/upload-artifact@v4
         with:
           name: zk-certificate-manifest-${{ matrix.arch }}
-          path: zk-certify-manifest.txt
+          path: target/zk-certificate-manifest
