@@ -96,12 +96,13 @@ cargo run --locked --release -p flock-prover --features veil \
 
 cargo run --locked --release -p flock-prover --features veil \
   --bin veiled_flock -- \
-  verify --in proof.bin
+  verify --in proof.bin --digests expected-digests.hex
 ```
 
-`messages.bin` must contain one or more concatenated 64-byte messages. The
-proof bundle includes the ordered public digests. Full-ZK batches support up
-to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
+`messages.bin` must contain one or more concatenated 64-byte messages.
+`expected-digests.hex` must contain the trusted ordered public BLAKE3 digest
+list, one 64-character digest per line. Full-ZK batches support up to 4096
+messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
 
 ## Examples
 
