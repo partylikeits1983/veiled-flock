@@ -57,6 +57,9 @@
 //! `eq(τ',0ⁿ)`. Soundness rests on the PCS binding `g(τ',s₀*)` to the committed
 //! `ẑ`; the sumcheck (random `τ`, `α`) proves the glue + both endpoints at once.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;

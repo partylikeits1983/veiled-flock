@@ -1,3 +1,6 @@
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use super::super::{F128, build_sum_table};
 #[cfg(target_arch = "aarch64")]
 use rayon::prelude::*;

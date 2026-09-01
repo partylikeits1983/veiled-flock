@@ -19,6 +19,9 @@
 //! See [DP24](https://eprint.iacr.org/2024/504) (ring-switching) and the
 //! ligerito module docs for the recursion.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 pub mod commit;
 pub mod jagged;
 pub mod ligerito;

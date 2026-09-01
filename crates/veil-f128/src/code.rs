@@ -7,6 +7,9 @@
 //! Pointwise codeword products are evaluations of the product polynomial, so a
 //! twice-degree square code supplies VEIL's Hadamard reduction.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use std::fmt;
 
 use flock_core::field::F128;

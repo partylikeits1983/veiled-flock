@@ -25,7 +25,10 @@
 //!
 //! This module always compiles (the layout types are plain data consumed by
 //! `BlockR1cs`), but OS entropy — and every prove path that needs it — is
-//! gated behind the `zk` cargo feature.
+//! gated behind the `os-rng` cargo feature.
+
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
 
 use crate::field::F128;
 use serde::{Deserialize, Serialize};
@@ -61,7 +64,7 @@ enum ZkRngSource {
         forks: u64,
         reader: blake3::OutputReader,
     },
-    #[cfg(feature = "zk")]
+    #[cfg(feature = "os-rng")]
     Os,
 }
 
@@ -80,7 +83,7 @@ impl ZkRng {
 
     /// Draw directly from OS entropy. Panics if the source is unavailable
     /// (a proof produced without real entropy would silently not be hiding).
-    #[cfg(feature = "zk")]
+    #[cfg(feature = "os-rng")]
     pub fn from_entropy() -> Self {
         Self {
             source: ZkRngSource::Os,
@@ -101,7 +104,7 @@ impl ZkRng {
                 *forks += 1;
                 Self::from_seed(*h.finalize().as_bytes())
             }
-            #[cfg(feature = "zk")]
+            #[cfg(feature = "os-rng")]
             ZkRngSource::Os => Self::from_entropy(),
         }
     }
@@ -120,7 +123,7 @@ impl MaskSampler for ZkRng {
             unsafe { std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<u8>(), out.len() * 8) };
         match &mut self.source {
             ZkRngSource::Deterministic { reader, .. } => reader.fill(bytes),
-            #[cfg(feature = "zk")]
+            #[cfg(feature = "os-rng")]
             ZkRngSource::Os => {
                 getrandom::getrandom(bytes).expect("flock-zk: OS entropy unavailable")
             }

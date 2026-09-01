@@ -9,6 +9,9 @@
 //! boolean (`k = 2^k_log`). `C_0 = I_k` is implicit (we still carry the
 //! materialized `c_0` matrix for utilities like `satisfies`).
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::bits::transpose_8_u64s_to_64_bytes;
 use crate::field::F128;
 use rayon::prelude::*;

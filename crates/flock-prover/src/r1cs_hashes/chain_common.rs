@@ -17,6 +17,9 @@
 //! above. The two slots must be consecutive (slot 0 = input, slot 1 = output)
 //! so the chain claim's selector is a single bit-flip in the multilinear cube.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;

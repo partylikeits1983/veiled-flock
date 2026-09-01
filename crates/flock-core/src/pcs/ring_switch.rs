@@ -57,6 +57,9 @@
 //! The packed witness has `2^(m−7)` F_{2^128} elements indexed by the suffix.
 //! `s_hat_v` has 128 entries indexed by the 7-bit prefix.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::bits::transpose_8x8_bits;
 use crate::challenger::Challenger;
 use crate::field::F128;
