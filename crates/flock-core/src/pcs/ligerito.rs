@@ -1074,6 +1074,12 @@ impl LigeritoSecurityConfig {
                     lv.log_msg_cols, lv.log_num_interleaved
                 ));
             }
+            if lv.k_recursive != lv.log_num_interleaved {
+                return Err(format!(
+                    "L{i}: k_recursive ({}) must equal log_num_interleaved ({})",
+                    lv.k_recursive, lv.log_num_interleaved
+                ));
+            }
 
             // eta presence matches regime.
             match (lv.regime, lv.eta) {
@@ -5837,6 +5843,24 @@ mod tests {
         cfg.levels[0].expected_eps_query_bits = 50.0; // < target 100 (grinding 0)
         let err = cfg.validate().unwrap_err();
         assert!(err.contains("expected_eps_query_bits"), "err = {err}");
+    }
+
+    #[test]
+    fn ligerito_security_config_rejects_fold_count_ledger_mismatch() {
+        let mut cfg = blake3_m29_udr_example();
+        let last = cfg.levels.len() - 1;
+        assert!(cfg.levels[last].k_recursive > 0);
+        assert_eq!(
+            cfg.levels[last].k_recursive,
+            cfg.levels[last].log_num_interleaved
+        );
+        cfg.levels[last].k_recursive -= 1;
+        cfg.final_block.yr_log_n += 1;
+        let err = cfg.validate().unwrap_err();
+        assert!(
+            err.contains("k_recursive") && err.contains("log_num_interleaved"),
+            "err = {err}"
+        );
     }
 
     /// UDR regime must not carry an `eta` value.
