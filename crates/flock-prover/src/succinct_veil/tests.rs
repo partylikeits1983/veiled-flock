@@ -91,6 +91,92 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
 }
 
 #[test]
+fn embedded_secure_profiles_match_the_formal_parameter_table() {
+    struct ExpectedProfile {
+        log_inv_rates: &'static [usize],
+        log_message_columns: &'static [usize],
+        queries: &'static [usize],
+        fold_grinding_bits: &'static [usize],
+        final_log_size: usize,
+    }
+
+    const EXPECTED: [ExpectedProfile; 5] = [
+        ExpectedProfile {
+            log_inv_rates: &[1, 2, 4],
+            log_message_columns: &[10, 7, 4],
+            queries: &[294, 182, 137],
+            fold_grinding_bits: &[1, 0, 0],
+            final_log_size: 4,
+        },
+        ExpectedProfile {
+            log_inv_rates: &[1, 2, 3],
+            log_message_columns: &[11, 8, 5],
+            queries: &[292, 180, 151],
+            fold_grinding_bits: &[2, 1, 0],
+            final_log_size: 5,
+        },
+        ExpectedProfile {
+            log_inv_rates: &[1, 2, 3, 5],
+            log_message_columns: &[12, 9, 6, 3],
+            queries: &[291, 179, 148, 131],
+            fold_grinding_bits: &[3, 2, 0, 0],
+            final_log_size: 3,
+        },
+        ExpectedProfile {
+            log_inv_rates: &[1, 2, 3, 4],
+            log_message_columns: &[13, 10, 7, 4],
+            queries: &[290, 178, 147, 137],
+            fold_grinding_bits: &[4, 3, 1, 0],
+            final_log_size: 4,
+        },
+        ExpectedProfile {
+            log_inv_rates: &[1, 2, 3, 4],
+            log_message_columns: &[14, 11, 8, 5],
+            queries: &[290, 178, 146, 134],
+            fold_grinding_bits: &[5, 4, 2, 0],
+            final_log_size: 5,
+        },
+    ];
+
+    for (index, expected) in EXPECTED.iter().enumerate() {
+        let blocks = 1usize << (8 + index);
+        let setup = Blake3PreimageZkSetup::new(blocks);
+        let config = flock_core::pcs::ligerito::prover_config_for(
+            setup.pcs_params.log_msg_len(),
+            setup.pcs_params.log_batch_size,
+            setup.pcs_params.profile,
+        )
+        .expect("registered Secure profile");
+
+        assert_eq!(config.log_inv_rates, expected.log_inv_rates);
+        assert_eq!(config.initial_log_msg_cols, expected.log_message_columns[0]);
+        assert_eq!(
+            config.recursive_log_msg_cols,
+            expected.log_message_columns[1..]
+        );
+        assert_eq!(config.initial_log_num_interleaved, 6);
+        assert_eq!(config.initial_k, 6);
+        assert_eq!(
+            config.recursive_ks,
+            vec![3; expected.log_inv_rates.len() - 1]
+        );
+        assert_eq!(config.recursive_steps, expected.log_inv_rates.len() - 1);
+        assert_eq!(config.queries, expected.queries);
+        assert_eq!(config.grinding_bits, vec![0; expected.log_inv_rates.len()]);
+        assert_eq!(config.fold_grinding_bits, expected.fold_grinding_bits);
+        assert_eq!(
+            config.fold_grinding_taper,
+            vec![false; expected.log_inv_rates.len()]
+        );
+        assert_eq!(config.ood_samples, vec![0; expected.log_inv_rates.len()]);
+        assert_eq!(
+            config.initial_log_msg_cols - config.recursive_ks.iter().sum::<usize>(),
+            expected.final_log_size
+        );
+    }
+}
+
+#[test]
 fn production_mask_layout_matches_every_visible_private_coordinate() {
     let r1cs = build_block_r1cs_zk(8);
     let layout = MaskLayout::new(&r1cs).unwrap();
