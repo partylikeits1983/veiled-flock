@@ -502,25 +502,58 @@ pub struct Blake3PreimageZkSetup {
     pub pcs_params: PcsParams,
 }
 
+#[cfg(feature = "veil")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProverScratchWarmup {
+    Prewarm,
+    Skip,
+}
+
 impl Blake3PreimageZkSetup {
-    /// VEIL setup padded to the hiding-Ligerito production floor.
+    /// Prover VEIL setup padded to the hiding-Ligerito production floor.
     /// This lets applications prove a short list while the public statement
     /// deterministically fills the remaining slots with the fixed padding
     /// digest.
+    ///
+    /// This prewarms prover scratch. Verifier paths that derive the statement
+    /// shape from an untrusted bundle should use [`Self::new_for_verifier`].
     #[cfg(feature = "veil")]
     pub fn new(n_blocks: usize) -> Self {
         assert!(
             (1..=MAX_ZK_PREIMAGE_BLOCKS).contains(&n_blocks),
             "n_blocks must be in 1..={MAX_ZK_PREIMAGE_BLOCKS}"
         );
-        Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
+        Self::with_outer_log(
+            n_blocks,
+            min_n_blocks_log(n_blocks).max(8),
+            ProverScratchWarmup::Prewarm,
+        )
+    }
+
+    /// Verifier-only VEIL setup for statements decoded from untrusted bundles.
+    ///
+    /// This builds the same certified circuit and PCS parameters as [`Self::new`]
+    /// without allocating prover scratch based on the public digest count.
+    #[cfg(feature = "veil")]
+    pub fn new_for_verifier(n_blocks: usize) -> Self {
+        assert!(
+            (1..=MAX_ZK_PREIMAGE_BLOCKS).contains(&n_blocks),
+            "n_blocks must be in 1..={MAX_ZK_PREIMAGE_BLOCKS}"
+        );
+        Self::with_outer_log(
+            n_blocks,
+            min_n_blocks_log(n_blocks).max(8),
+            ProverScratchWarmup::Skip,
+        )
     }
 
     #[cfg(feature = "veil")]
-    fn with_outer_log(n_blocks: usize, n_log: usize) -> Self {
+    fn with_outer_log(n_blocks: usize, n_log: usize, warmup: ProverScratchWarmup) -> Self {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
-        flock_core::scratch::prewarm_prover(r1cs.m);
+        if warmup == ProverScratchWarmup::Prewarm {
+            flock_core::scratch::prewarm_prover(r1cs.m);
+        }
         let pcs_params = PcsParams {
             m: r1cs.m,
             log_inv_rate: 1,
@@ -1017,6 +1050,28 @@ mod tests {
     #[should_panic(expected = "n_blocks must be in 1..=")]
     fn zk_setup_rejects_batches_above_current_certificate_ceiling() {
         let _ = Blake3PreimageZkSetup::new(MAX_ZK_PREIMAGE_BLOCKS + 1);
+    }
+
+    #[cfg(all(feature = "veil", debug_assertions))]
+    #[test]
+    fn zk_verifier_setup_does_not_prewarm_prover_scratch() {
+        flock_core::scratch::reset_prewarm_prover_call_count_for_diagnostics();
+        let setup = Blake3PreimageZkSetup::new_for_verifier(MAX_ZK_PREIMAGE_BLOCKS);
+        assert_eq!(setup.n_blocks, MAX_ZK_PREIMAGE_BLOCKS);
+        assert_eq!(setup.r1cs.m, setup.pcs_params.m);
+        assert_eq!(
+            flock_core::scratch::prewarm_prover_call_count_for_diagnostics(),
+            0,
+            "verifier setup must not allocate prover scratch from an untrusted statement shape"
+        );
+
+        let _prover_setup = Blake3PreimageZkSetup::new(1);
+        assert_eq!(
+            flock_core::scratch::prewarm_prover_call_count_for_diagnostics(),
+            1,
+            "prover setup should still prewarm prover scratch"
+        );
+        flock_core::scratch::clear();
     }
 
     #[cfg(feature = "veil")]

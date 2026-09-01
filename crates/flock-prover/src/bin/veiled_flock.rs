@@ -119,7 +119,7 @@ fn verify(bundle: &Bundle) -> Result<(), String> {
     if bundle.digests.is_empty() || bundle.digests.len() > MAX_MESSAGES {
         return Err("invalid bundle statement shape".to_string());
     }
-    let setup = Blake3PreimageZkSetup::new(bundle.digests.len());
+    let setup = Blake3PreimageZkSetup::new_for_verifier(bundle.digests.len());
     let started = Instant::now();
     setup
         .verify(&bundle.commitment, &bundle.proof, &bundle.digests)

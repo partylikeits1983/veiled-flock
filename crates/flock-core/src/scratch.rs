@@ -19,9 +19,16 @@
 
 use crate::field::F128;
 use rayon::prelude::*;
+#[cfg(debug_assertions)]
+use std::cell::Cell;
 use std::sync::Mutex;
 
 static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
+
+#[cfg(debug_assertions)]
+thread_local! {
+    static PREWARM_PROVER_CALLS: Cell<usize> = const { Cell::new(0) };
+}
 
 /// Max buffers retained. The m=29 prove cycle gives ~18 distinct buffers:
 /// witness z/a/b, the L0 codeword, zerocheck's 2 fold outputs + 2 ping-pong
@@ -111,6 +118,8 @@ pub fn prewarm_prover(m: usize) {
     if m < 7 {
         return;
     }
+    #[cfg(debug_assertions)]
+    PREWARM_PROVER_CALLS.with(|calls| calls.set(calls.get() + 1));
     let small = 1usize << (m - 7);
     let large = 1usize << (m - 6);
     let mut bufs: Vec<Vec<F128>> = Vec::new();
@@ -136,6 +145,18 @@ pub fn prewarm_prover(m: usize) {
 /// Release every pooled buffer back to the OS.
 pub fn clear() {
     POOL.lock().unwrap().clear();
+}
+
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub fn reset_prewarm_prover_call_count_for_diagnostics() {
+    PREWARM_PROVER_CALLS.with(|calls| calls.set(0));
+}
+
+#[cfg(debug_assertions)]
+#[doc(hidden)]
+pub fn prewarm_prover_call_count_for_diagnostics() -> usize {
+    PREWARM_PROVER_CALLS.with(Cell::get)
 }
 
 #[cfg(test)]
