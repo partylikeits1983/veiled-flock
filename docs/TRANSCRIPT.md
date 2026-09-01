@@ -3,25 +3,30 @@
 All transcript inputs are typed and length-framed. The labels below are stable
 protocol domains.
 
-1. Absorb the ordered public statement under the VEIL-FLOCK BLAKE3-preimage
-   Fiat-Shamir domain.
+1. Absorb the ordered public statement under the `veil-flock-blake3-preimage`
+   Fiat-Shamir domain and `flock-blake3-preimage` statement label.
 2. Sample a 256-bit proof nonce and independent 256-bit nonces for the witness,
    VEIL-linear, and VEIL-Hadamard initial trees. Commit to the randomized FLOCK
    witness and VEIL mask inputs under those tree contexts.
 3. Bind the circuit shape, proof nonce, tree nonces, witness root, and mask
-   root before any PIOP challenge.
-4. Run FLOCK zerocheck. Every prover field value is serialized as
-   `value + fresh_mask`, with scalar/vector framing preserved. Equality
-   coordinates are drawn from the production rejection domain.
-5. Run lincheck with the same one-time-pad treatment for each round pair and
-   final partial vector.
-6. Mask and absorb the witness and blinder ring slices. Build the public
-   packed-direct digest functional and absorb its blinder evaluation.
+   root under `flock-r1cs`, `veil-flock-tree-nonces`, and
+   `veil-flock-mask-root` before any PIOP challenge.
+4. Run FLOCK zerocheck under `flock-zerocheck`. Every prover field value is
+   serialized as `value + fresh_mask`, with scalar/vector framing preserved.
+   Equality coordinates are drawn from the production rejection domain.
+5. Run lincheck under `flock-lincheck` with the same one-time-pad treatment for
+   each round pair and final partial vector.
+6. Mask and absorb the witness and blinder ring slices under
+   `veil-flock-ring-masks`. Build the public packed-direct digest functional
+   after `flock-digest-bind` challenge sampling and absorb its blinder
+   evaluation under `veil-flock-public-pcs-blind`.
 7. Perform the bounded outer grind, sample the nonzero folding challenge, form
-   the committed fold, and absorb the masked AB/C slices.
+   the committed fold, and absorb the masked AB/C slices under
+   `veil-flock-blinded-ring`.
 8. Fix the claim manifest and batch AB, C, and the public digest functional
    into one opening.
-9. Fork the bound prefix. The PCS branch performs the shielded
+9. Fork the bound prefix under `veil-flock-pcs-fork` and
+   `veil-flock-inner-fork`. The PCS branch performs the shielded
    ring-switch/Ligerito opening. The VEIL branch proves the shifted verifier,
    including Hadamard and ring-link constraints.
 

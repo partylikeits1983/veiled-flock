@@ -62,10 +62,10 @@ The terms cover challenge prequeries, hidden initial-Merkle inputs, oracle
 collisions, collisions in the four nonce domains, and bounded-grinding failure.
 `ClassicalPromZkBound` computes this sum.
 
-Every proof needs fresh proof nonces, witness-code padding, PIOP masks, ring
-masks, VEIL padding, tree nonces, and leaf salts. The public full-ZK API draws
-coins from OS randomness and does not accept caller-selected deterministic
-seeds.
+Every proof needs fresh proof nonces, randomizer witness rows, witness-code
+padding, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts. The
+public full-ZK API draws coins from OS randomness and does not accept
+caller-selected deterministic seeds.
 
 ## Privacy chain
 
