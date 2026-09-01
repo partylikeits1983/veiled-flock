@@ -166,6 +166,13 @@ theorem and implementation scope.
 - [Upstream source pins](docs/SOURCES.md)
 - [Full-ZK examples of FLOCK's protocols](examples/README.md)
 
+## Papers and credits
+
+- [Flock: Fast Proving for Batch Boolean Computations](https://arxiv.org/pdf/2607.27491)
+  by Benedikt Bünz, Ron D. Rothblum, and William Wang.
+- [VEIL: Lightweight Zero-Knowledge for Hash-Based Multilinear Proof Systems](https://eprint.iacr.org/2026/683.pdf)
+  by Rahul Dalal, Tamir Hemo, Eugene Rabinovich, and Ron Rothblum.
+
 ## License
 
 Apache-2.0 or MIT.
