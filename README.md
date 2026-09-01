@@ -1,8 +1,5 @@
 # zk-FLOCK
 
-> **Warning:** This is draft work. No code review has been performed. Use at
-> your own risk. Do not use this repository for production secrets.
-
 ## Overview
 
 VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for ordered batches
