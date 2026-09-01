@@ -15,7 +15,7 @@ pub use code::{AdditiveRsCode, CodeError, CodeParameters};
 pub use commitment::{MerkleMatrix, MerkleMatrixOpening};
 pub use constraints::{
     ArithmeticCircuit, CircuitBuilder, ConstraintCommitment, ConstraintError, ConstraintParameters,
-    ConstraintProof, ConstraintSoundnessBound, LinearCombination,
+    ConstraintProof, ConstraintSoundnessBound, LinearCombination, MAX_CONSTRAINT_CODE_LENGTH,
     SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS, certify_constraint_soundness, commit_constraint_inputs,
     prove_constraints, prove_constraints_from_commitment, prove_constraints_with_parameters,
     verify_constraints,
