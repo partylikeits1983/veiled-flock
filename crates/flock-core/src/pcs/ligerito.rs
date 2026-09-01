@@ -183,10 +183,9 @@ const UDR_DISTANCE_FLOOR_FACTOR: f64 = 3.0;
 const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
 const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
 pub const MAX_LIGERITO_GRIND_TRIALS: u64 = REJECTION_SAMPLING_TRIALS as u64;
-const LIGERITO_GRIND_TRIAL_SAFETY_BITS: u32 = 7;
-const LIGERITO_GRIND_TRIAL_SAFETY_FACTOR: u64 = 1 << LIGERITO_GRIND_TRIAL_SAFETY_BITS;
+const LIGERITO_GRIND_TRIAL_OVERHEAD_BITS: u32 = 7;
 
-/// Prover-side PoW trial cap for generic Ligerito profiles.
+/// PoW trial cap for generic Ligerito profiles.
 ///
 /// A `bits`-wide proof-of-work search succeeds with probability `2^-bits` per
 /// candidate. The cap gives each site 128 expected windows, so cap exhaustion is
@@ -194,13 +193,29 @@ const LIGERITO_GRIND_TRIAL_SAFETY_FACTOR: u64 = 1 << LIGERITO_GRIND_TRIAL_SAFETY
 /// fast/slim profiles. For the succinct VEIL maximum of five live fold-grind
 /// bits this still returns 4096, preserving the audited VEIL bound.
 pub fn ligerito_grind_trials_for_bits(bits: u32) -> u64 {
-    if bits == 0 {
-        1
-    } else if bits >= u64::BITS - LIGERITO_GRIND_TRIAL_SAFETY_BITS {
-        u64::MAX
-    } else {
-        LIGERITO_GRIND_TRIAL_SAFETY_FACTOR << bits
+    match bits {
+        0 => 1,
+        bits => 1u64
+            .checked_shl(bits.saturating_add(LIGERITO_GRIND_TRIAL_OVERHEAD_BITS))
+            .unwrap_or(u64::MAX),
     }
+}
+
+#[inline]
+fn grind_ligerito_pow<Ch: Challenger>(
+    challenger: &mut Ch,
+    bits: u32,
+) -> Result<u64, OracleLimitError> {
+    challenger.grind_pow_bounded(bits, ligerito_grind_trials_for_bits(bits))
+}
+
+#[inline]
+fn verify_ligerito_pow<Ch: Challenger>(
+    challenger: &mut Ch,
+    nonce: u64,
+    bits: u32,
+) -> Result<bool, OracleLimitError> {
+    challenger.verify_pow_bounded(nonce, bits, ligerito_grind_trials_for_bits(bits))
 }
 
 /// PoW bits before fold round `j` of level `lvl`; shared by prover/verifiers.
@@ -3551,8 +3566,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         // Johnson levels taper by round; UDR levels grind full width.
         let bits = fold_round_bits(0, j);
         if bits > 0 {
-            fold_grinding_nonces
-                .push(challenger.grind_pow_bounded(bits, ligerito_grind_trials_for_bits(bits))?);
+            fold_grinding_nonces.push(grind_ligerito_pow(challenger, bits)?);
         }
         let r = challenger.try_sample_f128()?;
         let msg = sc_prover.fold(r);
@@ -3630,10 +3644,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     // sample query positions. (The proximity-gap shortfall is covered
     // separately by the fold-challenge grinds above.)
     let grinding_bits_0 = config.grinding_bits[0] as u32;
-    let pow_nonce_0 = challenger.grind_pow_bounded(
-        grinding_bits_0,
-        ligerito_grind_trials_for_bits(grinding_bits_0),
-    )?;
+    let pow_nonce_0 = grind_ligerito_pow(challenger, grinding_bits_0)?;
     let mut grinding_nonces: Vec<u64> = vec![pow_nonce_0];
 
     // Open L0; lane-fold weights = r_lane_fold.
@@ -3716,9 +3727,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
             // in the Johnson regime (see L0 loop).
             let bits = fold_round_bits(i + 1, j);
             if bits > 0 {
-                fold_grinding_nonces.push(
-                    challenger.grind_pow_bounded(bits, ligerito_grind_trials_for_bits(bits))?,
-                );
+                fold_grinding_nonces.push(grind_ligerito_pow(challenger, bits)?);
             }
             let ri = challenger.try_sample_f128()?;
             let msg = sc_prover.fold(ri);
@@ -3737,10 +3746,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
             }
             // PoW grinding for the last level before sampling its queries.
             let grinding_bits_last = config.grinding_bits[i + 1] as u32;
-            let nonce_last = challenger.grind_pow_bounded(
-                grinding_bits_last,
-                ligerito_grind_trials_for_bits(grinding_bits_last),
-            )?;
+            let nonce_last = grind_ligerito_pow(challenger, grinding_bits_last)?;
             grinding_nonces.push(nonce_last);
             let num_queries_last = config.queries[i + 1];
             let queries_last =
@@ -3863,10 +3869,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 
         // PoW grinding for this iteration's query phase.
         let grinding_bits_i = config.grinding_bits[i + 1] as u32;
-        let nonce_i = challenger.grind_pow_bounded(
-            grinding_bits_i,
-            ligerito_grind_trials_for_bits(grinding_bits_i),
-        )?;
+        let nonce_i = grind_ligerito_pow(challenger, grinding_bits_i)?;
         grinding_nonces.push(nonce_i);
         let num_queries_i = config.queries[i + 1];
         let queries_i =
@@ -4141,11 +4144,7 @@ where
             if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                 return Ok(false);
             }
-            if !challenger.verify_pow_bounded(
-                proof.fold_grinding_nonces[fold_nonce_idx],
-                bits,
-                ligerito_grind_trials_for_bits(bits),
-            )? {
+            if !verify_ligerito_pow(challenger, proof.fold_grinding_nonces[fold_nonce_idx], bits)? {
                 return Ok(false);
             }
             fold_nonce_idx += 1;
@@ -4206,10 +4205,10 @@ where
         return Ok(false);
     }
     let grinding_bits_0 = config.grinding_bits[0] as u32;
-    if !challenger.verify_pow_bounded(
+    if !verify_ligerito_pow(
+        challenger,
         proof.grinding_nonces[nonce_idx],
         grinding_bits_0,
-        ligerito_grind_trials_for_bits(grinding_bits_0),
     )? {
         return Ok(false);
     }
@@ -4331,10 +4330,10 @@ where
                 if fold_nonce_idx >= proof.fold_grinding_nonces.len() {
                     return Ok(false);
                 }
-                if !challenger.verify_pow_bounded(
+                if !verify_ligerito_pow(
+                    challenger,
                     proof.fold_grinding_nonces[fold_nonce_idx],
                     bits,
-                    ligerito_grind_trials_for_bits(bits),
                 )? {
                     return Ok(false);
                 }
@@ -4376,10 +4375,10 @@ where
                 return Ok(false);
             }
             let grinding_bits_last = config.grinding_bits[i + 1] as u32;
-            if !challenger.verify_pow_bounded(
+            if !verify_ligerito_pow(
+                challenger,
                 proof.grinding_nonces[nonce_idx],
                 grinding_bits_last,
-                ligerito_grind_trials_for_bits(grinding_bits_last),
             )? {
                 return Ok(false);
             }
@@ -4590,10 +4589,10 @@ where
             return Ok(false);
         }
         let grinding_bits_i = config.grinding_bits[i + 1] as u32;
-        if !challenger.verify_pow_bounded(
+        if !verify_ligerito_pow(
+            challenger,
             proof.grinding_nonces[nonce_idx],
             grinding_bits_i,
-            ligerito_grind_trials_for_bits(grinding_bits_i),
         )? {
             return Ok(false);
         }
