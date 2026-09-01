@@ -11,15 +11,6 @@ Given an ordered list of BLAKE3 digests, the prover demonstrates that
 it has corresponding 64-byte preimages without revealing those
 preimages.
 
-### Headline benchmark
-
-For 4,096 64-byte BLAKE3 preimages:
-
-- Prove: ~135 ms
-- Verify: ~20 ms
-- Full proof bundle: 1,017,308 bytes
-- Machine: AMD Ryzen 7 7840HS
-
 ## Overview
 
 VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for ordered batches
