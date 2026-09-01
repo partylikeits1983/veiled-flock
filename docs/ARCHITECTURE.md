@@ -77,7 +77,9 @@ The mask commitment is made before FLOCK derives challenges. Once the masked
 transcript is known, the shifted verifier circuit reconstructs each hidden
 value from its public masked coordinate and private pad. It checks every
 zerocheck and lincheck recurrence, the terminal multiplication, AB/C linkage,
-ring-switch linkage, and public-functional linkage.
+and ring-switch linkage. The public digest functional is outside the shifted
+circuit and is verified as the separate packed-direct claim in the same PCS
+opening.
 
 VEIL uses additive-domain Reed--Solomon codes over `GF(2^128)`. Operand and
 product codes have separately checked ZK projection, distance, and query

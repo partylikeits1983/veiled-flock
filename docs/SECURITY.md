@@ -202,8 +202,8 @@ turn SHA-256 into an information-theoretic primitive.
 
 The verifier pins the exact circuit digest, mask count, witness layout, Secure
 PCS profile, code geometry, query budget, and VEIL parameters. The canonical
-bundle has a 1 MiB decode limit, rejects trailing bytes, and rejects any
-parameter mismatch.
+bundle has a 1 MiB decode limit and rejects trailing bytes; verification rejects
+any parameter mismatch.
 
 No alternate or legacy ZK proof flavor is exported. The public ZK API is:
 

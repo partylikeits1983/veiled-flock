@@ -48,15 +48,18 @@ cargo run --release -p flock-prover --features veil --bin veiled_flock -- demo
 
 ```sh
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
-  prove --message messages.bin --out proof.bin
+  prove --message messages.bin --out proof.bin --digest-out digests.hex
 
 cargo run --release -p flock-prover --features veil --bin veiled_flock -- \
-  verify --in proof.bin
+  verify --in proof.bin --digests digests.hex
 ```
 
 `messages.bin` must contain one or more concatenated 64-byte messages. The
-proof bundle includes the ordered public digests. Full-ZK batches support up
-to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
+proof bundle includes a transport copy of the ordered public digests. The
+verifier must supply the expected digest list separately as whitespace-separated
+64-character hex digests; verification rejects if the bundle copy differs.
+Full-ZK batches support up to 4096 messages and use registered
+256/512/1024/2048/4096-slot circuit shapes.
 
 ## Verification
 
