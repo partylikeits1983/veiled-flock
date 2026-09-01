@@ -26,8 +26,9 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use veil_f128::{
     ArithmeticCircuit, CircuitBuilder, ConstraintError, ConstraintParameters, ConstraintProof,
-    ConstraintSoundnessBound, LinearCombination, certify_constraint_soundness,
-    commit_constraint_inputs, prove_constraints_from_commitment, verify_constraints,
+    ConstraintSoundnessBound, DotProductError, HadamardError, LinearCombination,
+    certify_constraint_soundness, commit_constraint_inputs, prove_constraints_from_commitment,
+    verify_constraints,
 };
 
 use crate::prover::quirky_x_outer_full;
@@ -497,6 +498,8 @@ impl From<ConstraintError> for SuccinctVeilError {
     fn from(value: ConstraintError) -> Self {
         match value {
             ConstraintError::OracleLimit(err) => Self::OracleLimit(err),
+            ConstraintError::Dot(DotProductError::OracleLimit(err)) => Self::OracleLimit(err),
+            ConstraintError::Hadamard(HadamardError::OracleLimit(err)) => Self::OracleLimit(err),
             other => Self::Veil(other),
         }
     }
@@ -1382,14 +1385,15 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             )?,
             None => {
                 let mut masking = MaskingChallenger::new(challenger, &masks);
-                let (proof, claim, s_hat_v_c) = zerocheck::prove_packed_padded_capture_s_hat_v_c(
-                    a_bytes,
-                    b_bytes,
-                    z_bytes,
-                    r1cs.m,
-                    &padding,
-                    &mut masking,
-                );
+                let (proof, claim, s_hat_v_c) =
+                    zerocheck::try_prove_packed_padded_capture_s_hat_v_c(
+                        a_bytes,
+                        b_bytes,
+                        z_bytes,
+                        r1cs.m,
+                        &padding,
+                        &mut masking,
+                    )?;
                 if masking.cursor != 2 * layout.ell + 2 * layout.zc_rounds + 2 {
                     return Err(SuccinctVeilError::InvalidShape(
                         "zerocheck mask observation count",
@@ -1410,7 +1414,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             masks: &masks,
             cursor: zc_mask_count,
         };
-        let result = lincheck::prove_padded_capture_z_vec(
+        let result = lincheck::try_prove_padded_capture_z_vec(
             &z_lincheck,
             r1cs.m,
             r1cs.k_log,
@@ -1419,7 +1423,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             lincheck_circuit,
             &x_ab,
             &mut masking,
-        );
+        )?;
         if masking.cursor != layout.piop_count() {
             return Err(SuccinctVeilError::InvalidShape(
                 "lincheck mask observation count",
