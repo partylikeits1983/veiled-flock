@@ -140,7 +140,7 @@ fn embedded_secure_profiles_match_the_formal_parameter_table() {
 
     for (index, expected) in EXPECTED.iter().enumerate() {
         let blocks = 1usize << (8 + index);
-        let setup = Blake3PreimageZkSetup::new(blocks);
+        let setup = zk_setup(blocks);
         let config = flock_core::pcs::ligerito::prover_config_for(
             setup.pcs_params.log_msg_len(),
             setup.pcs_params.log_batch_size,
