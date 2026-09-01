@@ -8,6 +8,10 @@ use crate::r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE
 use flock_core::field::F128;
 use veil_f128::LinearCombination;
 
+fn zk_setup(n_blocks: usize) -> Blake3PreimageZkSetup {
+    Blake3PreimageZkSetup::new(n_blocks).expect("valid zk setup")
+}
+
 #[test]
 fn succinct_shape_rejects_nonidentity_c() {
     let mut r1cs = build_block_r1cs_zk(3);
@@ -21,7 +25,7 @@ fn succinct_shape_rejects_nonidentity_c() {
 
 #[test]
 fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
-    let setup = Blake3PreimageZkSetup::new(2).expect("valid zk setup");
+    let setup = zk_setup(2);
     assert!(super::supported_mask_count(&setup.r1cs).is_some());
     validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
     let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
@@ -64,7 +68,7 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
     {
         let blocks = 1usize << (FIRST_REGISTERED_BLOCK_LOG + index);
         let m = FIRST_REGISTERED_R1CS_M + index;
-        let setup = Blake3PreimageZkSetup::new(blocks).expect("valid zk setup");
+        let setup = zk_setup(blocks);
         assert_eq!(setup.r1cs.m, m);
         assert_eq!(shape.r1cs_m, m);
         assert_eq!(
