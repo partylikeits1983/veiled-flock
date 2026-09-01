@@ -89,6 +89,7 @@ mask `u₁` at each fixed outer mask `b`, with
 the joint transcript distribution under uniform `(u₁, b)` is independent
 of the witness: for every value `y`, the number of joint mask assignments
 producing `y` is the same for `w` and `w'`. -/
+-- @audit:FlockZk.triangular_witness_indep
 theorem triangular_witness_indep
     (A : W → B → (U₁ →+ V)) (g : W → B → V) (pub : W → P)
     (V₀ : AddSubgroup V) (Bq : B →+ V ⧸ V₀) (d : W → V ⧸ V₀)
@@ -121,12 +122,14 @@ theorem triangular_witness_indep
         Fintype.sum_equiv (Equiv.addRight β) _ _ fun b => rfl
     _ = ((univ : Finset (U₁ × B)).filter fun ub => A w' ub.2 ub.1 + g w' ub.2 = y).card :=
         (card_filter_prod_eq_sum (fun u b => A w' b u + g w' b) y).symm
+-- @audit:end
 
 /-- **Simulation for the triangular prover.** A simulator that knows any
 public representative `w₀` of the claim (`pub w = pub w₀`) and runs the
 honest prover on it — sampling both mask stages uniformly — produces
 **exactly** the honest prover's transcript distribution, without access
 to `w`. Immediate from `triangular_witness_indep`. -/
+-- @audit:FlockZk.triangular_simulator_exact
 theorem triangular_simulator_exact
     (A : W → B → (U₁ →+ V)) (g : W → B → V) (pub : W → P)
     (V₀ : AddSubgroup V) (Bq : B →+ V ⧸ V₀) (d : W → V ⧸ V₀)
@@ -137,6 +140,7 @@ theorem triangular_simulator_exact
     ((univ : Finset (U₁ × B)).filter fun ub => A w ub.2 ub.1 + g w ub.2 = y).card
       = ((univ : Finset (U₁ × B)).filter fun ub => A w₀ ub.2 ub.1 + g w₀ ub.2 = y).card :=
   triangular_witness_indep A g pub V₀ Bq d hrange hquot hcover hpub y
+-- @audit:end
 
 section PMF
 

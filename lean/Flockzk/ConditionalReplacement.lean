@@ -37,11 +37,13 @@ theorem mixture_tv_bad_set [Nonempty U] [Nonempty B]
 /-- Conditional replacement composition: once the algebraic-prefix distance
 is bounded by the bad-set mass, an independently bounded commitment/hash
 boundary adds exactly one further term. -/
+-- @audit:FlockZk.conditional_replacement_tv_bound
 theorem conditional_replacement_tv_bound
     (tvAlgebraic tvFull badMass boundary : ℚ)
     (halgebraic : tvAlgebraic <= badMass)
     (hboundary : tvFull <= tvAlgebraic + boundary) :
     tvFull <= badMass + boundary := by
   linarith
+-- @audit:end
 
 end FlockZk
