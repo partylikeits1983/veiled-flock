@@ -175,10 +175,13 @@ fn parse_digest_list(text: &str) -> Result<Vec<[u8; 32]>, String> {
             ));
         }
         let mut digest = [0u8; DIGEST_BYTES];
-        for (byte, pair) in digest.iter_mut().zip(token.as_bytes().chunks_exact(2)) {
-            let hi = hex_nibble(pair[0])
+        let (pairs, []) = token.as_bytes().as_chunks::<2>() else {
+            unreachable!("digest hex length was checked above");
+        };
+        for (byte, [hi_char, lo_char]) in digest.iter_mut().zip(pairs) {
+            let hi = hex_nibble(*hi_char)
                 .ok_or_else(|| format!("digest {} contains non-hex characters", index + 1))?;
-            let lo = hex_nibble(pair[1])
+            let lo = hex_nibble(*lo_char)
                 .ok_or_else(|| format!("digest {} contains non-hex characters", index + 1))?;
             *byte = (hi << 4) | lo;
         }
