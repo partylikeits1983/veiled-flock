@@ -1,5 +1,16 @@
 # veiled-flock
 
+Zero-knowledge batched BLAKE3 preimage proofs over binary fields,
+combining Succinct's FLOCK and VEIL.
+
+FLOCK provides fast batched hash proving. VEIL adds zero knowledge to
+hash-based multilinear proof systems. veiled-flock adapts those ideas
+to FLOCK's binary-field setting.
+
+Given an ordered list of BLAKE3 digests, the prover demonstrates that
+it has corresponding 64-byte preimages without revealing those
+preimages.
+
 ## Overview
 
 VEIL-FLOCK is a succinct zero-knowledge FLOCK composition for ordered batches
@@ -167,3 +178,8 @@ theorem and implementation scope.
 ## License
 
 Apache-2.0 or MIT.
+
+## Status
+
+Experimental and unaudited. The Lean proof covers statistical zero knowledge
+for the formal model; Rust-to-Lean correspondence remains future work.
