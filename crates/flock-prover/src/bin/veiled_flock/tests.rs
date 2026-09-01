@@ -1,6 +1,6 @@
 use super::{
-    MAX_BUNDLE_BYTES, decode_bundle, digest_hex, parse_digests_text, parse_paths,
-    verify_expected_digests,
+    DIGEST_HEX_BYTES, MAX_BUNDLE_BYTES, MAX_DIGEST_FILE_BYTES, MAX_MESSAGES, Paths, decode_bundle,
+    digest_hex, parse_digests_text, parse_paths, run_prove, run_verify, verify_expected_digests,
 };
 use flock_prover::proof_io::MAGIC;
 use flock_prover::r1cs_hashes::blake3_preimage::DIGEST_BYTES;
@@ -29,9 +29,17 @@ fn decoder_rejects_an_unbounded_digest_vector() {
 fn digest_text_parser_accepts_hex_lines() {
     let first = [0x12; DIGEST_BYTES];
     let second = [0xAB; DIGEST_BYTES];
-    let text = format!("{}\r\n{}\n", digest_hex(&first), digest_hex(&second));
+    let text = format!("{} \r\n{}\n", digest_hex(&first), digest_hex(&second));
 
     assert_eq!(parse_digests_text(&text).unwrap(), vec![first, second]);
+}
+
+#[test]
+fn digest_file_byte_limit_allows_benign_whitespace() {
+    let max_crlf_with_trailing_space = MAX_MESSAGES * (DIGEST_HEX_BYTES + 3);
+
+    assert!(MAX_DIGEST_FILE_BYTES as usize >= max_crlf_with_trailing_space);
+    assert!(MAX_DIGEST_FILE_BYTES < MAX_BUNDLE_BYTES);
 }
 
 #[test]
@@ -78,4 +86,29 @@ fn parser_rejects_duplicate_paths() {
     );
 
     assert!(result.is_err());
+}
+
+#[test]
+fn command_handlers_reject_unsupported_paths() {
+    let prove_paths = Paths {
+        message: Some("missing-message.bin".to_string()),
+        output: Some("proof.bin".to_string()),
+        input: None,
+        digests: Some("ignored-digests.hex".to_string()),
+    };
+    let verify_paths = Paths {
+        message: Some("ignored-message.bin".to_string()),
+        output: None,
+        input: Some("proof.bin".to_string()),
+        digests: Some("expected-digests.hex".to_string()),
+    };
+
+    assert_eq!(
+        run_prove(prove_paths).unwrap_err(),
+        "prove: --digests is not supported"
+    );
+    assert_eq!(
+        run_verify(verify_paths).unwrap_err(),
+        "verify: --message is not supported"
+    );
 }

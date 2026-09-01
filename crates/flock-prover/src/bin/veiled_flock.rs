@@ -12,7 +12,9 @@ use flock_prover::{
 const MAX_MESSAGES: usize = MAX_ZK_PREIMAGE_BLOCKS;
 const MAX_BUNDLE_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES;
 const DIGEST_HEX_BYTES: usize = DIGEST_BYTES * 2;
-const MAX_DIGEST_FILE_BYTES: u64 = (MAX_MESSAGES * (DIGEST_HEX_BYTES + 2)) as u64;
+const DIGEST_FILE_WHITESPACE_BYTES_PER_DIGEST: usize = 64;
+const MAX_DIGEST_FILE_BYTES: u64 =
+    (MAX_MESSAGES * (DIGEST_HEX_BYTES + DIGEST_FILE_WHITESPACE_BYTES_PER_DIGEST)) as u64;
 type Bundle = VeilFlockProofBundle;
 type Digest = [u8; DIGEST_BYTES];
 
@@ -70,6 +72,8 @@ fn run() -> Result<(), String> {
 }
 
 fn run_prove(paths: Paths) -> Result<(), String> {
+    reject_path(&paths.input, "prove", "--in")?;
+    reject_path(&paths.digests, "prove", "--digests")?;
     let message_path = paths.message.ok_or("prove: --message is required")?;
     let output = paths.output.ok_or("prove: --out is required")?;
     let bytes =
@@ -89,6 +93,8 @@ fn run_prove(paths: Paths) -> Result<(), String> {
 }
 
 fn run_verify(paths: Paths) -> Result<(), String> {
+    reject_path(&paths.message, "verify", "--message")?;
+    reject_path(&paths.output, "verify", "--out")?;
     let input = paths.input.ok_or("verify: --in is required")?;
     let digest_path = paths.digests.ok_or("verify: --digests is required")?;
     let bytes = read_bundle(&input)?;
@@ -264,7 +270,7 @@ fn verify_expected_digests(
 fn print_digests(digests: &[Digest]) {
     eprintln!("verified digests:");
     for digest in digests {
-        eprintln!("{}", digest_hex(digest));
+        println!("{}", digest_hex(digest));
     }
 }
 
@@ -306,6 +312,13 @@ fn parse_paths(mut args: impl Iterator<Item = String>) -> Result<Paths, String> 
 fn set_path(slot: &mut Option<String>, flag: &str, value: String) -> Result<(), String> {
     if slot.replace(value).is_some() {
         return Err(format!("{flag} was provided more than once"));
+    }
+    Ok(())
+}
+
+fn reject_path(path: &Option<String>, command: &str, flag: &str) -> Result<(), String> {
+    if path.is_some() {
+        return Err(format!("{command}: {flag} is not supported"));
     }
     Ok(())
 }
