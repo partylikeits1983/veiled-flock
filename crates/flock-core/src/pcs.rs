@@ -587,8 +587,8 @@ fn try_open_zk_blinded<Ch: Challenger>(
     challenger.observe_label(b"flock-pcs-zk-blind");
     challenger.observe_f128(y_g);
     let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    let c_grind_nonce =
-        challenger.grind_pow_bounded(c_bits, ligerito::MAX_LIGERITO_GRIND_TRIALS)?;
+    let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits);
+    let c_grind_nonce = challenger.grind_pow_bounded(c_bits, c_grind_trials)?;
     let c = challenger.try_sample_f128()?;
 
     // (3) F = message′ + c·g and the offset-embedded basis b′ = [0 ‖ b].
@@ -1300,11 +1300,8 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-zk-blind");
         challenger.observe_f128(zkb.y_g);
         let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-        if !challenger.verify_pow_bounded(
-            zkb.c_grind_nonce,
-            c_bits,
-            ligerito::MAX_LIGERITO_GRIND_TRIALS,
-        )? {
+        let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits);
+        if !challenger.verify_pow_bounded(zkb.c_grind_nonce, c_bits, c_grind_trials)? {
             return Err(VerifyError::Ligerito);
         }
         let c = challenger.try_sample_f128()?;
