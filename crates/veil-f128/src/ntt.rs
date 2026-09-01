@@ -6,6 +6,9 @@
 //! correctness-first path; the optimized zero-offset implementation remains in
 //! `flock-core` for the main PCS.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::field::F128;
 use rayon::prelude::*;
 

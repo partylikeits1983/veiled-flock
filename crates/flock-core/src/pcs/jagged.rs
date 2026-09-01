@@ -40,6 +40,9 @@
 //! bits, zero-padded to `m`), `b = i` (dense index, `m` bits), and
 //! `c = t_{y-1}`, `d = t_y` are the (boolean, constant) cumulative heights.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::lincheck::build_eq_table;

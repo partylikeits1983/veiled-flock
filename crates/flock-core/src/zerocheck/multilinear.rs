@@ -33,6 +33,9 @@
 //! Verifier reconstructs `G(0)` from the running claim via
 //! `current_claim = (1+r_now)·G(0) + r_now·G(1)`.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 #[cfg(all(
     target_arch = "x86_64",
     target_feature = "avx512f",

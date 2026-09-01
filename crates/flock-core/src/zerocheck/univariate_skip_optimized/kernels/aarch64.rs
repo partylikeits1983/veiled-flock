@@ -1,3 +1,6 @@
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use super::super::{F8, F128, InvNttTableByteSingleGf8, N_CHUNKS};
 #[cfg(target_arch = "aarch64")]
 use crate::field::gf2_8::neon::{gf8_mul_vec16, gf8_reduce_vec16};

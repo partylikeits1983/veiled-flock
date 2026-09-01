@@ -41,6 +41,9 @@
 //! FRI fold processes layers in **reverse** (deepest first), at which level
 //! pairs are adjacent — matching the standard `fold_pair` formula in DP24.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 use rayon::prelude::*;
 

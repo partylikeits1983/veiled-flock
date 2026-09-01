@@ -25,6 +25,9 @@
 //!     R1csClaim { ab: z-claim from lincheck,  c: z-claim from extract_c }
 //! ```
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::{self, QuirkyPoint, pack_z_lincheck_from_packed};

@@ -20,6 +20,9 @@
 //! should prepend `0x00`/`0x01` (or equivalent) to distinguish the two
 //! pre-images and avoid second-preimage attacks via interpretation collision.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::ro::{ROLE_LEAF, ROLE_NODE, RoTreeHasher};
 use rayon::prelude::*;
 #[cfg(feature = "hash-count")]

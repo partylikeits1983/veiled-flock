@@ -20,6 +20,9 @@
 //!   the previous one (Merlin-style duplex). SHA-256 is also used for the
 //!   Merkle commitments, so the whole system rests on a single hash.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::{field::F128, ro::RoContext};
 use rayon::prelude::*;
 use sha2::{Digest, Sha256};

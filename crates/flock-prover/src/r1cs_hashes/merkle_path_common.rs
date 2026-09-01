@@ -20,6 +20,9 @@
 //! coords, so its contents are invisible to the sumcheck but participate in
 //! the multilinear extension over the slot-selector dimensions.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::merkle_path::{MerklePathShiftProof, SlotLayout};
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;

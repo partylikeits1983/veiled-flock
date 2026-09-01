@@ -88,6 +88,9 @@
 //!   are "free" witness bits. PCS-level openings at fixed indices will
 //!   eventually pin them to claimed public inputs.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use super::common::{BitRecord, add_carry_parts, or_bit_at, or_u32_at_bit, xor_dedup};
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;

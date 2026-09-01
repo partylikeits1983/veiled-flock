@@ -116,6 +116,9 @@
 //!   `byte_idx` and apply it across all `i_inner` with one lookup + one XOR
 //!   per byte.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::r1cs::SparseBinaryMatrix;

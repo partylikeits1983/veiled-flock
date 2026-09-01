@@ -6,22 +6,42 @@ license.workspace = true
 authors.workspace = true
 description = "Apple-silicon-optimized end-to-end prover for Flock (R1CS over GF(2))."
 
+[lib]
+crate-type = ["rlib", "cdylib"]
+
 [features]
+default = ["std", "parallel"]
+std = [
+    "blake3/std",
+    "dep:bincode",
+    "flock-core/std",
+    "flock-core/os-rng",
+    "serde/std",
+    "sha2/asm",
+    "sha2/std",
+    "veil-f128?/std",
+]
+parallel = ["dep:rayon", "flock-core/parallel", "veil-f128?/parallel"]
+wasm = ["flock-core/wasm", "veil-f128?/wasm"]
+wasm-bench = ["dep:dlmalloc", "veil", "wasm"]
+
 # Forwarded to flock-core. See that crate's manifest for semantics.
 hash-count = ["flock-core/hash-count"]
 unsound-challenger = ["flock-core/unsound-challenger"]
 zk = ["flock-core/zk"]
+os-rng = ["flock-core/os-rng"]
 veil = ["zk", "dep:veil-f128"]
 symbolic = ["flock-core/symbolic"]
 
 [dependencies]
-flock-core = { path = "../flock-core" }
-rayon = { workspace = true }
+flock-core = { path = "../flock-core", default-features = false }
+rayon = { workspace = true, optional = true }
 sha2 = { workspace = true }
 blake3 = { workspace = true }
 serde = { workspace = true }
-bincode = { workspace = true }
-veil-f128 = { path = "../veil-f128", optional = true }
+bincode = { workspace = true, optional = true }
+veil-f128 = { path = "../veil-f128", default-features = false, optional = true }
+dlmalloc = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Tests, benches, and examples use the insecure `RandomChallenger`, gated in
@@ -35,7 +55,12 @@ serde_json = { workspace = true }
 [[bin]]
 name = "veiled_flock"
 path = "src/bin/veiled_flock.rs"
-required-features = ["veil"]
+required-features = ["veil", "std"]
+
+[[bin]]
+name = "flock_chain"
+path = "src/bin/flock_chain.rs"
+required-features = ["std"]
 
 [[bench]]
 name = "keccak_native_chain"

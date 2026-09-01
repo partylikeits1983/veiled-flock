@@ -1,9 +1,19 @@
 #![forbid(unsafe_code)]
+#![cfg_attr(not(feature = "std"), no_std)]
 //! Native `GF(2^128)` components for the VEIL compilation of FLOCK.
 //!
 //! The upstream VEIL implementation uses a two-adic prime-field code. FLOCK's
 //! transcript lives in `GF(2^128)`, whose multiplicative group has odd order,
 //! so this crate supplies the corresponding additive-domain code directly.
+
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+
+#[cfg(not(feature = "parallel"))]
+extern crate flock_core as rayon;
+#[cfg(not(feature = "std"))]
+extern crate flock_core as std;
 
 pub mod code;
 pub mod commitment;

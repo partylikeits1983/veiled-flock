@@ -4,6 +4,9 @@
 //! before hashing and checks the closed-form translation against the actual
 //! additive-NTT encoding used by `commit_zk`.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 use crate::linalg::F128Mat;
 use crate::ntt::AdditiveNttF128;

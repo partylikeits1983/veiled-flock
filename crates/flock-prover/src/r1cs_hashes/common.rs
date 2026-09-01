@@ -2,6 +2,9 @@
 //! modules (`sha2`, `blake3`, `keccak`). The shared `prove_fast`
 //! orchestration lives in [`crate::prover::prove_fast_from_witness`].
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use std::sync::OnceLock;
 
 use flock_core::bits::transpose_8_u64s_to_64_bytes;

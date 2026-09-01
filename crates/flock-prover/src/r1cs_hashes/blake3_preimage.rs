@@ -41,6 +41,9 @@
 //! the PIOP transcript, and proves the shifted verifier with `veil-f128`.
 //! The exact classical-pROM theorem and exclusions are in `docs/SECURITY.md`.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 #[cfg(feature = "veil")]
 use flock_core::challenger::FsChallenger;
@@ -161,7 +164,7 @@ pub enum SuccinctPreimageError {
     Protocol(crate::succinct_veil::SuccinctVeilError),
 }
 
-#[cfg(feature = "veil")]
+#[cfg(all(feature = "veil", feature = "std"))]
 pub struct SimulatedSuccinctPreimage {
     pub proof: crate::succinct_veil::SuccinctVeilProof,
     pub commitment: Commitment,
@@ -231,7 +234,7 @@ impl SuccinctRomSoundnessBound {
     }
 }
 
-#[cfg(feature = "veil")]
+#[cfg(all(feature = "veil", feature = "std"))]
 impl SimulatedSuccinctPreimage {
     pub fn classical_prom_bound(
         &self,
@@ -560,13 +563,28 @@ impl Blake3PreimageZkSetup {
             .map_err(|_| PreimageError::Uncertified)?;
         let log_n = self.pcs_params.log_msg_len();
         let effective_m = log_n + flock_core::pcs::LOG_PACKING;
+        #[cfg(feature = "std")]
         let source = flock_core::pcs::ligerito::embedded_security_config(
             effective_m,
             self.pcs_params.profile,
         )
         .ok_or(PreimageError::Uncertified)?;
+        #[cfg(feature = "std")]
         let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
             .map_err(|_| PreimageError::Uncertified)?;
+        #[cfg(not(feature = "std"))]
+        let config = {
+            flock_core::pcs::ligerito::embedded_security_config(
+                effective_m,
+                self.pcs_params.profile,
+            )
+            .ok_or(PreimageError::Uncertified)?;
+            flock_core::pcs::ligerito::LigeritoSecurityConfig::derive_profile(
+                effective_m,
+                self.pcs_params.profile,
+            )
+            .map_err(|_| PreimageError::Uncertified)?
+        };
         let l0 = config.levels.first().ok_or(PreimageError::Uncertified)?;
         if config.initial_k != self.pcs_params.log_batch_size
             || l0.log_inv_rate != self.pcs_params.log_inv_rate
@@ -682,15 +700,28 @@ impl Blake3PreimageZkSetup {
 
     /// Prove the fixed-digest relation with the succinct VEIL composition and
     /// the pinned production SHA-256 Fiat--Shamir challenger.
-    #[cfg(feature = "veil")]
+    #[cfg(all(feature = "veil", feature = "std"))]
     pub fn prove(
         &self,
         msgs: &[[u8; MESSAGE_BYTES]],
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
         let mut rng = flock_core::zk::ZkRng::from_entropy();
+        self.prove_with_rng(msgs, digests, &mut rng)
+    }
+
+    /// Prove with caller-provided mask randomness. This is intended for
+    /// reproducible benchmarks and tests; production callers should use
+    /// [`Self::prove`] so masks come from OS entropy.
+    #[cfg(feature = "veil")]
+    pub fn prove_with_rng(
+        &self,
+        msgs: &[[u8; MESSAGE_BYTES]],
+        digests: &[[u8; DIGEST_BYTES]],
+        rng: &mut flock_core::zk::ZkRng,
+    ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
         let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
-        self.prove_with_challenger(msgs, digests, &mut rng, &mut challenger)
+        self.prove_with_challenger(msgs, digests, rng, &mut challenger)
     }
 
     #[cfg(feature = "veil")]
@@ -822,7 +853,7 @@ impl Blake3PreimageZkSetup {
     /// linear processing covered by the joint masking theorem. The resulting
     /// shifted VEIL circuit is genuinely satisfied by simulator-owned masks,
     /// so the ordinary ZK VEIL prover is invoked only on a valid assignment.
-    #[cfg(feature = "veil")]
+    #[cfg(all(feature = "veil", feature = "std"))]
     pub fn simulate(
         &self,
         digests: &[[u8; DIGEST_BYTES]],
@@ -832,7 +863,7 @@ impl Blake3PreimageZkSetup {
         self.simulate_with_rng(digests, oracle, &mut rng)
     }
 
-    #[cfg(all(feature = "veil", test))]
+    #[cfg(all(feature = "veil", feature = "std", test))]
     fn simulate_with_seed(
         &self,
         digests: &[[u8; DIGEST_BYTES]],
@@ -843,7 +874,7 @@ impl Blake3PreimageZkSetup {
         self.simulate_with_rng(digests, oracle, &mut rng)
     }
 
-    #[cfg(feature = "veil")]
+    #[cfg(all(feature = "veil", feature = "std"))]
     fn simulate_with_rng(
         &self,
         digests: &[[u8; DIGEST_BYTES]],

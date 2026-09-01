@@ -15,6 +15,9 @@
 //! (4 PMULL schoolbook + 2-stage recursive reduction, 2 extra PMULL), which
 //! benchmarked as the fastest of four variants tried.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use core::ops::{Add, AddAssign, BitXor, BitXorAssign, Mul, MulAssign};
 
 use serde::{Deserialize, Serialize};
