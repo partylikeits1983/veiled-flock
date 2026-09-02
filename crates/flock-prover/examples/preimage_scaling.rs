@@ -11,9 +11,8 @@
 use std::time::{Duration, Instant};
 
 use flock_core::challenger::FsChallenger;
-use flock_prover::{
-    proof_io::{R1csProofBundleLigerito, VeilFlockProofBundle},
-    r1cs_hashes::blake3_preimage::{Blake3PreimageSetup, Blake3PreimageZkSetup, MESSAGE_BYTES},
+use flock_prover::r1cs_hashes::blake3_preimage::{
+    Blake3PreimageSetup, Blake3PreimageZkSetup, MESSAGE_BYTES,
 };
 
 const SIZES: [usize; 7] = [64, 128, 256, 512, 1024, 2048, 4096];
@@ -23,7 +22,7 @@ const FLOCK_BENCHMARK_DOMAIN: &[u8] = b"flock-blake3-preimage-scaling";
 struct Sample {
     prove: Duration,
     verify: Duration,
-    bundle_bytes: usize,
+    proof_bytes: usize,
 }
 
 fn main() {
@@ -39,7 +38,7 @@ fn main() {
     assert!(samples > 0, "sample count must be positive");
 
     println!(
-        "hashes,protocol,prove_ms_median,verify_ms_median,bundle_bytes_median,bundle_bytes_min,bundle_bytes_max"
+        "hashes,protocol,prove_ms_median,verify_ms_median,proof_bytes_median,proof_bytes_min,proof_bytes_max"
     );
     for size in SIZES {
         benchmark_size(size, samples);
@@ -85,13 +84,12 @@ fn sample_flock(
         .expect("non-ZK FLOCK verification");
     let verify = started.elapsed();
 
-    let bundle_bytes = R1csProofBundleLigerito { commitment, proof }
-        .to_bytes()
-        .len();
+    let proof_bytes =
+        bincode::serialized_size(&proof).expect("serialize non-ZK FLOCK proof") as usize;
     Sample {
         prove,
         verify,
-        bundle_bytes,
+        proof_bytes,
     }
 }
 
@@ -112,14 +110,11 @@ fn sample_zk(
         .expect("full-ZK VEIL-FLOCK verification");
     let verify = started.elapsed();
 
-    let bundle_bytes = VeilFlockProofBundle::new(digests.to_vec(), commitment, proof)
-        .to_bytes()
-        .expect("serialize full-ZK bundle")
-        .len();
+    let proof_bytes = bincode::serialized_size(&proof).expect("serialize full-ZK proof") as usize;
     Sample {
         prove,
         verify,
-        bundle_bytes,
+        proof_bytes,
     }
 }
 
@@ -128,13 +123,13 @@ fn print_samples(size: usize, protocol: &str, samples: &mut [Sample]) {
     let prove = samples[samples.len() / 2].prove.as_secs_f64() * 1000.0;
     samples.sort_unstable_by_key(|sample| sample.verify);
     let verify = samples[samples.len() / 2].verify.as_secs_f64() * 1000.0;
-    samples.sort_unstable_by_key(|sample| sample.bundle_bytes);
-    let bundle_bytes = samples[samples.len() / 2].bundle_bytes;
+    samples.sort_unstable_by_key(|sample| sample.proof_bytes);
+    let proof_bytes = samples[samples.len() / 2].proof_bytes;
 
     println!(
-        "{size},{protocol},{prove:.3},{verify:.3},{bundle_bytes},{},{}",
-        samples.first().expect("at least one sample").bundle_bytes,
-        samples.last().expect("at least one sample").bundle_bytes,
+        "{size},{protocol},{prove:.3},{verify:.3},{proof_bytes},{},{}",
+        samples.first().expect("at least one sample").proof_bytes,
+        samples.last().expect("at least one sample").proof_bytes,
     );
 }
 

@@ -74,6 +74,16 @@ pub const DIGEST_BYTES: usize = 32;
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 /// Smallest `m` for which embedded Ligerito PCS configs are registered.
 const MIN_REGISTERED_LIGERITO_M: usize = 22;
+/// High-rate full-ZK query budgets keyed by committed PCS dimension.
+/// L0 stays at the default budget; aggregate slack is paid at narrower levels.
+#[cfg(feature = "veil")]
+const ZK_AGGREGATE_100_BIT_QUERIES: &[(usize, &[usize])] = &[
+    (23, &[121, 114, 110]),
+    (24, &[121, 113, 110]),
+    (25, &[121, 113, 109, 109]),
+    (26, &[121, 113, 109, 108]),
+    (27, &[121, 113, 109, 107]),
+];
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -486,6 +496,20 @@ impl Blake3PreimageSetup {
     }
 }
 
+#[cfg(feature = "veil")]
+fn apply_zk_aggregate_100_bit_queries(queries: &mut [usize], committed_m: usize) {
+    let (_, tuned) = ZK_AGGREGATE_100_BIT_QUERIES
+        .iter()
+        .find(|(m, _)| *m == committed_m)
+        .expect("supported high-rate ZK Ligerito query schedule");
+    assert_eq!(
+        queries.len(),
+        tuned.len(),
+        "high-rate ZK Ligerito query schedule shape changed"
+    );
+    queries.copy_from_slice(tuned);
+}
+
 // ---------------------------------------------------------------------------
 // Zero-knowledge mode
 // ---------------------------------------------------------------------------
@@ -546,23 +570,33 @@ impl Blake3PreimageZkSetup {
     #[cfg(feature = "veil")]
     fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
         let log_n = self.pcs_params.log_msg_len();
-        flock_core::pcs::ligerito::default_config(
+        let mut config = flock_core::pcs::ligerito::default_config(
             log_n,
             self.pcs_params.log_batch_size,
             self.pcs_params.log_inv_rate,
         )
-        .expect("high-rate ZK Ligerito prover config")
+        .expect("high-rate ZK Ligerito prover config");
+        apply_zk_aggregate_100_bit_queries(
+            &mut config.queries,
+            log_n + flock_core::pcs::LOG_PACKING,
+        );
+        config
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
         let log_n = self.pcs_params.log_msg_len();
-        flock_core::pcs::ligerito::default_verifier_config(
+        let mut config = flock_core::pcs::ligerito::default_verifier_config(
             log_n,
             self.pcs_params.log_batch_size,
             self.pcs_params.log_inv_rate,
         )
-        .expect("high-rate ZK Ligerito verifier config")
+        .expect("high-rate ZK Ligerito verifier config");
+        apply_zk_aggregate_100_bit_queries(
+            &mut config.queries,
+            log_n + flock_core::pcs::LOG_PACKING,
+        );
+        config
     }
 
     /// PCS soundness contribution for the final protocol ledger. Returns
@@ -965,11 +999,21 @@ pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &Diges
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "veil")]
+    use crate::proof_io::{MAX_VEIL_FLOCK_BUNDLE_BYTES, VeilFlockProofBundle};
     use flock_core::challenger::FsChallenger;
 
     /// The smallest batch with a supported ZK circuit shape: m = k_log +
     /// n_log = 14 + 8 = 22.
     const N_TEST: usize = 256;
+    #[cfg(feature = "veil")]
+    const ZK_QUERY_CASES: &[(usize, usize, &[usize])] = &[
+        (256, 23, &[121, 114, 110]),
+        (512, 24, &[121, 113, 110]),
+        (1024, 25, &[121, 113, 109, 109]),
+        (2048, 26, &[121, 113, 109, 108]),
+        (4096, 27, &[121, 113, 109, 107]),
+    ];
 
     fn msgs_of(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
         let mut s = seed | 1;
@@ -985,8 +1029,52 @@ mod tests {
             .collect()
     }
 
-    /// Exercises the largest accepted ZK shape, including its 6-bit outer blind
-    /// grind and the high-rate UDR query schedule.
+    #[cfg(feature = "veil")]
+    #[test]
+    fn supported_zk_shapes_use_aggregate_100_query_budgets() {
+        for &(blocks, committed_m, expected_queries) in ZK_QUERY_CASES {
+            let setup = Blake3PreimageZkSetup::new(blocks);
+            let committed_log_n = setup.pcs_params.log_msg_len();
+            assert_eq!(committed_log_n + flock_core::pcs::LOG_PACKING, committed_m);
+
+            let prover_config = setup.ligerito_prover_config();
+            let verifier_config = setup.ligerito_verifier_config();
+            assert_eq!(prover_config.queries.as_slice(), expected_queries);
+            assert_eq!(verifier_config.queries.as_slice(), expected_queries);
+            assert_eq!(prover_config.log_inv_rates[0], 3);
+            assert_eq!(prover_config.grinding_bits, vec![0; expected_queries.len()]);
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn high_rate_zk_query_budgets_clear_100_bit_pcs_ledger() {
+        for &(_, committed_m, expected_queries) in ZK_QUERY_CASES {
+            let mut security =
+                flock_core::pcs::ligerito::LigeritoSecurityConfig::derive_paper_compatible(
+                    committed_m,
+                    3,
+                    100,
+                )
+                .expect("derive high-rate ZK PCS ledger");
+            for (level, &queries) in security.levels.iter_mut().zip(expected_queries) {
+                level.queries = queries;
+                let (_, query_bits) = level.paper_predicted_bits();
+                level.expected_eps_query_bits = (query_bits * 10.0).round() / 10.0;
+            }
+            let bits = security
+                .aggregate_soundness_bound_zk_l0()
+                .expect("aggregate high-rate ZK PCS ledger")
+                .bits();
+            assert!(
+                bits >= 100.0,
+                "committed m={committed_m}: aggregate PCS bits {bits:.3}"
+            );
+        }
+    }
+
+    /// Exercises the largest accepted ZK shape with the high-rate UDR query
+    /// schedule.
     #[cfg(feature = "veil")]
     #[test]
     fn largest_supported_zk_shape_accepts_high_rate_pcs() {
@@ -998,16 +1086,14 @@ mod tests {
         setup
             .verify(&commitment, &proof, &digests)
             .expect("verify m27 shape");
-        let bundle =
-            crate::proof_io::VeilFlockProofBundle::new(digests.clone(), commitment, proof.clone());
+        let bundle = VeilFlockProofBundle::new(digests.clone(), commitment, proof.clone());
         let encoded = bundle.to_bytes().expect("serialize largest bundle");
         assert!(
-            encoded.len() <= crate::proof_io::MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
+            encoded.len() <= MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
             "largest proof bundle is {} bytes",
             encoded.len()
         );
-        let decoded = crate::proof_io::VeilFlockProofBundle::from_bytes(&encoded)
-            .expect("decode largest bundle");
+        let decoded = VeilFlockProofBundle::from_bytes(&encoded).expect("decode largest bundle");
         assert_eq!(decoded, bundle);
         setup
             .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
@@ -1027,12 +1113,17 @@ mod tests {
         let (flock_proof, flock_commitment) = flock
             .prove(&messages, &digests, &mut flock_challenger)
             .expect("prove FLOCK baseline");
-        let flock_bundle_bytes = crate::proof_io::R1csProofBundleLigerito {
-            commitment: flock_commitment,
-            proof: flock_proof,
-        }
-        .to_bytes()
-        .len();
+        let mut flock_verifier = FsChallenger::new(b"flock-high-rate-zk-pcs-baseline");
+        flock
+            .verify(
+                &flock_commitment,
+                &flock_proof,
+                &digests,
+                &mut flock_verifier,
+            )
+            .expect("verify FLOCK baseline");
+        let flock_proof_bytes =
+            bincode::serialized_size(&flock_proof).expect("serialize FLOCK proof") as usize;
 
         let zk = Blake3PreimageZkSetup::new(n);
         assert_eq!(zk.pcs_params.log_inv_rate, 3);
@@ -1042,17 +1133,11 @@ mod tests {
         zk.verify(&commitment, &proof, &digests)
             .expect("verify high-rate ZK PCS");
 
-        let bundle = crate::proof_io::VeilFlockProofBundle::new(digests.clone(), commitment, proof);
-        let zk_bundle_bytes = bundle
-            .to_bytes()
-            .expect("serialize high-rate ZK PCS bundle")
-            .len();
-        let public_digest_bytes =
-            bincode::serialized_size(&digests).expect("serialize public digests") as usize;
-        let zk_proof_bytes = zk_bundle_bytes - public_digest_bytes;
+        let zk_proof_bytes =
+            bincode::serialized_size(&proof).expect("serialize high-rate ZK proof") as usize;
         assert!(
-            zk_proof_bytes * 10 <= flock_bundle_bytes * 13,
-            "high-rate ZK PCS bytes {zk_proof_bytes} exceed target overhead over FLOCK {flock_bundle_bytes}",
+            zk_proof_bytes * 10 <= flock_proof_bytes * 13,
+            "high-rate ZK PCS bytes {zk_proof_bytes} exceed target overhead over FLOCK {flock_proof_bytes}",
         );
     }
 
@@ -1095,14 +1180,10 @@ mod tests {
             .prove(&messages, &digests)
             .expect("prove succinct VEIL");
 
-        let bundle = crate::proof_io::VeilFlockProofBundle::new(
-            digests.clone(),
-            commitment.clone(),
-            proof.clone(),
-        );
+        let bundle = VeilFlockProofBundle::new(digests.clone(), commitment.clone(), proof.clone());
         let encoded = bundle.to_bytes().expect("serialize canonical bundle");
         assert!(
-            encoded.len() <= crate::proof_io::MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
+            encoded.len() <= MAX_VEIL_FLOCK_BUNDLE_BYTES as usize,
             "succinct proof unexpectedly grew to {} bytes",
             encoded.len()
         );
@@ -1113,15 +1194,15 @@ mod tests {
             "serialized proof contains the raw preimage marker"
         );
 
-        let decoded = crate::proof_io::VeilFlockProofBundle::from_bytes(&encoded)
-            .expect("canonical bundle roundtrip");
+        let decoded =
+            VeilFlockProofBundle::from_bytes(&encoded).expect("canonical bundle roundtrip");
         assert_eq!(decoded, bundle);
         setup
             .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
             .expect("verify decoded bundle");
         let mut trailing = encoded.clone();
         trailing.push(0);
-        assert!(crate::proof_io::VeilFlockProofBundle::from_bytes(&trailing).is_err());
+        assert!(VeilFlockProofBundle::from_bytes(&trailing).is_err());
 
         setup
             .verify(&commitment, &proof, &digests)

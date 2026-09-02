@@ -98,7 +98,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
         mask_count: 762,
     },
 ];
-/// ZK doubles the committed dimension; the 4096 shape derives a 6-bit L0 grind.
+/// Registered full-ZK schedules may derive up to a 6-bit L0 grind.
 /// An 8192-trial fail-closed cap charges `(63/64)^8192 < 2^-186`.
 pub const MAX_BLIND_GRINDING_BITS: u32 = 6;
 pub const MAX_BLIND_GRIND_TRIALS: u64 = 8192;

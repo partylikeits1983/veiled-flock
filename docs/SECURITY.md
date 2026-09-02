@@ -139,9 +139,20 @@ Each level tuple is
 Query-phase grinding, tapering, and OOD sampling are zero in these profiles.
 
 The current Rust full-ZK path swaps the outer PCS to an initial
-`log_inv_rate = 3` UDR schedule. The matching registered config and Lean tables
-are intentionally not added in this change, so the concrete certificate APIs
-fail closed with `Uncertified` for that PCS.
+`log_inv_rate = 3` UDR schedule with query budgets selected to clear a
+100-bit additive ZK-L0 PCS ledger:
+
+| Slots | Committed PCS `m` | Queries |
+|---:|---:|---|
+| 256 | 23 | `[121, 114, 110]` |
+| 512 | 24 | `[121, 113, 110]` |
+| 1024 | 25 | `[121, 113, 109, 109]` |
+| 2048 | 26 | `[121, 113, 109, 108]` |
+| 4096 | 27 | `[121, 113, 109, 107]` |
+
+The matching registered config and Lean tables are intentionally not added in
+this change, so the concrete certificate APIs fail closed with `Uncertified`
+for that PCS.
 
 The Rust prover and simulator currently check returned grind nonces against
 the caps, but some search and rejection loops are not bounded while they run.
