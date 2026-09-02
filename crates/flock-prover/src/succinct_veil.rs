@@ -98,7 +98,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
         mask_count: 762,
     },
 ];
-/// ZK doubles the committed dimension; the 4096 shape derives a 6-bit L0 grind.
+/// Registered full-ZK schedules may derive up to a 6-bit L0 grind.
 /// An 8192-trial fail-closed cap charges `(63/64)^8192 < 2^-186`.
 pub const MAX_BLIND_GRINDING_BITS: u32 = 6;
 pub const MAX_BLIND_GRIND_TRIALS: u64 = 8192;
@@ -736,7 +736,7 @@ fn validate_succinct_parameters(
     if !pcs_params.zk
         || r1cs.zk.is_none()
         || pcs_params.m != r1cs.m
-        || pcs_params.log_inv_rate != 1
+        || pcs_params.log_inv_rate != 3
         || pcs_params.log_batch_size != 6
         || pcs_params.profile != pcs::ligerito::LigeritoProfile::Secure
     {

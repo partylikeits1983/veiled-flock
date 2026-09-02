@@ -20,9 +20,10 @@ fn succinct_shape_rejects_nonidentity_c() {
 }
 
 #[test]
-fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
+fn production_entry_point_is_pinned_to_supported_relation_and_high_rate_pcs() {
     let setup = Blake3PreimageZkSetup::new(2);
     assert!(super::supported_mask_count(&setup.r1cs).is_some());
+    assert_eq!(setup.pcs_params.log_inv_rate, 3);
     validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
     let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
         .expect("production PIOP soundness certificate");
@@ -44,6 +45,13 @@ fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
     wrong_profile.profile = flock_core::pcs::ligerito::LigeritoProfile::Fast;
     assert_eq!(
         validate_succinct_parameters(&setup.r1cs, &wrong_profile),
+        Err(SuccinctVeilError::InvalidParameters)
+    );
+
+    let mut wrong_rate = setup.pcs_params.clone();
+    wrong_rate.log_inv_rate = 1;
+    assert_eq!(
+        validate_succinct_parameters(&setup.r1cs, &wrong_rate),
         Err(SuccinctVeilError::InvalidParameters)
     );
 }
