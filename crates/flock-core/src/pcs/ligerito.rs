@@ -78,6 +78,20 @@ impl LigeritoProfile {
             Self::Slim => 2,
         }
     }
+    /// Profile marker to pair with an explicit PCS rate shortcut.
+    ///
+    /// Rates 1 and 2 select the registered Fast/Slim profiles directly. Rate 3
+    /// selects the Secure UDR regime plus the proof-size-optimized resolver
+    /// path; it is not a registered Secure profile until matching security
+    /// tables are added.
+    pub fn for_explicit_log_inv_rate(log_inv_rate: usize) -> Option<Self> {
+        match log_inv_rate {
+            1 => Some(Self::Fast),
+            2 => Some(Self::Slim),
+            PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE => Some(Self::Secure),
+            _ => None,
+        }
+    }
     /// Round-by-round soundness target (bits) the profile's configs are derived
     /// for: every round must individually clear this level (total security =
     /// min over rounds, per the Fiat-Shamir / `soundcalc` convention).
@@ -229,6 +243,14 @@ pub fn udr_queries(log_inv_rate: usize) -> usize {
     let per_q = udr_per_query_bits_asymptotic(log_inv_rate);
     (UDR_TARGET_BITS / per_q).ceil() as usize
 }
+
+/// Initial inverse-rate log for the proof-size-optimized UDR ladder currently
+/// used by the full-ZK preimage benchmarks.
+///
+/// This is intentionally not a registered security profile yet. Callers that
+/// need concrete soundness certificates must use a matching TOML-backed
+/// [`LigeritoSecurityConfig`] instead.
+pub const PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE: usize = 3;
 
 /// Build a sensible default Ligerito config from the upstream PCS shape.
 /// `log_n` is the packed-witness log size (= `m - LOG_PACKING`); `log_batch_size`
@@ -415,9 +437,9 @@ pub fn embedded_security_config(m: usize, profile: LigeritoProfile) -> Option<&'
 /// with weaker (or unverified) soundness.
 ///
 /// For ad-hoc / testing shapes where a security spec hasn't been derived,
-/// callers can use [`default_config`] explicitly — but that's
-/// `#[deprecated]` outside of test code because the per-level parameters
-/// haven't been audited.
+/// callers can use [`default_config`] explicitly, but production code should
+/// prefer registered configs or an intentionally named unregistered helper
+/// because raw default parameters have not been audited.
 pub fn prover_config_for(
     log_n: usize,
     log_batch_size: usize,
@@ -493,6 +515,72 @@ pub fn default_verifier_config(
         fold_grinding_taper: p.fold_grinding_taper,
         ood_samples: p.ood_samples,
     })
+}
+
+/// Unregistered UDR ladder selected for proof-size measurements. It starts at
+/// rate 1/8 (`log_inv_rate = 3`) and derives query counts from [`udr_queries`].
+pub fn proof_size_optimized_udr_config(
+    log_n: usize,
+    log_batch_size: usize,
+) -> Result<ProverConfig, &'static str> {
+    default_config(log_n, log_batch_size, PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE)
+}
+
+/// Verifier-side counterpart to [`proof_size_optimized_udr_config`].
+pub fn proof_size_optimized_udr_verifier_config(
+    log_n: usize,
+    log_batch_size: usize,
+) -> Result<VerifierConfig, &'static str> {
+    default_verifier_config(log_n, log_batch_size, PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE)
+}
+
+/// Resolve the Ligerito prover config that matches concrete PCS parameters.
+///
+/// Registered profiles still go through [`prover_config_for`]. The only
+/// unregistered exception is the proof-size-optimized UDR ladder used by the
+/// full-ZK benchmarks, which intentionally remains uncertified until matching
+/// security tables are added.
+pub fn prover_config_for_pcs_params(
+    pcs_params: &crate::pcs::commit::PcsParams,
+) -> Result<ProverConfig, String> {
+    let log_n = pcs_params.log_msg_len();
+    if pcs_params.log_inv_rate == pcs_params.profile.log_inv_rate() {
+        return prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile);
+    }
+    if pcs_params.profile == LigeritoProfile::Secure
+        && pcs_params.log_inv_rate == PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE
+    {
+        return proof_size_optimized_udr_config(log_n, pcs_params.log_batch_size)
+            .map_err(|err| format!("proof-size-optimized UDR prover config: {err}"));
+    }
+    Err(format!(
+        "PcsParams log_inv_rate={} does not match {:?} profile rate {}",
+        pcs_params.log_inv_rate,
+        pcs_params.profile,
+        pcs_params.profile.log_inv_rate()
+    ))
+}
+
+/// Verifier-side counterpart to [`prover_config_for_pcs_params`].
+pub fn verifier_config_for_pcs_params(
+    pcs_params: &crate::pcs::commit::PcsParams,
+) -> Result<VerifierConfig, String> {
+    let log_n = pcs_params.log_msg_len();
+    if pcs_params.log_inv_rate == pcs_params.profile.log_inv_rate() {
+        return verifier_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile);
+    }
+    if pcs_params.profile == LigeritoProfile::Secure
+        && pcs_params.log_inv_rate == PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE
+    {
+        return proof_size_optimized_udr_verifier_config(log_n, pcs_params.log_batch_size)
+            .map_err(|err| format!("proof-size-optimized UDR verifier config: {err}"));
+    }
+    Err(format!(
+        "PcsParams log_inv_rate={} does not match {:?} profile rate {}",
+        pcs_params.log_inv_rate,
+        pcs_params.profile,
+        pcs_params.profile.log_inv_rate()
+    ))
 }
 
 // ===================================================================
@@ -5791,6 +5879,42 @@ mod tests {
             err.contains("no security config registered"),
             "unexpected error: {err}"
         );
+    }
+
+    #[test]
+    fn ligerito_pcs_param_resolver_accepts_only_registered_or_named_unregistered_shapes() {
+        let registered = crate::pcs::PcsParams {
+            m: 29,
+            log_inv_rate: LigeritoProfile::Secure.log_inv_rate(),
+            log_batch_size: 6,
+            profile: LigeritoProfile::Secure,
+            zk: false,
+        };
+        assert!(prover_config_for_pcs_params(&registered).is_ok());
+        assert!(verifier_config_for_pcs_params(&registered).is_ok());
+
+        let optimized = crate::pcs::PcsParams {
+            m: 22,
+            log_inv_rate: PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE,
+            log_batch_size: 6,
+            profile: LigeritoProfile::Secure,
+            zk: true,
+        };
+        let pv = prover_config_for_pcs_params(&optimized).expect("proof-size-optimized UDR config");
+        assert_eq!(pv.log_inv_rates[0], PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE);
+        assert_eq!(
+            pv.queries[0],
+            udr_queries(PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE)
+        );
+        assert!(verifier_config_for_pcs_params(&optimized).is_ok());
+
+        let mismatch = crate::pcs::PcsParams {
+            log_inv_rate: PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE,
+            profile: LigeritoProfile::Fast,
+            ..optimized
+        };
+        let err = prover_config_for_pcs_params(&mismatch).unwrap_err();
+        assert!(err.contains("does not match"), "unexpected error: {err}");
     }
 
     #[test]

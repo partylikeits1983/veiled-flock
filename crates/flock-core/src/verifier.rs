@@ -318,13 +318,8 @@ fn verify_claims_ligerito_inner<Ch: Challenger>(
     let lig_v_config = match lig_v_config {
         Some(cfg) => cfg,
         None => {
-            let log_n = pcs_params.log_msg_len();
-            derived = crate::pcs::ligerito::verifier_config_for(
-                log_n,
-                pcs_params.log_batch_size,
-                pcs_params.profile,
-            )
-            .expect("Ligerito default verifier config");
+            derived = crate::pcs::ligerito::verifier_config_for_pcs_params(pcs_params)
+                .expect("Ligerito verifier config for PCS parameters");
             &derived
         }
     };

@@ -72,6 +72,11 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the supported full-ZK circuit shapes.
 /// Smaller batches are padded to the next power-of-two shape.
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
+/// Outer PCS inverse-rate log used by the current proof-size-optimized
+/// full-ZK draft. This path remains uncertified until matching registered
+/// Ligerito security tables are added.
+pub const HIGH_RATE_ZK_PCS_LOG_INV_RATE: usize =
+    flock_core::pcs::ligerito::PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -453,7 +458,6 @@ impl Blake3PreimageSetup {
             Err(_) if self.pcs_params.m < 22 => {
                 // Explicitly limited to the below-registry benchmark/test
                 // range. Missing production-sized profiles still fail closed.
-                #[allow(deprecated)]
                 flock_core::pcs::ligerito::default_config(
                     log_n,
                     self.pcs_params.log_batch_size,
@@ -472,16 +476,12 @@ impl Blake3PreimageSetup {
             self.pcs_params.profile,
         ) {
             Ok(config) => config,
-            Err(_) if self.pcs_params.m < 22 =>
-            {
-                #[allow(deprecated)]
-                flock_core::pcs::ligerito::default_verifier_config(
-                    log_n,
-                    self.pcs_params.log_batch_size,
-                    self.pcs_params.profile.log_inv_rate(),
-                )
-                .expect("small-batch ad-hoc Ligerito verifier config")
-            }
+            Err(_) if self.pcs_params.m < 22 => flock_core::pcs::ligerito::default_verifier_config(
+                log_n,
+                self.pcs_params.log_batch_size,
+                self.pcs_params.profile.log_inv_rate(),
+            )
+            .expect("small-batch ad-hoc Ligerito verifier config"),
             Err(error) => panic!("Ligerito verifier config: {error}"),
         }
     }
@@ -524,7 +524,7 @@ impl Blake3PreimageZkSetup {
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = PcsParams {
             m: r1cs.m,
-            log_inv_rate: 3,
+            log_inv_rate: HIGH_RATE_ZK_PCS_LOG_INV_RATE,
             log_batch_size: 6,
             profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
             zk: true,
@@ -546,31 +546,19 @@ impl Blake3PreimageZkSetup {
 
     #[cfg(feature = "veil")]
     fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
-        let log_n = self.pcs_params.log_msg_len();
-        #[allow(deprecated)]
-        flock_core::pcs::ligerito::default_config(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.log_inv_rate,
-        )
-        .expect("high-rate ZK Ligerito prover config")
+        flock_core::pcs::ligerito::prover_config_for_pcs_params(&self.pcs_params)
+            .expect("proof-size-optimized ZK Ligerito prover config")
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
-        let log_n = self.pcs_params.log_msg_len();
-        #[allow(deprecated)]
-        flock_core::pcs::ligerito::default_verifier_config(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.log_inv_rate,
-        )
-        .expect("high-rate ZK Ligerito verifier config")
+        flock_core::pcs::ligerito::verifier_config_for_pcs_params(&self.pcs_params)
+            .expect("proof-size-optimized ZK Ligerito verifier config")
     }
 
-    /// Additive whole-opening soundness of the PCS component. This is one term
-    /// in the final protocol ledger and is available only when the selected
-    /// PCS rate has a matching registered security config.
+    /// PCS soundness contribution for the final protocol ledger. Returns
+    /// `Uncertified` unless the selected PCS rate has a registered security
+    /// config matching the concrete commitment parameters.
     #[cfg(feature = "veil")]
     pub fn ligerito_aggregate_soundness_bits(&self) -> Result<f64, SuccinctPreimageError> {
         Ok(-self.ligerito_aggregate_soundness_probability()?.log2())

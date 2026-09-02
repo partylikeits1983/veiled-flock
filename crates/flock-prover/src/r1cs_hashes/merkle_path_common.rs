@@ -325,13 +325,8 @@ pub fn prove_merkle_paths_ligerito_generic<Ch: Challenger>(
 ) -> (MerklePathProofLigerito, Commitment) {
     let trace = std::env::var("MERKLE_TRACE").is_ok();
 
-    let log_n = r1cs.m - LOG_PACKING;
-    let lig_config = flock_core::pcs::ligerito::prover_config_for(
-        log_n,
-        pcs_params.log_batch_size,
-        pcs_params.profile,
-    )
-    .expect("Ligerito config for merkle-path prove; bump m for tiny instances");
+    let lig_config = flock_core::pcs::ligerito::prover_config_for_pcs_params(pcs_params)
+        .expect("Ligerito config for merkle-path prove; bump m for tiny instances");
 
     // ---- Core: commit → zerocheck → lincheck.
     let t = if trace {
@@ -520,13 +515,8 @@ pub fn verify_merkle_paths_ligerito_generic<Ch: Challenger>(
         value: claims.value,
     };
 
-    let log_n = r1cs.m - LOG_PACKING;
-    let lig_v_config = flock_core::pcs::ligerito::verifier_config_for(
-        log_n,
-        pcs_params.log_batch_size,
-        pcs_params.profile,
-    )
-    .expect("Ligerito verifier config for merkle-path verify");
+    let lig_v_config = flock_core::pcs::ligerito::verifier_config_for_pcs_params(pcs_params)
+        .expect("Ligerito verifier config for merkle-path verify");
 
     flock_core::pcs::verify_opening_batch_ligerito_mixed(
         commitment,
