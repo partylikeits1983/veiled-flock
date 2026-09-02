@@ -1,11 +1,12 @@
 //! Reproducible release benchmark for the pinned 64-byte BLAKE3-preimage
 //! relation.
 //!
-//! Compares full-ZK VEIL-FLOCK with non-ZK FLOCK using the Secure Ligerito
-//! profile. Setup construction, message generation, digest generation, and
-//! serialization are excluded from the prove/verify timings; checks performed
-//! by the public prove APIs remain included. One untimed warm-up precedes the
-//! reported median samples.
+//! Compares full-ZK VEIL-FLOCK with non-ZK FLOCK. The non-ZK baseline uses
+//! the Secure Ligerito profile; the full-ZK path uses the high-rate PCS
+//! selected by `Blake3PreimageZkSetup`. Setup construction, message
+//! generation, digest generation, and serialization are excluded from the
+//! prove/verify timings; checks performed by the public prove APIs remain
+//! included. One untimed warm-up precedes the reported median samples.
 
 use std::time::{Duration, Instant};
 

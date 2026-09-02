@@ -123,7 +123,8 @@ transcript.
 
 Outer blinding grinding is modeled as first success within 8192 attempts. Each
 positive Ligerito fold grind is modeled as first success within 4096 attempts,
-with sixteen reserved grind sites. Registered schedules are:
+with sixteen reserved grind sites. The Lean-backed registered schedules
+currently checked into the repo are:
 
 | Slots | Rust profile | Levels | Final `yr_log_n` |
 |---:|---|---|---:|
@@ -137,6 +138,11 @@ Each level tuple is
 `(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`.
 Query-phase grinding, tapering, and OOD sampling are zero in these profiles.
 
+The current Rust full-ZK path swaps the outer PCS to an initial
+`log_inv_rate = 3` UDR schedule. The matching registered config and Lean tables
+are intentionally not added in this change, so the concrete certificate APIs
+fail closed with `Uncertified` for that PCS.
+
 The Rust prover and simulator currently check returned grind nonces against
 the caps, but some search and rejection loops are not bounded while they run.
 The executable must enforce per-loop caps and the cumulative oracle-call budget
@@ -148,7 +154,8 @@ domain internally; the test-only random challenger is not part of their API.
 
 ## Soundness
 
-`Blake3PreimageZkSetup::interactive_soundness_bound()` adds these errors:
+For a registered PCS, `Blake3PreimageZkSetup::interactive_soundness_bound()`
+adds these errors:
 
 - FLOCK zerocheck, lincheck, ring-switch, and claim batching
 - VEIL dot-product and Hadamard binding
@@ -158,9 +165,9 @@ domain internally; the test-only random challenger is not part of their API.
 
 The RS proximity terms use the finite-length unique-decoding backoff
 `gamma = delta/2 - 3/(delta*N)` and union-bound every live binary fold. Fast
-and Slim/list-decoding profiles are rejected by the full-ZK setup. The pinned
-interactive aggregate is about 107 bits; runtime code returns the computed
-value and fails closed below each component floor.
+and Slim/list-decoding profiles are rejected by the full-ZK setup. Until the
+high-rate PCS has matching registered tables, runtime code refuses to return a
+pinned interactive aggregate for it.
 
 `rom_soundness_bound(Q, attempts)` also accounts for proof attempts and oracle
 collisions. It is a classical-ROM statement and does not make SHA-256
@@ -169,9 +176,9 @@ information-theoretic.
 ## Format and API
 
 The verifier checks the circuit digest, mask count, witness layout, Secure PCS
-profile, code geometry, query budget, and VEIL parameters. The canonical bundle
-has a 1 MiB decode limit, rejects trailing bytes, and rejects parameter
-mismatches.
+profile marker, high-rate code geometry, query budget, and VEIL parameters.
+The canonical bundle has a 1 MiB decode limit, rejects trailing bytes, and
+rejects parameter mismatches.
 
 No alternate or legacy ZK proof flavor is exported. The public ZK API is:
 

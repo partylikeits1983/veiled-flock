@@ -69,7 +69,7 @@ use crate::r1cs_hashes::blake3::{
 pub const MESSAGE_BYTES: usize = 64;
 /// Bytes of digest produced per instance.
 pub const DIGEST_BYTES: usize = 32;
-/// Largest batch covered by the registered full-ZK circuit and PCS certificates.
+/// Largest batch covered by the supported full-ZK circuit shapes.
 /// Smaller batches are padded to the next power-of-two shape.
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 
@@ -494,7 +494,8 @@ impl Blake3PreimageSetup {
 /// Full-ZK fixed-digest setup for the VEIL-FLOCK composition.
 ///
 /// Construction validates the exact circuit digest, mask geometry, code
-/// parameters, query budget, and soundness profiles before proving.
+/// parameters, and query budget before proving. The current high-rate PCS path
+/// does not yet have a registered Lean-backed soundness certificate.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -523,7 +524,7 @@ impl Blake3PreimageZkSetup {
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = PcsParams {
             m: r1cs.m,
-            log_inv_rate: 1,
+            log_inv_rate: 3,
             log_batch_size: 6,
             profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
             zk: true,
@@ -546,48 +547,58 @@ impl Blake3PreimageZkSetup {
     #[cfg(feature = "veil")]
     fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
         let log_n = self.pcs_params.log_msg_len();
-        flock_core::pcs::ligerito::prover_config_for(
+        #[allow(deprecated)]
+        flock_core::pcs::ligerito::default_config(
             log_n,
             self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
+            self.pcs_params.log_inv_rate,
         )
-        .unwrap_or_else(|error| panic!("registered Secure Ligerito prover config: {error}"))
+        .expect("high-rate ZK Ligerito prover config")
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
         let log_n = self.pcs_params.log_msg_len();
-        flock_core::pcs::ligerito::verifier_config_for(
+        #[allow(deprecated)]
+        flock_core::pcs::ligerito::default_verifier_config(
             log_n,
             self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
+            self.pcs_params.log_inv_rate,
         )
-        .unwrap_or_else(|error| panic!("registered Secure Ligerito verifier config: {error}"))
+        .expect("high-rate ZK Ligerito verifier config")
     }
 
-    /// Additive whole-opening soundness of the registered Secure Ligerito
-    /// PCS component. This is one term in the final protocol ledger.
+    /// Additive whole-opening soundness of the PCS component. This is one term
+    /// in the final protocol ledger and is available only when the selected
+    /// PCS rate has a matching registered security config.
     #[cfg(feature = "veil")]
-    pub fn ligerito_aggregate_soundness_bits(&self) -> f64 {
-        -self.ligerito_aggregate_soundness_probability().log2()
+    pub fn ligerito_aggregate_soundness_bits(&self) -> Result<f64, SuccinctPreimageError> {
+        Ok(-self.ligerito_aggregate_soundness_probability()?.log2())
     }
 
     #[cfg(feature = "veil")]
-    fn ligerito_aggregate_soundness_probability(&self) -> f64 {
+    fn ligerito_aggregate_soundness_probability(&self) -> Result<f64, SuccinctPreimageError> {
         let effective_m = self.pcs_params.log_msg_len() + flock_core::pcs::LOG_PACKING;
-        let source = flock_core::pcs::ligerito::embedded_security_config(
+        let Some(source) = flock_core::pcs::ligerito::embedded_security_config(
             effective_m,
             self.pcs_params.profile,
-        )
-        .expect("full-ZK setup requires a registered Secure Ligerito configuration");
+        ) else {
+            return Err(PreimageError::Uncertified.into());
+        };
         let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
-            .expect("registered Secure Ligerito configuration must validate");
+            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        let Some(l0) = config.levels.first() else {
+            return Err(PreimageError::Uncertified.into());
+        };
+        if l0.log_inv_rate != self.pcs_params.log_inv_rate {
+            return Err(PreimageError::Uncertified.into());
+        }
         // The full-ZK path opens the hiding wide-leaf L0 commitment, so the
         // ledger must also carry the `c` combination event.
-        config
+        let bound = config
             .aggregate_soundness_bound_zk_l0()
-            .expect("registered Secure Ligerito aggregate bound")
-            .probability()
+            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        Ok(bound.probability())
     }
 
     /// Fail-closed additive soundness certificate for the exact interactive
@@ -602,7 +613,7 @@ impl Blake3PreimageZkSetup {
         Ok(SuccinctInteractiveSoundnessBound {
             flock_piop_probability: piop.probability(),
             veil_constraint_probability: veil.probability(),
-            ligerito_pcs_probability: self.ligerito_aggregate_soundness_probability(),
+            ligerito_pcs_probability: self.ligerito_aggregate_soundness_probability()?,
         })
     }
 
@@ -959,8 +970,8 @@ mod tests {
     use super::*;
     use flock_core::challenger::FsChallenger;
 
-    /// The smallest batch with a registered Ligerito config: m = k_log +
-    /// n_log = 14 + 8 = 22, the production shape.
+    /// The smallest batch with a supported ZK circuit shape: m = k_log +
+    /// n_log = 14 + 8 = 22.
     const N_TEST: usize = 256;
 
     fn msgs_of(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
@@ -978,10 +989,10 @@ mod tests {
     }
 
     /// Exercises the largest accepted ZK shape, including its 6-bit outer blind
-    /// grind and the bounded UDR fold-grind schedule.
+    /// grind and the high-rate UDR query schedule.
     #[cfg(feature = "veil")]
     #[test]
-    fn largest_supported_zk_shape_grinds_every_udr_fold_round() {
+    fn largest_supported_zk_shape_accepts_high_rate_pcs() {
         let blocks = MAX_ZK_PREIMAGE_BLOCKS;
         let setup = Blake3PreimageZkSetup::new(blocks);
         let messages = msgs_of(0x5EED, blocks);
@@ -1004,40 +1015,81 @@ mod tests {
         setup
             .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
             .expect("verify decoded m27 shape");
-        // Ligerito m27 Secure grinds at L0 (6 rounds), L1 (3) and L2 (3).
-        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 12);
+        assert!(proof.pcs_open.ligerito.fold_grinding_nonces.is_empty());
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn high_rate_zk_pcs_roundtrips_with_target_overhead() {
+        let n = N_TEST;
+        let messages = msgs_of(0x51E, n);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+
+        let flock = Blake3PreimageSetup::new(n);
+        let mut flock_challenger = FsChallenger::new(b"flock-high-rate-zk-pcs-baseline");
+        let (flock_proof, flock_commitment) = flock
+            .prove(&messages, &digests, &mut flock_challenger)
+            .expect("prove FLOCK baseline");
+        let flock_bundle_bytes = crate::proof_io::R1csProofBundleLigerito {
+            commitment: flock_commitment,
+            proof: flock_proof,
+        }
+        .to_bytes()
+        .len();
+
+        let zk = Blake3PreimageZkSetup::new(n);
+        assert_eq!(zk.pcs_params.log_inv_rate, 3);
+        let (proof, commitment) = zk
+            .prove(&messages, &digests)
+            .expect("prove high-rate ZK PCS");
+        zk.verify(&commitment, &proof, &digests)
+            .expect("verify high-rate ZK PCS");
+
+        let bundle = crate::proof_io::VeilFlockProofBundle::new(digests.clone(), commitment, proof);
+        let zk_bundle_bytes = bundle
+            .to_bytes()
+            .expect("serialize high-rate ZK PCS bundle")
+            .len();
+        let public_digest_bytes =
+            bincode::serialized_size(&digests).expect("serialize public digests") as usize;
+        let zk_proof_bytes = zk_bundle_bytes - public_digest_bytes;
         assert!(
-            proof.pcs_open.ligerito.fold_grinding_nonces.len()
-                <= crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as usize
+            zk_proof_bytes * 10 <= flock_bundle_bytes * 13,
+            "high-rate ZK PCS bytes {zk_proof_bytes} exceed target overhead over FLOCK {flock_bundle_bytes}",
         );
     }
 
     #[cfg(feature = "veil")]
     #[test]
     #[should_panic(expected = "n_blocks must be in 1..=")]
-    fn zk_setup_rejects_batches_above_current_certificate_ceiling() {
+    fn zk_setup_rejects_batches_above_supported_shape_ceiling() {
         let _ = Blake3PreimageZkSetup::new(MAX_ZK_PREIMAGE_BLOCKS + 1);
     }
 
     #[cfg(feature = "veil")]
     #[test]
     fn succinct_veil_preimage_roundtrip_and_mutations() {
-        // The hiding Ligerito layer's registered production geometry starts
-        // at m=22, i.e. 256 BLAKE3 blocks.
+        // The supported ZK circuit shapes start at m=22, i.e. 256 BLAKE3
+        // block slots.
         let n = N_TEST;
         let setup = Blake3PreimageZkSetup::new(n);
         assert_eq!(
             setup.pcs_params.profile,
             flock_core::pcs::ligerito::LigeritoProfile::Secure
         );
-        assert!(setup.ligerito_aggregate_soundness_bits() > 114.0);
-        let interactive = setup.interactive_soundness_bound().unwrap();
-        assert!(interactive.bits() > 106.0);
-        assert!(interactive.bits() < 110.0);
-        let rom = setup.rom_soundness_bound(64, 1).unwrap();
-        assert!(rom.bits() > 106.0);
-        let many_attempts = setup.rom_soundness_bound(64, 1u64 << 32).unwrap();
-        assert!(many_attempts.bits() < rom.bits());
+        assert_eq!(setup.pcs_params.log_inv_rate, 3);
+        assert_eq!(
+            setup.ligerito_aggregate_soundness_bits(),
+            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
+        );
+        assert_eq!(
+            setup.interactive_soundness_bound(),
+            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
+        );
+        assert_eq!(
+            setup.rom_soundness_bound(64, 1),
+            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
+        );
         let mut messages = msgs_of(0x51_CC_1C_7, n);
         // Detect accidental raw-witness serialization.
         messages[0] = [0xA5; MESSAGE_BYTES];
@@ -1112,15 +1164,7 @@ mod tests {
         oversized_blind_grind.blind_grind_nonce = crate::succinct_veil::MAX_BLIND_GRIND_TRIALS;
         rejects(&oversized_blind_grind, &commitment, &digests);
 
-        // The registered Secure shape is UDR, so L0 grinds its one
-        // fold-grind bit in every one of its six fold rounds.
-        assert_eq!(proof.pcs_open.ligerito.fold_grinding_nonces.len(), 6);
-        let mut oversized_ligerito_grind = proof.clone();
-        oversized_ligerito_grind
-            .pcs_open
-            .ligerito
-            .fold_grinding_nonces[0] = crate::succinct_veil::MAX_LIGERITO_GRIND_TRIALS;
-        rejects(&oversized_ligerito_grind, &commitment, &digests);
+        assert!(proof.pcs_open.ligerito.fold_grinding_nonces.is_empty());
 
         let mut changed_blinded_slice = proof.clone();
         changed_blinded_slice.pcs_open.ring_switches[0].s_hat_v[0] += flock_core::field::F128::ONE;
@@ -1330,9 +1374,9 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn succinct_simulator_query_cap_covers_every_registered_shape() {
+    fn succinct_simulator_query_cap_covers_every_supported_shape() {
         let oracle = crate::sim_oracle::shared_oracle();
-        // These are the smallest public batches selecting each registered shape.
+        // These are the smallest public batches selecting each supported shape.
         for n_blocks in [1usize, 257, 513, 1025, 2049] {
             let setup = Blake3PreimageZkSetup::new(n_blocks);
             let digests = vec![[n_blocks as u8; DIGEST_BYTES]; n_blocks];
@@ -1342,7 +1386,7 @@ mod tests {
                 .total_answer_count();
             let simulated = setup
                 .simulate(&digests, oracle.clone())
-                .expect("simulate every registered shape");
+                .expect("simulate every supported shape");
             assert!(simulated.programming_audit.is_valid());
             assert_eq!(
                 simulated.programmed_points,
@@ -1358,14 +1402,14 @@ mod tests {
                     &digests,
                     &mut verifier,
                 )
-                .expect("verify every registered simulated shape");
+                .expect("verify every supported simulated shape");
             let after = oracle
                 .lock()
                 .unwrap_or_else(|error| error.into_inner())
                 .total_answer_count();
             assert!(
                 after - before <= crate::sim_game::MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF,
-                "registered shape m={} exceeded the per-proof oracle cap",
+                "supported shape m={} exceeded the per-proof oracle cap",
                 setup.r1cs.m
             );
         }
