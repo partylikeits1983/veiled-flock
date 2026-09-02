@@ -72,6 +72,8 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the supported full-ZK circuit shapes.
 /// Smaller batches are padded to the next power-of-two shape.
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
+/// Smallest `m` for which embedded Ligerito PCS configs are registered.
+const MIN_REGISTERED_LIGERITO_M: usize = 22;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -450,7 +452,7 @@ impl Blake3PreimageSetup {
             self.pcs_params.profile,
         ) {
             Ok(config) => config,
-            Err(_) if self.pcs_params.m < 22 => {
+            Err(_) if self.pcs_params.m < MIN_REGISTERED_LIGERITO_M => {
                 // Explicitly limited to the below-registry benchmark/test
                 // range. Missing production-sized profiles still fail closed.
                 flock_core::pcs::ligerito::default_config(
@@ -471,12 +473,14 @@ impl Blake3PreimageSetup {
             self.pcs_params.profile,
         ) {
             Ok(config) => config,
-            Err(_) if self.pcs_params.m < 22 => flock_core::pcs::ligerito::default_verifier_config(
-                log_n,
-                self.pcs_params.log_batch_size,
-                self.pcs_params.profile.log_inv_rate(),
-            )
-            .expect("small-batch ad-hoc Ligerito verifier config"),
+            Err(_) if self.pcs_params.m < MIN_REGISTERED_LIGERITO_M => {
+                flock_core::pcs::ligerito::default_verifier_config(
+                    log_n,
+                    self.pcs_params.log_batch_size,
+                    self.pcs_params.profile.log_inv_rate(),
+                )
+                .expect("small-batch ad-hoc Ligerito verifier config")
+            }
             Err(error) => panic!("Ligerito verifier config: {error}"),
         }
     }
