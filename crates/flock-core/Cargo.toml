@@ -22,7 +22,7 @@ unsound-challenger = []
 # Zero-knowledge mode: hiding commitments (per-lane mask block + blinder
 # codeword), randomizer-witness layouts, and the prover-side DRBG that feeds
 # them. Off by default; the non-zk paths are byte-identical with the feature
-# disabled. Pulls in `getrandom` for OS entropy.
+# disabled. Pulls in `getrandom` for production seeds.
 zk = ["dep:getrandom"]
 
 # Exact symbolic execution used to generate and reverify ZK theorem

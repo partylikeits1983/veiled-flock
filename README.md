@@ -182,4 +182,5 @@ Apache-2.0 or MIT.
 ## Status
 
 Experimental and unaudited. The Lean proof covers statistical zero knowledge
-for the formal model; Rust-to-Lean correspondence remains future work.
+for the formal model; production Rust expands an OS seed with BLAKE3 XOF, and
+Rust-to-Lean correspondence remains future work.

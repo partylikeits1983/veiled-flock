@@ -16,14 +16,14 @@ implementation is unaudited and should not be used for production secrets.
 |---|---|
 | Relation | Ordered batch of 1-4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
 | Completeness | Honest proofs verify |
-| Zero knowledge | Proved for the finite Lean model with distance `< 2^-126`; Rust correspondence not proved |
-| Algebraic privacy | Perfect, conditioned on the public statement and accepted challenge history |
+| Zero knowledge | Proved for the finite Lean uniform coin model with distance `< 2^-126`; Rust correspondence and seeded XOF instantiation not proved |
+| Algebraic privacy | Perfect in the formal uniform coin model, conditioned on the public statement and accepted challenge history |
 | Noninteractive privacy loss | Random-oracle prequeries, collisions, nonce collisions, and bounded-grinding failures |
 | Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Secure Ligerito |
 | Fiat-Shamir soundness | Classical-ROM assumption and reduction boundary |
 | Argument of knowledge | Not claimed |
 | QROM/post-quantum ZK | Not claimed |
-| Concrete SHA-256 theorem | Not claimed; SHA-256 instantiates the modeled oracle |
+| Concrete hash theorem | Not claimed; SHA-256 instantiates the modeled oracle and BLAKE3 XOF instantiates prover coin expansion |
 
 Short batches are padded to a registered power-of-two shape before any
 Fiat-Shamir challenge. The Lean statement model carries the unpadded digest
@@ -41,6 +41,12 @@ distance of a witness-free simulated view in the finite classical pROM model.
 Because the formal relation is broader than the Rust BLAKE3 relation, the
 privacy result applies to the Rust relation once the missing correspondence
 obligations are discharged.
+
+Rust production provers sample a 32-byte OS seed and expand it with BLAKE3 XOF
+for prover secret coins. This replaces direct OS sampling of every mask byte;
+the concrete implementation therefore relies on the XOF as a PRG/ROM
+instantiation, while the formal statistical ZK theorem still models those coins
+as uniform.
 
 The companion theorem
 `VeiledFlock.ProductionFormalZK.productionSimulator_expected_polytime` gives an
@@ -64,7 +70,7 @@ collisions, collisions in the four nonce domains, and bounded-grinding failure.
 
 Every proof needs fresh proof nonces, randomizer witness rows, witness-code
 padding, PIOP masks, ring masks, VEIL padding, tree nonces, and leaf salts. The
-public full-ZK API draws coins from OS randomness and does not accept
+public full-ZK API draws a fresh OS seed for coin expansion and does not accept
 caller-selected deterministic seeds.
 
 ## Privacy chain

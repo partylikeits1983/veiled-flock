@@ -17,20 +17,19 @@
 //! 2. **PCS masks** — the low-half mask block and the blinder codeword `g` of
 //!    the hiding commitment (`pcs::commit_zk`).
 //!
-//! Both draw from [`ZkRng`], which is seeded from OS entropy (or a fixed seed
-//! in tests) and is **independent of the Fiat–Shamir transcript**: mask
-//! randomness reaches the transcript only through the committed witness /
-//! codeword, so every mask is committed before any challenge that could
-//! depend on it.
+//! Both draw from [`ZkRng`], which expands a prover secret seed and is
+//! **independent of the Fiat–Shamir transcript**: mask randomness reaches the
+//! transcript only through the committed witness / codeword, so every mask is
+//! committed before any challenge that could depend on it.
 //!
 //! This module always compiles (the layout types are plain data consumed by
-//! `BlockR1cs`), but OS entropy — and every prove path that needs it — is
-//! gated behind the `zk` cargo feature.
+//! `BlockR1cs`), but production seeding — and every prove path that needs it —
+//! is gated behind the `zk` cargo feature.
 
 use crate::field::F128;
 use serde::{Deserialize, Serialize};
 
-/// Source of prover-secret mask material. Implemented by [`ZkRng`]; tests use
+/// Source of prover secret mask material. Implemented by [`ZkRng`]; tests use
 /// playback/zero implementations to probe or break the masking on purpose.
 pub trait MaskSampler {
     fn fill_u64s(&mut self, out: &mut [u64]);
@@ -47,22 +46,16 @@ pub trait MaskSampler {
     }
 }
 
-/// Prover-side random source. Production [`ZkRng::from_entropy`] draws every
-/// requested byte directly from the OS random source, so the algebraic hiding
-/// theorem does not rely on a separate PRG assumption. [`ZkRng::from_seed`]
-/// is deterministic and exists for tests and reproducible audits only.
+/// Prover-side random source. Production [`ZkRng::from_entropy`] samples a
+/// seed from OS entropy and expands it with a BLAKE3 XOF. The formal
+/// statistical ZK model treats these coins as uniform; the concrete Rust
+/// instantiation additionally relies on the XOF as a PRG/ROM implementation.
+/// [`ZkRng::from_seed`] is deterministic and exists for tests and reproducible
+/// audits only.
 pub struct ZkRng {
-    source: ZkRngSource,
-}
-
-enum ZkRngSource {
-    Deterministic {
-        key: [u8; 32],
-        forks: u64,
-        reader: blake3::OutputReader,
-    },
-    #[cfg(feature = "zk")]
-    Os,
+    key: [u8; 32],
+    forks: u64,
+    reader: blake3::OutputReader,
 }
 
 impl ZkRng {
@@ -70,40 +63,31 @@ impl ZkRng {
         let mut h = blake3::Hasher::new_keyed(&key);
         h.update(b"flock-zk-drbg");
         Self {
-            source: ZkRngSource::Deterministic {
-                key,
-                forks: 0,
-                reader: h.finalize_xof(),
-            },
+            key,
+            forks: 0,
+            reader: h.finalize_xof(),
         }
     }
 
-    /// Draw directly from OS entropy. Panics if the source is unavailable
-    /// (a proof produced without real entropy would silently not be hiding).
+    /// Draw one production seed from OS entropy, then expand it with BLAKE3.
+    /// Panics if the seed source is unavailable.
     #[cfg(feature = "zk")]
     pub fn from_entropy() -> Self {
-        Self {
-            source: ZkRngSource::Os,
-        }
+        let mut seed = [0u8; 32];
+        getrandom::getrandom(&mut seed).expect("flock-zk: OS entropy unavailable");
+        Self::from_seed(seed)
     }
 
     /// Derive an independent child source. Deterministic children are
-    /// domain-separated by `label` and a per-parent counter; production
-    /// children continue drawing independent bytes from the OS source.
+    /// domain-separated by `label` and a per-parent counter.
     pub fn fork(&mut self, label: &[u8]) -> Self {
-        match &mut self.source {
-            ZkRngSource::Deterministic { key, forks, .. } => {
-                let mut h = blake3::Hasher::new_keyed(key);
-                h.update(b"flock-zk-fork");
-                h.update(&forks.to_le_bytes());
-                h.update(&(label.len() as u64).to_le_bytes());
-                h.update(label);
-                *forks += 1;
-                Self::from_seed(*h.finalize().as_bytes())
-            }
-            #[cfg(feature = "zk")]
-            ZkRngSource::Os => Self::from_entropy(),
-        }
+        let mut h = blake3::Hasher::new_keyed(&self.key);
+        h.update(b"flock-zk-fork");
+        h.update(&self.forks.to_le_bytes());
+        h.update(&(label.len() as u64).to_le_bytes());
+        h.update(label);
+        self.forks += 1;
+        Self::from_seed(*h.finalize().as_bytes())
     }
 
     pub fn next_u64(&mut self) -> u64 {
@@ -118,13 +102,7 @@ impl MaskSampler for ZkRng {
         // One bulk XOF read; u64 has no invalid bit patterns.
         let bytes: &mut [u8] =
             unsafe { std::slice::from_raw_parts_mut(out.as_mut_ptr().cast::<u8>(), out.len() * 8) };
-        match &mut self.source {
-            ZkRngSource::Deterministic { reader, .. } => reader.fill(bytes),
-            #[cfg(feature = "zk")]
-            ZkRngSource::Os => {
-                getrandom::getrandom(bytes).expect("flock-zk: OS entropy unavailable")
-            }
-        }
+        self.reader.fill(bytes);
         // Canonicalize endianness so streams are platform-independent.
         for v in out.iter_mut() {
             *v = u64::from_le(*v);
