@@ -872,11 +872,12 @@ impl KeccakSetup {
     }
 
     pub fn with_log_inv_rate(n_keccaks: usize, log_inv_rate: usize) -> Self {
-        let profile =
-            flock_core::pcs::ligerito::LigeritoProfile::for_explicit_log_inv_rate(log_inv_rate)
-                .unwrap_or_else(|| {
-                    panic!("unsupported PCS log_inv_rate {log_inv_rate}; expected 1, 2, or 3")
-                });
+        // Rate keys the legacy profiles: 1 -> Fast, 2 -> Slim.
+        let profile = match log_inv_rate {
+            1 => flock_core::pcs::ligerito::LigeritoProfile::Fast,
+            2 => flock_core::pcs::ligerito::LigeritoProfile::Slim,
+            _ => flock_core::pcs::ligerito::LigeritoProfile::Fast, // other rates default to Fast
+        };
         Self::with_profile_and_rate(n_keccaks, profile, log_inv_rate)
     }
 

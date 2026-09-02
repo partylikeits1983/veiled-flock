@@ -35,11 +35,10 @@ pub struct PcsParams {
     pub log_inv_rate: usize,
     /// Number of parallel sub-NTTs = `2^log_batch_size`. Default 5 (= 32 lanes).
     pub log_batch_size: usize,
-    /// Ligerito parameter profile (fast/slim/secure). Registered profiles use
-    /// this to select the embedded security config (queries, OOD samples,
-    /// grinding schedule). The usual invariant is
-    /// `profile.log_inv_rate() == log_inv_rate`; explicit unregistered
-    /// exceptions must go through the Ligerito PCS-parameter resolvers.
+    /// Ligerito parameter profile (fast/slim/secure). Selects which embedded
+    /// security config (queries, OOD samples, grinding schedule) drives the
+    /// PCS opening; must agree with `log_inv_rate`
+    /// (`profile.log_inv_rate() == log_inv_rate`). Defaults to `Fast`.
     #[serde(default)]
     pub profile: crate::pcs::ligerito::LigeritoProfile,
     /// Zero-knowledge mode. The committed message becomes

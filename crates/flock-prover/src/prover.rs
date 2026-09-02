@@ -210,8 +210,12 @@ fn prove_ligerito_impl<Ch: Challenger>(
     assert_eq!(z_packed.len(), 1usize << (r1cs.m - 7));
     assert_eq!(pcs_params.m, r1cs.m);
 
-    let lig_config = pcs::ligerito::prover_config_for_pcs_params(pcs_params)
-        .expect("Ligerito config for PCS parameters; bump m for tiny instances");
+    // In zk mode the committed message is one dimension larger (mask half),
+    // so the ladder is keyed on the committed length — the (m+1) config.
+    let log_n = pcs_params.log_msg_len();
+    let lig_config =
+        pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
+            .expect("Ligerito default config; bump m for tiny instances");
 
     let (commitment, prover_data) = commit_dispatch(&z_packed, pcs_params, None, zk_rng);
     bind_statement(challenger, r1cs, &commitment, &[0u8; 32]);
@@ -338,8 +342,10 @@ fn prove_fast_ligerito_from_witness_impl<Ch: Challenger>(
     zk_rng: Option<&mut dyn flock_core::zk::MaskSampler>,
     challenger: &mut Ch,
 ) -> (R1csProofLigerito, Commitment, R1csClaim) {
-    let lig_config = pcs::ligerito::prover_config_for_pcs_params(pcs_params)
-        .expect("Ligerito config for PCS parameters; bump m for tiny instances");
+    let log_n = pcs_params.log_msg_len();
+    let lig_config =
+        pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
+            .expect("Ligerito default config; bump m for tiny instances");
 
     let ProveCore {
         zc_proof,
@@ -610,8 +616,10 @@ pub fn prove_fast_ligerito_timed<Ch: Challenger>(
 ) -> (R1csProofLigerito, Commitment, R1csClaim, ProvePhaseTimings) {
     let mut t = ProvePhaseTimings::default();
 
-    let lig_config = pcs::ligerito::prover_config_for_pcs_params(pcs_params)
-        .expect("Ligerito config for PCS parameters; bump m for tiny instances");
+    let log_n = r1cs.m - pcs::LOG_PACKING;
+    let lig_config =
+        pcs::ligerito::prover_config_for(log_n, pcs_params.log_batch_size, pcs_params.profile)
+            .expect("Ligerito default config; bump m for tiny instances");
 
     // --- PCS commit ---
     let t0 = Instant::now();

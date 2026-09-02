@@ -72,11 +72,6 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the supported full-ZK circuit shapes.
 /// Smaller batches are padded to the next power-of-two shape.
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
-/// Outer PCS inverse-rate log used by the current proof-size-optimized
-/// full-ZK draft. This path remains uncertified until matching registered
-/// Ligerito security tables are added.
-pub const HIGH_RATE_ZK_PCS_LOG_INV_RATE: usize =
-    flock_core::pcs::ligerito::PROOF_SIZE_OPTIMIZED_UDR_LOG_INV_RATE;
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -524,7 +519,7 @@ impl Blake3PreimageZkSetup {
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = PcsParams {
             m: r1cs.m,
-            log_inv_rate: HIGH_RATE_ZK_PCS_LOG_INV_RATE,
+            log_inv_rate: 3,
             log_batch_size: 6,
             profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
             zk: true,
@@ -546,14 +541,24 @@ impl Blake3PreimageZkSetup {
 
     #[cfg(feature = "veil")]
     fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
-        flock_core::pcs::ligerito::prover_config_for_pcs_params(&self.pcs_params)
-            .expect("proof-size-optimized ZK Ligerito prover config")
+        let log_n = self.pcs_params.log_msg_len();
+        flock_core::pcs::ligerito::default_config(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.log_inv_rate,
+        )
+        .expect("high-rate ZK Ligerito prover config")
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
-        flock_core::pcs::ligerito::verifier_config_for_pcs_params(&self.pcs_params)
-            .expect("proof-size-optimized ZK Ligerito verifier config")
+        let log_n = self.pcs_params.log_msg_len();
+        flock_core::pcs::ligerito::default_verifier_config(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.log_inv_rate,
+        )
+        .expect("high-rate ZK Ligerito verifier config")
     }
 
     /// PCS soundness contribution for the final protocol ledger. Returns
