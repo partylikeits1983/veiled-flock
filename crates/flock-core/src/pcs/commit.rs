@@ -52,6 +52,23 @@ pub struct PcsParams {
 }
 
 impl PcsParams {
+    pub fn profile_rate_matches(&self) -> bool {
+        self.log_inv_rate == self.profile.log_inv_rate()
+    }
+
+    pub fn validate_profile_rate(&self) -> Result<(), String> {
+        if self.profile_rate_matches() {
+            Ok(())
+        } else {
+            Err(format!(
+                "PcsParams.profile ({}) implies log_inv_rate {}, but PcsParams.log_inv_rate is {}",
+                self.profile.as_str(),
+                self.profile.log_inv_rate(),
+                self.log_inv_rate
+            ))
+        }
+    }
+
     /// Log length of the **committed** message (= log2 packed witness length,
     /// +1 in zk mode for the low-half mask block).
     pub fn log_msg_len(&self) -> usize {
@@ -114,6 +131,8 @@ impl PcsParams {
             self.log_inv_rate >= 1,
             "log_inv_rate must be ≥ 1 for a non-trivial RS code",
         );
+        self.validate_profile_rate()
+            .unwrap_or_else(|message| panic!("{message}"));
         #[cfg(not(feature = "zk"))]
         assert!(!self.zk, "PcsParams.zk requires the `zk` cargo feature",);
     }
@@ -571,11 +590,13 @@ mod tests {
     fn commit_matches_full_ntt_oracle() {
         let mut rng = Rng::new(0xFEED);
         for (m, log_inv_rate, log_batch_size) in [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3)] {
+            let profile = crate::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
+                .expect("test rate has a profile");
             let params = PcsParams {
                 m,
                 log_inv_rate,
                 log_batch_size,
-                profile: Default::default(),
+                profile,
                 zk: false,
             };
             let z = rng.bits(1 << m);
@@ -622,11 +643,13 @@ mod tests {
     fn commit_zk_matches_wide_oracle() {
         let mut rng = Rng::new(0xC0FFEE);
         for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
+            let profile = crate::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
+                .expect("test rate has a profile");
             let params = PcsParams {
                 m,
                 log_inv_rate,
                 log_batch_size,
-                profile: Default::default(),
+                profile,
                 zk: true,
             };
             let z = rng.bits(1 << m);
@@ -699,6 +722,20 @@ mod tests {
             zk: true,
         };
         let z_packed = vec![F128::ZERO; 1 << 3];
+        let _ = commit(&z_packed, &params);
+    }
+
+    #[test]
+    #[should_panic(expected = "PcsParams.profile")]
+    fn commit_rejects_profile_rate_mismatch() {
+        let params = PcsParams {
+            m: 10,
+            log_inv_rate: 2,
+            log_batch_size: 1,
+            profile: crate::pcs::ligerito::LigeritoProfile::Fast,
+            zk: false,
+        };
+        let z_packed = vec![F128::ZERO; 1 << (10 - LOG_PACKING)];
         let _ = commit(&z_packed, &params);
     }
 

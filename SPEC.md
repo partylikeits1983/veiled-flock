@@ -66,10 +66,11 @@ Every proof MUST sample fresh independent:
 - VEIL operand and product padding;
 - proof nonce, tree nonces, and one 256-bit salt per initial leaf.
 
-The public full-ZK prover and simulator MUST draw these coins directly from the
-OS random source. Their public APIs MUST NOT accept deterministic seeds. The
-deterministic sampler is test-only and MUST remain unreachable from the public
-full-ZK entry point.
+The public full-ZK prover and simulator MUST draw one fresh seed from the OS
+random source for each proof or simulation and expand it with the prover-side
+DRBG. Their public APIs MUST NOT accept deterministic seeds. The deterministic
+sampler is test-only and MUST remain unreachable from the public full-ZK entry
+point.
 
 Leaf and internal-node hash inputs MUST use disjoint tags and injective length
 framing. Witness, VEIL-linear, and VEIL-Hadamard trees MUST use distinct
