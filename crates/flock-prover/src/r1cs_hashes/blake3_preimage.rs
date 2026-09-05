@@ -72,6 +72,12 @@ pub const DIGEST_BYTES: usize = 32;
 /// Largest batch covered by the supported full-ZK circuit shapes.
 /// Smaller batches are padded to the next power-of-two shape.
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
+/// Minimum registered PCS aggregate soundness accepted by the public full-ZK API.
+#[cfg(feature = "veil")]
+pub const MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS: f64 = 114.0;
+/// Minimum composed interactive soundness accepted by the public full-ZK API.
+#[cfg(feature = "veil")]
+pub const MIN_ZK_INTERACTIVE_SOUNDNESS_BITS: f64 = 106.0;
 /// Smallest `m` for which embedded Ligerito PCS configs are registered.
 const MIN_REGISTERED_LIGERITO_M: usize = 22;
 
@@ -543,36 +549,23 @@ impl Blake3PreimageZkSetup {
     }
 
     #[cfg(feature = "veil")]
-    fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
+    fn ensure_soundness_floor(bits: f64, floor: f64) -> Result<(), SuccinctPreimageError> {
+        if bits.is_finite() && bits >= floor {
+            Ok(())
+        } else {
+            Err(PreimageError::Uncertified.into())
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    fn registered_ligerito_security_config(
+        &self,
+    ) -> Result<flock_core::pcs::ligerito::LigeritoSecurityConfig, SuccinctPreimageError> {
+        self.pcs_params
+            .validate_profile_rate()
+            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
         let log_n = self.pcs_params.log_msg_len();
-        flock_core::pcs::ligerito::prover_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .expect("registered Secure Ligerito prover config")
-    }
-
-    #[cfg(feature = "veil")]
-    fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
-        let log_n = self.pcs_params.log_msg_len();
-        flock_core::pcs::ligerito::verifier_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .expect("registered Secure Ligerito verifier config")
-    }
-
-    /// PCS soundness contribution for the final protocol ledger.
-    #[cfg(feature = "veil")]
-    pub fn ligerito_aggregate_soundness_bits(&self) -> Result<f64, SuccinctPreimageError> {
-        Ok(-self.ligerito_aggregate_soundness_probability()?.log2())
-    }
-
-    #[cfg(feature = "veil")]
-    fn ligerito_aggregate_soundness_probability(&self) -> Result<f64, SuccinctPreimageError> {
-        let effective_m = self.pcs_params.log_msg_len() + flock_core::pcs::LOG_PACKING;
+        let effective_m = log_n + flock_core::pcs::LOG_PACKING;
         let Some(source) = flock_core::pcs::ligerito::embedded_security_config(
             effective_m,
             self.pcs_params.profile,
@@ -590,12 +583,112 @@ impl Blake3PreimageZkSetup {
         if l0.log_inv_rate != self.pcs_params.log_inv_rate {
             return Err(PreimageError::Uncertified.into());
         }
+        Ok(config)
+    }
+
+    #[cfg(feature = "veil")]
+    fn prover_config_matches_registered_certificate(
+        &self,
+        actual: &flock_core::pcs::ligerito::ProverConfig,
+    ) -> Result<(), SuccinctPreimageError> {
+        let (expected, _) = self
+            .registered_ligerito_security_config()?
+            .to_prover_verifier_configs()
+            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        if actual.log_inv_rates == expected.log_inv_rates
+            && actual.recursive_steps == expected.recursive_steps
+            && actual.initial_log_msg_cols == expected.initial_log_msg_cols
+            && actual.initial_log_num_interleaved == expected.initial_log_num_interleaved
+            && actual.initial_k == expected.initial_k
+            && actual.recursive_log_msg_cols == expected.recursive_log_msg_cols
+            && actual.recursive_ks == expected.recursive_ks
+            && actual.queries == expected.queries
+            && actual.grinding_bits == expected.grinding_bits
+            && actual.fold_grinding_bits == expected.fold_grinding_bits
+            && actual.fold_grinding_taper == expected.fold_grinding_taper
+            && actual.ood_samples == expected.ood_samples
+        {
+            Ok(())
+        } else {
+            Err(PreimageError::Uncertified.into())
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    fn verifier_config_matches_registered_certificate(
+        &self,
+        actual: &flock_core::pcs::ligerito::VerifierConfig,
+    ) -> Result<(), SuccinctPreimageError> {
+        let (_, expected) = self
+            .registered_ligerito_security_config()?
+            .to_prover_verifier_configs()
+            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        if actual.log_inv_rates == expected.log_inv_rates
+            && actual.recursive_steps == expected.recursive_steps
+            && actual.initial_log_msg_cols == expected.initial_log_msg_cols
+            && actual.initial_log_num_interleaved == expected.initial_log_num_interleaved
+            && actual.initial_k == expected.initial_k
+            && actual.recursive_log_msg_cols == expected.recursive_log_msg_cols
+            && actual.recursive_ks == expected.recursive_ks
+            && actual.queries == expected.queries
+            && actual.grinding_bits == expected.grinding_bits
+            && actual.fold_grinding_bits == expected.fold_grinding_bits
+            && actual.fold_grinding_taper == expected.fold_grinding_taper
+            && actual.ood_samples == expected.ood_samples
+        {
+            Ok(())
+        } else {
+            Err(PreimageError::Uncertified.into())
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    fn ligerito_prover_config(
+        &self,
+    ) -> Result<flock_core::pcs::ligerito::ProverConfig, SuccinctPreimageError> {
+        let log_n = self.pcs_params.log_msg_len();
+        let config = flock_core::pcs::ligerito::prover_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        )
+        .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        self.prover_config_matches_registered_certificate(&config)?;
+        Ok(config)
+    }
+
+    #[cfg(feature = "veil")]
+    fn ligerito_verifier_config(
+        &self,
+    ) -> Result<flock_core::pcs::ligerito::VerifierConfig, SuccinctPreimageError> {
+        let log_n = self.pcs_params.log_msg_len();
+        let config = flock_core::pcs::ligerito::verifier_config_for(
+            log_n,
+            self.pcs_params.log_batch_size,
+            self.pcs_params.profile,
+        )
+        .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        self.verifier_config_matches_registered_certificate(&config)?;
+        Ok(config)
+    }
+
+    /// PCS soundness contribution for the final protocol ledger.
+    #[cfg(feature = "veil")]
+    pub fn ligerito_aggregate_soundness_bits(&self) -> Result<f64, SuccinctPreimageError> {
+        Ok(-self.ligerito_aggregate_soundness_probability()?.log2())
+    }
+
+    #[cfg(feature = "veil")]
+    fn ligerito_aggregate_soundness_probability(&self) -> Result<f64, SuccinctPreimageError> {
+        let config = self.registered_ligerito_security_config()?;
         // The full-ZK path opens the hiding wide-leaf L0 commitment, so the
         // ledger must also carry the `c` combination event.
         let bound = config
             .aggregate_soundness_bound_zk_l0()
             .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
-        Ok(bound.probability())
+        let probability = bound.probability();
+        Self::ensure_soundness_floor(-probability.log2(), MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS)?;
+        Ok(probability)
     }
 
     /// Fail-closed additive soundness certificate for the exact interactive
@@ -607,11 +700,13 @@ impl Blake3PreimageZkSetup {
         let lincheck = self.r1cs.csc_lincheck_circuit();
         let piop = crate::succinct_veil::certify_flock_piop_soundness(&self.r1cs, lincheck)?;
         let veil = crate::succinct_veil::certify_shifted_veil_soundness(&self.r1cs)?;
-        Ok(SuccinctInteractiveSoundnessBound {
+        let bound = SuccinctInteractiveSoundnessBound {
             flock_piop_probability: piop.probability(),
             veil_constraint_probability: veil.probability(),
             ligerito_pcs_probability: self.ligerito_aggregate_soundness_probability()?,
-        })
+        };
+        Self::ensure_soundness_floor(bound.bits(), MIN_ZK_INTERACTIVE_SOUNDNESS_BITS)?;
+        Ok(bound)
     }
 
     /// Classical-ROM soundness for a declared oracle budget and number of
@@ -689,6 +784,8 @@ impl Blake3PreimageZkSetup {
         }
         let statement = self.statement(digests);
         statement.validate();
+        let _soundness = self.interactive_soundness_bound()?;
+        let lig_config = self.ligerito_prover_config()?;
         let layout = self
             .r1cs
             .zk
@@ -708,7 +805,6 @@ impl Blake3PreimageZkSetup {
             &random_words,
             ParamPinning::RootHash64,
         );
-        let lig_config = self.ligerito_prover_config();
         absorb_statement(challenger, &statement);
         let statement_for_claim = statement.clone();
         Ok(crate::succinct_veil::prove_succinct_veil_r1cs(
@@ -763,7 +859,8 @@ impl Blake3PreimageZkSetup {
         }
         let statement = self.statement(digests);
         statement.validate();
-        let lig_config = self.ligerito_verifier_config();
+        let _soundness = self.interactive_soundness_bound()?;
+        let lig_config = self.ligerito_verifier_config()?;
         absorb_statement(challenger, &statement);
         let layout = self.r1cs.layout;
         crate::succinct_veil::verify_succinct_veil_r1cs(
@@ -835,6 +932,8 @@ impl Blake3PreimageZkSetup {
             .checkpoint();
         let statement = self.statement(digests);
         statement.validate();
+        let _soundness = self.interactive_soundness_bound()?;
+        let lig_config = self.ligerito_prover_config()?;
         let mut message_rng = rng.fork(b"veil-flock-simulator-public-fiber-messages");
         let mut message_words = vec![0u64; self.n_blocks * MESSAGE_BYTES / 8];
         message_rng.fill_u64s(&mut message_words);
@@ -897,7 +996,6 @@ impl Blake3PreimageZkSetup {
         let b = self.r1cs.apply_b_packed(&z);
         let z_lincheck =
             flock_core::lincheck::pack_z_lincheck_from_packed(&z, self.r1cs.m, self.r1cs.k_log);
-        let lig_config = self.ligerito_prover_config();
         let mut challenger =
             crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
         absorb_statement(&mut challenger, &statement);
@@ -1003,8 +1101,12 @@ mod tests {
             let committed_log_n = setup.pcs_params.log_msg_len();
             assert_eq!(committed_log_n + flock_core::pcs::LOG_PACKING, committed_m);
 
-            let prover_config = setup.ligerito_prover_config();
-            let verifier_config = setup.ligerito_verifier_config();
+            let prover_config = setup
+                .ligerito_prover_config()
+                .expect("registered Secure prover config");
+            let verifier_config = setup
+                .ligerito_verifier_config()
+                .expect("registered Secure verifier config");
             assert_eq!(prover_config.queries.as_slice(), expected_queries);
             assert_eq!(verifier_config.queries.as_slice(), expected_queries);
             assert_eq!(
@@ -1024,9 +1126,26 @@ mod tests {
                 .ligerito_aggregate_soundness_bits()
                 .expect("registered Secure PCS ledger");
             assert!(
-                bits >= 110.0,
+                bits >= MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS,
                 "blocks={blocks}: aggregate PCS bits {bits:.3}"
             );
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn registered_zk_query_budgets_clear_composed_soundness_floor() {
+        for &(blocks, _, _) in REGISTERED_ZK_QUERY_CASES {
+            let setup = Blake3PreimageZkSetup::new(blocks);
+            let interactive = setup
+                .interactive_soundness_bound()
+                .expect("registered composed soundness ledger");
+            assert!(
+                interactive.bits() >= MIN_ZK_INTERACTIVE_SOUNDNESS_BITS,
+                "blocks={blocks}: interactive bits {:.3}",
+                interactive.bits()
+            );
+            assert!(setup.rom_soundness_bound(64, 1).unwrap().bits() > 64.0);
         }
     }
 
@@ -1112,8 +1231,14 @@ mod tests {
             setup.pcs_params.log_inv_rate,
             setup.pcs_params.profile.log_inv_rate()
         );
-        assert!(setup.ligerito_aggregate_soundness_bits().unwrap() > 110.0);
-        assert!(setup.interactive_soundness_bound().unwrap().bits() > 100.0);
+        assert!(
+            setup.ligerito_aggregate_soundness_bits().unwrap()
+                >= MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS
+        );
+        assert!(
+            setup.interactive_soundness_bound().unwrap().bits()
+                >= MIN_ZK_INTERACTIVE_SOUNDNESS_BITS
+        );
         assert!(setup.rom_soundness_bound(64, 1).unwrap().bits() > 64.0);
         let mut messages = msgs_of(0x51_CC_1C_7, n);
         // Detect accidental raw-witness serialization.
@@ -1150,6 +1275,17 @@ mod tests {
         setup
             .verify(&commitment, &proof, &digests)
             .expect("verify succinct VEIL");
+
+        let mut uncertified_setup = setup.clone();
+        uncertified_setup.pcs_params.log_inv_rate = 3;
+        assert!(matches!(
+            uncertified_setup.verify(&commitment, &proof, &digests),
+            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
+        ));
+        assert!(matches!(
+            uncertified_setup.prove(&messages, &digests),
+            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
+        ));
 
         let rejects = |proof_under_test: &crate::succinct_veil::SuccinctVeilProof,
                        commitment_under_test: &Commitment,

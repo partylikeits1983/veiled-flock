@@ -1281,13 +1281,11 @@ impl Sha256HybridSetup {
         }
     }
 
+    /// Build a setup from the legacy PCS rate selector: 1 = Fast, 2 = Slim.
+    /// Use [`Self::with_profile`] to select Secure.
     pub fn with_log_inv_rate(n_compressions: usize, log_inv_rate: usize) -> Self {
-        // Rate keys the legacy profiles: 1 -> Fast, 2 -> Slim.
-        let profile = match log_inv_rate {
-            1 => flock_core::pcs::ligerito::LigeritoProfile::Fast,
-            2 => flock_core::pcs::ligerito::LigeritoProfile::Slim,
-            _ => flock_core::pcs::ligerito::LigeritoProfile::Fast, // other rates default to Fast
-        };
+        let profile = flock_core::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
+            .unwrap_or_else(|| panic!("unsupported PCS log_inv_rate {log_inv_rate}"));
         Self::with_profile_and_rate(n_compressions, profile, log_inv_rate)
     }
 

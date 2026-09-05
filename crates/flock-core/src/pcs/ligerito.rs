@@ -78,6 +78,16 @@ impl LigeritoProfile {
             Self::Slim => 2,
         }
     }
+    /// Legacy rate-only constructors map `1` to Fast and `2` to Slim. Secure
+    /// also has rate 1, but must be selected explicitly because it carries a
+    /// different soundness target and query schedule.
+    pub fn from_log_inv_rate(log_inv_rate: usize) -> Option<Self> {
+        match log_inv_rate {
+            1 => Some(Self::Fast),
+            2 => Some(Self::Slim),
+            _ => None,
+        }
+    }
     /// Round-by-round soundness target (bits) the profile's configs are derived
     /// for: every round must individually clear this level (total security =
     /// min over rounds, per the Fiat-Shamir / `soundcalc` convention).
