@@ -74,16 +74,6 @@ pub const DIGEST_BYTES: usize = 32;
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 /// Smallest `m` for which embedded Ligerito PCS configs are registered.
 const MIN_REGISTERED_LIGERITO_M: usize = 22;
-/// High-rate full-ZK query budgets keyed by committed PCS dimension.
-/// L0 stays at the default budget; aggregate slack is paid at narrower levels.
-#[cfg(feature = "veil")]
-const ZK_AGGREGATE_100_BIT_QUERIES: &[(usize, &[usize])] = &[
-    (23, &[121, 114, 110]),
-    (24, &[121, 113, 110]),
-    (25, &[121, 113, 109, 109]),
-    (26, &[121, 113, 109, 108]),
-    (27, &[121, 113, 109, 107]),
-];
 
 /// The digest region's geometry in a BLAKE3 witness block: `out_lo` is the
 /// 256-bit aligned slot 1 (see the encoder's I/O-aligned layout).
@@ -496,20 +486,6 @@ impl Blake3PreimageSetup {
     }
 }
 
-#[cfg(feature = "veil")]
-fn apply_zk_aggregate_100_bit_queries(queries: &mut [usize], committed_m: usize) {
-    let (_, tuned) = ZK_AGGREGATE_100_BIT_QUERIES
-        .iter()
-        .find(|(m, _)| *m == committed_m)
-        .expect("supported high-rate ZK Ligerito query schedule");
-    assert_eq!(
-        queries.len(),
-        tuned.len(),
-        "high-rate ZK Ligerito query schedule shape changed"
-    );
-    queries.copy_from_slice(tuned);
-}
-
 // ---------------------------------------------------------------------------
 // Zero-knowledge mode
 // ---------------------------------------------------------------------------
@@ -517,8 +493,7 @@ fn apply_zk_aggregate_100_bit_queries(queries: &mut [usize], committed_m: usize)
 /// Full-ZK fixed-digest setup for the VEIL-FLOCK composition.
 ///
 /// Construction validates the exact circuit digest, mask geometry, code
-/// parameters, and query budget before proving. The current high-rate PCS path
-/// does not yet have a registered Lean-backed soundness certificate.
+/// parameters, and registered Secure Ligerito query budget before proving.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -547,7 +522,7 @@ impl Blake3PreimageZkSetup {
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = PcsParams {
             m: r1cs.m,
-            log_inv_rate: 3,
+            log_inv_rate: flock_core::pcs::ligerito::LigeritoProfile::Secure.log_inv_rate(),
             log_batch_size: 6,
             profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
             zk: true,
@@ -570,38 +545,26 @@ impl Blake3PreimageZkSetup {
     #[cfg(feature = "veil")]
     fn ligerito_prover_config(&self) -> flock_core::pcs::ligerito::ProverConfig {
         let log_n = self.pcs_params.log_msg_len();
-        let mut config = flock_core::pcs::ligerito::default_config(
+        flock_core::pcs::ligerito::prover_config_for(
             log_n,
             self.pcs_params.log_batch_size,
-            self.pcs_params.log_inv_rate,
+            self.pcs_params.profile,
         )
-        .expect("high-rate ZK Ligerito prover config");
-        apply_zk_aggregate_100_bit_queries(
-            &mut config.queries,
-            log_n + flock_core::pcs::LOG_PACKING,
-        );
-        config
+        .expect("registered Secure Ligerito prover config")
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_verifier_config(&self) -> flock_core::pcs::ligerito::VerifierConfig {
         let log_n = self.pcs_params.log_msg_len();
-        let mut config = flock_core::pcs::ligerito::default_verifier_config(
+        flock_core::pcs::ligerito::verifier_config_for(
             log_n,
             self.pcs_params.log_batch_size,
-            self.pcs_params.log_inv_rate,
+            self.pcs_params.profile,
         )
-        .expect("high-rate ZK Ligerito verifier config");
-        apply_zk_aggregate_100_bit_queries(
-            &mut config.queries,
-            log_n + flock_core::pcs::LOG_PACKING,
-        );
-        config
+        .expect("registered Secure Ligerito verifier config")
     }
 
-    /// PCS soundness contribution for the final protocol ledger. Returns
-    /// `Uncertified` unless the selected PCS rate has a registered security
-    /// config matching the concrete commitment parameters.
+    /// PCS soundness contribution for the final protocol ledger.
     #[cfg(feature = "veil")]
     pub fn ligerito_aggregate_soundness_bits(&self) -> Result<f64, SuccinctPreimageError> {
         Ok(-self.ligerito_aggregate_soundness_probability()?.log2())
@@ -618,6 +581,9 @@ impl Blake3PreimageZkSetup {
         };
         let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
             .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        if config.initial_k != self.pcs_params.log_batch_size {
+            return Err(PreimageError::Uncertified.into());
+        }
         let Some(l0) = config.levels.first() else {
             return Err(PreimageError::Uncertified.into());
         };
@@ -1007,12 +973,12 @@ mod tests {
     /// n_log = 14 + 8 = 22.
     const N_TEST: usize = 256;
     #[cfg(feature = "veil")]
-    const ZK_QUERY_CASES: &[(usize, usize, &[usize])] = &[
-        (256, 23, &[121, 114, 110]),
-        (512, 24, &[121, 113, 110]),
-        (1024, 25, &[121, 113, 109, 109]),
-        (2048, 26, &[121, 113, 109, 108]),
-        (4096, 27, &[121, 113, 109, 107]),
+    const REGISTERED_ZK_QUERY_CASES: &[(usize, usize, &[usize])] = &[
+        (256, 23, &[294, 182, 137]),
+        (512, 24, &[292, 180, 151]),
+        (1024, 25, &[291, 179, 148, 131]),
+        (2048, 26, &[290, 178, 147, 137]),
+        (4096, 27, &[290, 178, 146, 134]),
     ];
 
     fn msgs_of(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
@@ -1031,8 +997,8 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn supported_zk_shapes_use_aggregate_100_query_budgets() {
-        for &(blocks, committed_m, expected_queries) in ZK_QUERY_CASES {
+    fn supported_zk_shapes_use_registered_secure_query_budgets() {
+        for &(blocks, committed_m, expected_queries) in REGISTERED_ZK_QUERY_CASES {
             let setup = Blake3PreimageZkSetup::new(blocks);
             let committed_log_n = setup.pcs_params.log_msg_len();
             assert_eq!(committed_log_n + flock_core::pcs::LOG_PACKING, committed_m);
@@ -1041,43 +1007,34 @@ mod tests {
             let verifier_config = setup.ligerito_verifier_config();
             assert_eq!(prover_config.queries.as_slice(), expected_queries);
             assert_eq!(verifier_config.queries.as_slice(), expected_queries);
-            assert_eq!(prover_config.log_inv_rates[0], 3);
+            assert_eq!(
+                prover_config.log_inv_rates[0],
+                setup.pcs_params.profile.log_inv_rate()
+            );
             assert_eq!(prover_config.grinding_bits, vec![0; expected_queries.len()]);
         }
     }
 
     #[cfg(feature = "veil")]
     #[test]
-    fn high_rate_zk_query_budgets_clear_100_bit_pcs_ledger() {
-        for &(_, committed_m, expected_queries) in ZK_QUERY_CASES {
-            let mut security =
-                flock_core::pcs::ligerito::LigeritoSecurityConfig::derive_paper_compatible(
-                    committed_m,
-                    3,
-                    100,
-                )
-                .expect("derive high-rate ZK PCS ledger");
-            for (level, &queries) in security.levels.iter_mut().zip(expected_queries) {
-                level.queries = queries;
-                let (_, query_bits) = level.paper_predicted_bits();
-                level.expected_eps_query_bits = (query_bits * 10.0).round() / 10.0;
-            }
-            let bits = security
-                .aggregate_soundness_bound_zk_l0()
-                .expect("aggregate high-rate ZK PCS ledger")
-                .bits();
+    fn registered_zk_query_budgets_have_concrete_pcs_certificates() {
+        for &(blocks, _, _) in REGISTERED_ZK_QUERY_CASES {
+            let setup = Blake3PreimageZkSetup::new(blocks);
+            let bits = setup
+                .ligerito_aggregate_soundness_bits()
+                .expect("registered Secure PCS ledger");
             assert!(
-                bits >= 100.0,
-                "committed m={committed_m}: aggregate PCS bits {bits:.3}"
+                bits >= 110.0,
+                "blocks={blocks}: aggregate PCS bits {bits:.3}"
             );
         }
     }
 
-    /// Exercises the largest accepted ZK shape with the high-rate UDR query
-    /// schedule.
+    /// Exercises the largest accepted ZK shape with the registered Secure
+    /// Ligerito schedule.
     #[cfg(feature = "veil")]
     #[test]
-    fn largest_supported_zk_shape_accepts_high_rate_pcs() {
+    fn largest_supported_zk_shape_accepts_registered_secure_pcs() {
         let blocks = MAX_ZK_PREIMAGE_BLOCKS;
         let setup = Blake3PreimageZkSetup::new(blocks);
         let messages = msgs_of(0x5EED, blocks);
@@ -1098,47 +1055,39 @@ mod tests {
         setup
             .verify(&decoded.commitment, &decoded.proof, &decoded.digests)
             .expect("verify decoded m27 shape");
-        assert!(proof.pcs_open.ligerito.fold_grinding_nonces.is_empty());
+        assert!(
+            proof.pcs_open.ligerito.fold_grinding_nonces.len()
+                <= crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as usize
+        );
+        assert!(
+            proof
+                .pcs_open
+                .ligerito
+                .fold_grinding_nonces
+                .iter()
+                .all(|nonce| *nonce < crate::succinct_veil::MAX_LIGERITO_GRIND_TRIALS)
+        );
     }
 
     #[cfg(feature = "veil")]
     #[test]
-    fn high_rate_zk_pcs_roundtrips_with_target_overhead() {
+    fn registered_secure_zk_pcs_roundtrips() {
         let n = N_TEST;
         let messages = msgs_of(0x51E, n);
         let digests = Blake3PreimageSetup::digests_of(&messages);
 
-        let flock = Blake3PreimageSetup::new(n);
-        let mut flock_challenger = FsChallenger::new(b"flock-high-rate-zk-pcs-baseline");
-        let (flock_proof, flock_commitment) = flock
-            .prove(&messages, &digests, &mut flock_challenger)
-            .expect("prove FLOCK baseline");
-        let mut flock_verifier = FsChallenger::new(b"flock-high-rate-zk-pcs-baseline");
-        flock
-            .verify(
-                &flock_commitment,
-                &flock_proof,
-                &digests,
-                &mut flock_verifier,
-            )
-            .expect("verify FLOCK baseline");
-        let flock_proof_bytes =
-            bincode::serialized_size(&flock_proof).expect("serialize FLOCK proof") as usize;
-
         let zk = Blake3PreimageZkSetup::new(n);
-        assert_eq!(zk.pcs_params.log_inv_rate, 3);
+        assert_eq!(
+            zk.pcs_params.log_inv_rate,
+            zk.pcs_params.profile.log_inv_rate()
+        );
         let (proof, commitment) = zk
             .prove(&messages, &digests)
-            .expect("prove high-rate ZK PCS");
+            .expect("prove registered Secure ZK PCS");
         zk.verify(&commitment, &proof, &digests)
-            .expect("verify high-rate ZK PCS");
+            .expect("verify registered Secure ZK PCS");
 
-        let zk_proof_bytes =
-            bincode::serialized_size(&proof).expect("serialize high-rate ZK proof") as usize;
-        assert!(
-            zk_proof_bytes * 10 <= flock_proof_bytes * 13,
-            "high-rate ZK PCS bytes {zk_proof_bytes} exceed target overhead over FLOCK {flock_proof_bytes}",
-        );
+        bincode::serialized_size(&proof).expect("serialize registered Secure ZK proof");
     }
 
     #[cfg(feature = "veil")]
@@ -1159,19 +1108,13 @@ mod tests {
             setup.pcs_params.profile,
             flock_core::pcs::ligerito::LigeritoProfile::Secure
         );
-        assert_eq!(setup.pcs_params.log_inv_rate, 3);
         assert_eq!(
-            setup.ligerito_aggregate_soundness_bits(),
-            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
+            setup.pcs_params.log_inv_rate,
+            setup.pcs_params.profile.log_inv_rate()
         );
-        assert_eq!(
-            setup.interactive_soundness_bound(),
-            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
-        );
-        assert_eq!(
-            setup.rom_soundness_bound(64, 1),
-            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
-        );
+        assert!(setup.ligerito_aggregate_soundness_bits().unwrap() > 110.0);
+        assert!(setup.interactive_soundness_bound().unwrap().bits() > 100.0);
+        assert!(setup.rom_soundness_bound(64, 1).unwrap().bits() > 64.0);
         let mut messages = msgs_of(0x51_CC_1C_7, n);
         // Detect accidental raw-witness serialization.
         messages[0] = [0xA5; MESSAGE_BYTES];
@@ -1242,7 +1185,18 @@ mod tests {
         oversized_blind_grind.blind_grind_nonce = crate::succinct_veil::MAX_BLIND_GRIND_TRIALS;
         rejects(&oversized_blind_grind, &commitment, &digests);
 
-        assert!(proof.pcs_open.ligerito.fold_grinding_nonces.is_empty());
+        assert!(
+            proof.pcs_open.ligerito.fold_grinding_nonces.len()
+                <= crate::succinct_veil::MAX_LIGERITO_GRIND_SITES as usize
+        );
+        assert!(
+            proof
+                .pcs_open
+                .ligerito
+                .fold_grinding_nonces
+                .iter()
+                .all(|nonce| *nonce < crate::succinct_veil::MAX_LIGERITO_GRIND_TRIALS)
+        );
 
         let mut changed_blinded_slice = proof.clone();
         changed_blinded_slice.pcs_open.ring_switches[0].s_hat_v[0] += flock_core::field::F128::ONE;
