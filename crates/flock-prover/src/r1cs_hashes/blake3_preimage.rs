@@ -578,22 +578,11 @@ impl Blake3PreimageZkSetup {
     #[cfg(feature = "veil")]
     fn ligerito_aggregate_soundness_probability(&self) -> f64 {
         let effective_m = self.pcs_params.log_msg_len() + flock_core::pcs::LOG_PACKING;
-        #[cfg(feature = "std")]
-        let config = {
-            let source = flock_core::pcs::ligerito::embedded_security_config(
-                effective_m,
-                self.pcs_params.profile,
-            )
-            .expect("full-ZK setup requires a registered Secure Ligerito configuration");
-            flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
-                .expect("registered Secure Ligerito configuration must validate")
-        };
-        #[cfg(not(feature = "std"))]
-        let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::derive_profile(
+        let config = flock_core::pcs::ligerito::registered_security_config(
             effective_m,
             self.pcs_params.profile,
         )
-        .expect("derived Secure Ligerito configuration must validate");
+        .expect("full-ZK setup requires a registered Secure Ligerito configuration");
         // The full-ZK path opens the hiding wide-leaf L0 commitment, so the
         // ledger must also carry the `c` combination event.
         config

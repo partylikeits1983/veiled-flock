@@ -33,6 +33,8 @@ clippy-x86:
 
 no-std-check:
 	$(CARGO) check --locked -p flock-core --no-default-features
+	$(CARGO) check --locked -p veil-f128 --no-default-features
+	$(CARGO) check --locked -p flock-prover --no-default-features
 
 wasm-bench:
 	$(RUSTUP) target add wasm32-unknown-unknown
