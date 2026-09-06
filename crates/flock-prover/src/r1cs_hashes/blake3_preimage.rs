@@ -667,14 +667,24 @@ impl Blake3PreimageZkSetup {
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
         let mut rng = flock_core::zk::ZkRng::from_entropy();
-        self.prove_with_rng(msgs, digests, &mut rng)
+        self.prove_with_mask_rng(msgs, digests, &mut rng)
     }
 
     /// Prove with caller-provided mask randomness. This is intended for
     /// reproducible benchmarks and tests; production callers should use
     /// [`Self::prove`] so masks come from OS entropy.
-    #[cfg(feature = "veil")]
+    #[cfg(all(feature = "veil", any(test, feature = "insecure-deterministic-masks")))]
     pub fn prove_with_rng(
+        &self,
+        msgs: &[[u8; MESSAGE_BYTES]],
+        digests: &[[u8; DIGEST_BYTES]],
+        rng: &mut flock_core::zk::ZkRng,
+    ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
+        self.prove_with_mask_rng(msgs, digests, rng)
+    }
+
+    #[cfg(feature = "veil")]
+    fn prove_with_mask_rng(
         &self,
         msgs: &[[u8; MESSAGE_BYTES]],
         digests: &[[u8; DIGEST_BYTES]],
