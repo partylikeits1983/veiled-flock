@@ -5915,12 +5915,8 @@ mod tests {
         fn observe_f128(&mut self, _value: F128) {}
 
         fn sample_f128(&mut self) -> F128 {
-            self.try_sample_f128().unwrap()
-        }
-
-        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
             self.scalar_calls += 1;
-            Ok(self.value)
+            self.value
         }
     }
 
