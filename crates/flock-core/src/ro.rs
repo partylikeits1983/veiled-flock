@@ -155,11 +155,6 @@ impl RoContext {
     pub fn is_native(&self) -> bool {
         matches!(self.backend, RoBackend::Native)
     }
-
-    #[inline]
-    pub(crate) fn has_budget(&self) -> bool {
-        self.budget.is_some()
-    }
 }
 
 /// The 64-byte constant header for a (role, channel, tree-depth) context.
@@ -326,6 +321,37 @@ impl<'a> RoTreeHasher<'a> {
             }
             RoTreeHasher::External { oracle, header } => {
                 oracle.try_answer(&encode_point(header, level, index, payload))
+            }
+        }
+    }
+
+    /// Reserve `amount` native point-oracle answers. Native bulk Merkle kernels
+    /// call this once per level, then hash without per-node atomic charges.
+    #[inline]
+    pub(crate) fn try_charge(&self, amount: u64) -> Result<(), OracleLimitError> {
+        if let RoTreeHasher::Native {
+            budget: Some(budget),
+            ..
+        } = self
+        {
+            budget.try_charge(amount)?;
+        }
+        Ok(())
+    }
+
+    /// Native SHA-256 hash after the caller has already charged the query.
+    #[inline]
+    pub(crate) fn native_hash_unmetered(&self, level: u32, index: u64, payload: &[u8]) -> Hash {
+        match self {
+            RoTreeHasher::Native { mid, .. } => {
+                let mut h = mid.clone();
+                h.update(level.to_le_bytes());
+                h.update(index.to_le_bytes());
+                h.update(payload);
+                h.finalize().into()
+            }
+            RoTreeHasher::External { .. } => {
+                unreachable!("native_hash_unmetered requires a native tree hasher")
             }
         }
     }
