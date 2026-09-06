@@ -47,6 +47,7 @@
 
 use super::common::{BitRecord, add_carry_parts, or_bit_at, or_u32_at_bit};
 use flock_core::field::F128;
+use flock_core::pcs::ligerito::{LigeritoProfile, UnsupportedLogInvRate};
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix};
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -1249,7 +1250,7 @@ pub struct Sha256HybridSetup {
 
 impl Sha256HybridSetup {
     pub fn new(n_compressions: usize) -> Self {
-        Self::with_log_inv_rate(n_compressions, 1)
+        Self::with_profile(n_compressions, LigeritoProfile::Fast)
     }
 
     /// [`Self::new`] with the **batch-major** witness layout (see
@@ -1283,26 +1284,20 @@ impl Sha256HybridSetup {
 
     /// Build a setup from the legacy PCS rate selector: 1 = Fast, 2 = Slim.
     /// Use [`Self::with_profile`] to select Secure.
-    pub fn with_log_inv_rate(n_compressions: usize, log_inv_rate: usize) -> Self {
-        let profile = flock_core::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
-            .unwrap_or_else(|| panic!("unsupported PCS log_inv_rate {log_inv_rate}"));
-        Self::with_profile_and_rate(n_compressions, profile, log_inv_rate)
+    ///
+    /// # Errors
+    /// Returns [`UnsupportedLogInvRate`] when the rate is not 1 or 2.
+    pub fn try_with_log_inv_rate(
+        n_compressions: usize,
+        log_inv_rate: usize,
+    ) -> Result<Self, UnsupportedLogInvRate> {
+        let profile = LigeritoProfile::try_from(log_inv_rate)?;
+        Ok(Self::with_profile(n_compressions, profile))
     }
 
     /// Build a setup for a named Ligerito profile (fast/slim/secure);
     /// the PCS rate follows the profile.
-    pub fn with_profile(
-        n_compressions: usize,
-        profile: flock_core::pcs::ligerito::LigeritoProfile,
-    ) -> Self {
-        Self::with_profile_and_rate(n_compressions, profile, profile.log_inv_rate())
-    }
-
-    fn with_profile_and_rate(
-        n_compressions: usize,
-        profile: flock_core::pcs::ligerito::LigeritoProfile,
-        log_inv_rate: usize,
-    ) -> Self {
+    pub fn with_profile(n_compressions: usize, profile: LigeritoProfile) -> Self {
         assert!(n_compressions >= 1, "n_compressions must be ≥ 1");
         let n_log = min_n_blocks_log(n_compressions);
         let r1cs = build_block_r1cs(n_log);
@@ -1313,7 +1308,7 @@ impl Sha256HybridSetup {
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = flock_core::pcs::PcsParams {
             m: r1cs.m,
-            log_inv_rate,
+            log_inv_rate: profile.log_inv_rate(),
             log_batch_size: 6,
             profile,
             zk: false,

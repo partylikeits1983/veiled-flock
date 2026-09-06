@@ -42,6 +42,7 @@
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::LincheckCircuit;
+use flock_core::pcs::ligerito::{LigeritoProfile, UnsupportedLogInvRate};
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csClaim;
 use flock_core::r1cs::BlockR1cs;
@@ -495,37 +496,31 @@ pub struct KeccakSetup {
 
 impl KeccakSetup {
     pub fn new(n_keccaks: usize) -> Self {
-        Self::with_log_inv_rate(n_keccaks, 1)
+        Self::with_profile(n_keccaks, LigeritoProfile::Fast)
     }
 
     /// Build a setup from the legacy PCS rate selector: 1 = Fast, 2 = Slim.
     /// Use [`Self::with_profile`] to select Secure.
-    pub fn with_log_inv_rate(n_keccaks: usize, log_inv_rate: usize) -> Self {
-        let profile = flock_core::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
-            .unwrap_or_else(|| panic!("unsupported PCS log_inv_rate {log_inv_rate}"));
-        Self::with_profile_and_rate(n_keccaks, profile, log_inv_rate)
+    ///
+    /// # Errors
+    /// Returns [`UnsupportedLogInvRate`] when the rate is not 1 or 2.
+    pub fn try_with_log_inv_rate(
+        n_keccaks: usize,
+        log_inv_rate: usize,
+    ) -> Result<Self, UnsupportedLogInvRate> {
+        let profile = LigeritoProfile::try_from(log_inv_rate)?;
+        Ok(Self::with_profile(n_keccaks, profile))
     }
 
     /// Build a setup for a named Ligerito profile (fast/slim/secure);
     /// the PCS rate follows the profile.
-    pub fn with_profile(
-        n_keccaks: usize,
-        profile: flock_core::pcs::ligerito::LigeritoProfile,
-    ) -> Self {
-        Self::with_profile_and_rate(n_keccaks, profile, profile.log_inv_rate())
-    }
-
-    fn with_profile_and_rate(
-        n_keccaks: usize,
-        profile: flock_core::pcs::ligerito::LigeritoProfile,
-        log_inv_rate: usize,
-    ) -> Self {
+    pub fn with_profile(n_keccaks: usize, profile: LigeritoProfile) -> Self {
         assert!(n_keccaks >= 1);
         let n_blocks_log = min_n_blocks_log(n_keccaks);
         let r1cs = build_block_r1cs(n_blocks_log);
         let pcs_params = PcsParams {
             m: r1cs.m,
-            log_inv_rate,
+            log_inv_rate: profile.log_inv_rate(),
             log_batch_size: 6,
             profile,
             zk: false,

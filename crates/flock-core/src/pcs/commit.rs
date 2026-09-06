@@ -20,6 +20,18 @@ use crate::ntt::AdditiveNttF128;
 use crate::pcs::pack::LOG_PACKING;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+/// The selected Ligerito profile and PCS code rate disagree.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[error(
+    "PcsParams.profile ({profile}) implies log_inv_rate {expected_log_inv_rate}, but PcsParams.log_inv_rate is {actual_log_inv_rate}"
+)]
+pub struct ProfileRateMismatch {
+    pub profile: crate::pcs::ligerito::LigeritoProfile,
+    pub expected_log_inv_rate: usize,
+    pub actual_log_inv_rate: usize,
+}
 
 /// PCS configuration. Polynomial-basis subspace `{1, x, x², …}` for the NTT.
 ///
@@ -56,16 +68,16 @@ impl PcsParams {
         self.log_inv_rate == self.profile.log_inv_rate()
     }
 
-    pub fn validate_profile_rate(&self) -> Result<(), String> {
-        if self.profile_rate_matches() {
+    pub fn validate_profile_rate(&self) -> Result<(), ProfileRateMismatch> {
+        let expected_log_inv_rate = self.profile.log_inv_rate();
+        if self.log_inv_rate == expected_log_inv_rate {
             Ok(())
         } else {
-            Err(format!(
-                "PcsParams.profile ({}) implies log_inv_rate {}, but PcsParams.log_inv_rate is {}",
-                self.profile.as_str(),
-                self.profile.log_inv_rate(),
-                self.log_inv_rate
-            ))
+            Err(ProfileRateMismatch {
+                profile: self.profile,
+                expected_log_inv_rate,
+                actual_log_inv_rate: self.log_inv_rate,
+            })
         }
     }
 
@@ -120,7 +132,7 @@ impl PcsParams {
         16usize << self.log_leaf_f128_count()
     }
 
-    fn validate(&self) {
+    fn validate(&self) -> Result<(), ProfileRateMismatch> {
         assert!(
             self.m >= LOG_PACKING + self.log_batch_size,
             "m={} too small (need m ≥ LOG_PACKING + log_batch_size = {})",
@@ -131,10 +143,10 @@ impl PcsParams {
             self.log_inv_rate >= 1,
             "log_inv_rate must be ≥ 1 for a non-trivial RS code",
         );
-        self.validate_profile_rate()
-            .unwrap_or_else(|message| panic!("{message}"));
+        self.validate_profile_rate()?;
         #[cfg(not(feature = "zk"))]
         assert!(!self.zk, "PcsParams.zk requires the `zk` cargo feature",);
+        Ok(())
     }
 }
 
@@ -205,7 +217,7 @@ pub fn commit_with_ro(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
 ) -> (Commitment, ProverData) {
-    params.validate();
+    params.validate().expect("invalid PCS parameters");
     assert!(!params.zk, "zk params require commit_zk");
     assert_eq!(z_packed.len(), 1usize << params.log_msg_len());
 
@@ -255,7 +267,7 @@ pub fn commit_into_with_ro(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
 ) -> (Commitment, ProverData) {
-    params.validate();
+    params.validate().expect("invalid PCS parameters");
     assert!(!params.zk, "zk params require commit_zk");
     assert_eq!(z_packed.len(), 1usize << params.log_msg_len());
     let codeword_len = params.codeword_len_f128();
@@ -312,7 +324,7 @@ pub fn commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
 ) -> (Commitment, ProverData) {
-    params.validate();
+    params.validate().expect("invalid PCS parameters");
     assert!(params.zk, "commit_zk requires PcsParams.zk");
     assert_eq!(z_packed.len(), 1usize << params.witness_log_msg_len());
 
@@ -590,7 +602,7 @@ mod tests {
     fn commit_matches_full_ntt_oracle() {
         let mut rng = Rng::new(0xFEED);
         for (m, log_inv_rate, log_batch_size) in [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3)] {
-            let profile = crate::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
+            let profile = crate::pcs::ligerito::LigeritoProfile::try_from(log_inv_rate)
                 .expect("test rate has a profile");
             let params = PcsParams {
                 m,
@@ -643,7 +655,7 @@ mod tests {
     fn commit_zk_matches_wide_oracle() {
         let mut rng = Rng::new(0xC0FFEE);
         for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
-            let profile = crate::pcs::ligerito::LigeritoProfile::from_log_inv_rate(log_inv_rate)
+            let profile = crate::pcs::ligerito::LigeritoProfile::try_from(log_inv_rate)
                 .expect("test rate has a profile");
             let params = PcsParams {
                 m,
@@ -726,7 +738,32 @@ mod tests {
     }
 
     #[test]
-    #[should_panic(expected = "PcsParams.profile")]
+    fn profile_rate_validation_returns_structured_error() {
+        let params = PcsParams {
+            m: 10,
+            log_inv_rate: 2,
+            log_batch_size: 1,
+            profile: crate::pcs::ligerito::LigeritoProfile::Fast,
+            zk: false,
+        };
+
+        let error = params.validate_profile_rate().unwrap_err();
+        assert_eq!(
+            error,
+            ProfileRateMismatch {
+                profile: crate::pcs::ligerito::LigeritoProfile::Fast,
+                expected_log_inv_rate: 1,
+                actual_log_inv_rate: 2,
+            }
+        );
+        assert_eq!(
+            error.to_string(),
+            "PcsParams.profile (fast) implies log_inv_rate 1, but PcsParams.log_inv_rate is 2"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "invalid PCS parameters")]
     fn commit_rejects_profile_rate_mismatch() {
         let params = PcsParams {
             m: 10,

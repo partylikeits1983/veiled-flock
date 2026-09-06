@@ -33,8 +33,8 @@ mod zk_audit;
 #[cfg(feature = "zk")]
 pub use commit::commit_zk_with_ro;
 pub use commit::{
-    Commitment, PcsParams, ProverData, commit, commit_into, commit_into_with_ro, commit_with_ro,
-    prefault_codeword_during,
+    Commitment, PcsParams, ProfileRateMismatch, ProverData, commit, commit_into,
+    commit_into_with_ro, commit_with_ro, prefault_codeword_during,
 };
 pub use pack::{LOG_PACKING, pack_witness, unpack_witness};
 pub use ring_switch::{RingSwitchProof, SparseEqTensor};

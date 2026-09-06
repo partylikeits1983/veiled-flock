@@ -36,8 +36,11 @@ fn main() {
                 Ok(cfg) => {
                     let toml = cfg.to_toml_string().expect("serialize");
                     // Round-trip to be sure the written form re-validates.
-                    LigeritoSecurityConfig::from_toml_str(&toml)
-                        .unwrap_or_else(|e| panic!("m={m}: written toml fails reload: {e}"));
+                    if let Err(error) = LigeritoSecurityConfig::from_toml_str(&toml) {
+                        eprintln!("FAIL  m={m}: written toml fails reload: {error}");
+                        failures += 1;
+                        continue;
+                    }
                     std::fs::write(&path, &toml).expect("write toml");
                     let queries: usize = cfg.levels.iter().map(|l| l.queries).sum();
                     let ood: usize = cfg.levels.iter().map(|l| l.ood_samples).sum();
