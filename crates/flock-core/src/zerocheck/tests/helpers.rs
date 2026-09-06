@@ -10,7 +10,7 @@ impl Challenger for ScriptedEqChallenger {
     fn observe_f128(&mut self, _value: F128) {}
 
     fn sample_f128(&mut self) -> F128 {
-        panic!("sample_eq_point uses framed vector sampling")
+        unreachable!("equality-point sampling must use framed vector challenges")
     }
 
     fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
@@ -32,7 +32,7 @@ impl Challenger for AlwaysRejectEqChallenger {
     fn observe_f128(&mut self, _value: F128) {}
 
     fn sample_f128(&mut self) -> F128 {
-        panic!("sample_eq_point uses framed vector sampling")
+        unreachable!("equality-point sampling must use framed vector challenges")
     }
 
     fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
