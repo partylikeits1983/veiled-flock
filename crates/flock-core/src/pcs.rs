@@ -30,17 +30,18 @@ pub mod tensor_algebra;
 #[cfg(all(test, feature = "zk"))]
 mod zk_audit;
 
-#[cfg(feature = "zk")]
-pub use commit::commit_zk_with_ro;
 pub use commit::{
     Commitment, PcsParams, ProverData, commit, commit_into, commit_into_with_ro, commit_with_ro,
     prefault_codeword_during,
 };
+#[cfg(feature = "zk")]
+pub use commit::{commit_zk_with_ro, try_commit_zk_with_ro};
 pub use pack::{LOG_PACKING, pack_witness, unpack_witness};
 pub use ring_switch::{RingSwitchProof, SparseEqTensor};
 
-use crate::challenger::Challenger;
+use crate::challenger::{Challenger, sample_f128_scalars};
 use crate::field::F128;
+use crate::oracle_budget::OracleLimitError;
 use crate::ro::{RoChannel, RoContext};
 use crate::zerocheck::PaddingSpec;
 use crate::zerocheck::multilinear::eq_eval;
@@ -75,6 +76,13 @@ pub enum VerifyError {
     RingSwitch(ring_switch::VerifyError),
     /// The Ligerito recursive verifier rejected the proof.
     Ligerito,
+    OracleLimit(OracleLimitError),
+}
+
+impl From<OracleLimitError> for VerifyError {
+    fn from(err: OracleLimitError) -> Self {
+        Self::OracleLimit(err)
+    }
 }
 
 /// `eq_ind` representation for a packed-direct claim. The contributed value at
@@ -167,7 +175,36 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
     challenger: &mut Ch,
 ) -> BatchOpeningProofLigerito {
     let ro = crate::ro::RoContext::plain();
-    open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
+    try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
+        packed_witness,
+        prover_data,
+        commitment,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        padding,
+        lig_config,
+        &ro,
+        crate::ro::RoChannel::Witness,
+        challenger,
+    )
+    .expect("PCS opening oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_open_batch_mixed_ligerito_with_precomputed_s_hat_v<Ch: Challenger>(
+    packed_witness: Vec<F128>,
+    prover_data: &ProverData,
+    commitment: &Commitment,
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[PackedDirectClaim],
+    padding: &PaddingSpec,
+    lig_config: &ligerito::ProverConfig,
+    challenger: &mut Ch,
+) -> Result<BatchOpeningProofLigerito, OracleLimitError> {
+    let ro = crate::ro::RoContext::plain();
+    try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
         packed_witness,
         prover_data,
         commitment,
@@ -197,7 +234,37 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro<Ch: Challenger>(
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> BatchOpeningProofLigerito {
-    open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro(
+    try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
+        packed_witness,
+        prover_data,
+        commitment,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        padding,
+        lig_config,
+        ro,
+        channel,
+        challenger,
+    )
+    .expect("PCS opening oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro<Ch: Challenger>(
+    packed_witness: Vec<F128>,
+    prover_data: &ProverData,
+    commitment: &Commitment,
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[PackedDirectClaim],
+    padding: &PaddingSpec,
+    lig_config: &ligerito::ProverConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<BatchOpeningProofLigerito, OracleLimitError> {
+    try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro(
         packed_witness,
         prover_data,
         commitment,
@@ -229,6 +296,38 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
 ) -> BatchOpeningProofLigerito {
+    try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro(
+        packed_witness,
+        prover_data,
+        commitment,
+        x_outers,
+        precomputed_s_hat_v,
+        packed_direct,
+        packed_linear,
+        padding,
+        lig_config,
+        ro,
+        channel,
+        challenger,
+    )
+    .expect("PCS opening oracle query budget exhausted")
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challenger>(
+    packed_witness: Vec<F128>,
+    prover_data: &ProverData,
+    commitment: &Commitment,
+    x_outers: &[&[F128]],
+    precomputed_s_hat_v: &[Option<&[F128]>],
+    packed_direct: &[PackedDirectClaim],
+    packed_linear: &[PackedLinearClaim],
+    padding: &PaddingSpec,
+    lig_config: &ligerito::ProverConfig,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> Result<BatchOpeningProofLigerito, OracleLimitError> {
     let trace = std::env::var("PCS_TRACE").is_ok();
     let t_total = std::time::Instant::now();
 
@@ -243,7 +342,7 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
         lig_config.log_inv_rates[0], commitment.params.log_inv_rate,
     );
 
-    let combined = compute_combined_basis_and_target(
+    let combined = try_compute_combined_basis_and_target(
         &packed_witness,
         x_outers,
         precomputed_s_hat_v,
@@ -252,7 +351,7 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
         padding,
         challenger,
         trace,
-    );
+    )?;
 
     let CombinedClaim {
         ring_switches,
@@ -265,7 +364,7 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
     let (ligerito_proof, zk_blind) = if commitment.params.zk {
         #[cfg(feature = "zk")]
         {
-            let (p, b) = open_zk_blinded(
+            let (p, b) = try_open_zk_blinded(
                 packed_witness,
                 prover_data,
                 b_combined,
@@ -275,13 +374,13 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
                 ro,
                 channel,
                 challenger,
-            );
+            )?;
             (p, Some(b))
         }
         #[cfg(not(feature = "zk"))]
         unreachable!("PcsParams.zk requires the `zk` cargo feature")
     } else {
-        let p = ligerito::recursive_prover_with_basis_precomputed_round0_with_ro(
+        let p = ligerito::try_recursive_prover_with_basis_precomputed_round0_with_ro(
             lig_config,
             packed_witness,
             b_combined,
@@ -292,7 +391,7 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
             ro,
             channel,
             challenger,
-        );
+        )?;
         (p, None)
     };
     if trace {
@@ -306,11 +405,11 @@ pub fn open_batch_mixed_ligerito_with_precomputed_s_hat_v_linear_ro<Ch: Challeng
         );
     }
 
-    BatchOpeningProofLigerito {
+    Ok(BatchOpeningProofLigerito {
         ring_switches,
         ligerito: ligerito_proof,
         zk_blind,
-    }
+    })
 }
 
 /// Open claims on the uniformly blinded packed vector `q = z + c·g_top`.
@@ -339,6 +438,15 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
     opening: PreblindedOpening<'_>,
     challenger: &mut Ch,
 ) -> BatchOpeningProofLigerito {
+    try_open_batch_mixed_ligerito_preblinded_ro(opening, challenger)
+        .expect("preblinded PCS opening oracle query budget exhausted")
+}
+
+#[cfg(feature = "zk")]
+pub fn try_open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
+    opening: PreblindedOpening<'_>,
+    challenger: &mut Ch,
+) -> Result<BatchOpeningProofLigerito, OracleLimitError> {
     let PreblindedOpening {
         q_packed,
         prover_data,
@@ -368,7 +476,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
         b_combined,
         target_combined,
         round0_prime,
-    } = compute_combined_basis_and_target(
+    } = try_compute_combined_basis_and_target(
         &q_packed,
         x_outers,
         precomputed_s_hat_v,
@@ -377,7 +485,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
         padding,
         challenger,
         false,
-    );
+    )?;
 
     let w = q_packed.len();
     assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
@@ -405,7 +513,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
     crate::scratch::give_f128(b_combined);
     crate::scratch::give_f128(q_packed);
 
-    let ligerito = ligerito::recursive_prover_with_basis_precomputed_round0_zk_with_ro(
+    let ligerito = ligerito::try_recursive_prover_with_basis_precomputed_round0_zk_with_ro(
         lig_config,
         f_blinded,
         b_wide,
@@ -418,13 +526,13 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
         ro,
         channel,
         challenger,
-    );
+    )?;
 
-    BatchOpeningProofLigerito {
+    Ok(BatchOpeningProofLigerito {
         ring_switches,
         ligerito,
         zk_blind: None,
-    }
+    })
 }
 
 /// zk open path: combine the blinder `g` into the folded vector.
@@ -437,7 +545,7 @@ pub fn open_batch_mixed_ligerito_preblinded_ro<Ch: Challenger>(
 ///    `b′ = [0 ‖ b_combined]`; shift target and round-0 prime by `c·(…)`.
 /// 4. Run the unchanged Ligerito recursion on `(F, b′)` with wide-leaf L0.
 #[cfg(feature = "zk")]
-fn open_zk_blinded<Ch: Challenger>(
+fn try_open_zk_blinded<Ch: Challenger>(
     packed_witness: Vec<F128>,
     prover_data: &ProverData,
     b_combined: Vec<F128>,
@@ -447,7 +555,7 @@ fn open_zk_blinded<Ch: Challenger>(
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
     challenger: &mut Ch,
-) -> (ligerito::LigeritoProof, ZkBlindOpening) {
+) -> Result<(ligerito::LigeritoProof, ZkBlindOpening), OracleLimitError> {
     let w = packed_witness.len();
     assert_eq!(prover_data.zk_mask.len(), w, "commit_zk mask missing");
     assert_eq!(
@@ -479,8 +587,9 @@ fn open_zk_blinded<Ch: Challenger>(
     challenger.observe_label(b"flock-pcs-zk-blind");
     challenger.observe_f128(y_g);
     let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    let c_grind_nonce = challenger.grind_pow(c_bits);
-    let c = challenger.sample_f128();
+    let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits)?;
+    let c_grind_nonce = challenger.grind_pow_bounded(c_bits, c_grind_trials)?;
+    let c = challenger.try_sample_f128()?;
 
     // (3) F = message′ + c·g and the offset-embedded basis b′ = [0 ‖ b].
     let mut f_blinded = crate::scratch::take_f128(2 * w);
@@ -505,7 +614,7 @@ fn open_zk_blinded<Ch: Challenger>(
     let target_prime = target_combined + c * y_g;
     let prime_wide = (round0_prime.0 + c * u0g, round0_prime.1 + c * u2g);
 
-    let proof = ligerito::recursive_prover_with_basis_precomputed_round0_zk_with_ro(
+    let proof = ligerito::try_recursive_prover_with_basis_precomputed_round0_zk_with_ro(
         lig_config,
         f_blinded,
         b_wide,
@@ -518,8 +627,8 @@ fn open_zk_blinded<Ch: Challenger>(
         ro,
         channel,
         challenger,
-    );
-    (proof, ZkBlindOpening { y_g, c_grind_nonce })
+    )?;
+    Ok((proof, ZkBlindOpening { y_g, c_grind_nonce }))
 }
 
 /// What ring_switch + claim-combination produces, fed to the Ligerito backend.
@@ -538,7 +647,7 @@ struct CombinedClaim {
 /// Also computes the round-0 prime as a side effect (cheap since it shares
 /// the b_combined pass).
 #[allow(clippy::too_many_arguments)]
-fn compute_combined_basis_and_target<Ch: Challenger>(
+fn try_compute_combined_basis_and_target<Ch: Challenger>(
     packed_witness: &[F128],
     x_outers: &[&[F128]],
     precomputed_s_hat_v: &[Option<&[F128]>],
@@ -547,7 +656,7 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut Ch,
     trace: bool,
-) -> CombinedClaim {
+) -> Result<CombinedClaim, OracleLimitError> {
     let n_rs = x_outers.len();
     let n_pd = packed_direct.len();
     let n_pl = packed_linear.len();
@@ -569,13 +678,13 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         Vec<(RingSwitchProof, ring_switch::RingSwitchBatchOutput)>,
         Vec<F128>,
     ) = if n_rs > 0 {
-        ring_switch::prove_batched_padded_with_precomputed(
+        ring_switch::try_prove_batched_padded_with_precomputed(
             packed_witness,
             x_outers,
             precomputed_s_hat_v,
             padding,
             challenger,
-        )
+        )?
     } else {
         (Vec::new(), Vec::new())
     };
@@ -596,8 +705,8 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-packed-linear");
         challenger.observe_f128(pl.value);
     }
-    let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
-    let gammas_pl: Vec<F128> = (0..n_pl).map(|_| challenger.sample_f128()).collect();
+    let gammas_pd = sample_f128_scalars(challenger, n_pd)?;
+    let gammas_pl = sample_f128_scalars(challenger, n_pl)?;
 
     let t = std::time::Instant::now();
 
@@ -823,7 +932,7 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         );
     }
 
-    CombinedClaim {
+    Ok(CombinedClaim {
         ring_switches: rs_results
             .into_iter()
             .map(|(p, o)| {
@@ -837,7 +946,7 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         b_combined,
         target_combined,
         round0_prime: (round0_u0, round0_u2),
-    }
+    })
 }
 
 /// Parallel sparse scatter-add: `b_combined[scatter_idx(c)] += gamma * eq.live_tensor[c]`
@@ -1150,7 +1259,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         .map_err(VerifyError::RingSwitch)?;
         rs_outputs.push(out);
     }
-    let gammas_rs: Vec<F128> = (0..n_rs).map(|_| challenger.sample_f128()).collect();
+    let gammas_rs = sample_f128_scalars(challenger, n_rs)?;
 
     // 2. PD claim values + γ_pd.
     for pd in packed_direct {
@@ -1161,8 +1270,8 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-packed-linear");
         challenger.observe_f128(pl.value);
     }
-    let gammas_pd: Vec<F128> = (0..n_pd).map(|_| challenger.sample_f128()).collect();
-    let gammas_pl: Vec<F128> = (0..n_pl).map(|_| challenger.sample_f128()).collect();
+    let gammas_pd = sample_f128_scalars(challenger, n_pd)?;
+    let gammas_pl = sample_f128_scalars(challenger, n_pl)?;
 
     // 3. target_combined from succinct rs claims + PD values.
     let mut target_combined = F128::ZERO;
@@ -1191,10 +1300,11 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-zk-blind");
         challenger.observe_f128(zkb.y_g);
         let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-        if !challenger.verify_pow(zkb.c_grind_nonce, c_bits) {
+        let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits)?;
+        if !challenger.verify_pow_bounded(zkb.c_grind_nonce, c_bits, c_grind_trials)? {
             return Err(VerifyError::Ligerito);
         }
-        let c = challenger.sample_f128();
+        let c = challenger.try_sample_f128()?;
         target_combined += c * zkb.y_g;
         Some(ligerito::ZkL0 { c })
     } else {
@@ -1325,7 +1435,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
 
     // 5. Drive ligerito SUCCINCT verifier — eval_b_residual is called ONCE
     //    at the residual check (returns all yr_len values in one batch).
-    let ok = ligerito::recursive_verifier_with_basis_succinct_with_ro(
+    let ok = ligerito::try_recursive_verifier_with_basis_succinct_with_ro(
         lig_config,
         &proof.ligerito,
         log_n,
@@ -1336,7 +1446,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         ro,
         channel,
         challenger,
-    );
+    )?;
     if !ok {
         return Err(VerifyError::Ligerito);
     }
@@ -1449,30 +1559,17 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn pcs_zk_roundtrip_and_negatives() {
-        let m = 13usize;
-        let mut rng = Rng::new(0x2CF0);
-        let z = rng.bits(1 << m);
-        let z_skip = rng.f128();
-        let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
-        let rs_claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
-
-        let params = PcsParams {
+        let ZkPcsFixture {
             m,
-            log_inv_rate: 1,
-            log_batch_size: 2,
-            profile: Default::default(),
-            zk: true,
-        };
-        let z_packed = pack_witness(&z, m);
-
-        // Packed-direct claim at a random point.
-        let pd_point: Vec<F128> = (0..(m - 7)).map(|_| rng.f128()).collect();
-        let pd_eq = build_eq(&pd_point);
-        let pd_value: F128 = pd_eq
-            .iter()
-            .zip(z_packed.iter())
-            .map(|(e, z)| *e * *z)
-            .fold(F128::ZERO, |a, b| a + b);
+            params,
+            z_packed,
+            z_skip,
+            x_outer,
+            rs_claim,
+            pd_point,
+            pd_eq,
+            pd_value,
+        } = zk_pcs_fixture();
 
         let (lig_p_cfg, lig_v_cfg) = tiny_zk_configs();
         let recorder = Arc::new(RecordingOracle::new());
@@ -1564,6 +1661,269 @@ mod tests {
         assert!(
             verify(&c5, &p5).is_err(),
             "missing zk_blind must be rejected"
+        );
+    }
+
+    /// Shared m=13 zk PCS fixture: the witness, its packing, and the two
+    /// opening claims that [`tiny_zk_configs`] serves.
+    #[cfg(feature = "zk")]
+    struct ZkPcsFixture {
+        m: usize,
+        params: PcsParams,
+        z_packed: Vec<F128>,
+        z_skip: F128,
+        x_outer: Vec<F128>,
+        rs_claim: F128,
+        pd_point: Vec<F128>,
+        pd_eq: Vec<F128>,
+        pd_value: F128,
+    }
+
+    #[cfg(feature = "zk")]
+    fn zk_pcs_fixture() -> ZkPcsFixture {
+        let m = 13usize;
+        let mut rng = Rng::new(0x2CF0);
+        let z = rng.bits(1 << m);
+        let z_skip = rng.f128();
+        let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
+        let rs_claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
+
+        let params = PcsParams {
+            m,
+            log_inv_rate: 1,
+            log_batch_size: 2,
+            profile: Default::default(),
+            zk: true,
+        };
+        let z_packed = pack_witness(&z, m);
+
+        // Packed-direct claim at a random point.
+        let pd_point: Vec<F128> = (0..(m - 7)).map(|_| rng.f128()).collect();
+        let pd_eq = build_eq(&pd_point);
+        let pd_value: F128 = pd_eq
+            .iter()
+            .zip(z_packed.iter())
+            .map(|(e, z)| *e * *z)
+            .fold(F128::ZERO, |a, b| a + b);
+
+        ZkPcsFixture {
+            m,
+            params,
+            z_packed,
+            z_skip,
+            x_outer,
+            rs_claim,
+            pd_point,
+            pd_eq,
+            pd_value,
+        }
+    }
+
+    /// Caps recorded for the sites that grind exactly `bits` wide.
+    #[cfg(feature = "zk")]
+    fn caps_at(recorded: &[(u32, u64)], bits: u32) -> Vec<u64> {
+        recorded
+            .iter()
+            .filter(|(b, _)| *b == bits)
+            .map(|(_, cap)| *cap)
+            .collect()
+    }
+
+    /// Forwards every challenger call to an inner challenger, and records the
+    /// `(bits, max_trials)` pair that each bounded-PoW site passes. This lets
+    /// a test pin the trial cap of one call site without depending on which
+    /// nonce the grind happens to find.
+    ///
+    /// The unbounded `grind_pow` and `verify_pow` panic, as
+    /// `BoundedPowOnlyChallenger` in `pcs::ligerito` does: a call site that
+    /// drops back to them escapes the cap entirely, and must fail loudly
+    /// instead of recording nothing.
+    #[cfg(feature = "zk")]
+    struct CapRecordingChallenger<C> {
+        inner: C,
+        grind_caps: Vec<(u32, u64)>,
+        verify_caps: Vec<(u32, u64)>,
+    }
+
+    #[cfg(feature = "zk")]
+    impl<C: Challenger> CapRecordingChallenger<C> {
+        fn new(inner: C) -> Self {
+            Self {
+                inner,
+                grind_caps: Vec::new(),
+                verify_caps: Vec::new(),
+            }
+        }
+    }
+
+    #[cfg(feature = "zk")]
+    impl<C: Challenger> Challenger for CapRecordingChallenger<C> {
+        fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+            self.inner.ro_context(nonce)
+        }
+        fn observe_label(&mut self, label: &[u8]) {
+            self.inner.observe_label(label);
+        }
+        fn observe_f128(&mut self, value: F128) {
+            self.inner.observe_f128(value);
+        }
+        fn observe_f128_slice(&mut self, values: &[F128]) {
+            self.inner.observe_f128_slice(values);
+        }
+        fn observe_bytes(&mut self, bytes: &[u8]) {
+            self.inner.observe_bytes(bytes);
+        }
+        fn sample_f128(&mut self) -> F128 {
+            self.inner.sample_f128()
+        }
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.inner.try_sample_f128()
+        }
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.inner.sample_f128_vec(n)
+        }
+        fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+            self.inner.try_sample_f128_vec(n)
+        }
+        fn grind_pow(&mut self, _bits: u32) -> u64 {
+            panic!("zk PCS prover must use bounded PoW grinding")
+        }
+        fn grind_pow_bounded(
+            &mut self,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<u64, OracleLimitError> {
+            self.grind_caps.push((bits, max_trials));
+            self.inner.grind_pow_bounded(bits, max_trials)
+        }
+        fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+            panic!("zk PCS verifier must use bounded PoW checks")
+        }
+        fn verify_pow_bounded(
+            &mut self,
+            nonce: u64,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<bool, OracleLimitError> {
+            self.verify_caps.push((bits, max_trials));
+            self.inner.verify_pow_bounded(nonce, bits, max_trials)
+        }
+    }
+
+    /// The zk L0 blind grind must bound its PoW search by the cap that
+    /// `fold_grinding_bits` derives, on the prover path and on the verifier
+    /// path alike. A restored `MAX_LIGERITO_GRIND_TRIALS` at either site
+    /// fails this test, which a test of the helper alone cannot do.
+    ///
+    /// The test reads the cap off the call site through a recording
+    /// challenger, so no nonce, digest, or transcript byte enters the
+    /// assertions.
+    #[cfg(feature = "zk")]
+    #[test]
+    fn pcs_zk_blind_grind_uses_l0_derived_trial_cap() {
+        use crate::pcs::ligerito::{
+            MAX_LIGERITO_GRIND_TRIALS, l0_derived_grind_bits, l0_derived_grind_trials,
+        };
+
+        let ZkPcsFixture {
+            m,
+            params,
+            z_packed,
+            z_skip,
+            x_outer,
+            rs_claim,
+            pd_point,
+            pd_eq,
+            pd_value,
+        } = zk_pcs_fixture();
+
+        let (lig_p_cfg, lig_v_cfg) = tiny_zk_configs();
+
+        // The cap under test, and the constant it replaced. The test is only
+        // meaningful while the two differ.
+        let c_bits = l0_derived_grind_bits(&lig_p_cfg.fold_grinding_bits);
+        let derived_cap = l0_derived_grind_trials(&lig_p_cfg.fold_grinding_bits).unwrap();
+        assert_eq!(c_bits, 1, "tiny config grinds the blind site at 1 bit");
+        assert_eq!(
+            derived_cap, 256,
+            "1 bit plus the 7-bit trial overhead gives a 256-trial cap"
+        );
+        assert_ne!(
+            derived_cap, MAX_LIGERITO_GRIND_TRIALS,
+            "the derived cap must differ from the generic cap, or this test proves nothing"
+        );
+        assert_eq!(
+            lig_v_cfg.fold_grinding_bits, lig_p_cfg.fold_grinding_bits,
+            "both sides must derive the cap from the same widths"
+        );
+        // The assertions below select the blind site by its grind width, so no
+        // other site may share that width.
+        assert!(
+            lig_p_cfg.fold_grinding_taper.iter().all(|t| !*t),
+            "an untapered config keeps each site at its configured width"
+        );
+        assert!(
+            lig_p_cfg
+                .fold_grinding_bits
+                .iter()
+                .chain(lig_p_cfg.grinding_bits.iter())
+                .all(|b| *b != c_bits as usize),
+            "no ligerito site may grind at the blind width, or the cap filter is ambiguous"
+        );
+
+        let ro = RoContext::native([0x42; 32]);
+
+        let mut zk_rng = ZkRng::from_seed([5u8; 32]);
+        let (commitment, prover_data) =
+            commit::commit_zk_with_ro(&z_packed, &params, &mut zk_rng, &ro, RoChannel::Witness);
+
+        let mut ch_p = CapRecordingChallenger::new(FsChallenger::new(b"flock-test-lig-zk"));
+        let proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
+            z_packed.clone(),
+            &prover_data,
+            &commitment,
+            &[x_outer.as_slice()],
+            &[],
+            &[PackedDirectClaim {
+                point: pd_point.clone(),
+                value: pd_value,
+                eq_ind: DirectEqInd::Dense(pd_eq.clone()),
+            }],
+            &PaddingSpec::dense(m),
+            &lig_p_cfg,
+            &ro,
+            RoChannel::Witness,
+            &mut ch_p,
+        );
+        assert!(proof.zk_blind.is_some(), "the zk blind path must run");
+
+        let mut ch_v = CapRecordingChallenger::new(FsChallenger::new(b"flock-test-lig-zk"));
+        verify_opening_batch_ligerito_mixed_ro(
+            &commitment,
+            &[rs_claim],
+            &[z_skip],
+            &[x_outer.as_slice()],
+            &[PackedDirectClaimRef {
+                point: &pd_point,
+                value: pd_value,
+            }],
+            &proof,
+            &lig_v_cfg,
+            &ro,
+            RoChannel::Witness,
+            &mut ch_v,
+        )
+        .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
+
+        assert_eq!(
+            caps_at(&ch_p.grind_caps, c_bits),
+            vec![derived_cap],
+            "the prover blind grind must pass the L0-derived cap"
+        );
+        assert_eq!(
+            caps_at(&ch_v.verify_caps, c_bits),
+            vec![derived_cap],
+            "the verifier blind check must pass the L0-derived cap"
         );
     }
 

@@ -60,6 +60,7 @@
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;
+use flock_core::oracle_budget::OracleLimitError;
 use flock_core::pcs::{DirectEqInd, LOG_PACKING, PackedDirectClaim};
 use flock_core::r1cs::WitnessLayout;
 
@@ -268,10 +269,17 @@ impl DigestChallenges {
     /// otherwise a prover could choose the committed slab to agree with the
     /// public digests only at the point it knew in advance.
     pub fn sample<Ch: Challenger>(stmt: &DigestStatement, challenger: &mut Ch) -> Self {
+        Self::try_sample(stmt, challenger).expect("digest-bind oracle query budget exhausted")
+    }
+
+    pub fn try_sample<Ch: Challenger>(
+        stmt: &DigestStatement,
+        challenger: &mut Ch,
+    ) -> Result<Self, OracleLimitError> {
         challenger.observe_label(b"flock-digest-bind");
-        let tau_pos = challenger.sample_f128_vec(stmt.layout.tau_pos_len());
-        let instance = challenger.sample_f128_vec(stmt.n_log);
-        Self { tau_pos, instance }
+        let tau_pos = challenger.try_sample_f128_vec(stmt.layout.tau_pos_len())?;
+        let instance = challenger.try_sample_f128_vec(stmt.n_log)?;
+        Ok(Self { tau_pos, instance })
     }
 }
 

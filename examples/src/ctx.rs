@@ -4,6 +4,7 @@ use flock_core::{
     challenger::{Challenger, FsChallenger},
     field::F128,
     lincheck::QuirkyPoint,
+    oracle_budget::OracleLimitError,
     pcs::{
         self, Commitment, PreblindedOpening, PreblindedOpeningVerification, ProverData,
         commit_zk_with_ro,
@@ -737,7 +738,20 @@ impl Challenger for ZkProverCtx {
         panic!("the PIOP layer must not grind through the masking context")
     }
 
+    fn grind_pow_bounded(&mut self, _bits: u32, _max_trials: u64) -> Result<u64, OracleLimitError> {
+        panic!("the PIOP layer must not grind through the masking context")
+    }
+
     fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+        panic!("the PIOP layer must not grind through the masking context")
+    }
+
+    fn verify_pow_bounded(
+        &mut self,
+        _nonce: u64,
+        _bits: u32,
+        _max_trials: u64,
+    ) -> Result<bool, OracleLimitError> {
         panic!("the PIOP layer must not grind through the masking context")
     }
 }

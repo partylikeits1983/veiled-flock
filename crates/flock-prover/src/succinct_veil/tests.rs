@@ -1,7 +1,8 @@
 use super::{
-    MaskLayout, RING_WIDTH, SuccinctVeilError, certify_flock_piop_soundness,
-    certify_shifted_veil_soundness, scale_ring_expressions, solve_sumcheck_messages,
-    validate_batch_opening, validate_l0_hiding_budget, validate_succinct_parameters,
+    MaskLayout, RING_WIDTH, SuccinctVeilError, blind_grind_parameters,
+    certify_flock_piop_soundness, certify_shifted_veil_soundness, scale_ring_expressions,
+    solve_sumcheck_messages, validate_batch_opening, validate_l0_hiding_budget,
+    validate_succinct_parameters,
 };
 use crate::r1cs_hashes::blake3::build_block_r1cs_zk;
 use crate::r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE_BLOCKS};
@@ -168,6 +169,35 @@ fn embedded_secure_profiles_match_the_formal_parameter_table() {
         assert_eq!(
             config.initial_log_msg_cols - config.recursive_ks.iter().sum::<usize>(),
             expected.final_log_size
+        );
+    }
+}
+
+#[test]
+fn outer_position_sampling_accounting_covers_every_ligerito_level() {
+    let got = super::supported_outer_position_sampling_parameters();
+    assert_eq!(got.len(), 18);
+    assert_eq!(&got[..3], &[(2048, 294), (512, 182), (256, 137)]);
+    assert!(got.contains(&(512, 134)));
+    assert!(got.iter().all(|&(domain, queries)| queries <= domain));
+}
+
+#[test]
+fn registered_blind_grinds_share_the_ligerito_derived_cap() {
+    for (index, expected_trials) in [512u64, 1024, 2048, 4096, 8192].into_iter().enumerate() {
+        let r1cs_m = 22 + index;
+        let config = flock_core::pcs::ligerito::prover_config_for(
+            r1cs_m - 6,
+            6,
+            flock_core::pcs::ligerito::LigeritoProfile::Secure,
+        )
+        .expect("registered Secure profile");
+        let (bits, trials) = blind_grind_parameters(&config.fold_grinding_bits).unwrap();
+        assert_eq!(bits, index as u32 + 2);
+        assert_eq!(trials, expected_trials);
+        assert_eq!(
+            trials,
+            flock_core::pcs::ligerito::l0_derived_grind_trials(&config.fold_grinding_bits).unwrap()
         );
     }
 }

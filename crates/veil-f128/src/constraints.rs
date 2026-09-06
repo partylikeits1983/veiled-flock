@@ -14,6 +14,7 @@
 use flock_core::{
     challenger::Challenger,
     field::F128,
+    oracle_budget::OracleLimitError,
     ro::{RoChannel, RoContext},
     zk::MaskSampler,
 };
@@ -358,6 +359,7 @@ pub enum ConstraintError {
     InsufficientSoundness,
     Dot(DotProductError),
     Hadamard(HadamardError),
+    OracleLimit(OracleLimitError),
 }
 
 /// Minimum soundness floor accepted by the production succinct compiler.
@@ -625,6 +627,12 @@ impl From<HadamardError> for ConstraintError {
     }
 }
 
+impl From<OracleLimitError> for ConstraintError {
+    fn from(value: OracleLimitError) -> Self {
+        Self::OracleLimit(value)
+    }
+}
+
 pub fn prove_constraints<C: Challenger, R: MaskSampler + ?Sized>(
     circuit: &ArithmeticCircuit,
     inputs: &[F128],
@@ -770,14 +778,14 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
             RoChannel::VeilHadamard,
         )?;
         challenger.observe_bytes(&hadamard_data.root());
-        let multiplication_rlc = sample_not_zero_or_one(challenger);
+        let multiplication_rlc = sample_not_zero_or_one(challenger)?;
         let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
         let proof = prove_hadamard_and_dots(&dot_vector, hadamard_data, challenger)?;
         append_multiplication_link_constraints(&padded, &dot_vector, &proof, &mut constraints);
         proof
     };
 
-    let constraint_rlc = challenger.sample_f128();
+    let constraint_rlc = challenger.try_sample_f128()?;
     let (dot_vector, expected_dot) =
         combine_linear_constraints(padded.num_variables, &constraints, constraint_rlc)?;
     let linear = prove_dot_product(&dot_vector, linear_data, challenger)?;
@@ -833,7 +841,7 @@ pub fn verify_constraints<C: Challenger>(
     challenger.observe_label(b"veil-f128-constraint-system");
     challenger.observe_bytes(&proof.linear.commitment);
     challenger.observe_bytes(&proof.hadamard.commitment);
-    let multiplication_rlc = sample_not_zero_or_one(challenger);
+    let multiplication_rlc = sample_not_zero_or_one(challenger)?;
     let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
     verify_hadamard_and_dots(
         &dot_vector,
@@ -844,7 +852,7 @@ pub fn verify_constraints<C: Challenger>(
     )?;
     append_multiplication_link_constraints(&padded, &dot_vector, &proof.hadamard, &mut constraints);
 
-    let constraint_rlc = challenger.sample_f128();
+    let constraint_rlc = challenger.try_sample_f128()?;
     let (dot_vector, expected_dot) =
         combine_linear_constraints(padded.num_variables, &constraints, constraint_rlc)?;
     if proof.linear.claimed_dot_products.as_slice() != [expected_dot] {

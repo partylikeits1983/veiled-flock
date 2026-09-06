@@ -29,6 +29,7 @@ pub mod linalg;
 pub mod lincheck;
 pub mod merkle;
 pub mod ntt;
+pub mod oracle_budget;
 pub mod pcs;
 pub mod permutation;
 pub mod proof;

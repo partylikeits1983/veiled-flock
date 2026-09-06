@@ -15,9 +15,10 @@
 //! is tested on honest witnesses; verify also rejects byte-mutated proofs and
 //! shape-corrupted ones.
 
-use crate::challenger::Challenger;
+use crate::challenger::{Challenger, sample_f128_vec_matching};
 use crate::field::{F8, F128};
 use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
+use crate::oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS};
 use serde::{Deserialize, Serialize};
 
 pub mod multilinear;
@@ -45,23 +46,32 @@ pub const K_SKIP: usize = 6;
 /// zerocheck after the univariate skip.
 pub const N_INNER: usize = 7;
 
+const ORACLE_LIMIT_EXPECT: &str = "zerocheck oracle query budget exhausted";
+
 /// Derive the equality point shared by every zerocheck prover, verifier, and
 /// simulator. The multilinear recurrence reconstructs `G(0)` by dividing by
 /// `1 + r_i`, so sampled rest coordinates must exclude `1`.
 pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128> {
+    sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)
+        .expect("zerocheck equality-point sampler exhausted")
+}
+
+/// Fallible bounded equality-point sampler used by production proof paths.
+pub fn sample_eq_point_bounded<C: Challenger>(
+    m: usize,
+    challenger: &mut C,
+    max_trials: usize,
+) -> Result<Vec<F128>, OracleLimitError> {
     assert!(
         m >= K_SKIP + N_INNER,
         "zerocheck equality point is too short"
     );
 
-    let r_skip = challenger.sample_f128_vec(K_SKIP);
+    let r_skip = challenger.try_sample_f128_vec(K_SKIP)?;
     let outer_len = m - K_SKIP - N_INNER;
-    let r_outer = loop {
-        let sampled_point = challenger.sample_f128_vec(outer_len);
-        if sampled_point.iter().all(|value| *value != F128::ONE) {
-            break sampled_point;
-        }
-    };
+    let r_outer = sample_f128_vec_matching(challenger, outer_len, max_trials, |point| {
+        point.iter().all(|value| *value != F128::ONE)
+    })?;
 
     let small = small_challenges_ghash();
     let medium = medium_challenges_ghash();
@@ -72,7 +82,7 @@ pub fn sample_eq_point<C: Challenger>(m: usize, challenger: &mut C) -> Vec<F128>
     r[K_SKIP..K_SKIP + 3].copy_from_slice(&small);
     r[K_SKIP + 3..K_SKIP + N_INNER].copy_from_slice(&medium);
     r[K_SKIP + N_INNER..].copy_from_slice(&r_outer);
-    r
+    Ok(r)
 }
 
 /// Linear weights taking `(running, G(1), G(∞))` to `G(rho)` for one
@@ -372,6 +382,9 @@ pub struct ZerocheckProof {
 /// Reasons the verifier may reject a proof.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum VerifyError {
+    /// Random-oracle budget or bounded sampling was exhausted while replaying
+    /// the transcript.
+    OracleLimit(OracleLimitError),
     /// `log_n` doesn't satisfy `log_n >= K_SKIP`.
     LogNTooSmall { log_n: usize, k_skip: usize },
     /// Round-1 messages have the wrong length (expected `2^K_SKIP`).
@@ -388,6 +401,12 @@ pub enum VerifyError {
     /// `(P_r(1), P_r(∞))`, or in `final_a_eval` / `final_b_eval` propagates
     /// to this check.
     SumcheckFinalFailed,
+}
+
+impl From<OracleLimitError> for VerifyError {
+    fn from(err: OracleLimitError) -> Self {
+        Self::OracleLimit(err)
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -412,7 +431,17 @@ pub fn prove_packed<C: Challenger>(
     m: usize,
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim) {
-    prove_packed_padded(
+    try_prove_packed(a_packed, b_packed, c_packed, m, challenger).expect(ORACLE_LIMIT_EXPECT)
+}
+
+pub fn try_prove_packed<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    m: usize,
+    challenger: &mut C,
+) -> Result<(ZerocheckProof, ZerocheckClaim), OracleLimitError> {
+    try_prove_packed_padded(
         a_packed,
         b_packed,
         c_packed,
@@ -434,9 +463,21 @@ pub fn prove_packed_padded<C: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim) {
+    try_prove_packed_padded(a_packed, b_packed, c_packed, m, padding, challenger)
+        .expect(ORACLE_LIMIT_EXPECT)
+}
+
+pub fn try_prove_packed_padded<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    m: usize,
+    padding: &PaddingSpec,
+    challenger: &mut C,
+) -> Result<(ZerocheckProof, ZerocheckClaim), OracleLimitError> {
     let (proof, claim, _) =
-        prove_packed_padded_inner(a_packed, b_packed, c_packed, m, padding, false, challenger);
-    (proof, claim)
+        try_prove_packed_padded_inner(a_packed, b_packed, c_packed, m, padding, false, challenger)?;
+    Ok((proof, claim))
 }
 
 /// Variant of [`prove_packed_padded`] that ALSO returns the canonical
@@ -454,17 +495,29 @@ pub fn prove_packed_padded_capture_s_hat_v_c<C: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut C,
 ) -> (ZerocheckProof, ZerocheckClaim, Vec<F128>) {
+    try_prove_packed_padded_capture_s_hat_v_c(a_packed, b_packed, c_packed, m, padding, challenger)
+        .expect(ORACLE_LIMIT_EXPECT)
+}
+
+pub fn try_prove_packed_padded_capture_s_hat_v_c<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    m: usize,
+    padding: &PaddingSpec,
+    challenger: &mut C,
+) -> Result<(ZerocheckProof, ZerocheckClaim, Vec<F128>), OracleLimitError> {
     let (proof, claim, captured) =
-        prove_packed_padded_inner(a_packed, b_packed, c_packed, m, padding, true, challenger);
-    (
+        try_prove_packed_padded_inner(a_packed, b_packed, c_packed, m, padding, true, challenger)?;
+    Ok((
         proof,
         claim,
         captured.expect("capture=true must produce s_hat_v_c"),
-    )
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
-fn prove_packed_padded_inner<C: Challenger>(
+fn try_prove_packed_padded_inner<C: Challenger>(
     a_packed: &[u8],
     b_packed: &[u8],
     c_packed: &[u8],
@@ -472,7 +525,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     padding: &PaddingSpec,
     capture_s_hat_v_c: bool,
     challenger: &mut C,
-) -> (ZerocheckProof, ZerocheckClaim, Option<Vec<F128>>) {
+) -> Result<(ZerocheckProof, ZerocheckClaim, Option<Vec<F128>>), OracleLimitError> {
     let k_skip = K_SKIP;
     assert!(
         m >= k_skip + N_INNER,
@@ -496,7 +549,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     //   r[k_skip+3..k_skip+7]       — protocol medium-eq constants β_i
     //   r[k_skip+7..m]              — sampled (the "outer" eq weights for
     //                                  the URM and multilinear rounds)
-    let r = sample_eq_point(m, challenger);
+    let r = sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)?;
 
     // ---- 3. Round 1: URM (extract_c, parallel) ----
     //
@@ -542,7 +595,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     // ---- 4. Observe round-1 message, sample z (URM fold point) ----
     challenger.observe_f128_slice(&round1_ab);
     challenger.observe_f128_slice(&round1_c);
-    let z = challenger.sample_f128();
+    let z = challenger.try_sample_f128()?;
 
     // ---- 5. c_eval = ĉ(z, r_rest) via interpolation of round1_c at z ----
     //
@@ -585,7 +638,7 @@ fn prove_packed_padded_inner<C: Challenger>(
     challenger.observe_f128(msg_1);
     challenger.observe_f128(msg_inf);
     let mut mlv_rhos: Vec<F128> = Vec::with_capacity(n_mlv);
-    mlv_rhos.push(challenger.sample_f128());
+    mlv_rhos.push(challenger.try_sample_f128()?);
 
     // ---- 7. Rounds 3..(n_mlv + 1) — AB only (c is done) ----
     //
@@ -647,7 +700,7 @@ fn prove_packed_padded_inner<C: Challenger>(
         multilinear_msgs.push((m1, mi));
         challenger.observe_f128(m1);
         challenger.observe_f128(mi);
-        mlv_rhos.push(challenger.sample_f128());
+        mlv_rhos.push(challenger.try_sample_f128()?);
     }
 
     // ---- 8. Final binding at ρ_{n_mlv} (the last challenge) ----
@@ -705,7 +758,7 @@ fn prove_packed_padded_inner<C: Challenger>(
         b_eval: final_b_eval,
         c_eval: final_c_eval,
     };
-    (proof, claim, s_hat_v_c)
+    Ok((proof, claim, s_hat_v_c))
 }
 
 /// Verify a zerocheck proof for an instance over `{0,1}^log_n`.
@@ -753,12 +806,12 @@ pub fn verify<C: Challenger>(
     challenger.observe_label(b"flock-zerocheck");
 
     // ---- Re-derive r (in lockstep with prove_packed) ----
-    let r = sample_eq_point(m, challenger);
+    let r = sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)?;
 
     // ---- Observe round-1 messages, sample z ----
     challenger.observe_f128_slice(&proof.round1_ab);
     challenger.observe_f128_slice(&proof.round1_c);
-    let z = challenger.sample_f128();
+    let z = challenger.try_sample_f128()?;
 
     // ---- Reconstruct ĉ(z, r_rest) from round1_c ----
     //
@@ -818,7 +871,7 @@ pub fn verify<C: Challenger>(
 
         challenger.observe_f128(msg_1);
         challenger.observe_f128(msg_inf);
-        let rho = challenger.sample_f128();
+        let rho = challenger.try_sample_f128()?;
         mlv_rhos.push(rho);
 
         c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
@@ -943,10 +996,25 @@ pub fn prove_packed_padded_zk<C: Challenger>(
     padding: &PaddingSpec,
     challenger: &mut C,
 ) -> (ZkZerocheckProof, ZerocheckClaim) {
-    let (proof, claim, _) = prove_packed_padded_zk_masked(
+    try_prove_packed_padded_zk(
+        a_packed, b_packed, c_packed, p_small, m, padding, challenger,
+    )
+    .expect(ORACLE_LIMIT_EXPECT)
+}
+
+pub fn try_prove_packed_padded_zk<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    p_small: &[F128],
+    m: usize,
+    padding: &PaddingSpec,
+    challenger: &mut C,
+) -> Result<(ZkZerocheckProof, ZerocheckClaim), OracleLimitError> {
+    let (proof, claim, _) = try_prove_packed_padded_zk_masked(
         a_packed, b_packed, c_packed, p_small, m, padding, None, challenger,
-    );
-    (proof, claim)
+    )?;
+    Ok((proof, claim))
 }
 
 /// [`prove_packed_padded_zk`] with the optional round-1 mask channel.
@@ -969,6 +1037,30 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     ZerocheckClaim,
     Option<Round1MaskTranscript>,
 ) {
+    try_prove_packed_padded_zk_masked(
+        a_packed, b_packed, c_packed, p_small, m, padding, mask, challenger,
+    )
+    .expect(ORACLE_LIMIT_EXPECT)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn try_prove_packed_padded_zk_masked<C: Challenger>(
+    a_packed: &[u8],
+    b_packed: &[u8],
+    c_packed: &[u8],
+    p_small: &[F128],
+    m: usize,
+    padding: &PaddingSpec,
+    mask: Option<Round1Mask<'_>>,
+    challenger: &mut C,
+) -> Result<
+    (
+        ZkZerocheckProof,
+        ZerocheckClaim,
+        Option<Round1MaskTranscript>,
+    ),
+    OracleLimitError,
+> {
     let k_skip = K_SKIP;
     assert!(
         m >= k_skip + N_INNER,
@@ -985,7 +1077,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     challenger.observe_label(b"flock-zerocheck-zk");
 
     // ---- r (identical layout to prove_packed_padded_inner) ----
-    let r = sample_eq_point(m, challenger);
+    let r = sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)?;
 
     // ---- round 1 (â·b̂ only; unmasked) ----
     let ntt_s = AdditiveNttGf8::new(k_skip, F8::ZERO);
@@ -1042,7 +1134,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
 
     challenger.observe_f128_slice(&round1_ab);
     challenger.observe_f128_slice(&round1_c);
-    let z = challenger.sample_f128();
+    let z = challenger.try_sample_f128()?;
     // The proof field is the MASKED value: the verifier recomputes exactly
     // this from `round1_c` and compares, so that check is unchanged.
     let final_c_eval = interpolate_at_z_on_lambda(&round1_c, k_skip, z);
@@ -1083,7 +1175,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
         .zip(&q_mlv)
         .fold(F128::ZERO, |acc, ((e, p), q)| acc + *e * *p * *q);
     challenger.observe_f128(mask_init);
-    let gamma = challenger.sample_f128();
+    let gamma = challenger.try_sample_f128()?;
 
     // ---- combined round 2 message ----
     let mut multilinear_msgs: Vec<(F128, F128)> = Vec::with_capacity(n_mlv);
@@ -1092,7 +1184,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
     challenger.observe_f128(c2.0);
     challenger.observe_f128(c2.1);
     let mut mlv_rhos: Vec<F128> = Vec::with_capacity(n_mlv);
-    mlv_rhos.push(challenger.sample_f128());
+    mlv_rhos.push(challenger.try_sample_f128()?);
 
     // ---- tail rounds (naive path for both cubes; reference-correct) ----
     for i in 0..(n_mlv - 1) {
@@ -1108,7 +1200,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
         multilinear_msgs.push(c);
         challenger.observe_f128(c.0);
         challenger.observe_f128(c.1);
-        mlv_rhos.push(challenger.sample_f128());
+        mlv_rhos.push(challenger.try_sample_f128()?);
     }
 
     // ---- final binding ----
@@ -1142,7 +1234,7 @@ pub fn prove_packed_padded_zk_masked<C: Challenger>(
         b_eval: final_b_eval,
         c_eval: claim_c_eval,
     };
-    (proof, claim, mask_transcript)
+    Ok((proof, claim, mask_transcript))
 }
 
 /// Terminal values of the honest masked zerocheck at a fixed challenge
@@ -1265,6 +1357,14 @@ pub fn mask_round_pairs<C: Challenger>(
     m: usize,
     challenger: &mut C,
 ) -> Vec<(F128, F128)> {
+    try_mask_round_pairs(p_small, m, challenger).expect(ORACLE_LIMIT_EXPECT)
+}
+
+pub fn try_mask_round_pairs<C: Challenger>(
+    p_small: &[F128],
+    m: usize,
+    challenger: &mut C,
+) -> Result<Vec<(F128, F128)>, OracleLimitError> {
     let k_skip = K_SKIP;
     assert!(m >= k_skip + N_INNER);
     let n_mlv = m - k_skip;
@@ -1272,8 +1372,8 @@ pub fn mask_round_pairs<C: Challenger>(
     assert_eq!(p_small.len(), mask_spec.d(m));
 
     challenger.observe_label(b"flock-zerocheck-zk");
-    let r = sample_eq_point(m, challenger);
-    let _z = challenger.sample_f128();
+    let r = sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)?;
+    let _z = challenger.try_sample_f128()?;
 
     let mut mlv_arg = vec![F128::ONE; n_mlv];
     mlv_arg[1..].copy_from_slice(&r[k_skip + 1..]);
@@ -1284,16 +1384,16 @@ pub fn mask_round_pairs<C: Challenger>(
     out.push((mm2_1, mm2_inf));
     // The fold challenges ρ_j are whatever the caller's challenger yields at
     // this position; the map is linear in P for any fixed schedule.
-    let mut rho = challenger.sample_f128();
+    let mut rho = challenger.try_sample_f128()?;
     for i in 0..(n_mlv - 1) {
         let log_n_before = p_mlv.len().trailing_zeros() as usize;
         let mut r_next = vec![F128::ONE; log_n_before - 1];
         r_next[1..].copy_from_slice(&r[k_skip + i + 2..]);
         fold_in_place_pair(&mut p_mlv, &mut q_mlv, rho);
         out.push(round_pair_naive(&p_mlv, &q_mlv, &r_next));
-        rho = challenger.sample_f128();
+        rho = challenger.try_sample_f128()?;
     }
-    out
+    Ok(out)
 }
 
 /// Verify a combined masked zerocheck proof. Checks the sumcheck equation
@@ -1343,11 +1443,11 @@ pub fn verify_zk_masked<C: Challenger>(
     }
 
     challenger.observe_label(b"flock-zerocheck-zk");
-    let r = sample_eq_point(m, challenger);
+    let r = sample_eq_point_bounded(m, challenger, REJECTION_SAMPLING_TRIALS)?;
 
     challenger.observe_f128_slice(&proof.round1_ab);
     challenger.observe_f128_slice(&proof.round1_c);
-    let z = challenger.sample_f128();
+    let z = challenger.try_sample_f128()?;
 
     let computed_c_eval = interpolate_at_z_on_lambda(&proof.round1_c, k_skip, z);
     if computed_c_eval != proof.final_c_eval {
@@ -1376,7 +1476,7 @@ pub fn verify_zk_masked<C: Challenger>(
 
     // Observe σ_z, sample γ — mirrors the prover; γ is bound to (root, σ_z).
     challenger.observe_f128(proof.mask_init);
-    let gamma = challenger.sample_f128();
+    let gamma = challenger.try_sample_f128()?;
 
     // Combined initial claim.
     let mut c_running = ab_init + gamma * proof.mask_init;
@@ -1388,7 +1488,7 @@ pub fn verify_zk_masked<C: Challenger>(
         let g_inf = msg_inf;
         challenger.observe_f128(msg_1);
         challenger.observe_f128(msg_inf);
-        let rho = challenger.sample_f128();
+        let rho = challenger.try_sample_f128()?;
         mlv_rhos.push(rho);
         c_running = fold_sumcheck_round(c_running, g1, g_inf, r_eq, rho)
             .ok_or(VerifyError::SumcheckFinalFailed)?;
