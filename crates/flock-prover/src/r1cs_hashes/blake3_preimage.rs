@@ -550,7 +550,7 @@ impl Blake3PreimageZkSetup {
 
     #[cfg(feature = "veil")]
     fn ensure_soundness_floor(bits: f64, floor: f64) -> Result<(), SuccinctPreimageError> {
-        if bits.is_finite() && bits >= floor {
+        if bits >= floor {
             Ok(())
         } else {
             Err(PreimageError::Uncertified.into())
@@ -1091,6 +1091,20 @@ mod tests {
                 })
             })
             .collect()
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn soundness_floor_accepts_infinite_bits() {
+        assert!(Blake3PreimageZkSetup::ensure_soundness_floor(f64::INFINITY, 106.0).is_ok());
+        assert_eq!(
+            Blake3PreimageZkSetup::ensure_soundness_floor(f64::NAN, 106.0),
+            Err(PreimageError::Uncertified.into())
+        );
+        assert_eq!(
+            Blake3PreimageZkSetup::ensure_soundness_floor(105.9, 106.0),
+            Err(PreimageError::Uncertified.into())
+        );
     }
 
     #[cfg(feature = "veil")]
