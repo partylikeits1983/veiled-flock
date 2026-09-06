@@ -44,6 +44,7 @@
 use flock_core::challenger::Challenger;
 #[cfg(feature = "veil")]
 use flock_core::challenger::FsChallenger;
+use flock_core::pcs::ligerito::LigeritoProfile;
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
@@ -270,7 +271,7 @@ impl Blake3PreimageSetup {
             // The full-view ZK instantiation uses the unique-decoding
             // profile. Fast/Slim rely on a separate Johnson/list-decoding
             // analysis that is not part of this protocol's theorem stack.
-            profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
+            profile: LigeritoProfile::Secure,
             zk: false,
         };
         Self {
@@ -522,9 +523,9 @@ impl Blake3PreimageZkSetup {
         flock_core::scratch::prewarm_prover(r1cs.m);
         let pcs_params = PcsParams {
             m: r1cs.m,
-            log_inv_rate: flock_core::pcs::ligerito::LigeritoProfile::Secure.log_inv_rate(),
+            log_inv_rate: LigeritoProfile::Secure.log_inv_rate(),
             log_batch_size: 6,
-            profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
+            profile: LigeritoProfile::Secure,
             zk: true,
         };
         Self {
@@ -1104,10 +1105,7 @@ mod tests {
         // block slots.
         let n = N_TEST;
         let setup = Blake3PreimageZkSetup::new(n);
-        assert_eq!(
-            setup.pcs_params.profile,
-            flock_core::pcs::ligerito::LigeritoProfile::Secure
-        );
+        assert_eq!(setup.pcs_params.profile, LigeritoProfile::Secure);
         assert_eq!(
             setup.pcs_params.log_inv_rate,
             setup.pcs_params.profile.log_inv_rate()
