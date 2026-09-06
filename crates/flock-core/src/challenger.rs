@@ -108,9 +108,15 @@ pub trait Challenger: Send {
     /// Bounded prover-side PoW grinding. Implementations must try only nonces
     /// in `0..max_trials`, absorb the first successful nonce, and fail closed
     /// without absorbing if no such nonce exists.
-    fn grind_pow_bounded(&mut self, bits: u32, _max_trials: u64) -> Result<u64, OracleLimitError> {
+    fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
         validate_pow_bits(bits)?;
-        Ok(self.grind_pow(bits))
+        if max_trials == 0 {
+            return Err(OracleLimitError::GrindingLimitExceeded);
+        }
+        if bits == 0 {
+            return Ok(self.grind_pow(bits));
+        }
+        Err(OracleLimitError::GrindingLimitExceeded)
     }
 
     /// Verifier-side mirror of [`Self::grind_pow`]: check that `nonce`
@@ -131,9 +137,12 @@ pub trait Challenger: Send {
         &mut self,
         nonce: u64,
         bits: u32,
-        _max_trials: u64,
+        max_trials: u64,
     ) -> Result<bool, OracleLimitError> {
         validate_pow_bits(bits)?;
+        if nonce >= max_trials {
+            return Ok(false);
+        }
         Ok(self.verify_pow(nonce, bits))
     }
 }
@@ -531,6 +540,9 @@ impl Challenger for FsChallenger {
 
     fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
         validate_pow_bits(bits)?;
+        if max_trials == 0 {
+            return Err(OracleLimitError::GrindingLimitExceeded);
+        }
         if bits == 0 {
             let nonce = 0u64;
             self.observe_bytes(&nonce.to_le_bytes());
@@ -581,14 +593,14 @@ impl Challenger for FsChallenger {
         max_trials: u64,
     ) -> Result<bool, OracleLimitError> {
         validate_pow_bits(bits)?;
+        if nonce >= max_trials {
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(false);
+        }
         if bits == 0 {
             let ok = nonce == 0;
             self.observe_bytes(&nonce.to_le_bytes());
             return Ok(ok);
-        }
-        if nonce >= max_trials {
-            self.observe_bytes(&nonce.to_le_bytes());
-            return Ok(false);
         }
         let state_digest = self.try_pow_state_digest()?;
         let ok = self.try_pow_candidate(&state_digest, nonce, bits)?;
@@ -729,6 +741,27 @@ mod tests {
         let mut ch = RandomChallenger::new(0);
         assert_eq!(ch.grind_pow(16), 0);
         assert!(ch.verify_pow(0, 16));
+    }
+
+    #[test]
+    fn default_bounded_grind_fails_closed_for_positive_bits() {
+        let mut ch = RandomChallenger::new(0);
+        assert_eq!(
+            ch.grind_pow_bounded(1, u64::MAX),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(
+            ch.grind_pow_bounded(0, 0),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(ch.grind_pow_bounded(0, 1), Ok(0));
+    }
+
+    #[test]
+    fn default_bounded_verify_checks_nonce_cap_before_delegating() {
+        let mut ch = RandomChallenger::new(0);
+        assert_eq!(ch.verify_pow_bounded(7, 1, 7), Ok(false));
+        assert_eq!(ch.verify_pow_bounded(6, 1, 7), Ok(true));
     }
 
     #[test]
@@ -889,6 +922,18 @@ mod tests {
             challenger.verify_pow_bounded(0, MAX_POW_BITS + 1, 3),
             Err(OracleLimitError::InvalidGrindingBits)
         );
+        assert_eq!(budget.used(), 0);
+    }
+
+    #[test]
+    fn fs_challenger_bounded_pow_rejects_empty_trial_window() {
+        let budget = OracleQueryBudget::new(0);
+        let mut challenger = FsChallenger::new_budgeted(b"pow-empty", budget.clone());
+        assert_eq!(
+            challenger.grind_pow_bounded(0, 0),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(challenger.verify_pow_bounded(0, 0, 0), Ok(false));
         assert_eq!(budget.used(), 0);
     }
 

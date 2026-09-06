@@ -623,6 +623,9 @@ impl Challenger for OracleChallenger {
 
     fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
         validate_pow_bits(bits)?;
+        if max_trials == 0 {
+            return Err(OracleLimitError::GrindingLimitExceeded);
+        }
         // Grinding queries the oracle at fresh points, exactly as the honest
         // challenger does. It is NOT programmed: the simulator grinds
         // honestly on its programmed prefix, which is why programming and
@@ -663,14 +666,14 @@ impl Challenger for OracleChallenger {
         max_trials: u64,
     ) -> Result<bool, OracleLimitError> {
         validate_pow_bits(bits)?;
+        if nonce >= max_trials {
+            self.observe_bytes(&nonce.to_le_bytes());
+            return Ok(false);
+        }
         if bits == 0 {
             let ok = nonce == 0;
             self.observe_bytes(&nonce.to_le_bytes());
             return Ok(ok);
-        }
-        if nonce >= max_trials {
-            self.observe_bytes(&nonce.to_le_bytes());
-            return Ok(false);
         }
         let state = self.try_pow_state_digest()?;
         let ok = leading_zero_bits(&self.try_pow_answer(&state, nonce)?) >= bits;
@@ -899,6 +902,20 @@ mod tests {
             ch.grind_pow_bounded(flock_core::challenger::MAX_POW_BITS + 1, 3),
             Err(OracleLimitError::InvalidGrindingBits)
         );
+        assert_eq!(budget.used(), 0);
+        assert_eq!(oracle.lock().unwrap().total_answer_count(), 0);
+    }
+
+    #[test]
+    fn bounded_oracle_pow_rejects_empty_trial_window() {
+        let oracle = shared_oracle();
+        let budget = OracleQueryBudget::new(0);
+        let mut ch = OracleChallenger::new_budgeted(b"pow-empty", oracle.clone(), budget.clone());
+        assert_eq!(
+            ch.grind_pow_bounded(0, 0),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(ch.verify_pow_bounded(0, 0, 0), Ok(false));
         assert_eq!(budget.used(), 0);
         assert_eq!(oracle.lock().unwrap().total_answer_count(), 0);
     }

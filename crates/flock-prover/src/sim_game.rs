@@ -70,8 +70,8 @@ impl ClassicalPromZkBound {
         self.proofs as f64 * (5.0 * nonzero + not_zero_or_one + equality_point)
     }
 
-    /// Fail-closed tails for bounded distinct-position sampling in the outer
-    /// PCS L0 opening and the two VEIL matrix commitments.
+    /// Fail-closed tails for bounded distinct-position sampling in every outer
+    /// PCS Ligerito opening level and the two VEIL matrix commitments.
     pub fn position_sampling_abort_probability(self) -> f64 {
         let trials = flock_core::oracle_budget::REJECTION_SAMPLING_TRIALS;
         let outer = crate::succinct_veil::supported_outer_position_sampling_parameters()

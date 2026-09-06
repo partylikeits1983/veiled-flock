@@ -133,7 +133,7 @@ fn supported_blake3_r1cs_shape(r1cs: &BlockR1cs) -> Option<SupportedBlake3R1csSh
 pub(crate) fn supported_outer_position_sampling_parameters() -> Vec<(usize, usize)> {
     SUPPORTED_BLAKE3_R1CS_SHAPES
         .iter()
-        .map(|shape| {
+        .flat_map(|shape| {
             let params = PcsParams {
                 m: shape.r1cs_m,
                 log_inv_rate: 1,
@@ -147,7 +147,15 @@ pub(crate) fn supported_outer_position_sampling_parameters() -> Vec<(usize, usiz
                 params.profile,
             )
             .expect("supported VEIL shape must have a registered Ligerito profile");
-            (params.n_positions(), config.queries[0])
+            let level_log_msg_cols = std::iter::once(config.initial_log_msg_cols)
+                .chain(config.recursive_log_msg_cols.iter().copied());
+            level_log_msg_cols
+                .zip(config.log_inv_rates.iter().copied())
+                .zip(config.queries.iter().copied())
+                .map(|((log_msg_cols, log_inv_rate), query_count)| {
+                    (1usize << (log_msg_cols + log_inv_rate), query_count)
+                })
+                .collect::<Vec<_>>()
         })
         .collect()
 }

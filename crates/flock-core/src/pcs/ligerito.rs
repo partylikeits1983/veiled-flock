@@ -228,7 +228,6 @@ fn verify_ligerito_pow<Ch: Challenger>(
 }
 
 #[inline]
-#[cfg(test)]
 fn verify_ligerito_pow_or_reject<Ch: Challenger>(
     challenger: &mut Ch,
     nonce: u64,
@@ -4718,7 +4717,6 @@ where
 /// `b_initial` recomputed locally (typically from the combined claims) and
 /// `target`. Also supplies the L0 root (from the upstream `Commitment`).
 #[allow(clippy::too_many_arguments)]
-#[cfg(test)]
 pub fn recursive_verifier_with_basis<Ch: Challenger>(
     config: &VerifierConfig,
     proof: &LigeritoProof,
@@ -5606,7 +5604,6 @@ fn recursive_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
         .all(|rp| rp.leaf_salts.is_empty())
 }
 
-#[cfg(test)]
 fn all_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
     proof.initial_proof.leaf_salts.is_empty() && recursive_proof_salts_are_empty(proof)
 }

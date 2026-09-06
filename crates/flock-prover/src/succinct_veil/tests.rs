@@ -174,6 +174,15 @@ fn embedded_secure_profiles_match_the_formal_parameter_table() {
 }
 
 #[test]
+fn outer_position_sampling_accounting_covers_every_ligerito_level() {
+    let got = super::supported_outer_position_sampling_parameters();
+    assert_eq!(got.len(), 18);
+    assert_eq!(&got[..3], &[(2048, 294), (512, 182), (256, 137)]);
+    assert!(got.contains(&(512, 134)));
+    assert!(got.iter().all(|&(domain, queries)| queries <= domain));
+}
+
+#[test]
 fn registered_blind_grinds_share_the_ligerito_derived_cap() {
     for (index, expected_trials) in [512u64, 1024, 2048, 4096, 8192].into_iter().enumerate() {
         let r1cs_m = 22 + index;
