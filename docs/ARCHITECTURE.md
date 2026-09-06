@@ -2,6 +2,10 @@
 
 VEIL-FLOCK has one zero-knowledge path built from three layers.
 
+The cryptographic layers can run in a no-std environment; host-dependent
+workflow boundaries and the WASM benchmark export are documented in
+[NO_STD.md](NO_STD.md).
+
 | Layer | Role |
 |---|---|
 | FLOCK PIOP | Reduce the pinned Boolean R1CS to witness evaluations |
