@@ -58,16 +58,14 @@ pub fn take_f128(n: usize) -> Vec<F128> {
 /// back to a fresh allocation. Lets callers branch on warm-vs-cold (e.g.
 /// the commit prefault skips its page-touch thread when the pool can
 /// supply an already-resident buffer).
+#[cfg(feature = "std")]
 pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
-    #[cfg(not(feature = "std"))]
-    {
-        let _ = n;
-        None
-    }
-    #[cfg(feature = "std")]
-    {
-        try_take_f128_from_pool(&POOL, n)
-    }
+    try_take_f128_from_pool(&POOL, n)
+}
+
+#[cfg(not(feature = "std"))]
+pub(crate) fn try_take_f128(_: usize) -> Option<Vec<F128>> {
+    None
 }
 
 #[cfg(feature = "std")]
@@ -96,15 +94,9 @@ fn try_take_f128_from_pool(pool: &Mutex<Vec<Vec<F128>>>, n: usize) -> Option<Vec
 /// smallest-capacity buffer is evicted (large buffers are the expensive ones
 /// to re-fault; a run that ramps problem sizes upward must not get its big
 /// buffers crowded out by stale small ones).
+#[cfg(feature = "std")]
 pub fn give_f128(v: Vec<F128>) {
-    #[cfg(not(feature = "std"))]
-    {
-        drop(v);
-    }
-    #[cfg(feature = "std")]
-    {
-        give_f128_to_pool(&POOL, v);
-    }
+    give_f128_to_pool(&POOL, v);
 }
 
 #[cfg(feature = "std")]
@@ -124,6 +116,9 @@ fn give_f128_to_pool(pool: &Mutex<Vec<Vec<F128>>>, v: Vec<F128>) {
         pool.swap_remove(smallest);
     }
 }
+
+#[cfg(not(feature = "std"))]
+pub fn give_f128(_: Vec<F128>) {}
 
 /// Pre-warm the pool for proves at witness size `2^m`: allocate and
 /// first-touch the full prove-cycle buffer set once, in parallel, then park
@@ -170,16 +165,13 @@ pub fn prewarm_prover(m: usize) {
 pub fn prewarm_prover(_: usize) {}
 
 /// Release every pooled buffer back to the OS.
+#[cfg(feature = "std")]
 pub fn clear() {
-    #[cfg(not(feature = "std"))]
-    {
-        return;
-    }
-    #[cfg(feature = "std")]
-    {
-        POOL.lock().unwrap().clear();
-    }
+    POOL.lock().unwrap().clear();
 }
+
+#[cfg(not(feature = "std"))]
+pub fn clear() {}
 
 #[cfg(all(test, feature = "std"))]
 mod tests {

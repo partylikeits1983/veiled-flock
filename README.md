@@ -140,9 +140,10 @@ The `parallel` feature depends on `std`, so real Rayon execution is a native
 `std`-build feature. The command-line tools, proof-file IO, Cargo examples, and
 benchmarks also require `std`; no-std support is for the reusable protocol,
 verifier, prover, PCS, and VEIL backend code. TOML parsing and serialization of
-Ligerito configs are `std`-only; no-std builds derive the registered profile
-values. See [docs/NO_STD.md](docs/NO_STD.md) for feature boundaries, randomness
-requirements, and the WASM benchmark ABI.
+Ligerito configs are `std`-only; no-std builds load and validate profile values
+generated from the registered TOMLs at build time. See
+[docs/NO_STD.md](docs/NO_STD.md) for feature boundaries, randomness requirements,
+and the WASM benchmark ABI.
 
 For WebAssembly-oriented proving benchmarks, use the dedicated no-std export
 crate:

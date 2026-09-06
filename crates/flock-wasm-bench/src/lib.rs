@@ -68,7 +68,11 @@ pub extern "C" fn veiled_flock_wasm_bench_result_size() -> usize {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn veiled_flock_wasm_bench_blake3_preimage(
+/// # Safety
+///
+/// When `out` is non-null, it must be aligned and valid to write one
+/// [`VeiledFlockWasmBenchResult`].
+pub unsafe extern "C" fn veiled_flock_wasm_bench_blake3_preimage(
     n_blocks: usize,
     samples: usize,
     out: *mut VeiledFlockWasmBenchResult,
@@ -78,9 +82,7 @@ pub extern "C" fn veiled_flock_wasm_bench_blake3_preimage(
     }
     let result = run_bench(n_blocks, samples);
     let status = result.status;
-    unsafe {
-        *out = result;
-    }
+    unsafe { out.write(result) };
     status
 }
 

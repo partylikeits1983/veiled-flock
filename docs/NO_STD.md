@@ -40,13 +40,15 @@ intentionally require `std`:
 - The programmable-oracle simulator and host-specific thread-pool setup.
 
 Ligerito's production profile can still be selected without TOML at runtime:
-the no-std build derives the registered profile values used by the protocol.
+the no-std build loads and validates profile values generated from the
+registered TOMLs at build time.
 
 ## Proving and randomness
 
 Secure zero-knowledge proofs need unpredictable mask randomness. The ordinary
-`Blake3PreimageZkSetup::prove` API draws that randomness from the operating
-system and is therefore available only with `std`.
+`Blake3PreimageZkSetup::prove` API samples a seed from the operating system
+and expands it with a BLAKE3 XOF. This API is available only with `std`;
+its mask randomness relies on BLAKE3's pseudorandomness.
 
 The no-std benchmark path enables the explicitly named
 `insecure-deterministic-masks` feature and calls `prove_with_rng` with a

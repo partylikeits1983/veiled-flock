@@ -290,6 +290,10 @@ impl<'a> RoTreeHasher<'a> {
 
     /// Native SHA-256 state after the 64-byte tree header has been compressed.
     /// The architecture-specific four-way kernels continue from these words.
+    #[cfg(any(
+        all(target_arch = "aarch64", target_feature = "sha2"),
+        all(target_arch = "x86_64", target_feature = "sha"),
+    ))]
     #[inline]
     pub(crate) fn native_midstate(&self) -> Option<&[u32; 8]> {
         match self {

@@ -563,28 +563,11 @@ impl Blake3PreimageZkSetup {
             .map_err(|_| PreimageError::Uncertified)?;
         let log_n = self.pcs_params.log_msg_len();
         let effective_m = log_n + flock_core::pcs::LOG_PACKING;
-        #[cfg(feature = "std")]
-        let source = flock_core::pcs::ligerito::embedded_security_config(
+        let config = flock_core::pcs::ligerito::registered_security_config(
             effective_m,
             self.pcs_params.profile,
         )
-        .ok_or(PreimageError::Uncertified)?;
-        #[cfg(feature = "std")]
-        let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
-            .map_err(|_| PreimageError::Uncertified)?;
-        #[cfg(not(feature = "std"))]
-        let config = {
-            flock_core::pcs::ligerito::embedded_security_config(
-                effective_m,
-                self.pcs_params.profile,
-            )
-            .ok_or(PreimageError::Uncertified)?;
-            flock_core::pcs::ligerito::LigeritoSecurityConfig::derive_profile(
-                effective_m,
-                self.pcs_params.profile,
-            )
-            .map_err(|_| PreimageError::Uncertified)?
-        };
+        .map_err(|_| PreimageError::Uncertified)?;
         let l0 = config.levels.first().ok_or(PreimageError::Uncertified)?;
         if config.initial_k != self.pcs_params.log_batch_size
             || l0.log_inv_rate != self.pcs_params.log_inv_rate
