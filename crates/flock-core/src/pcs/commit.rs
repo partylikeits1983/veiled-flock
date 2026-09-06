@@ -17,6 +17,7 @@
 use crate::field::F128;
 use crate::merkle::{self, Hash};
 use crate::ntt::AdditiveNttF128;
+use crate::pcs::ligerito::LigeritoProfile;
 use crate::pcs::pack::LOG_PACKING;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
@@ -27,10 +28,23 @@ use thiserror::Error;
 #[error(
     "PcsParams.profile ({profile}) implies log_inv_rate {expected_log_inv_rate}, but PcsParams.log_inv_rate is {actual_log_inv_rate}"
 )]
-pub struct ProfileRateMismatch {
-    pub profile: crate::pcs::ligerito::LigeritoProfile,
+pub struct ProfileRateMismatchError {
+    pub profile: LigeritoProfile,
     pub expected_log_inv_rate: usize,
     pub actual_log_inv_rate: usize,
+}
+
+/// Invalid PCS configuration.
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+pub enum PcsParamsError {
+    #[error("m={m} is too small for log_batch_size {log_batch_size} after field-element packing")]
+    InvalidDimensions { m: usize, log_batch_size: usize },
+    #[error("log_inv_rate must be at least 1 for a non-trivial RS code, got {log_inv_rate}")]
+    InvalidLogInvRate { log_inv_rate: usize },
+    #[error(transparent)]
+    ProfileRateMismatch(#[from] ProfileRateMismatchError),
+    #[error("PcsParams.zk requires the `zk` cargo feature")]
+    ZkFeatureDisabled,
 }
 
 /// PCS configuration. Polynomial-basis subspace `{1, x, x², …}` for the NTT.
@@ -52,7 +66,7 @@ pub struct PcsParams {
     /// PCS opening; must agree with `log_inv_rate`
     /// (`profile.log_inv_rate() == log_inv_rate`). Defaults to `Fast`.
     #[serde(default)]
-    pub profile: crate::pcs::ligerito::LigeritoProfile,
+    pub profile: LigeritoProfile,
     /// Zero-knowledge mode. The committed message becomes
     /// `[mask ‖ z_packed]` (uniform low half, witness in the top half), and a
     /// full-support blinder codeword `g` is committed alongside it in shared
@@ -68,14 +82,13 @@ impl PcsParams {
         self.log_inv_rate == self.profile.log_inv_rate()
     }
 
-    pub fn validate_profile_rate(&self) -> Result<(), ProfileRateMismatch> {
-        let expected_log_inv_rate = self.profile.log_inv_rate();
-        if self.log_inv_rate == expected_log_inv_rate {
+    pub fn validate_profile_rate(&self) -> Result<(), ProfileRateMismatchError> {
+        if self.profile_rate_matches() {
             Ok(())
         } else {
-            Err(ProfileRateMismatch {
+            Err(ProfileRateMismatchError {
                 profile: self.profile,
-                expected_log_inv_rate,
+                expected_log_inv_rate: self.profile.log_inv_rate(),
                 actual_log_inv_rate: self.log_inv_rate,
             })
         }
@@ -132,20 +145,28 @@ impl PcsParams {
         16usize << self.log_leaf_f128_count()
     }
 
-    fn validate(&self) -> Result<(), ProfileRateMismatch> {
-        assert!(
-            self.m >= LOG_PACKING + self.log_batch_size,
-            "m={} too small (need m ≥ LOG_PACKING + log_batch_size = {})",
-            self.m,
-            LOG_PACKING + self.log_batch_size,
-        );
-        assert!(
-            self.log_inv_rate >= 1,
-            "log_inv_rate must be ≥ 1 for a non-trivial RS code",
-        );
+    /// Checks that all PCS parameters form a valid configuration.
+    ///
+    /// # Errors
+    /// Returns [`PcsParamsError`] for the first invalid parameter or
+    /// incompatible parameter combination.
+    pub fn validate(&self) -> Result<(), PcsParamsError> {
+        if self.m < LOG_PACKING || self.log_batch_size > self.m - LOG_PACKING {
+            return Err(PcsParamsError::InvalidDimensions {
+                m: self.m,
+                log_batch_size: self.log_batch_size,
+            });
+        }
+        if self.log_inv_rate == 0 {
+            return Err(PcsParamsError::InvalidLogInvRate {
+                log_inv_rate: self.log_inv_rate,
+            });
+        }
         self.validate_profile_rate()?;
         #[cfg(not(feature = "zk"))]
-        assert!(!self.zk, "PcsParams.zk requires the `zk` cargo feature",);
+        if self.zk {
+            return Err(PcsParamsError::ZkFeatureDisabled);
+        }
         Ok(())
     }
 }
@@ -602,8 +623,7 @@ mod tests {
     fn commit_matches_full_ntt_oracle() {
         let mut rng = Rng::new(0xFEED);
         for (m, log_inv_rate, log_batch_size) in [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3)] {
-            let profile = crate::pcs::ligerito::LigeritoProfile::try_from(log_inv_rate)
-                .expect("test rate has a profile");
+            let profile = LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile");
             let params = PcsParams {
                 m,
                 log_inv_rate,
@@ -655,8 +675,7 @@ mod tests {
     fn commit_zk_matches_wide_oracle() {
         let mut rng = Rng::new(0xC0FFEE);
         for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
-            let profile = crate::pcs::ligerito::LigeritoProfile::try_from(log_inv_rate)
-                .expect("test rate has a profile");
+            let profile = LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile");
             let params = PcsParams {
                 m,
                 log_inv_rate,
@@ -743,15 +762,15 @@ mod tests {
             m: 10,
             log_inv_rate: 2,
             log_batch_size: 1,
-            profile: crate::pcs::ligerito::LigeritoProfile::Fast,
+            profile: LigeritoProfile::Fast,
             zk: false,
         };
 
         let error = params.validate_profile_rate().unwrap_err();
         assert_eq!(
             error,
-            ProfileRateMismatch {
-                profile: crate::pcs::ligerito::LigeritoProfile::Fast,
+            ProfileRateMismatchError {
+                profile: LigeritoProfile::Fast,
                 expected_log_inv_rate: 1,
                 actual_log_inv_rate: 2,
             }
@@ -763,13 +782,62 @@ mod tests {
     }
 
     #[test]
+    fn params_validation_returns_structured_errors() {
+        let mut params = default_params(10);
+        assert_eq!(params.validate(), Ok(()));
+
+        params.log_batch_size = usize::MAX;
+        assert_eq!(
+            params.validate(),
+            Err(PcsParamsError::InvalidDimensions {
+                m: 10,
+                log_batch_size: usize::MAX,
+            })
+        );
+
+        params = default_params(10);
+        params.log_inv_rate = 0;
+        assert_eq!(
+            params.validate(),
+            Err(PcsParamsError::InvalidLogInvRate { log_inv_rate: 0 })
+        );
+
+        params = default_params(10);
+        params.log_inv_rate = 2;
+        assert_eq!(
+            params.validate(),
+            Err(PcsParamsError::ProfileRateMismatch(
+                ProfileRateMismatchError {
+                    profile: LigeritoProfile::Fast,
+                    expected_log_inv_rate: 1,
+                    actual_log_inv_rate: 2,
+                }
+            ))
+        );
+
+        #[cfg(not(feature = "zk"))]
+        {
+            params = default_params(10);
+            params.zk = true;
+            assert_eq!(params.validate(), Err(PcsParamsError::ZkFeatureDisabled));
+        }
+
+        #[cfg(feature = "zk")]
+        {
+            params = default_params(10);
+            params.zk = true;
+            assert_eq!(params.validate(), Ok(()));
+        }
+    }
+
+    #[test]
     #[should_panic(expected = "invalid PCS parameters")]
     fn commit_rejects_profile_rate_mismatch() {
         let params = PcsParams {
             m: 10,
             log_inv_rate: 2,
             log_batch_size: 1,
-            profile: crate::pcs::ligerito::LigeritoProfile::Fast,
+            profile: LigeritoProfile::Fast,
             zk: false,
         };
         let z_packed = vec![F128::ZERO; 1 << (10 - LOG_PACKING)];
