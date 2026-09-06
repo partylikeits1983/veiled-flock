@@ -110,6 +110,18 @@ pub const MAX_LIGERITO_GRINDING_BITS: usize = 5;
 pub const MAX_LIGERITO_GRIND_TRIALS: u64 = pcs::ligerito::MAX_LIGERITO_GRIND_TRIALS;
 pub const MAX_LIGERITO_GRIND_SITES: u64 = 16;
 
+fn blind_grind_parameters(fold_grinding_bits: &[usize]) -> Result<(u32, u64), SuccinctVeilError> {
+    let bits = pcs::ligerito::l0_derived_grind_bits(fold_grinding_bits);
+    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&bits) {
+        return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
+    }
+    let trials = pcs::ligerito::l0_derived_grind_trials(fold_grinding_bits)?;
+    if trials > MAX_BLIND_GRIND_TRIALS {
+        return Err(SuccinctVeilError::InvalidShape("blind grinding trials"));
+    }
+    Ok((bits, trials))
+}
+
 fn supported_blake3_r1cs_shape(r1cs: &BlockR1cs) -> Option<SupportedBlake3R1csShape> {
     let digest = r1cs.statement_digest();
     SUPPORTED_BLAKE3_R1CS_SHAPES
@@ -853,8 +865,7 @@ fn validate_batch_opening(
     if positive_fold_sites > MAX_LIGERITO_GRIND_SITES as usize {
         return Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"));
     }
-    let blind_grinding_bits = pcs::ligerito::l0_derived_grind_bits(fold_grinding_bits);
-    if queries[0] == 0 || !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_grinding_bits) {
+    if queries[0] == 0 || blind_grind_parameters(fold_grinding_bits).is_err() {
         return Err(SuccinctVeilError::InvalidShape("batch opening certificate"));
     }
     Ok(())
@@ -1510,11 +1521,8 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         .map(|claim| claim.evaluate(g_top))
         .collect::<Vec<_>>();
     observe_direct_blinds(challenger, &public_direct_blind_values);
-    let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
-        return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
-    }
-    let blind_grind_nonce = challenger.grind_pow_bounded(blind_bits, MAX_BLIND_GRIND_TRIALS)?;
+    let (blind_bits, blind_grind_trials) = blind_grind_parameters(&lig_config.fold_grinding_bits)?;
+    let blind_grind_nonce = challenger.grind_pow_bounded(blind_bits, blind_grind_trials)?;
     let blind_challenge = sample_nonzero(challenger)?;
 
     let q_slices = witness_slices
@@ -1684,13 +1692,12 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         ));
     }
     observe_direct_blinds(challenger, &proof.public_direct_blind_values);
-    let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits)
-        || proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
+    let (blind_bits, blind_grind_trials) = blind_grind_parameters(&lig_config.fold_grinding_bits)?;
+    if proof.blind_grind_nonce >= blind_grind_trials
         || !challenger.verify_pow_bounded(
             proof.blind_grind_nonce,
             blind_bits,
-            MAX_BLIND_GRIND_TRIALS,
+            blind_grind_trials,
         )?
     {
         return Err(SuccinctVeilError::InvalidParameters);
