@@ -1212,7 +1212,7 @@ pub fn try_prove<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     challenger: &mut Ch,
 ) -> Result<(LincheckProof, LincheckClaim), OracleLimitError> {
-    try_prove_padded(
+    prove_padded(
         z_packed,
         m,
         k_log,
@@ -1229,31 +1229,11 @@ pub fn try_prove<Ch: Challenger>(
 /// `[useful_bits, 2^k_log)` are honest zero padding. The partial-fold over
 /// the outer dimension skips work for those padding rows — byte-identical
 /// proof on a witness with zero-padded blocks.
-pub fn prove_padded<Ch: Challenger>(
-    z_packed: &[u8],
-    m: usize,
-    k_log: usize,
-    k_skip: usize,
-    useful_bits: usize,
-    circuit: &dyn LincheckCircuit,
-    x_ab: &QuirkyPoint,
-    challenger: &mut Ch,
-) -> (LincheckProof, LincheckClaim) {
-    try_prove_padded(
-        z_packed,
-        m,
-        k_log,
-        k_skip,
-        useful_bits,
-        circuit,
-        x_ab,
-        challenger,
-    )
-    .expect(ORACLE_LIMIT_EXPECT)
-}
-
+///
+/// Returns [`OracleLimitError`] when the challenger cannot supply a required
+/// transcript challenge.
 #[allow(clippy::too_many_arguments)]
-pub fn try_prove_padded<Ch: Challenger>(
+pub fn prove_padded<Ch: Challenger>(
     z_packed: &[u8],
     m: usize,
     k_log: usize,
@@ -2056,6 +2036,34 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(err, query_budget_exceeded());
+    }
+
+    #[test]
+    fn prove_padded_returns_oracle_limit_when_budget_exhausted() {
+        let (m, k_log, k_skip) = (10usize, 4usize, 2usize);
+        let k = 1usize << k_log;
+        let mut rng = Rng::new(0x51A7_0BAD);
+        let a_0 = random_sparse_matrix(k, k, &mut rng);
+        let b_0 = random_sparse_matrix(k, k, &mut rng);
+        let circuit = SparseMatrixCircuit::new(&a_0, &b_0);
+        let x_ab = random_quirky_point(m, k_log, k_skip, &mut rng);
+        let z_packed = pack_z_lincheck(&vec![false; 1usize << m], m, k_log);
+        let budget = OracleQueryBudget::new(0);
+        let mut challenger = FsChallenger::new_budgeted(b"flock-test", budget);
+
+        let err = prove_padded(
+            &z_packed,
+            m,
+            k_log,
+            k_skip,
+            k,
+            &circuit,
+            &x_ab,
+            &mut challenger,
+        )
+        .unwrap_err();
+
+        assert_eq!(err, OracleLimitError::QueryBudgetExceeded);
     }
 
     // ---- Unit tests for the kernels ----
