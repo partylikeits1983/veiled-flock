@@ -23,8 +23,10 @@ use std::prelude::v1::*;
 use crate::field::F128;
 #[cfg(feature = "std")]
 use rayon::prelude::*;
+#[cfg(feature = "std")]
 use std::sync::Mutex;
 
+#[cfg(feature = "std")]
 static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
 
 /// Max buffers retained. The m=29 prove cycle gives ~18 distinct buffers:
@@ -36,6 +38,7 @@ static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
 /// open stage would fault fresh pages every prove (the pool denies malloc
 /// the page reuse it would otherwise get from the freed early-phase
 /// buffers) — measured as a +24% open_batch regression on M4 before this.
+#[cfg(feature = "std")]
 const MAX_POOLED: usize = 24;
 
 /// Take a length-`n` `F128` vector, preferring a pooled buffer (smallest
@@ -56,24 +59,32 @@ pub fn take_f128(n: usize) -> Vec<F128> {
 /// the commit prefault skips its page-touch thread when the pool can
 /// supply an already-resident buffer).
 pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
-    let mut pool = POOL.lock().unwrap();
-    let mut best: Option<usize> = None;
-    for (i, v) in pool.iter().enumerate() {
-        if v.capacity() >= n && best.is_none_or(|b| v.capacity() < pool[b].capacity()) {
-            best = Some(i);
+    #[cfg(not(feature = "std"))]
+    {
+        let _ = n;
+        return None;
+    }
+    #[cfg(feature = "std")]
+    {
+        let mut pool = POOL.lock().unwrap();
+        let mut best: Option<usize> = None;
+        for (i, v) in pool.iter().enumerate() {
+            if v.capacity() >= n && best.is_none_or(|b| v.capacity() < pool[b].capacity()) {
+                best = Some(i);
+            }
         }
+        if let Some(i) = best {
+            let mut v = pool.swap_remove(i);
+            drop(pool);
+            v.clear();
+            // SAFETY: capacity ≥ n was checked above; F128: Copy (no Drop), so
+            // exposing uninit/stale elements is sound to *hold* — the caller
+            // upholds write-before-read per this function's contract.
+            unsafe { v.set_len(n) };
+            return Some(v);
+        }
+        None
     }
-    if let Some(i) = best {
-        let mut v = pool.swap_remove(i);
-        drop(pool);
-        v.clear();
-        // SAFETY: capacity ≥ n was checked above; F128: Copy (no Drop), so
-        // exposing uninit/stale elements is sound to *hold* — the caller
-        // upholds write-before-read per this function's contract.
-        unsafe { v.set_len(n) };
-        return Some(v);
-    }
-    None
 }
 
 /// Return a buffer to the pool for reuse. When the pool is full, the
@@ -81,19 +92,27 @@ pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
 /// to re-fault; a run that ramps problem sizes upward must not get its big
 /// buffers crowded out by stale small ones).
 pub fn give_f128(v: Vec<F128>) {
-    if v.capacity() == 0 {
+    #[cfg(not(feature = "std"))]
+    {
+        drop(v);
         return;
     }
-    let mut pool = POOL.lock().unwrap();
-    pool.push(v);
-    if pool.len() > MAX_POOLED {
-        let smallest = pool
-            .iter()
-            .enumerate()
-            .min_by_key(|(_, v)| v.capacity())
-            .map(|(i, _)| i)
-            .expect("pool non-empty");
-        pool.swap_remove(smallest);
+    #[cfg(feature = "std")]
+    {
+        if v.capacity() == 0 {
+            return;
+        }
+        let mut pool = POOL.lock().unwrap();
+        pool.push(v);
+        if pool.len() > MAX_POOLED {
+            let smallest = pool
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, v)| v.capacity())
+                .map(|(i, _)| i)
+                .expect("pool non-empty");
+            pool.swap_remove(smallest);
+        }
     }
 }
 
@@ -143,10 +162,17 @@ pub fn prewarm_prover(_: usize) {}
 
 /// Release every pooled buffer back to the OS.
 pub fn clear() {
-    POOL.lock().unwrap().clear();
+    #[cfg(not(feature = "std"))]
+    {
+        return;
+    }
+    #[cfg(feature = "std")]
+    {
+        POOL.lock().unwrap().clear();
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
 

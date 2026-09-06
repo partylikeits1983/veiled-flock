@@ -1,4 +1,5 @@
 #[cfg(not(feature = "std"))]
+#[allow(unused_imports)]
 use std::prelude::v1::*;
 
 use super::super::{F8, F128, InvNttTableByteSingleGf8, N_CHUNKS};

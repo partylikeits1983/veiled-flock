@@ -16,7 +16,7 @@ std = [
     "sha2/std",
     "dep:toml",
 ]
-parallel = ["dep:rayon"]
+parallel = ["std", "dep:rayon"]
 wasm = ["zk"]
 os-rng = ["dep:getrandom"]
 
@@ -43,13 +43,16 @@ zk = []
 symbolic = []
 
 [dependencies]
+flock-compat = { path = "../flock-compat" }
 rayon = { workspace = true, optional = true }
 sha2 = { workspace = true }
 blake3 = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true, optional = true }
 getrandom = { version = "0.2", default-features = false, optional = true }
-libm = { workspace = true }
+
+[build-dependencies]
+toml = { workspace = true }
 
 [dev-dependencies]
 bincode = { workspace = true }

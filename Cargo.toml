@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "crates/flock-compat",
     "crates/flock-core",
     "crates/flock-prover",
     "crates/veil-f128",

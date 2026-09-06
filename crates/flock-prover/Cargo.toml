@@ -21,7 +21,7 @@ std = [
     "sha2/std",
     "veil-f128?/std",
 ]
-parallel = ["dep:rayon", "flock-core/parallel", "veil-f128?/parallel"]
+parallel = ["std", "dep:rayon", "flock-core/parallel", "veil-f128?/parallel"]
 wasm = ["flock-core/wasm", "veil-f128?/wasm"]
 wasm-bench = ["dep:dlmalloc", "veil", "wasm"]
 
@@ -34,6 +34,7 @@ veil = ["zk", "dep:veil-f128"]
 symbolic = ["flock-core/symbolic"]
 
 [dependencies]
+flock-compat = { path = "../flock-compat" }
 flock-core = { path = "../flock-core", default-features = false }
 rayon = { workspace = true, optional = true }
 sha2 = { workspace = true }
