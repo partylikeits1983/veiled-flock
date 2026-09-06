@@ -182,7 +182,13 @@ const UDR_MIN_RADIUS_DISTANCE_DIVISOR: f64 = 3.0;
 const UDR_DISTANCE_FLOOR_FACTOR: f64 = 3.0;
 const UDR_DISTANCE_FLOOR_RADICAND: f64 = 2.0;
 const STRICT_POSITIVE_RADIUS_FLOOR: f64 = 0.0;
-pub const MAX_LIGERITO_GRIND_TRIALS: u64 = REJECTION_SAMPLING_TRIALS as u64;
+/// Trial cap for the five-bit Ligerito grinds used by succinct VEIL.
+pub const MAX_LIGERITO_GRIND_TRIALS: u64 = 1 << 12;
+/// Largest PoW width accepted by generic Ligerito. This covers every embedded
+/// profile, including the extra bit derived for an L0 hiding challenge.
+pub const MAX_SUPPORTED_LIGERITO_GRINDING_BITS: u32 = 24;
+/// Finite cap corresponding to [`MAX_SUPPORTED_LIGERITO_GRINDING_BITS`].
+pub const MAX_SUPPORTED_LIGERITO_GRIND_TRIALS: u64 = 1 << 31;
 const LIGERITO_GRIND_TRIAL_OVERHEAD_BITS: u32 = 7;
 
 /// PoW trial cap for generic Ligerito profiles.
@@ -192,13 +198,16 @@ const LIGERITO_GRIND_TRIAL_OVERHEAD_BITS: u32 = 7;
 /// an exceptional fail-closed event instead of the common outcome for honest
 /// fast/slim profiles. For the succinct VEIL maximum of five live fold-grind
 /// bits this still returns 4096, preserving the audited VEIL bound.
-pub fn ligerito_grind_trials_for_bits(bits: u32) -> u64 {
-    match bits {
-        0 => 1,
-        bits => 1u64
-            .checked_shl(bits.saturating_add(LIGERITO_GRIND_TRIAL_OVERHEAD_BITS))
-            .unwrap_or(u64::MAX),
+pub fn ligerito_grind_trials_for_bits(bits: u32) -> Result<u64, OracleLimitError> {
+    if bits > MAX_SUPPORTED_LIGERITO_GRINDING_BITS {
+        return Err(OracleLimitError::InvalidGrindingBits);
     }
+    let trials = match bits {
+        0 => 1,
+        bits => 1u64 << (bits + LIGERITO_GRIND_TRIAL_OVERHEAD_BITS),
+    };
+    debug_assert!(trials <= MAX_SUPPORTED_LIGERITO_GRIND_TRIALS);
+    Ok(trials)
 }
 
 #[inline]
@@ -206,7 +215,7 @@ fn grind_ligerito_pow<Ch: Challenger>(
     challenger: &mut Ch,
     bits: u32,
 ) -> Result<u64, OracleLimitError> {
-    challenger.grind_pow_bounded(bits, ligerito_grind_trials_for_bits(bits))
+    challenger.grind_pow_bounded(bits, ligerito_grind_trials_for_bits(bits)?)
 }
 
 #[inline]
@@ -215,7 +224,7 @@ fn verify_ligerito_pow<Ch: Challenger>(
     nonce: u64,
     bits: u32,
 ) -> Result<bool, OracleLimitError> {
-    challenger.verify_pow_bounded(nonce, bits, ligerito_grind_trials_for_bits(bits))
+    challenger.verify_pow_bounded(nonce, bits, ligerito_grind_trials_for_bits(bits)?)
 }
 
 #[inline]
@@ -249,6 +258,11 @@ fn fold_round_grind_bits(
     bits.try_into().unwrap_or(u32::MAX)
 }
 
+#[inline]
+fn configured_grind_bits(bits: usize) -> u32 {
+    bits.try_into().unwrap_or(u32::MAX)
+}
+
 /// PoW bits shared by hiding L0 `c` and outer blind challenges.
 /// This is one bit more than L0's registered fold grind.
 pub fn l0_derived_grind_bits(fold_grinding_bits: &[usize]) -> u32 {
@@ -262,7 +276,7 @@ pub fn l0_derived_grind_bits(fold_grinding_bits: &[usize]) -> u32 {
 }
 
 /// PoW trial cap for challenges whose grind width is derived from L0.
-pub fn l0_derived_grind_trials(fold_grinding_bits: &[usize]) -> u64 {
+pub fn l0_derived_grind_trials(fold_grinding_bits: &[usize]) -> Result<u64, OracleLimitError> {
     ligerito_grind_trials_for_bits(l0_derived_grind_bits(fold_grinding_bits))
 }
 
@@ -1117,6 +1131,14 @@ impl LigeritoSecurityConfig {
         // Per-level checks.
         let mut dim_in = self.log_n;
         for (i, lv) in self.levels.iter().enumerate() {
+            if lv.grinding_bits > MAX_SUPPORTED_LIGERITO_GRINDING_BITS as usize
+                || lv.fold_grinding_bits > MAX_SUPPORTED_LIGERITO_GRINDING_BITS as usize
+            {
+                return Err(format!(
+                    "L{i}: grinding width exceeds protocol maximum ({MAX_SUPPORTED_LIGERITO_GRINDING_BITS})"
+                ));
+            }
+
             // Shape: log_msg_cols + log_num_interleaved = dim_in.
             if lv.log_msg_cols + lv.log_num_interleaved != dim_in {
                 return Err(format!(
@@ -3657,7 +3679,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     // bits here). Verifier mirror checks the nonce; both then proceed to
     // sample query positions. (The proximity-gap shortfall is covered
     // separately by the fold-challenge grinds above.)
-    let grinding_bits_0 = config.grinding_bits[0] as u32;
+    let grinding_bits_0 = configured_grind_bits(config.grinding_bits[0]);
     let pow_nonce_0 = grind_ligerito_pow(challenger, grinding_bits_0)?;
     let mut grinding_nonces: Vec<u64> = vec![pow_nonce_0];
 
@@ -3759,7 +3781,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
                 challenger.observe_f128(*v);
             }
             // PoW grinding for the last level before sampling its queries.
-            let grinding_bits_last = config.grinding_bits[i + 1] as u32;
+            let grinding_bits_last = configured_grind_bits(config.grinding_bits[i + 1]);
             let nonce_last = grind_ligerito_pow(challenger, grinding_bits_last)?;
             grinding_nonces.push(nonce_last);
             let num_queries_last = config.queries[i + 1];
@@ -3882,7 +3904,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
         }
 
         // PoW grinding for this iteration's query phase.
-        let grinding_bits_i = config.grinding_bits[i + 1] as u32;
+        let grinding_bits_i = configured_grind_bits(config.grinding_bits[i + 1]);
         let nonce_i = grind_ligerito_pow(challenger, grinding_bits_i)?;
         grinding_nonces.push(nonce_i);
         let num_queries_i = config.queries[i + 1];
@@ -4218,7 +4240,7 @@ where
     if nonce_idx >= proof.grinding_nonces.len() {
         return Ok(false);
     }
-    let grinding_bits_0 = config.grinding_bits[0] as u32;
+    let grinding_bits_0 = configured_grind_bits(config.grinding_bits[0]);
     if !verify_ligerito_pow(
         challenger,
         proof.grinding_nonces[nonce_idx],
@@ -4388,7 +4410,7 @@ where
             if nonce_idx >= proof.grinding_nonces.len() {
                 return Ok(false);
             }
-            let grinding_bits_last = config.grinding_bits[i + 1] as u32;
+            let grinding_bits_last = configured_grind_bits(config.grinding_bits[i + 1]);
             if !verify_ligerito_pow(
                 challenger,
                 proof.grinding_nonces[nonce_idx],
@@ -4602,7 +4624,7 @@ where
         if nonce_idx >= proof.grinding_nonces.len() {
             return Ok(false);
         }
-        let grinding_bits_i = config.grinding_bits[i + 1] as u32;
+        let grinding_bits_i = configured_grind_bits(config.grinding_bits[i + 1]);
         if !verify_ligerito_pow(
             challenger,
             proof.grinding_nonces[nonce_idx],
@@ -4822,7 +4844,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
     if !verify_ligerito_pow_or_reject(
         challenger,
         proof.grinding_nonces[nonce_idx],
-        config.grinding_bits[0] as u32,
+        configured_grind_bits(config.grinding_bits[0]),
     ) {
         return false;
     }
@@ -4944,7 +4966,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
             if !verify_ligerito_pow_or_reject(
                 challenger,
                 proof.grinding_nonces[nonce_idx],
-                config.grinding_bits[i + 1] as u32,
+                configured_grind_bits(config.grinding_bits[i + 1]),
             ) {
                 return false;
             }
@@ -5064,7 +5086,7 @@ pub fn recursive_verifier_with_basis<Ch: Challenger>(
         if !verify_ligerito_pow_or_reject(
             challenger,
             proof.grinding_nonces[nonce_idx],
-            config.grinding_bits[i + 1] as u32,
+            configured_grind_bits(config.grinding_bits[i + 1]),
         ) {
             return false;
         }
@@ -5984,11 +6006,22 @@ mod tests {
 
     #[test]
     fn ligerito_grind_trial_cap_scales_with_pow_bits() {
-        assert_eq!(ligerito_grind_trials_for_bits(0), 1);
-        assert_eq!(ligerito_grind_trials_for_bits(5), MAX_LIGERITO_GRIND_TRIALS);
-        assert_eq!(ligerito_grind_trials_for_bits(16), 1 << 23);
-        assert_eq!(ligerito_grind_trials_for_bits(22), 1 << 29);
-        assert_eq!(ligerito_grind_trials_for_bits(57), u64::MAX);
+        assert_eq!(ligerito_grind_trials_for_bits(0), Ok(1));
+        assert_eq!(
+            ligerito_grind_trials_for_bits(5),
+            Ok(MAX_LIGERITO_GRIND_TRIALS)
+        );
+        assert_eq!(ligerito_grind_trials_for_bits(16), Ok(1 << 23));
+        assert_eq!(ligerito_grind_trials_for_bits(22), Ok(1 << 29));
+        assert_eq!(
+            ligerito_grind_trials_for_bits(MAX_SUPPORTED_LIGERITO_GRINDING_BITS),
+            Ok(MAX_SUPPORTED_LIGERITO_GRIND_TRIALS)
+        );
+        assert_eq!(
+            ligerito_grind_trials_for_bits(MAX_SUPPORTED_LIGERITO_GRINDING_BITS + 1),
+            Err(OracleLimitError::InvalidGrindingBits)
+        );
+        assert_eq!(configured_grind_bits(usize::MAX), u32::MAX);
     }
 
     #[test]
@@ -6001,8 +6034,12 @@ mod tests {
             l0_derived_grind_trials(&fold_grinding_bits),
             ligerito_grind_trials_for_bits(blind_bits)
         );
-        assert_eq!(l0_derived_grind_trials(&fold_grinding_bits), 8192);
-        assert!(l0_derived_grind_trials(&fold_grinding_bits) > MAX_LIGERITO_GRIND_TRIALS);
+        assert_eq!(l0_derived_grind_trials(&fold_grinding_bits), Ok(8192));
+        assert!(l0_derived_grind_trials(&fold_grinding_bits).unwrap() > MAX_LIGERITO_GRIND_TRIALS);
+        assert_eq!(
+            l0_derived_grind_trials(&[usize::MAX]),
+            Err(OracleLimitError::InvalidGrindingBits)
+        );
     }
 
     /// Worked example: `LigeritoSecurityConfig` for BLAKE3 m=29 at rate 1/2.
@@ -6105,6 +6142,17 @@ mod tests {
         assert!(
             err.contains("doesn't match") && err.contains("prediction"),
             "expected paper-mismatch error, got: {err}"
+        );
+    }
+
+    #[test]
+    fn ligerito_security_config_rejects_unbounded_grinding() {
+        let mut cfg = blake3_m29_udr_example();
+        cfg.levels[0].fold_grinding_bits = MAX_SUPPORTED_LIGERITO_GRINDING_BITS as usize + 1;
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .contains("grinding width exceeds protocol maximum")
         );
     }
 

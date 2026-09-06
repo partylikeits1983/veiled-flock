@@ -29,6 +29,17 @@ use rayon::prelude::*;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
 
+/// SHA-256 output width and the largest meaningful proof-of-work predicate.
+pub const MAX_POW_BITS: u32 = 256;
+
+#[inline]
+pub fn validate_pow_bits(bits: u32) -> Result<(), OracleLimitError> {
+    if bits > MAX_POW_BITS {
+        return Err(OracleLimitError::InvalidGrindingBits);
+    }
+    Ok(())
+}
+
 // `Send` supertrait: the verifier runs its PIOP/PCS replay inside a dedicated
 // single-thread rayon pool (see `verifier::verifier_pool`), so the challenger
 // it threads through must be able to cross into that pool. Both concrete
@@ -98,6 +109,7 @@ pub trait Challenger: Send {
     /// in `0..max_trials`, absorb the first successful nonce, and fail closed
     /// without absorbing if no such nonce exists.
     fn grind_pow_bounded(&mut self, bits: u32, _max_trials: u64) -> Result<u64, OracleLimitError> {
+        validate_pow_bits(bits)?;
         Ok(self.grind_pow(bits))
     }
 
@@ -121,6 +133,7 @@ pub trait Challenger: Send {
         bits: u32,
         _max_trials: u64,
     ) -> Result<bool, OracleLimitError> {
+        validate_pow_bits(bits)?;
         Ok(self.verify_pow(nonce, bits))
     }
 }
@@ -518,6 +531,7 @@ impl Challenger for FsChallenger {
     }
 
     fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
+        validate_pow_bits(bits)?;
         if bits == 0 {
             let nonce = 0u64;
             self.observe_bytes(&nonce.to_le_bytes());
@@ -567,6 +581,7 @@ impl Challenger for FsChallenger {
         bits: u32,
         max_trials: u64,
     ) -> Result<bool, OracleLimitError> {
+        validate_pow_bits(bits)?;
         if bits == 0 {
             let ok = nonce == 0;
             self.observe_bytes(&nonce.to_le_bytes());
@@ -846,10 +861,25 @@ mod tests {
         let mut challenger = FsChallenger::new_budgeted(b"pow-budget", budget.clone());
         challenger.observe_bytes(b"prefix");
         assert_eq!(
-            challenger.grind_pow_bounded(257, 3),
+            challenger.grind_pow_bounded(256, 3),
             Err(OracleLimitError::GrindingLimitExceeded)
         );
         assert_eq!(budget.used(), 4);
+    }
+
+    #[test]
+    fn fs_challenger_bounded_pow_rejects_invalid_width_without_querying() {
+        let budget = OracleQueryBudget::new(0);
+        let mut challenger = FsChallenger::new_budgeted(b"pow-width", budget.clone());
+        assert_eq!(
+            challenger.grind_pow_bounded(MAX_POW_BITS + 1, 3),
+            Err(OracleLimitError::InvalidGrindingBits)
+        );
+        assert_eq!(
+            challenger.verify_pow_bounded(0, MAX_POW_BITS + 1, 3),
+            Err(OracleLimitError::InvalidGrindingBits)
+        );
+        assert_eq!(budget.used(), 0);
     }
 
     #[test]

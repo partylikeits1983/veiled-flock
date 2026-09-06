@@ -42,7 +42,9 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use flock_core::challenger::{Challenger, f128_vec_byte_len, f128_vec_from_le_bytes};
+use flock_core::challenger::{
+    Challenger, f128_vec_byte_len, f128_vec_from_le_bytes, validate_pow_bits,
+};
 use flock_core::field::F128;
 use flock_core::oracle_budget::{OracleLimitError, OracleQueryBudget, oracle_blocks_for_bytes};
 use flock_core::ro::{ByteOracle, RoContext, encode_pow_point};
@@ -620,6 +622,7 @@ impl Challenger for OracleChallenger {
     }
 
     fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
+        validate_pow_bits(bits)?;
         // Grinding queries the oracle at fresh points, exactly as the honest
         // challenger does. It is NOT programmed: the simulator grinds
         // honestly on its programmed prefix, which is why programming and
@@ -659,6 +662,7 @@ impl Challenger for OracleChallenger {
         bits: u32,
         max_trials: u64,
     ) -> Result<bool, OracleLimitError> {
+        validate_pow_bits(bits)?;
         if bits == 0 {
             let ok = nonce == 0;
             self.observe_bytes(&nonce.to_le_bytes());
@@ -878,11 +882,24 @@ mod tests {
         let budget = OracleQueryBudget::new(4);
         let mut ch = OracleChallenger::new_budgeted(b"pow-budget", oracle.clone(), budget.clone());
         ch.observe_bytes(b"prefix");
-        let err = ch.grind_pow_bounded(257, 3).unwrap_err();
+        let err = ch.grind_pow_bounded(256, 3).unwrap_err();
         assert_eq!(err, OracleLimitError::GrindingLimitExceeded);
         assert_eq!(budget.used(), 4);
         let guard = oracle.lock().unwrap();
         assert_eq!(guard.total_answer_count(), 4);
         assert_eq!(guard.pow_answer_count(), 3);
+    }
+
+    #[test]
+    fn bounded_oracle_pow_rejects_invalid_width_without_querying() {
+        let oracle = shared_oracle();
+        let budget = OracleQueryBudget::new(0);
+        let mut ch = OracleChallenger::new_budgeted(b"pow-width", oracle.clone(), budget.clone());
+        assert_eq!(
+            ch.grind_pow_bounded(flock_core::challenger::MAX_POW_BITS + 1, 3),
+            Err(OracleLimitError::InvalidGrindingBits)
+        );
+        assert_eq!(budget.used(), 0);
+        assert_eq!(oracle.lock().unwrap().total_answer_count(), 0);
     }
 }

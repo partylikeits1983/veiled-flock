@@ -21,6 +21,7 @@ pub const REJECTION_SAMPLING_TRIALS: usize = 4096;
 pub enum OracleLimitError {
     QueryBudgetExceeded,
     GrindingLimitExceeded,
+    InvalidGrindingBits,
     RejectionSamplingLimitExceeded,
     PositionSamplingLimitExceeded,
 }
@@ -30,6 +31,9 @@ impl fmt::Display for OracleLimitError {
         match self {
             Self::QueryBudgetExceeded => f.write_str("random-oracle query budget exceeded"),
             Self::GrindingLimitExceeded => f.write_str("proof-of-work grinding cap exceeded"),
+            Self::InvalidGrindingBits => {
+                f.write_str("proof-of-work bit width exceeds protocol limit")
+            }
             Self::RejectionSamplingLimitExceeded => f.write_str("rejection-sampling cap exceeded"),
             Self::PositionSamplingLimitExceeded => f.write_str("position-sampling cap exceeded"),
         }

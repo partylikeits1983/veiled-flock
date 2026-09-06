@@ -587,7 +587,7 @@ fn try_open_zk_blinded<Ch: Challenger>(
     challenger.observe_label(b"flock-pcs-zk-blind");
     challenger.observe_f128(y_g);
     let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits);
+    let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits)?;
     let c_grind_nonce = challenger.grind_pow_bounded(c_bits, c_grind_trials)?;
     let c = challenger.try_sample_f128()?;
 
@@ -1300,7 +1300,7 @@ fn verify_opening_batch_ligerito_mixed_linear_mode_ro<Ch: Challenger>(
         challenger.observe_label(b"flock-pcs-zk-blind");
         challenger.observe_f128(zkb.y_g);
         let c_bits = ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-        let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits);
+        let c_grind_trials = ligerito::l0_derived_grind_trials(&lig_config.fold_grinding_bits)?;
         if !challenger.verify_pow_bounded(zkb.c_grind_nonce, c_bits, c_grind_trials)? {
             return Err(VerifyError::Ligerito);
         }
@@ -1842,7 +1842,7 @@ mod tests {
         // The cap under test, and the constant it replaced. The test is only
         // meaningful while the two differ.
         let c_bits = l0_derived_grind_bits(&lig_p_cfg.fold_grinding_bits);
-        let derived_cap = l0_derived_grind_trials(&lig_p_cfg.fold_grinding_bits);
+        let derived_cap = l0_derived_grind_trials(&lig_p_cfg.fold_grinding_bits).unwrap();
         assert_eq!(c_bits, 1, "tiny config grinds the blind site at 1 bit");
         assert_eq!(
             derived_cap, 256,
