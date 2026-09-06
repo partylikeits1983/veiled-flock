@@ -1,0 +1,13 @@
+[package]
+name = "flock-compat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Internal no-std compatibility shims for Flock crates."
+
+[dependencies]
+libm = { workspace = true }
+
+[lints]
+workspace = true

@@ -19,9 +19,9 @@
 extern crate alloc;
 
 #[cfg(not(feature = "parallel"))]
-extern crate flock_core as rayon;
+extern crate flock_compat as rayon;
 #[cfg(not(feature = "std"))]
-extern crate flock_core as std;
+extern crate flock_compat as std;
 
 #[cfg(all(feature = "wasm-bench", not(feature = "std"), target_arch = "wasm32"))]
 #[global_allocator]

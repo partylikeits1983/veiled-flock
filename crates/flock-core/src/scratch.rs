@@ -23,8 +23,10 @@ use std::prelude::v1::*;
 use crate::field::F128;
 #[cfg(feature = "std")]
 use rayon::prelude::*;
+#[cfg(feature = "std")]
 use std::sync::Mutex;
 
+#[cfg(feature = "std")]
 static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
 
 /// Max buffers retained. The m=29 prove cycle gives ~18 distinct buffers:
@@ -36,6 +38,7 @@ static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
 /// open stage would fault fresh pages every prove (the pool denies malloc
 /// the page reuse it would otherwise get from the freed early-phase
 /// buffers) — measured as a +24% open_batch regression on M4 before this.
+#[cfg(feature = "std")]
 const MAX_POOLED: usize = 24;
 
 /// Take a length-`n` `F128` vector, preferring a pooled buffer (smallest
@@ -56,9 +59,18 @@ pub fn take_f128(n: usize) -> Vec<F128> {
 /// the commit prefault skips its page-touch thread when the pool can
 /// supply an already-resident buffer).
 pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
-    try_take_f128_from_pool(&POOL, n)
+    #[cfg(not(feature = "std"))]
+    {
+        let _ = n;
+        None
+    }
+    #[cfg(feature = "std")]
+    {
+        try_take_f128_from_pool(&POOL, n)
+    }
 }
 
+#[cfg(feature = "std")]
 fn try_take_f128_from_pool(pool: &Mutex<Vec<Vec<F128>>>, n: usize) -> Option<Vec<F128>> {
     let mut pool = pool.lock().unwrap();
     let mut best: Option<usize> = None;
@@ -85,9 +97,17 @@ fn try_take_f128_from_pool(pool: &Mutex<Vec<Vec<F128>>>, n: usize) -> Option<Vec
 /// to re-fault; a run that ramps problem sizes upward must not get its big
 /// buffers crowded out by stale small ones).
 pub fn give_f128(v: Vec<F128>) {
-    give_f128_to_pool(&POOL, v);
+    #[cfg(not(feature = "std"))]
+    {
+        drop(v);
+    }
+    #[cfg(feature = "std")]
+    {
+        give_f128_to_pool(&POOL, v);
+    }
 }
 
+#[cfg(feature = "std")]
 fn give_f128_to_pool(pool: &Mutex<Vec<Vec<F128>>>, v: Vec<F128>) {
     if v.capacity() == 0 {
         return;
@@ -151,10 +171,17 @@ pub fn prewarm_prover(_: usize) {}
 
 /// Release every pooled buffer back to the OS.
 pub fn clear() {
-    POOL.lock().unwrap().clear();
+    #[cfg(not(feature = "std"))]
+    {
+        return;
+    }
+    #[cfg(feature = "std")]
+    {
+        POOL.lock().unwrap().clear();
+    }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
 

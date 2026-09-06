@@ -1,4 +1,5 @@
 #[cfg(not(feature = "std"))]
+#[allow(unused_imports)]
 use std::prelude::v1::*;
 
 use crate::field::F128;

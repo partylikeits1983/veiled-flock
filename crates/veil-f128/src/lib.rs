@@ -11,9 +11,9 @@
 extern crate alloc;
 
 #[cfg(not(feature = "parallel"))]
-extern crate flock_core as rayon;
+extern crate flock_compat as rayon;
 #[cfg(not(feature = "std"))]
-extern crate flock_core as std;
+extern crate flock_compat as std;
 
 pub mod code;
 pub mod commitment;
