@@ -286,6 +286,29 @@ impl Challenger for RandomChallenger {
         let hi = splitmix64(&mut self.state);
         F128 { lo, hi }
     }
+
+    fn grind_pow_bounded(&mut self, bits: u32, max_trials: u64) -> Result<u64, OracleLimitError> {
+        validate_pow_bits(bits)?;
+        if max_trials == 0 {
+            return Err(OracleLimitError::GrindingLimitExceeded);
+        }
+        // This challenger is test/benchmark-only and deliberately models PoW
+        // as a no-op. Production challengers must use the bounded search.
+        Ok(self.grind_pow(bits))
+    }
+
+    fn verify_pow_bounded(
+        &mut self,
+        nonce: u64,
+        bits: u32,
+        max_trials: u64,
+    ) -> Result<bool, OracleLimitError> {
+        validate_pow_bits(bits)?;
+        if nonce >= max_trials {
+            return Ok(false);
+        }
+        Ok(self.verify_pow(nonce, bits))
+    }
 }
 
 #[cfg(any(test, feature = "unsound-challenger"))]
@@ -681,6 +704,16 @@ fn sha256_has_leading_zero_bits(state_digest: &[u8; 32], nonce: u64, bits: u32) 
 mod tests {
     use super::*;
 
+    struct DefaultPowChallenger;
+
+    impl Challenger for DefaultPowChallenger {
+        fn observe_f128(&mut self, _value: F128) {}
+
+        fn sample_f128(&mut self) -> F128 {
+            F128::ZERO
+        }
+    }
+
     /// Prover-side PoW grinding produces a nonce that the verifier-side
     /// `verify_pow` accepts at the same transcript position. State binding
     /// is preserved — sampling after PoW gives identical challenges on both
@@ -750,11 +783,13 @@ mod tests {
         let mut ch = RandomChallenger::new(0);
         assert_eq!(ch.grind_pow(16), 0);
         assert!(ch.verify_pow(0, 16));
+        assert_eq!(ch.grind_pow_bounded(16, 1), Ok(0));
+        assert_eq!(ch.verify_pow_bounded(0, 16, 1), Ok(true));
     }
 
     #[test]
     fn default_bounded_grind_fails_closed_for_positive_bits() {
-        let mut ch = RandomChallenger::new(0);
+        let mut ch = DefaultPowChallenger;
         assert_eq!(
             ch.grind_pow_bounded(1, u64::MAX),
             Err(OracleLimitError::GrindingLimitExceeded)
@@ -768,7 +803,7 @@ mod tests {
 
     #[test]
     fn default_bounded_verify_checks_nonce_cap_before_delegating() {
-        let mut ch = RandomChallenger::new(0);
+        let mut ch = DefaultPowChallenger;
         assert_eq!(ch.verify_pow_bounded(7, 1, 7), Ok(false));
         assert_eq!(ch.verify_pow_bounded(6, 1, 7), Ok(true));
     }
