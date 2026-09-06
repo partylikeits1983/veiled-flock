@@ -40,6 +40,7 @@ use crate::ntt::additive_ntt_f128::AdditiveNttF128;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 
 // ===================================================================
 // Config
@@ -105,6 +106,43 @@ impl LigeritoProfile {
             _ => None,
         }
     }
+}
+
+impl core::fmt::Display for LigeritoProfile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
+#[derive(Debug, Error)]
+pub enum LigeritoConfigError {
+    #[error(
+        "security config for (m={m}, profile={profile}) has initial_k={initial_k} but caller requested log_batch_size={log_batch_size}"
+    )]
+    InitialKMismatch {
+        m: usize,
+        profile: LigeritoProfile,
+        initial_k: usize,
+        log_batch_size: usize,
+    },
+    #[error(
+        "no security config registered for (m={m}, profile={profile}). Add a TOML at configs/ligerito/m{m}_{profile}.toml and register it in EMBEDDED_CONFIGS, or call default_config explicitly for ad-hoc shapes."
+    )]
+    MissingSecurityConfig { m: usize, profile: LigeritoProfile },
+    #[cfg(feature = "std")]
+    #[error("toml parse: {0}")]
+    TomlParse(#[from] toml::de::Error),
+    #[cfg(feature = "std")]
+    #[error("toml serialize: {0}")]
+    TomlSerialize(#[from] toml::ser::Error),
+    #[error("{0}")]
+    InvalidConfig(String),
+}
+
+pub type LigeritoConfigResult<T> = Result<T, LigeritoConfigError>;
+
+fn invalid_config(message: impl Into<String>) -> LigeritoConfigError {
+    LigeritoConfigError::InvalidConfig(message.into())
 }
 
 #[derive(Clone, Debug)]
@@ -335,9 +373,11 @@ fn derive_ladder_shape(
     initial_k: usize,
     log_inv_rate: usize,
     queries_at_rate: &dyn Fn(usize) -> usize,
-) -> Result<LadderShape, String> {
+) -> LigeritoConfigResult<LadderShape> {
     if log_n <= initial_k {
-        return Err("log_n must be > initial_k".into());
+        return Err(LigeritoConfigError::InvalidConfig(
+            "log_n must be > initial_k".into(),
+        ));
     }
     let mut shape = LadderShape {
         log_inv_rates: vec![log_inv_rate],
@@ -349,7 +389,9 @@ fn derive_ladder_shape(
     let mut n_running = log_n - initial_k;
     let mut rate_running = log_inv_rate;
     if (1usize << (n_running + rate_running)) < queries_at_rate(rate_running) {
-        return Err("L0 block_len < queries — log_n too small for chosen rate".into());
+        return Err(LigeritoConfigError::InvalidConfig(
+            "L0 block_len < queries — log_n too small for chosen rate".into(),
+        ));
     }
     while n_running > 5 {
         let k = 3.min(n_running);
@@ -361,7 +403,9 @@ fn derive_ladder_shape(
             }
             next_rate += 1;
             if next_rate > 20 {
-                return Err("could not find feasible recursive rate (level too deep)".into());
+                return Err(LigeritoConfigError::InvalidConfig(
+                    "could not find feasible recursive rate (level too deep)".into(),
+                ));
             }
         }
         shape.log_inv_rates.push(next_rate);
@@ -372,7 +416,9 @@ fn derive_ladder_shape(
         rate_running = next_rate;
     }
     if shape.k_recursive.len() < 2 {
-        return Err("log_n too small — no recursive levels for the Ligerito recursion".into());
+        return Err(LigeritoConfigError::InvalidConfig(
+            "log_n too small — no recursive levels for the Ligerito recursion".into(),
+        ));
     }
     shape.yr_log_n = n_running;
     Ok(shape)
@@ -427,16 +473,16 @@ pub fn prover_config_for(
     log_n: usize,
     log_batch_size: usize,
     profile: LigeritoProfile,
-) -> Result<ProverConfig, String> {
+) -> LigeritoConfigResult<ProverConfig> {
     let m = log_n + crate::pcs::LOG_PACKING;
     let sec = security_config_for(m, profile)?;
     if sec.initial_k != log_batch_size {
-        return Err(format!(
-            "security config for (m={m}, profile={}) has \
-             initial_k={} but caller requested log_batch_size={log_batch_size}",
-            profile.as_str(),
-            sec.initial_k
-        ));
+        return Err(LigeritoConfigError::InitialKMismatch {
+            m,
+            profile,
+            initial_k: sec.initial_k,
+            log_batch_size,
+        });
     }
     let (pv, _) = sec.to_prover_verifier_configs()?;
     Ok(pv)
@@ -447,16 +493,16 @@ pub fn verifier_config_for(
     log_n: usize,
     log_batch_size: usize,
     profile: LigeritoProfile,
-) -> Result<VerifierConfig, String> {
+) -> LigeritoConfigResult<VerifierConfig> {
     let m = log_n + crate::pcs::LOG_PACKING;
     let sec = security_config_for(m, profile)?;
     if sec.initial_k != log_batch_size {
-        return Err(format!(
-            "security config for (m={m}, profile={}) has \
-             initial_k={} but caller requested log_batch_size={log_batch_size}",
-            profile.as_str(),
-            sec.initial_k
-        ));
+        return Err(LigeritoConfigError::InitialKMismatch {
+            m,
+            profile,
+            initial_k: sec.initial_k,
+            log_batch_size,
+        });
     }
     let (_, vc) = sec.to_prover_verifier_configs()?;
     Ok(vc)
@@ -465,16 +511,8 @@ pub fn verifier_config_for(
 fn security_config_for(
     m: usize,
     profile: LigeritoProfile,
-) -> Result<LigeritoSecurityConfig, String> {
-    let missing_config = || {
-        format!(
-            "no security config registered for (m={m}, profile={}). \
-             Add a TOML at configs/ligerito/m{m}_{}.toml and register it in \
-             EMBEDDED_CONFIGS, or call default_config explicitly for ad-hoc shapes.",
-            profile.as_str(),
-            profile.as_str(),
-        )
-    };
+) -> LigeritoConfigResult<LigeritoSecurityConfig> {
+    let missing_config = || LigeritoConfigError::MissingSecurityConfig { m, profile };
     #[cfg(feature = "std")]
     {
         let toml = embedded_security_config(m, profile).ok_or_else(missing_config)?;
@@ -961,7 +999,7 @@ impl LigeritoLevelConfig {
 fn validate_udr_theorem_range(
     level_index: usize,
     level: &LigeritoLevelConfig,
-) -> Result<(), String> {
+) -> LigeritoConfigResult<()> {
     let rho = (-(level.log_inv_rate as f64)).exp2();
     let delta = FULL_RELATIVE_DISTANCE - rho;
     let n = ((level.log_msg_cols + level.log_inv_rate) as f64).exp2();
@@ -981,10 +1019,10 @@ fn validate_udr_theorem_range(
         || gamma > theorem_ceiling
         || gamma <= STRICT_POSITIVE_RADIUS_FLOOR
     {
-        return Err(format!(
+        return Err(invalid_config(format!(
             "L{level_index}: UDR theorem range fails: delta={delta}, gamma={gamma}, \
              ceiling={theorem_ceiling}, size_floor={size_floor}"
-        ));
+        )));
     }
     Ok(())
 }
@@ -992,7 +1030,7 @@ fn validate_udr_theorem_range(
 impl LigeritoSecurityConfig {
     /// Additive whole-opening bound over registered proximity, query, and OOD events.
     /// Fold rounds are charged at worst-round proximity; taper flags align regimes.
-    pub fn aggregate_soundness_bound(&self) -> Result<AggregateSoundnessBound, String> {
+    pub fn aggregate_soundness_bound(&self) -> LigeritoConfigResult<AggregateSoundnessBound> {
         self.validate()?;
         let mut proximity_probability = ZERO_PROBABILITY;
         let mut query_probability = ZERO_PROBABILITY;
@@ -1021,16 +1059,18 @@ impl LigeritoSecurityConfig {
 
     /// Additive bound for hiding full-ZK openings, including the extra L0 `c` event.
     /// Fails closed for Johnson L0, where the row-union accounting differs.
-    pub fn aggregate_soundness_bound_zk_l0(&self) -> Result<AggregateSoundnessBound, String> {
+    pub fn aggregate_soundness_bound_zk_l0(&self) -> LigeritoConfigResult<AggregateSoundnessBound> {
         let mut bound = self.aggregate_soundness_bound()?;
         let l0 = self
             .levels
             .first()
-            .ok_or_else(|| "empty levels".to_string())?;
+            .ok_or_else(|| invalid_config("empty levels"))?;
         if matches!(l0.regime, SoundnessRegime::JohnsonOod) {
             // Johnson L0 makes `c` the widest fold, so this bound is unproved.
             // Fail closed instead of reporting it.
-            return Err("zk L0 bound covers the unique-decoding regime only".to_string());
+            return Err(invalid_config(
+                "zk L0 bound covers the unique-decoding regime only",
+            ));
         }
         let (pg_bits, _) = l0.paper_predicted_bits();
         let c_grind_bits = f64::from(l0_derived_grind_bits(&[l0.fold_grinding_bits]));
@@ -1040,44 +1080,44 @@ impl LigeritoSecurityConfig {
 
     /// Validate that the config is internally consistent and matches the
     /// declared analysis. Returns the first violation found, if any.
-    pub fn validate(&self) -> Result<(), String> {
+    pub fn validate(&self) -> LigeritoConfigResult<()> {
         if self.log_n + 7 != self.m {
-            return Err(format!(
+            return Err(invalid_config(format!(
                 "log_n ({}) + LOG_PACKING (7) != m ({})",
                 self.log_n, self.m
-            ));
+            )));
         }
 
         // Recursion shape: initial_k + Σ k_recursive (L1+) + yr_log_n = log_n.
         let levels_recursive_sum: usize = self.levels.iter().skip(1).map(|lv| lv.k_recursive).sum();
         let yr_log_n = self.final_block.yr_log_n;
         if self.initial_k + levels_recursive_sum + yr_log_n != self.log_n {
-            return Err(format!(
+            return Err(invalid_config(format!(
                 "shape mismatch: initial_k ({}) + Σ k_recursive ({}) + yr_log_n ({}) = {} ≠ log_n ({})",
                 self.initial_k,
                 levels_recursive_sum,
                 yr_log_n,
                 self.initial_k + levels_recursive_sum + yr_log_n,
                 self.log_n,
-            ));
+            )));
         }
 
         // L0 must have k_recursive = initial_k and log_num_interleaved = initial_k.
         let l0 = self
             .levels
             .first()
-            .ok_or_else(|| "empty levels".to_string())?;
+            .ok_or_else(|| invalid_config("empty levels"))?;
         if l0.k_recursive != self.initial_k {
-            return Err(format!(
+            return Err(invalid_config(format!(
                 "L0.k_recursive ({}) must equal initial_k ({})",
                 l0.k_recursive, self.initial_k
-            ));
+            )));
         }
         if l0.log_num_interleaved != self.initial_k {
-            return Err(format!(
+            return Err(invalid_config(format!(
                 "L0.log_num_interleaved ({}) must equal initial_k ({})",
                 l0.log_num_interleaved, self.initial_k
-            ));
+            )));
         }
 
         // Per-level checks.
@@ -1085,19 +1125,21 @@ impl LigeritoSecurityConfig {
         for (i, lv) in self.levels.iter().enumerate() {
             // Shape: log_msg_cols + log_num_interleaved = dim_in.
             if lv.log_msg_cols + lv.log_num_interleaved != dim_in {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: log_msg_cols ({}) + log_num_interleaved ({}) ≠ input dim ({dim_in})",
                     lv.log_msg_cols, lv.log_num_interleaved
-                ));
+                )));
             }
 
             // eta presence matches regime.
             match (lv.regime, lv.eta) {
                 (SoundnessRegime::Udr, Some(_)) => {
-                    return Err(format!("L{i}: regime=udr but eta is set"));
+                    return Err(invalid_config(format!("L{i}: regime=udr but eta is set")));
                 }
                 (SoundnessRegime::JohnsonOod, None) => {
-                    return Err(format!("L{i}: regime requires eta but eta is None"));
+                    return Err(invalid_config(format!(
+                        "L{i}: regime requires eta but eta is None"
+                    )));
                 }
                 _ => {}
             }
@@ -1105,17 +1147,21 @@ impl LigeritoSecurityConfig {
             // proximity_loss presence matches regime (UDR-only).
             match (lv.regime, lv.proximity_loss) {
                 (SoundnessRegime::Udr, None) => {
-                    return Err(format!("L{i}: regime=udr but proximity_loss is missing"));
+                    return Err(invalid_config(format!(
+                        "L{i}: regime=udr but proximity_loss is missing"
+                    )));
                 }
                 (SoundnessRegime::Udr, Some(eps))
                     if !eps.is_finite() || eps < UDR_PROXIMITY_LOSS =>
                 {
-                    return Err(format!(
+                    return Err(invalid_config(format!(
                         "L{i}: proximity_loss must be finite and ≥ 0, got {eps}"
-                    ));
+                    )));
                 }
                 (SoundnessRegime::JohnsonOod, Some(_)) => {
-                    return Err(format!("L{i}: proximity_loss is only valid for regime=udr"));
+                    return Err(invalid_config(format!(
+                        "L{i}: proximity_loss is only valid for regime=udr"
+                    )));
                 }
                 _ => {}
             }
@@ -1129,25 +1175,25 @@ impl LigeritoSecurityConfig {
             // L0 is bound by the opening's own post-commit evaluation claim.
             match lv.regime {
                 SoundnessRegime::Udr if lv.ood_samples != 0 => {
-                    return Err(format!(
+                    return Err(invalid_config(format!(
                         "L{i}: regime=udr but ood_samples={} (unique decoding \
                          has list size 1 — no OOD binding step exists)",
                         lv.ood_samples
-                    ));
+                    )));
                 }
                 SoundnessRegime::JohnsonOod if i == 0 && lv.ood_samples != 0 => {
-                    return Err(format!(
+                    return Err(invalid_config(format!(
                         "L0: ood_samples={} but L0 is bound by the opening's \
                          own evaluation claim (must be 0)",
                         lv.ood_samples
-                    ));
+                    )));
                 }
                 SoundnessRegime::JohnsonOod if i > 0 && lv.ood_samples == 0 => {
-                    return Err(format!(
+                    return Err(invalid_config(format!(
                         "L{i}: regime=johnson_ood requires ood_samples ≥ 1 \
                          past L0 (the query counts assume single-codeword \
                          binding)"
-                    ));
+                    )));
                 }
                 _ => {}
             }
@@ -1155,23 +1201,25 @@ impl LigeritoSecurityConfig {
             // OOD diagnostic matches regime + formula.
             match (lv.regime, lv.expected_eps_ood_bits) {
                 (SoundnessRegime::Udr, Some(_)) => {
-                    return Err(format!("L{i}: regime=udr but expected_eps_ood_bits is set"));
+                    return Err(invalid_config(format!(
+                        "L{i}: regime=udr but expected_eps_ood_bits is set"
+                    )));
                 }
                 (SoundnessRegime::JohnsonOod, None) => {
-                    return Err(format!(
+                    return Err(invalid_config(format!(
                         "L{i}: regime=johnson_ood requires expected_eps_ood_bits"
-                    ));
+                    )));
                 }
                 (SoundnessRegime::JohnsonOod, Some(declared)) => {
                     let pred = lv
                         .paper_predicted_ood_bits()
                         .expect("JohnsonOod has an OOD prediction");
                     if (declared - pred).abs() > PAPER_COMPAT_TOL_BITS {
-                        return Err(format!(
+                        return Err(invalid_config(format!(
                             "L{i}: expected_eps_ood_bits ({declared:.2}) doesn't \
                              match prediction ({pred:.2}); tolerance ±{:.2} bits.",
                             PAPER_COMPAT_TOL_BITS
-                        ));
+                        )));
                     }
                 }
                 _ => {}
@@ -1183,7 +1231,7 @@ impl LigeritoSecurityConfig {
             // hand-waved into compliance.
             let (pg_pred, q_pred) = lv.paper_predicted_bits();
             if (lv.expected_eps_pg_bits - pg_pred).abs() > PAPER_COMPAT_TOL_BITS {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: expected_eps_pg_bits ({:.2}) doesn't match \
                      {analysis} prediction ({:.2}); tolerance ±{:.2} bits. \
                      Re-derive Q, eta, or grinding so the declared diagnostic \
@@ -1192,17 +1240,17 @@ impl LigeritoSecurityConfig {
                     pg_pred,
                     PAPER_COMPAT_TOL_BITS,
                     analysis = self.analysis,
-                ));
+                )));
             }
             if (lv.expected_eps_query_bits - q_pred).abs() > PAPER_COMPAT_TOL_BITS {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: expected_eps_query_bits ({:.2}) doesn't match \
                      {analysis} prediction ({:.2}); tolerance ±{:.2} bits.",
                     lv.expected_eps_query_bits,
                     q_pred,
                     PAPER_COMPAT_TOL_BITS,
                     analysis = self.analysis,
-                ));
+                )));
             }
 
             // Security: queries cover the gap left by grinding.
@@ -1210,13 +1258,13 @@ impl LigeritoSecurityConfig {
                 && lv.expected_eps_query_bits + 1e-3
                     < (lv.target_security_bits - lv.grinding_bits) as f64
             {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: expected_eps_query_bits ({:.2}) < target ({}) - grinding ({}) = {}",
                     lv.expected_eps_query_bits,
                     lv.target_security_bits,
                     lv.grinding_bits,
                     lv.target_security_bits - lv.grinding_bits
-                ));
+                )));
             }
 
             // Per-application proximity gap + fold-challenge grinding must
@@ -1226,10 +1274,10 @@ impl LigeritoSecurityConfig {
             if lv.expected_eps_pg_bits + lv.fold_grinding_bits as f64 + 1e-3
                 < lv.target_security_bits as f64
             {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: expected_eps_pg_bits ({:.2}) + fold_grinding ({}) < target ({})",
                     lv.expected_eps_pg_bits, lv.fold_grinding_bits, lv.target_security_bits
-                ));
+                )));
             }
 
             // OOD binding must reach target on its own (no grind covers it;
@@ -1237,18 +1285,18 @@ impl LigeritoSecurityConfig {
             if let Some(ood) = lv.expected_eps_ood_bits
                 && ood + 1e-3 < lv.target_security_bits as f64
             {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: expected_eps_ood_bits ({ood:.2}) < target ({}); \
                          increase ood_samples",
                     lv.target_security_bits
-                ));
+                )));
             }
 
             if lv.target_security_bits < self.target_security_bits {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: target_security_bits ({}) < global target ({})",
                     lv.target_security_bits, self.target_security_bits
-                ));
+                )));
             }
 
             // Advance dim_in for next level: subtract k_recursive (the folds at this level).
@@ -1256,9 +1304,9 @@ impl LigeritoSecurityConfig {
         }
 
         if dim_in != yr_log_n {
-            return Err(format!(
+            return Err(invalid_config(format!(
                 "after consuming all levels, dim_in ({dim_in}) ≠ yr_log_n ({yr_log_n})"
-            ));
+            )));
         }
 
         // Round-by-round soundness: each error term at each round is checked
@@ -1289,12 +1337,12 @@ impl LigeritoSecurityConfig {
         m: usize,
         log_inv_rate: usize,
         target_security_bits: usize,
-    ) -> Result<Self, String> {
+    ) -> LigeritoConfigResult<Self> {
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
-            .ok_or_else(|| format!("m ({m}) < LOG_PACKING (7)"))?;
+            .ok_or_else(|| invalid_config(format!("m ({m}) < LOG_PACKING (7)")))?;
         let initial_k = 6usize;
-        let prover = default_config(log_n, initial_k, log_inv_rate).map_err(|e| e.to_string())?;
+        let prover = default_config(log_n, initial_k, log_inv_rate).map_err(invalid_config)?;
         let r = prover.recursive_steps;
         let mut levels = Vec::with_capacity(r + 1);
         // Build per-level (log_msg_cols, log_num_interleaved, k_recursive).
@@ -1380,7 +1428,7 @@ impl LigeritoSecurityConfig {
     /// - `Slim`:   JohnsonOod, rate 1/4, η = 0.02, 16-bit query grinding at
     ///             every level, 100 bits per round.
     /// - `Secure`: Udr, rate 1/2, ε* = 1e-3, 120 bits per round.
-    pub fn derive_profile(m: usize, profile: LigeritoProfile) -> Result<Self, String> {
+    pub fn derive_profile(m: usize, profile: LigeritoProfile) -> LigeritoConfigResult<Self> {
         /// Johnson slack below the Johnson radius, flat across levels.
         const JOHNSON_ETA: f64 = 0.02;
         let target_bits = profile.security_bits();
@@ -1391,7 +1439,7 @@ impl LigeritoSecurityConfig {
         };
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
-            .ok_or_else(|| format!("m ({m}) < LOG_PACKING (7)"))?;
+            .ok_or_else(|| invalid_config(format!("m ({m}) < LOG_PACKING (7)")))?;
         let initial_k = 6usize;
 
         // Length-agnostic per-query estimate for ladder-shape feasibility
@@ -1445,10 +1493,10 @@ impl LigeritoSecurityConfig {
             };
             let queries = ((t - query_grind as f64).max(1.0) / per_q).ceil() as usize;
             if queries > (1usize << (cols + rate)) {
-                return Err(format!(
+                return Err(invalid_config(format!(
                     "L{i}: {queries} queries exceed block length 2^{}",
                     cols + rate
-                ));
+                )));
             }
             let eps_query = queries as f64 * per_q;
 
@@ -1477,7 +1525,9 @@ impl LigeritoSecurityConfig {
                         (1..=8usize)
                             .find(|&s| paper_ood_bits(rate, JOHNSON_ETA, mu, s) >= t)
                             .ok_or_else(|| {
-                                format!("L{i}: no OOD sample count reaches {t:.1} bits")
+                                invalid_config(format!(
+                                    "L{i}: no OOD sample count reaches {t:.1} bits"
+                                ))
                             })?
                     };
                     let eps_ood = paper_ood_bits(rate, JOHNSON_ETA, mu, ood_samples);
@@ -1541,8 +1591,8 @@ impl LigeritoSecurityConfig {
     /// `include_str!("../../configs/ligerito/m29_fast.toml")` (for compile-time
     /// configs) or read it via `std::fs` (for runtime configs).
     #[cfg(feature = "std")]
-    pub fn from_toml_str(s: &str) -> Result<Self, String> {
-        let cfg: Self = toml::from_str(s).map_err(|e| format!("toml parse: {e}"))?;
+    pub fn from_toml_str(s: &str) -> LigeritoConfigResult<Self> {
+        let cfg: Self = toml::from_str(s)?;
         cfg.validate()?;
         Ok(cfg)
     }
@@ -1550,15 +1600,17 @@ impl LigeritoSecurityConfig {
     /// Serialize the config back out to TOML. Round-trip-stable with
     /// [`from_toml_str`].
     #[cfg(feature = "std")]
-    pub fn to_toml_string(&self) -> Result<String, String> {
-        toml::to_string_pretty(self).map_err(|e| format!("toml serialize: {e}"))
+    pub fn to_toml_string(&self) -> LigeritoConfigResult<String> {
+        Ok(toml::to_string_pretty(self)?)
     }
 
     /// Build a `(ProverConfig, VerifierConfig)` pair from this security config.
     /// Drops the security-only fields (eta, queries, grinding, expected_*) but
     /// preserves the recursion shape so the existing prover/verifier code path
     /// works unchanged.
-    pub fn to_prover_verifier_configs(&self) -> Result<(ProverConfig, VerifierConfig), String> {
+    pub fn to_prover_verifier_configs(
+        &self,
+    ) -> LigeritoConfigResult<(ProverConfig, VerifierConfig)> {
         self.validate()?;
         let log_inv_rates: Vec<usize> = self.levels.iter().map(|lv| lv.log_inv_rate).collect();
         let recursive_ks: Vec<usize> = self
@@ -5721,7 +5773,7 @@ mod tests {
     fn ligerito_security_config_rejects_paper_inconsistent_eps_pg() {
         let mut cfg = blake3_m29_udr_example();
         cfg.levels[0].expected_eps_pg_bits = 50.0; // very wrong
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(
             err.contains("doesn't match") && err.contains("prediction"),
             "expected paper-mismatch error, got: {err}"
@@ -5734,7 +5786,7 @@ mod tests {
         let mut cfg = blake3_m29_udr_example();
         // Bump query bits by 5 — far outside tolerance.
         cfg.levels[0].expected_eps_query_bits += 5.0;
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(
             err.contains("doesn't match") && err.contains("prediction"),
             "expected paper-mismatch error, got: {err}"
@@ -5826,7 +5878,9 @@ mod tests {
 
         // m=36 (unknown — above the registered 22..=35 range): errors,
         // no silent fallback.
-        let err = prover_config_for(29, 6, LigeritoProfile::Fast).unwrap_err();
+        let err = prover_config_for(29, 6, LigeritoProfile::Fast)
+            .unwrap_err()
+            .to_string();
         assert!(
             err.contains("no security config registered"),
             "unexpected error: {err}"
@@ -5875,7 +5929,7 @@ mod tests {
     fn ligerito_security_config_rejects_insufficient_queries() {
         let mut cfg = blake3_m29_udr_example();
         cfg.levels[0].expected_eps_query_bits = 50.0; // < target 100 (grinding 0)
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(err.contains("expected_eps_query_bits"), "err = {err}");
     }
 
@@ -5884,7 +5938,7 @@ mod tests {
     fn ligerito_security_config_rejects_udr_with_eta() {
         let mut cfg = blake3_m29_udr_example();
         cfg.levels[0].eta = Some(0.02); // eta is Johnson-only — should fail
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(err.contains("udr") && err.contains("eta"), "err = {err}");
     }
 
@@ -5893,7 +5947,7 @@ mod tests {
     fn ligerito_security_config_rejects_udr_without_proximity_loss() {
         let mut cfg = blake3_m29_udr_example();
         cfg.levels[0].proximity_loss = None; // missing!
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(
             err.contains("udr") && err.contains("proximity_loss"),
             "err = {err}"
@@ -5904,11 +5958,11 @@ mod tests {
     fn ligerito_security_config_rejects_udr_outside_theorem_range() {
         let mut cfg = blake3_m29_udr_example();
         cfg.levels[0].proximity_loss = Some(0.2);
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(err.contains("UDR theorem range"), "err = {err}");
 
         cfg.levels[0].proximity_loss = Some(f64::NAN);
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(err.contains("finite"), "err = {err}");
     }
 
@@ -5920,7 +5974,7 @@ mod tests {
         cfg.levels[0].regime = SoundnessRegime::JohnsonOod;
         cfg.levels[0].eta = Some(0.02);
         cfg.levels[0].proximity_loss = Some(0.01);
-        let err = cfg.validate().unwrap_err();
+        let err = cfg.validate().unwrap_err().to_string();
         assert!(
             err.contains("proximity_loss") && err.contains("udr"),
             "err = {err}"

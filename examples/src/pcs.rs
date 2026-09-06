@@ -70,9 +70,9 @@ impl BitPcs {
         };
         let log_n = params.log_msg_len();
         let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
-            .map_err(VeilError::Ligerito)?;
+            .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
-            .map_err(VeilError::Ligerito)?;
+            .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let pcs = Self {
             params,
             prover_config,
