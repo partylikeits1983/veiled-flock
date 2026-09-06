@@ -6,9 +6,6 @@ license.workspace = true
 authors.workspace = true
 description = "Apple-silicon-optimized end-to-end prover for Flock (R1CS over GF(2))."
 
-[lib]
-crate-type = ["rlib", "cdylib"]
-
 [features]
 default = ["std", "parallel"]
 std = [
@@ -43,7 +40,6 @@ blake3 = { workspace = true }
 serde = { workspace = true }
 bincode = { workspace = true, optional = true }
 veil-f128 = { path = "../veil-f128", default-features = false, optional = true }
-dlmalloc = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Tests, benches, and examples use the insecure `RandomChallenger`, gated in

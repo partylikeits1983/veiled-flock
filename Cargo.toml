@@ -3,6 +3,7 @@ members = [
     "crates/flock-compat",
     "crates/flock-core",
     "crates/flock-prover",
+    "crates/flock-wasm-bench",
     "crates/veil-f128",
     "examples",
     "tools/formal-proof",
