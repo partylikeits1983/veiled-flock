@@ -11,7 +11,7 @@
 //! sampled, and `M_c` is invertible for non-zero `c`.
 
 use flock_core::{
-    challenger::{Challenger, sample_f128_matching},
+    challenger::{Challenger, sample_nonzero_f128},
     field::F128,
     lincheck::{self, LincheckCircuit, LincheckProof},
     oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS},
@@ -1094,12 +1094,6 @@ fn observe_blinded_ring_claims<C: Challenger>(challenger: &mut C, slices: &[Vec<
     }
 }
 
-fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Result<F128, OracleLimitError> {
-    sample_f128_matching(challenger, REJECTION_SAMPLING_TRIALS, |value| {
-        !value.is_zero()
-    })
-}
-
 fn scale_ring_expressions(
     expressions: &[LinearCombination],
     scalar: F128,
@@ -1531,7 +1525,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     observe_direct_blinds(challenger, &public_direct_blind_values);
     let (blind_bits, blind_grind_trials) = blind_grind_parameters(&lig_config.fold_grinding_bits)?;
     let blind_grind_nonce = challenger.grind_pow_bounded(blind_bits, blind_grind_trials)?;
-    let blind_challenge = sample_nonzero(challenger)?;
+    let blind_challenge = sample_nonzero_f128(challenger)?;
 
     let q_slices = witness_slices
         .iter()
@@ -1710,7 +1704,7 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
-    let blind_challenge = sample_nonzero(challenger)?;
+    let blind_challenge = sample_nonzero_f128(challenger)?;
 
     let q_slices = proof
         .pcs_open

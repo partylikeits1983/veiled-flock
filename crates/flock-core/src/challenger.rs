@@ -22,7 +22,9 @@
 
 use crate::{
     field::F128,
-    oracle_budget::{OracleLimitError, OracleQueryBudget, oracle_blocks_for_bytes},
+    oracle_budget::{
+        OracleLimitError, OracleQueryBudget, REJECTION_SAMPLING_TRIALS, oracle_blocks_for_bytes,
+    },
     ro::RoContext,
 };
 use rayon::prelude::*;
@@ -191,6 +193,13 @@ where
         }
     }
     Err(OracleLimitError::RejectionSamplingLimitExceeded)
+}
+
+/// Sample uniformly from `F128 \ {0}` with the protocol-wide rejection cap.
+pub fn sample_nonzero_f128<C: Challenger>(challenger: &mut C) -> Result<F128, OracleLimitError> {
+    sample_f128_matching(challenger, REJECTION_SAMPLING_TRIALS, |value| {
+        !value.is_zero()
+    })
 }
 
 /// Draw vector challenges until `predicate` accepts or `max_trials` is exhausted.
@@ -762,6 +771,29 @@ mod tests {
         let mut ch = RandomChallenger::new(0);
         assert_eq!(ch.verify_pow_bounded(7, 1, 7), Ok(false));
         assert_eq!(ch.verify_pow_bounded(6, 1, 7), Ok(true));
+    }
+
+    #[test]
+    fn sample_nonzero_f128_exhausts_the_shared_rejection_cap() {
+        struct ZeroChallenger {
+            scalar_calls: usize,
+        }
+
+        impl Challenger for ZeroChallenger {
+            fn observe_f128(&mut self, _value: F128) {}
+
+            fn sample_f128(&mut self) -> F128 {
+                self.scalar_calls += 1;
+                F128::ZERO
+            }
+        }
+
+        let mut challenger = ZeroChallenger { scalar_calls: 0 };
+        assert_eq!(
+            sample_nonzero_f128(&mut challenger),
+            Err(OracleLimitError::RejectionSamplingLimitExceeded)
+        );
+        assert_eq!(challenger.scalar_calls, REJECTION_SAMPLING_TRIALS);
     }
 
     #[test]

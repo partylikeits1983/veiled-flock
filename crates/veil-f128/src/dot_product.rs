@@ -351,14 +351,10 @@ pub(crate) fn sample_unique_positions<C: Challenger>(
     sample_distinct_positions(challenger, code_length, count, REJECTION_SAMPLING_TRIALS)
 }
 
-/// Sample uniformly from `F128 \ {0}`. The last proximity-generator
-/// coefficient must be non-zero: at zero the additive masking vector drops
-/// out and the revealed linear combination is the witness itself.
-pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Result<F128, OracleLimitError> {
-    sample_f128_matching(challenger, REJECTION_SAMPLING_TRIALS, |value| {
-        !value.is_zero()
-    })
-}
+/// The last proximity-generator coefficient must be non-zero: at zero the
+/// additive masking vector drops out and the revealed linear combination is
+/// the witness itself.
+pub(crate) use flock_core::challenger::sample_nonzero_f128 as sample_nonzero;
 
 /// Sample uniformly from `F128 \ {0, 1}`. VEIL's six-value multiplication
 /// padding is invertible only away from these two exceptional challenges.

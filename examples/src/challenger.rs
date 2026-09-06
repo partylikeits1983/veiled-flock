@@ -1,8 +1,11 @@
 //! Transcript adapters shared by the prover and the verifier.
 
 use flock_core::{
-    challenger::Challenger, field::F128, oracle_budget::OracleLimitError,
-    pcs::ligerito::LigeritoProof, ro::RoContext,
+    challenger::Challenger,
+    field::F128,
+    oracle_budget::{OracleLimitError, REJECTION_SAMPLING_TRIALS},
+    pcs::ligerito::LigeritoProof,
+    ro::RoContext,
 };
 
 use crate::pcs::{MAX_LIGERITO_GRIND_SITES, MAX_LIGERITO_GRIND_TRIALS};
@@ -116,13 +119,9 @@ pub(crate) fn ligerito_grinding_is_bounded(proof: &LigeritoProof) -> bool {
         && proof.fold_grinding_nonces.len() <= MAX_LIGERITO_GRIND_SITES
 }
 
-/// Fail-closed cap for rejection-sampled field challenges, the value the
-/// production composition pins.
-pub(crate) const MAX_CHALLENGE_SAMPLING_TRIALS: usize = 4096;
-
 /// Sample uniformly from `F128 \ {0}` with a fail-closed trial cap.
 pub(crate) fn sample_nonzero<C: Challenger>(challenger: &mut C) -> Option<F128> {
-    for _ in 0..MAX_CHALLENGE_SAMPLING_TRIALS {
+    for _ in 0..REJECTION_SAMPLING_TRIALS {
         let value = challenger.sample_f128();
         if !value.is_zero() {
             return Some(value);

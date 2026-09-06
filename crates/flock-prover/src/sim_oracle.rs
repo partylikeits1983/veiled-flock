@@ -724,6 +724,121 @@ mod tests {
         assert_eq!(a.sample_f128(), b.sample_f128());
     }
 
+    #[test]
+    fn unprogrammed_oracle_reproduces_bounded_pow_transcript() {
+        let oracle = shared_oracle();
+        let mut simulated = OracleChallenger::new(b"bounded-pow", oracle);
+        let mut native = FsChallenger::new(b"bounded-pow");
+        simulated.observe_bytes(b"prefix");
+        native.observe_bytes(b"prefix");
+
+        assert_eq!(
+            simulated.grind_pow_bounded(0, 1),
+            native.grind_pow_bounded(0, 1)
+        );
+        assert_eq!(simulated.sample_f128(), native.sample_f128());
+
+        let oracle = shared_oracle();
+        let mut simulated = OracleChallenger::new(b"zero-bit-verify", oracle);
+        let mut native = FsChallenger::new(b"zero-bit-verify");
+        simulated.observe_bytes(b"prefix");
+        native.observe_bytes(b"prefix");
+
+        assert_eq!(simulated.verify_pow_bounded(1, 0, 2), Ok(false));
+        assert_eq!(native.verify_pow_bounded(1, 0, 2), Ok(false));
+        assert_eq!(simulated.sample_f128(), native.sample_f128());
+
+        let oracle = shared_oracle();
+        let mut simulated = OracleChallenger::new(b"positive-bounded-pow", oracle);
+        let mut native = FsChallenger::new(b"positive-bounded-pow");
+        simulated.observe_bytes(b"prefix");
+        native.observe_bytes(b"prefix");
+
+        assert_eq!(
+            simulated.grind_pow_bounded(4, 4096),
+            native.grind_pow_bounded(4, 4096)
+        );
+        assert_eq!(simulated.sample_f128(), native.sample_f128());
+    }
+
+    #[test]
+    fn bounded_failures_are_atomic_and_match_fiat_shamir() {
+        let oracle = shared_oracle();
+        let mut simulated = OracleChallenger::new(b"failed-grind", oracle);
+        let mut native = FsChallenger::new(b"failed-grind");
+        let control_oracle = shared_oracle();
+        let mut simulated_control = OracleChallenger::new(b"failed-grind", control_oracle);
+        let mut native_control = FsChallenger::new(b"failed-grind");
+        for challenger in [
+            &mut simulated as &mut dyn Challenger,
+            &mut native,
+            &mut simulated_control,
+            &mut native_control,
+        ] {
+            challenger.observe_bytes(b"prefix");
+        }
+
+        assert_eq!(
+            simulated.grind_pow_bounded(256, 3),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(
+            native.grind_pow_bounded(256, 3),
+            Err(OracleLimitError::GrindingLimitExceeded)
+        );
+        assert_eq!(
+            simulated.sample_f128(),
+            simulated_control.sample_f128(),
+            "failed grinding must not absorb a nonce"
+        );
+        assert_eq!(native.sample_f128(), native_control.sample_f128());
+
+        let simulated_budget = OracleQueryBudget::new(3);
+        let native_budget = OracleQueryBudget::new(3);
+        let simulated_control_budget = OracleQueryBudget::new(3);
+        let native_control_budget = OracleQueryBudget::new(3);
+        let mut simulated = OracleChallenger::new_budgeted(
+            b"budget-atomic",
+            shared_oracle(),
+            simulated_budget.clone(),
+        );
+        let mut native = FsChallenger::new_budgeted(b"budget-atomic", native_budget.clone());
+        let mut simulated_control = OracleChallenger::new_budgeted(
+            b"budget-atomic",
+            shared_oracle(),
+            simulated_control_budget,
+        );
+        let mut native_control =
+            FsChallenger::new_budgeted(b"budget-atomic", native_control_budget);
+
+        assert_eq!(
+            simulated.try_sample_f128_vec(3),
+            native.try_sample_f128_vec(3)
+        );
+        assert_eq!(
+            simulated_control.try_sample_f128_vec(3),
+            native_control.try_sample_f128_vec(3)
+        );
+        assert_eq!(simulated_budget.used(), 2);
+        assert_eq!(native_budget.used(), 2);
+        assert_eq!(
+            simulated.try_sample_f128_vec(3),
+            Err(OracleLimitError::QueryBudgetExceeded)
+        );
+        assert_eq!(
+            native.try_sample_f128_vec(3),
+            Err(OracleLimitError::QueryBudgetExceeded)
+        );
+        assert_eq!(simulated_budget.used(), 2);
+        assert_eq!(native_budget.used(), 2);
+        assert_eq!(
+            simulated.try_sample_f128(),
+            simulated_control.try_sample_f128(),
+            "failed budget reservation must not change the transcript"
+        );
+        assert_eq!(native.try_sample_f128(), native_control.try_sample_f128());
+    }
+
     /// Programming the next challenge makes it come out as chosen, and the
     /// transcript continues consistently from there.
     #[test]
