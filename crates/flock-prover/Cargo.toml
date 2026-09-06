@@ -15,7 +15,7 @@ std = [
     "blake3/std",
     "dep:bincode",
     "flock-core/std",
-    "flock-core/os-rng",
+    "os-rng",
     "serde/std",
     "sha2/asm",
     "sha2/std",
@@ -23,7 +23,7 @@ std = [
 ]
 parallel = ["std", "dep:rayon", "flock-core/parallel", "veil-f128?/parallel"]
 wasm = ["flock-core/wasm", "veil-f128?/wasm"]
-wasm-bench = ["dep:dlmalloc", "veil", "wasm"]
+wasm-bench = ["insecure-deterministic-masks", "veil", "wasm"]
 
 # Forwarded to flock-core. See that crate's manifest for semantics.
 hash-count = ["flock-core/hash-count"]
@@ -32,6 +32,7 @@ zk = ["flock-core/zk"]
 os-rng = ["flock-core/os-rng"]
 veil = ["zk", "dep:veil-f128"]
 symbolic = ["flock-core/symbolic"]
+insecure-deterministic-masks = []
 
 [dependencies]
 flock-compat = { path = "../flock-compat" }

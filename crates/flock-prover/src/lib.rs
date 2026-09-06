@@ -23,15 +23,12 @@ extern crate flock_compat as rayon;
 #[cfg(not(feature = "std"))]
 extern crate flock_compat as std;
 
-#[cfg(all(feature = "wasm-bench", not(feature = "std"), target_arch = "wasm32"))]
-#[global_allocator]
-static ALLOC: dlmalloc::GlobalDlmalloc = dlmalloc::GlobalDlmalloc;
-
-#[cfg(all(feature = "wasm-bench", not(feature = "std"), target_arch = "wasm32"))]
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo<'_>) -> ! {
-    loop {}
-}
+#[cfg(all(
+    feature = "veil",
+    not(feature = "os-rng"),
+    not(feature = "insecure-deterministic-masks")
+))]
+compile_error!("VEIL proving needs os-rng or the explicit insecure-deterministic-masks feature");
 
 #[cfg(not(feature = "std"))]
 #[allow(unused_macros)]
