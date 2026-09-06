@@ -32,6 +32,9 @@
 //!
 //! This variant is hardcoded for `k_skip = 6` (ell=64, n_chunks=8, N_INNER=7).
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use std::sync::OnceLock;
 
 use crate::field::{F8, F128, PHI_8_TABLE, mul_by_x, phi8};

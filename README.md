@@ -34,8 +34,12 @@ and the native `GF(2^128)` VEIL backend. See the
 
 - **[crates/flock-core](crates/flock-core)** - FLOCK field, transcript,
   polynomial, PCS, zerocheck, lincheck, and R1CS building blocks.
+- **[crates/flock-compat](crates/flock-compat)** - Internal no-std
+  compatibility shims used when `std` or Rayon are disabled.
 - **[crates/flock-prover](crates/flock-prover)** - End-to-end proof systems,
   BLAKE3 preimage relation, proof-bundle IO, CLI, examples, and benchmarks.
+- **[crates/flock-wasm-bench](crates/flock-wasm-bench)** - `wasm32` benchmark
+  exports for the VEIL-FLOCK preimage prover.
 - **[crates/veil-f128](crates/veil-f128)** - Native `GF(2^128)` VEIL
   commitment and constraint backend.
 - **[examples](examples)** - Full-ZK examples of FLOCK's protocol layers using
@@ -102,6 +106,39 @@ cargo run --locked --release -p flock-prover --features veil \
 `messages.bin` must contain one or more concatenated 64-byte messages. The
 proof bundle includes the ordered public digests. Full-ZK batches support up
 to 4096 messages and use registered 256/512/1024/2048/4096-slot circuit shapes.
+
+## No-Std and WASM
+
+The library crates default to `std` plus Rayon-backed parallelism. Disable
+default features to build the core libraries against `core` and `alloc`:
+
+```sh
+cargo check --locked -p flock-core --no-default-features
+cargo check --locked -p veil-f128 --no-default-features
+cargo check --locked -p flock-prover --no-default-features
+```
+
+In no-std builds, `flock-compat` supplies the narrow API surface this workspace
+uses from `std` and Rayon. It reexports `core`/`alloc` types, maps
+`HashMap`/`HashSet` to ordered collections, provides simple synchronization and
+time shims, and makes Rayon-style iterator calls run serially. Environment
+variables are unavailable, timing is inert, and thread-pool setup is a no-op.
+
+The `parallel` feature depends on `std`, so real Rayon execution is a native
+`std`-build feature. The command-line tools, proof-file IO, Cargo examples, and
+benchmarks also require `std`; no-std support is for the reusable protocol,
+verifier, prover, PCS, and VEIL backend code. TOML parsing and serialization of
+Ligerito configs are `std`-only; no-std builds derive the registered profile
+values. See [docs/NO_STD.md](docs/NO_STD.md) for feature boundaries, randomness
+requirements, and the WASM benchmark ABI.
+
+For WebAssembly-oriented proving benchmarks, use the dedicated no-std export
+crate:
+
+```sh
+cargo build --locked -p flock-wasm-bench \
+  --target wasm32-unknown-unknown --release
+```
 
 ## Examples
 

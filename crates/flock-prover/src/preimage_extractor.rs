@@ -38,6 +38,9 @@
 //! from an honest run and from a simulated one, and the two must behave
 //! differently.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::field::F128;
 use flock_core::pcs::PcsParams;
 

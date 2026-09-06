@@ -8,6 +8,9 @@
 //! that batch a/b/c with shared twiddles can be added later if the round-1 URM
 //! hot path needs them.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F8;
 
 pub mod additive_ntt_f128;

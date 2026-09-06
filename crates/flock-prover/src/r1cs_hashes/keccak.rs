@@ -62,6 +62,9 @@
 //! the slow `prove` path will report "everything satisfied vacuously" for
 //! this encoding — only use `prove_fast`/`prove_chain`.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::r1cs_hashes::chain_common::{ChainLayout, ChainVerifyError};
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;

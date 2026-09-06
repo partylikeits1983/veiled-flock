@@ -31,6 +31,9 @@
 //! extra evaluation just constrains the interpolation to the lower-degree
 //! polynomial.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;

@@ -41,9 +41,20 @@
 //! FRI fold processes layers in **reverse** (deepest first), at which level
 //! pairs are adjacent — matching the standard `fold_pair` formula in DP24.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
+#[cfg(any(
+    all(target_arch = "aarch64", target_feature = "aes"),
+    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
+))]
 use rayon::prelude::*;
 
+#[cfg(any(
+    all(target_arch = "aarch64", target_feature = "aes"),
+    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
+))]
 mod kernels;
 
 /// Compute the normalized subspace-polynomial evaluation table.
@@ -703,6 +714,10 @@ impl AdditiveNttF128 {
 /// 1-2 blocks exist (so block-level parallelism would be too coarse).
 ///
 /// Falls back to sequential when the row count is small.
+#[cfg(any(
+    all(target_arch = "aarch64", target_feature = "aes"),
+    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
+))]
 #[inline]
 fn butterfly_interleaved_block_par_rows(
     block: &mut [F128],
@@ -735,6 +750,10 @@ fn butterfly_interleaved_block_par_rows(
 /// `a=r`, `b=r+quarter`, `c=r+2*quarter`, `d=r+3*quarter`. Layer L
 /// butterflies `(a,c)` and `(b,d)`; layer L+1 then butterflies `(a,b)` (in
 /// the new top sub-block) and `(c,d)` (in the new bottom sub-block).
+#[cfg(any(
+    all(target_arch = "aarch64", target_feature = "aes"),
+    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
+))]
 #[inline]
 fn butterfly_interleaved_fused_2layer_par_rows(
     block: &mut [F128],
@@ -794,6 +813,10 @@ fn butterfly_interleaved_fused_2layer_par_rows(
 /// `binius_mul` already). An explicit 2-lane `ghash_mul_vec2_neon` variant was
 /// tried but **regressed** by ~10-30% because the explicit batching prevented
 /// ILP across more than 2 muls and added load/store overhead.
+#[cfg(any(
+    all(target_arch = "aarch64", target_feature = "aes"),
+    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
+))]
 #[inline]
 fn butterfly_interleaved_block(
     block: &mut [F128],
@@ -816,6 +839,10 @@ fn butterfly_interleaved_block(
 /// Butterfly one top-layer block, fusing four layers `(L..L+4)`. `block` holds
 /// `16 * sixteenth` rows of `num_ntts` lanes; `t` carries the 15 twiddles for
 /// the sub-butterflies (see module comment above). Parallel over row groups.
+#[cfg(any(
+    all(target_arch = "aarch64", target_feature = "aes"),
+    all(target_arch = "x86_64", target_feature = "pclmulqdq"),
+))]
 #[inline]
 fn butterfly_interleaved_fused_4layer_par_rows(
     block: &mut [F128],

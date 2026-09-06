@@ -1,3 +1,7 @@
+#[cfg(not(feature = "std"))]
+#[allow(unused_imports)]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 #[cfg(target_arch = "aarch64")]
 use core::arch::aarch64::*;

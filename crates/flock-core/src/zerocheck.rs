@@ -15,6 +15,9 @@
 //! is tested on honest witnesses; verify also rejects byte-mutated proofs and
 //! shape-corrupted ones.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::challenger::Challenger;
 use crate::field::{F8, F128};
 use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};

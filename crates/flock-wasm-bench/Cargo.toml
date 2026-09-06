@@ -1,0 +1,18 @@
+[package]
+name = "flock-wasm-bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "wasm32 benchmark exports for the Flock VEIL preimage prover."
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+blake3 = { workspace = true }
+dlmalloc = { workspace = true }
+flock-prover = { path = "../flock-prover", default-features = false, features = ["wasm-bench"] }
+
+[lints]
+workspace = true

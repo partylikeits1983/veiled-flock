@@ -1,2 +1,2 @@
-[build]
-rustflags = ["-C", "target-cpu=native"]
+# Native rustflags are applied by Makefile targets so cross and wasm builds
+# do not inherit target-cpu=native.

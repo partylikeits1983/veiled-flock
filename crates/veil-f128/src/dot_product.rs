@@ -5,6 +5,9 @@
 //! random linear combination, and proximity-test that combination at Merkle
 //! committed codeword coordinates.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use std::collections::BTreeSet;
 
 use flock_core::{

@@ -5,6 +5,9 @@
 //! additive RS product code from [`crate::code`] and shares one Merkle opening
 //! across both checks.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::{
     challenger::Challenger,
     field::F128,

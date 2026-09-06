@@ -39,6 +39,9 @@
 //! (multiplication by x^r is F₂₁₂₈-linear), so checking the F₂₁₂₈ span of the
 //! 64 packed columns covers all bit-level witness variations.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use super::commit::{PcsParams, commit_zk};
 use super::ligerito::ProverConfig;
 use super::{DirectEqInd, PackedDirectClaim, open_batch_mixed_ligerito_with_precomputed_s_hat_v};

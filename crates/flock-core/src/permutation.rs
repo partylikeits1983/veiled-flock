@@ -58,6 +58,9 @@
 //! F128-packed multilinears, and mirrors the eq-trick sumcheck verifier chain in
 //! `zerocheck.rs`.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 

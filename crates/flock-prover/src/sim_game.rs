@@ -1,5 +1,8 @@
 //! Concrete classical programmable-random-oracle accounting for VEIL-FLOCK.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 /// Deterministic upper bound on oracle calls made by one completed proof,
 /// including Merkle hashing, transcript squeezes, and bounded grinding.
 pub const MAX_PROTOCOL_ORACLE_QUERIES_PER_PROOF: u64 = 1_000_000;

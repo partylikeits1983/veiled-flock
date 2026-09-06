@@ -17,10 +17,16 @@
 //! the m = 29 prove set). Call [`clear`] to release everything to the OS,
 //! e.g. after the last prove of a batch.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
+#[cfg(feature = "std")]
 use rayon::prelude::*;
+#[cfg(feature = "std")]
 use std::sync::Mutex;
 
+#[cfg(feature = "std")]
 static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
 
 /// Max buffers retained. The m=29 prove cycle gives ~18 distinct buffers:
@@ -32,6 +38,7 @@ static POOL: Mutex<Vec<Vec<F128>>> = Mutex::new(Vec::new());
 /// open stage would fault fresh pages every prove (the pool denies malloc
 /// the page reuse it would otherwise get from the freed early-phase
 /// buffers) — measured as a +24% open_batch regression on M4 before this.
+#[cfg(feature = "std")]
 const MAX_POOLED: usize = 24;
 
 /// Take a length-`n` `F128` vector, preferring a pooled buffer (smallest
@@ -51,6 +58,7 @@ pub fn take_f128(n: usize) -> Vec<F128> {
 /// back to a fresh allocation. Lets callers branch on warm-vs-cold (e.g.
 /// the commit prefault skips its page-touch thread when the pool can
 /// supply an already-resident buffer).
+#[cfg(feature = "std")]
 pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
     let mut pool = POOL.lock().unwrap();
     let mut best: Option<usize> = None;
@@ -72,10 +80,16 @@ pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
     None
 }
 
+#[cfg(not(feature = "std"))]
+pub(crate) fn try_take_f128(_: usize) -> Option<Vec<F128>> {
+    None
+}
+
 /// Return a buffer to the pool for reuse. When the pool is full, the
 /// smallest-capacity buffer is evicted (large buffers are the expensive ones
 /// to re-fault; a run that ramps problem sizes upward must not get its big
 /// buffers crowded out by stale small ones).
+#[cfg(feature = "std")]
 pub fn give_f128(v: Vec<F128>) {
     if v.capacity() == 0 {
         return;
@@ -93,6 +107,9 @@ pub fn give_f128(v: Vec<F128>) {
     }
 }
 
+#[cfg(not(feature = "std"))]
+pub fn give_f128(_: Vec<F128>) {}
+
 /// Pre-warm the pool for proves at witness size `2^m`: allocate and
 /// first-touch the full prove-cycle buffer set once, in parallel, then park
 /// it in the pool. Called from the per-hash Setup constructors, this moves
@@ -107,6 +124,7 @@ pub fn give_f128(v: Vec<F128>) {
 /// z/a/b, zerocheck tail ping-pong ×2, open-stage transients, rs_eq_ind ×2,
 /// b_combined → 11 buffers. ~1.1 GB resident at m = 29; release with
 /// [`clear`].
+#[cfg(feature = "std")]
 pub fn prewarm_prover(m: usize) {
     if m < 7 {
         return;
@@ -133,12 +151,19 @@ pub fn prewarm_prover(m: usize) {
     }
 }
 
+#[cfg(not(feature = "std"))]
+pub fn prewarm_prover(_: usize) {}
+
 /// Release every pooled buffer back to the OS.
+#[cfg(feature = "std")]
 pub fn clear() {
     POOL.lock().unwrap().clear();
 }
 
-#[cfg(test)]
+#[cfg(not(feature = "std"))]
+pub fn clear() {}
+
+#[cfg(all(test, feature = "std"))]
 mod tests {
     use super::*;
 
