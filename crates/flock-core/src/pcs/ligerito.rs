@@ -261,6 +261,11 @@ pub fn l0_derived_grind_bits(fold_grinding_bits: &[usize]) -> u32 {
         .unwrap_or(u32::MAX)
 }
 
+/// PoW trial cap for challenges whose grind width is derived from L0.
+pub fn l0_derived_grind_trials(fold_grinding_bits: &[usize]) -> u64 {
+    ligerito_grind_trials_for_bits(l0_derived_grind_bits(fold_grinding_bits))
+}
+
 /// Number of queries for 100-bit soundness in the **unique-decoding regime**
 /// at rate `2^(-log_inv_rate)`: `γ = δ/2 = (1−ρ)/2`, per-query soundness
 /// `log₂(1/(1−γ))` (see [`udr_per_query_bits`]). Within the unique decoding
@@ -5984,6 +5989,20 @@ mod tests {
         assert_eq!(ligerito_grind_trials_for_bits(16), 1 << 23);
         assert_eq!(ligerito_grind_trials_for_bits(22), 1 << 29);
         assert_eq!(ligerito_grind_trials_for_bits(57), u64::MAX);
+    }
+
+    #[test]
+    fn l0_derived_grind_trial_cap_tracks_derived_bits() {
+        let fold_grinding_bits = [5usize, 4, 2, 0];
+        let blind_bits = l0_derived_grind_bits(&fold_grinding_bits);
+
+        assert_eq!(blind_bits, 6);
+        assert_eq!(
+            l0_derived_grind_trials(&fold_grinding_bits),
+            ligerito_grind_trials_for_bits(blind_bits)
+        );
+        assert_eq!(l0_derived_grind_trials(&fold_grinding_bits), 8192);
+        assert!(l0_derived_grind_trials(&fold_grinding_bits) > MAX_LIGERITO_GRIND_TRIALS);
     }
 
     /// Worked example: `LigeritoSecurityConfig` for BLAKE3 m=29 at rate 1/2.
