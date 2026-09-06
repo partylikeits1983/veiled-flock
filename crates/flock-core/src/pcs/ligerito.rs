@@ -228,6 +228,7 @@ fn verify_ligerito_pow<Ch: Challenger>(
 }
 
 #[inline]
+#[cfg(test)]
 fn verify_ligerito_pow_or_reject<Ch: Challenger>(
     challenger: &mut Ch,
     nonce: u64,
@@ -3058,8 +3059,7 @@ impl SumcheckProver {
 // ===================================================================
 
 /// Sample `count` distinct positions in `[0, block_len)` via the challenger.
-/// Asserts `count <= block_len` — otherwise no number of samples could satisfy
-/// the distinctness requirement (would infinite-loop).
+/// Infallible adapter retained for legacy prover/test paths.
 fn sample_distinct_queries<Ch: Challenger>(
     challenger: &mut Ch,
     block_len: usize,
@@ -4710,6 +4710,7 @@ where
 /// `b_initial` recomputed locally (typically from the combined claims) and
 /// `target`. Also supplies the L0 root (from the upstream `Commitment`).
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub fn recursive_verifier_with_basis<Ch: Challenger>(
     config: &VerifierConfig,
     proof: &LigeritoProof,
@@ -5597,6 +5598,7 @@ fn recursive_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
         .all(|rp| rp.leaf_salts.is_empty())
 }
 
+#[cfg(test)]
 fn all_proof_salts_are_empty(proof: &LigeritoProof) -> bool {
     proof.initial_proof.leaf_salts.is_empty() && recursive_proof_salts_are_empty(proof)
 }
@@ -5609,6 +5611,7 @@ fn proof_has_expected_recursive_shape(proof: &LigeritoProof, r: usize) -> bool {
 }
 
 /// Verifier counterpart to [`recursive_prover`]. Supports arbitrary `R ≥ 1`.
+#[cfg(test)]
 pub fn recursive_verifier<Ch: Challenger>(
     config: &VerifierConfig,
     proof: &LigeritoProof,
