@@ -1559,30 +1559,17 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn pcs_zk_roundtrip_and_negatives() {
-        let m = 13usize;
-        let mut rng = Rng::new(0x2CF0);
-        let z = rng.bits(1 << m);
-        let z_skip = rng.f128();
-        let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
-        let rs_claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
-
-        let params = PcsParams {
+        let ZkPcsFixture {
             m,
-            log_inv_rate: 1,
-            log_batch_size: 2,
-            profile: Default::default(),
-            zk: true,
-        };
-        let z_packed = pack_witness(&z, m);
-
-        // Packed-direct claim at a random point.
-        let pd_point: Vec<F128> = (0..(m - 7)).map(|_| rng.f128()).collect();
-        let pd_eq = build_eq(&pd_point);
-        let pd_value: F128 = pd_eq
-            .iter()
-            .zip(z_packed.iter())
-            .map(|(e, z)| *e * *z)
-            .fold(F128::ZERO, |a, b| a + b);
+            params,
+            z_packed,
+            z_skip,
+            x_outer,
+            rs_claim,
+            pd_point,
+            pd_eq,
+            pd_value,
+        } = zk_pcs_fixture();
 
         let (lig_p_cfg, lig_v_cfg) = tiny_zk_configs();
         let recorder = Arc::new(RecordingOracle::new());
@@ -1674,6 +1661,269 @@ mod tests {
         assert!(
             verify(&c5, &p5).is_err(),
             "missing zk_blind must be rejected"
+        );
+    }
+
+    /// Shared m=13 zk PCS fixture: the witness, its packing, and the two
+    /// opening claims that [`tiny_zk_configs`] serves.
+    #[cfg(feature = "zk")]
+    struct ZkPcsFixture {
+        m: usize,
+        params: PcsParams,
+        z_packed: Vec<F128>,
+        z_skip: F128,
+        x_outer: Vec<F128>,
+        rs_claim: F128,
+        pd_point: Vec<F128>,
+        pd_eq: Vec<F128>,
+        pd_value: F128,
+    }
+
+    #[cfg(feature = "zk")]
+    fn zk_pcs_fixture() -> ZkPcsFixture {
+        let m = 13usize;
+        let mut rng = Rng::new(0x2CF0);
+        let z = rng.bits(1 << m);
+        let z_skip = rng.f128();
+        let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
+        let rs_claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
+
+        let params = PcsParams {
+            m,
+            log_inv_rate: 1,
+            log_batch_size: 2,
+            profile: Default::default(),
+            zk: true,
+        };
+        let z_packed = pack_witness(&z, m);
+
+        // Packed-direct claim at a random point.
+        let pd_point: Vec<F128> = (0..(m - 7)).map(|_| rng.f128()).collect();
+        let pd_eq = build_eq(&pd_point);
+        let pd_value: F128 = pd_eq
+            .iter()
+            .zip(z_packed.iter())
+            .map(|(e, z)| *e * *z)
+            .fold(F128::ZERO, |a, b| a + b);
+
+        ZkPcsFixture {
+            m,
+            params,
+            z_packed,
+            z_skip,
+            x_outer,
+            rs_claim,
+            pd_point,
+            pd_eq,
+            pd_value,
+        }
+    }
+
+    /// Caps recorded for the sites that grind exactly `bits` wide.
+    #[cfg(feature = "zk")]
+    fn caps_at(recorded: &[(u32, u64)], bits: u32) -> Vec<u64> {
+        recorded
+            .iter()
+            .filter(|(b, _)| *b == bits)
+            .map(|(_, cap)| *cap)
+            .collect()
+    }
+
+    /// Forwards every challenger call to an inner challenger, and records the
+    /// `(bits, max_trials)` pair that each bounded-PoW site passes. This lets
+    /// a test pin the trial cap of one call site without depending on which
+    /// nonce the grind happens to find.
+    ///
+    /// The unbounded `grind_pow` and `verify_pow` panic, as
+    /// `BoundedPowOnlyChallenger` in `pcs::ligerito` does: a call site that
+    /// drops back to them escapes the cap entirely, and must fail loudly
+    /// instead of recording nothing.
+    #[cfg(feature = "zk")]
+    struct CapRecordingChallenger<C> {
+        inner: C,
+        grind_caps: Vec<(u32, u64)>,
+        verify_caps: Vec<(u32, u64)>,
+    }
+
+    #[cfg(feature = "zk")]
+    impl<C: Challenger> CapRecordingChallenger<C> {
+        fn new(inner: C) -> Self {
+            Self {
+                inner,
+                grind_caps: Vec::new(),
+                verify_caps: Vec::new(),
+            }
+        }
+    }
+
+    #[cfg(feature = "zk")]
+    impl<C: Challenger> Challenger for CapRecordingChallenger<C> {
+        fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+            self.inner.ro_context(nonce)
+        }
+        fn observe_label(&mut self, label: &[u8]) {
+            self.inner.observe_label(label);
+        }
+        fn observe_f128(&mut self, value: F128) {
+            self.inner.observe_f128(value);
+        }
+        fn observe_f128_slice(&mut self, values: &[F128]) {
+            self.inner.observe_f128_slice(values);
+        }
+        fn observe_bytes(&mut self, bytes: &[u8]) {
+            self.inner.observe_bytes(bytes);
+        }
+        fn sample_f128(&mut self) -> F128 {
+            self.inner.sample_f128()
+        }
+        fn try_sample_f128(&mut self) -> Result<F128, OracleLimitError> {
+            self.inner.try_sample_f128()
+        }
+        fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+            self.inner.sample_f128_vec(n)
+        }
+        fn try_sample_f128_vec(&mut self, n: usize) -> Result<Vec<F128>, OracleLimitError> {
+            self.inner.try_sample_f128_vec(n)
+        }
+        fn grind_pow(&mut self, _bits: u32) -> u64 {
+            panic!("zk PCS prover must use bounded PoW grinding")
+        }
+        fn grind_pow_bounded(
+            &mut self,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<u64, OracleLimitError> {
+            self.grind_caps.push((bits, max_trials));
+            self.inner.grind_pow_bounded(bits, max_trials)
+        }
+        fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
+            panic!("zk PCS verifier must use bounded PoW checks")
+        }
+        fn verify_pow_bounded(
+            &mut self,
+            nonce: u64,
+            bits: u32,
+            max_trials: u64,
+        ) -> Result<bool, OracleLimitError> {
+            self.verify_caps.push((bits, max_trials));
+            self.inner.verify_pow_bounded(nonce, bits, max_trials)
+        }
+    }
+
+    /// The zk L0 blind grind must bound its PoW search by the cap that
+    /// `fold_grinding_bits` derives, on the prover path and on the verifier
+    /// path alike. A restored `MAX_LIGERITO_GRIND_TRIALS` at either site
+    /// fails this test, which a test of the helper alone cannot do.
+    ///
+    /// The test reads the cap off the call site through a recording
+    /// challenger, so no nonce, digest, or transcript byte enters the
+    /// assertions.
+    #[cfg(feature = "zk")]
+    #[test]
+    fn pcs_zk_blind_grind_uses_l0_derived_trial_cap() {
+        use crate::pcs::ligerito::{
+            MAX_LIGERITO_GRIND_TRIALS, l0_derived_grind_bits, l0_derived_grind_trials,
+        };
+
+        let ZkPcsFixture {
+            m,
+            params,
+            z_packed,
+            z_skip,
+            x_outer,
+            rs_claim,
+            pd_point,
+            pd_eq,
+            pd_value,
+        } = zk_pcs_fixture();
+
+        let (lig_p_cfg, lig_v_cfg) = tiny_zk_configs();
+
+        // The cap under test, and the constant it replaced. The test is only
+        // meaningful while the two differ.
+        let c_bits = l0_derived_grind_bits(&lig_p_cfg.fold_grinding_bits);
+        let derived_cap = l0_derived_grind_trials(&lig_p_cfg.fold_grinding_bits);
+        assert_eq!(c_bits, 1, "tiny config grinds the blind site at 1 bit");
+        assert_eq!(
+            derived_cap, 256,
+            "1 bit plus the 7-bit trial overhead gives a 256-trial cap"
+        );
+        assert_ne!(
+            derived_cap, MAX_LIGERITO_GRIND_TRIALS,
+            "the derived cap must differ from the generic cap, or this test proves nothing"
+        );
+        assert_eq!(
+            lig_v_cfg.fold_grinding_bits, lig_p_cfg.fold_grinding_bits,
+            "both sides must derive the cap from the same widths"
+        );
+        // The assertions below select the blind site by its grind width, so no
+        // other site may share that width.
+        assert!(
+            lig_p_cfg.fold_grinding_taper.iter().all(|t| !*t),
+            "an untapered config keeps each site at its configured width"
+        );
+        assert!(
+            lig_p_cfg
+                .fold_grinding_bits
+                .iter()
+                .chain(lig_p_cfg.grinding_bits.iter())
+                .all(|b| *b != c_bits as usize),
+            "no ligerito site may grind at the blind width, or the cap filter is ambiguous"
+        );
+
+        let ro = RoContext::native([0x42; 32]);
+
+        let mut zk_rng = ZkRng::from_seed([5u8; 32]);
+        let (commitment, prover_data) =
+            commit::commit_zk_with_ro(&z_packed, &params, &mut zk_rng, &ro, RoChannel::Witness);
+
+        let mut ch_p = CapRecordingChallenger::new(FsChallenger::new(b"flock-test-lig-zk"));
+        let proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v_ro(
+            z_packed.clone(),
+            &prover_data,
+            &commitment,
+            &[x_outer.as_slice()],
+            &[],
+            &[PackedDirectClaim {
+                point: pd_point.clone(),
+                value: pd_value,
+                eq_ind: DirectEqInd::Dense(pd_eq.clone()),
+            }],
+            &PaddingSpec::dense(m),
+            &lig_p_cfg,
+            &ro,
+            RoChannel::Witness,
+            &mut ch_p,
+        );
+        assert!(proof.zk_blind.is_some(), "the zk blind path must run");
+
+        let mut ch_v = CapRecordingChallenger::new(FsChallenger::new(b"flock-test-lig-zk"));
+        verify_opening_batch_ligerito_mixed_ro(
+            &commitment,
+            &[rs_claim],
+            &[z_skip],
+            &[x_outer.as_slice()],
+            &[PackedDirectClaimRef {
+                point: &pd_point,
+                value: pd_value,
+            }],
+            &proof,
+            &lig_v_cfg,
+            &ro,
+            RoChannel::Witness,
+            &mut ch_v,
+        )
+        .unwrap_or_else(|e| panic!("zk verify rejected honest proof: {e:?}"));
+
+        assert_eq!(
+            caps_at(&ch_p.grind_caps, c_bits),
+            vec![derived_cap],
+            "the prover blind grind must pass the L0-derived cap"
+        );
+        assert_eq!(
+            caps_at(&ch_v.verify_caps, c_bits),
+            vec![derived_cap],
+            "the verifier blind check must pass the L0-derived cap"
         );
     }
 
