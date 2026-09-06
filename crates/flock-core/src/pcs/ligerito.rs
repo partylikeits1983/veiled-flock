@@ -399,6 +399,8 @@ macro_rules! profile_configs {
 const EMBEDDED_CONFIGS: &[((usize, LigeritoProfile), &str)] =
     profile_configs!(22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35);
 
+include!(concat!(env!("OUT_DIR"), "/ligerito_configs.rs"));
+
 /// Look up the embedded security config TOML for `(m, profile)`.
 /// Returns `None` if no config has been derived for this combination yet.
 pub fn embedded_security_config(m: usize, profile: LigeritoProfile) -> Option<&'static str> {
@@ -464,22 +466,25 @@ fn security_config_for(
     m: usize,
     profile: LigeritoProfile,
 ) -> Result<LigeritoSecurityConfig, String> {
+    let missing_config = || {
+        format!(
+            "no security config registered for (m={m}, profile={}). \
+             Add a TOML at configs/ligerito/m{m}_{}.toml and register it in \
+             EMBEDDED_CONFIGS, or call default_config explicitly for ad-hoc shapes.",
+            profile.as_str(),
+            profile.as_str(),
+        )
+    };
     #[cfg(feature = "std")]
     {
-        let toml = embedded_security_config(m, profile).ok_or_else(|| {
-            format!(
-                "no security config registered for (m={m}, profile={}). \
-                 Add a TOML at configs/ligerito/m{m}_{}.toml and register it in \
-                 EMBEDDED_CONFIGS, or call default_config explicitly for ad-hoc shapes.",
-                profile.as_str(),
-                profile.as_str(),
-            )
-        })?;
+        let toml = embedded_security_config(m, profile).ok_or_else(missing_config)?;
         LigeritoSecurityConfig::from_toml_str(toml)
     }
     #[cfg(not(feature = "std"))]
     {
-        LigeritoSecurityConfig::derive_profile(m, profile)
+        let config = embedded_security_config_value(m, profile).ok_or_else(missing_config)?;
+        config.validate()?;
+        Ok(config)
     }
 }
 
@@ -5748,6 +5753,28 @@ mod tests {
                     key.1.as_str()
                 )
             });
+        }
+    }
+
+    #[test]
+    fn ligerito_derived_profiles_match_embedded_configs() {
+        for &(key, toml) in EMBEDDED_CONFIGS {
+            let derived = LigeritoSecurityConfig::derive_profile(key.0, key.1)
+                .and_then(|cfg| cfg.to_toml_string())
+                .unwrap_or_else(|e| {
+                    panic!(
+                        "derive embedded config m={} profile={}: {e}",
+                        key.0,
+                        key.1.as_str()
+                    )
+                });
+            assert_eq!(
+                derived,
+                toml,
+                "derived config drifted from embedded TOML for m={} profile={}",
+                key.0,
+                key.1.as_str()
+            );
         }
     }
 
