@@ -118,6 +118,28 @@ fn supported_blake3_r1cs_shape(r1cs: &BlockR1cs) -> Option<SupportedBlake3R1csSh
         .find(|shape| shape.digest == digest && shape.r1cs_m == r1cs.m)
 }
 
+pub(crate) fn supported_outer_position_sampling_parameters() -> Vec<(usize, usize)> {
+    SUPPORTED_BLAKE3_R1CS_SHAPES
+        .iter()
+        .map(|shape| {
+            let params = PcsParams {
+                m: shape.r1cs_m,
+                log_inv_rate: 1,
+                log_batch_size: 6,
+                profile: pcs::ligerito::LigeritoProfile::Secure,
+                zk: true,
+            };
+            let config = pcs::ligerito::verifier_config_for(
+                params.log_msg_len(),
+                params.log_batch_size,
+                params.profile,
+            )
+            .expect("supported VEIL shape must have a registered Ligerito profile");
+            (params.n_positions(), config.queries[0])
+        })
+        .collect()
+}
+
 fn supported_mask_count(r1cs: &BlockR1cs) -> Option<usize> {
     supported_blake3_r1cs_shape(r1cs).map(|shape| shape.mask_count)
 }

@@ -74,18 +74,13 @@ impl ClassicalPromZkBound {
     /// PCS L0 opening and the two VEIL matrix commitments.
     pub fn position_sampling_abort_probability(self) -> f64 {
         let trials = flock_core::oracle_budget::REJECTION_SAMPLING_TRIALS;
-        let outer = [
-            (2048usize, 294usize),
-            (4096, 292),
-            (8192, 291),
-            (16384, 290),
-            (32768, 290),
-        ]
-        .into_iter()
-        .map(|(domain, target)| position_abort_bound(domain, target, trials))
-        .sum::<f64>();
-        let veil =
-            position_abort_bound(2048, 160, trials) + position_abort_bound(8192, 160, trials);
+        let outer = crate::succinct_veil::supported_outer_position_sampling_parameters()
+            .into_iter()
+            .map(|(domain, target)| position_abort_bound(domain, target, trials))
+            .sum::<f64>();
+        let veil_parameters = veil_f128::ConstraintParameters::succinct_flock_secure();
+        let veil = position_abort_bound(2048, veil_parameters.hadamard_padding, trials)
+            + position_abort_bound(8192, veil_parameters.linear_padding, trials);
         self.proofs as f64 * (outer + veil)
     }
 

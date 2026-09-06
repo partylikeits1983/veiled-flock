@@ -1132,6 +1132,12 @@ impl LigeritoSecurityConfig {
         // Per-level checks.
         let mut dim_in = self.log_n;
         for (i, lv) in self.levels.iter().enumerate() {
+            if lv.queries > REJECTION_SAMPLING_TRIALS {
+                return Err(format!(
+                    "L{i}: queries ({}) exceed position-sampling trial cap ({REJECTION_SAMPLING_TRIALS})",
+                    lv.queries
+                ));
+            }
             if lv.grinding_bits > MAX_SUPPORTED_LIGERITO_GRINDING_BITS as usize
                 || lv.fold_grinding_bits > MAX_SUPPORTED_LIGERITO_GRINDING_BITS as usize
             {
@@ -6010,6 +6016,23 @@ mod tests {
     }
 
     #[test]
+    fn ligerito_distinct_query_sampler_rejects_impossible_count_without_drawing() {
+        let mut challenger = ConstantChallenger {
+            value: F128::ZERO,
+            scalar_calls: 0,
+        };
+        assert_eq!(
+            try_sample_distinct_queries(
+                &mut challenger,
+                REJECTION_SAMPLING_TRIALS * 2,
+                REJECTION_SAMPLING_TRIALS + 1,
+            ),
+            Err(OracleLimitError::PositionSamplingLimitExceeded)
+        );
+        assert_eq!(challenger.scalar_calls, 0);
+    }
+
+    #[test]
     fn ligerito_grind_trial_cap_scales_with_pow_bits() {
         assert_eq!(ligerito_grind_trials_for_bits(0), Ok(1));
         assert_eq!(
@@ -6158,6 +6181,17 @@ mod tests {
             cfg.validate()
                 .unwrap_err()
                 .contains("grinding width exceeds protocol maximum")
+        );
+    }
+
+    #[test]
+    fn ligerito_security_config_rejects_unbounded_queries() {
+        let mut cfg = blake3_m29_udr_example();
+        cfg.levels[0].queries = REJECTION_SAMPLING_TRIALS + 1;
+        assert!(
+            cfg.validate()
+                .unwrap_err()
+                .contains("position-sampling trial cap")
         );
     }
 

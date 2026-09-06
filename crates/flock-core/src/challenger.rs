@@ -211,10 +211,9 @@ pub fn sample_distinct_positions<C: Challenger>(
     count: usize,
     max_trials: usize,
 ) -> Result<Vec<usize>, OracleLimitError> {
-    assert!(
-        count <= domain,
-        "cannot sample {count} distinct positions from a domain of size {domain}"
-    );
+    if count > domain || count > max_trials {
+        return Err(OracleLimitError::PositionSamplingLimitExceeded);
+    }
     if count == 0 {
         return Ok(Vec::new());
     }
@@ -865,6 +864,17 @@ mod tests {
             Err(OracleLimitError::GrindingLimitExceeded)
         );
         assert_eq!(budget.used(), 4);
+    }
+
+    #[test]
+    fn distinct_positions_reject_impossible_shape_without_sampling() {
+        let budget = OracleQueryBudget::new(0);
+        let mut challenger = FsChallenger::new_budgeted(b"positions", budget.clone());
+        assert_eq!(
+            sample_distinct_positions(&mut challenger, 8, 2, 1),
+            Err(OracleLimitError::PositionSamplingLimitExceeded)
+        );
+        assert_eq!(budget.used(), 0);
     }
 
     #[test]
