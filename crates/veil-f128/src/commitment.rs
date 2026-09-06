@@ -30,6 +30,7 @@ pub struct MerkleMatrixOpening {
 }
 
 impl MerkleMatrix {
+    #[cfg(test)]
     pub fn new<R: MaskSampler + ?Sized>(
         columns: &[Vec<F128>],
         rng: &mut R,
@@ -115,6 +116,7 @@ impl MerkleMatrix {
 }
 
 impl MerkleMatrixOpening {
+    #[cfg(test)]
     pub fn verify(
         &self,
         root: &Hash,

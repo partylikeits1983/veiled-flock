@@ -289,6 +289,7 @@ pub fn merkle_tree(data: &[u8], num_leaves: usize) -> Vec<Hash> {
 /// Native backends use the four-way midstate kernel where available, with any
 /// attached budget charged once per tree level. External backends serialize
 /// every framed point through the shared oracle.
+#[cfg(test)]
 pub fn merkle_tree_framed(
     data: &[u8],
     num_leaves: usize,
@@ -300,7 +301,7 @@ pub fn merkle_tree_framed(
         .expect("point-oracle query budget exhausted")
 }
 
-/// Fallible form of [`merkle_tree_framed`] for budgeted execution.
+/// Build a framed Merkle tree, returning oracle-budget exhaustion to the caller.
 pub fn try_merkle_tree_framed(
     data: &[u8],
     num_leaves: usize,
@@ -486,7 +487,8 @@ pub fn try_merkle_tree_framed(
 /// Framed Merkle tree with one independent 256-bit salt prepended to every
 /// leaf payload. Intended for initial witness-dependent commitments; recursive
 /// commitments whose entire input is already witness-independent use
-/// [`merkle_tree_framed`] directly.
+/// [`try_merkle_tree_framed`] directly.
+#[cfg(test)]
 pub fn merkle_tree_framed_salted(
     data: &[u8],
     num_leaves: usize,
@@ -499,7 +501,7 @@ pub fn merkle_tree_framed_salted(
         .expect("point-oracle query budget exhausted")
 }
 
-/// Fallible form of [`merkle_tree_framed_salted`] for budgeted execution.
+/// Build a salted framed Merkle tree, returning oracle-budget exhaustion.
 pub fn try_merkle_tree_framed_salted(
     data: &[u8],
     num_leaves: usize,
@@ -523,6 +525,7 @@ pub fn try_merkle_tree_framed_salted(
 
 /// Verify a framed Merkle opening (single leaf), recomputing the root through
 /// the point-oracle framing. Mirrors [`verify_merkle_proof`] but tags each hash.
+#[cfg(test)]
 pub fn verify_merkle_proof_framed(
     root: &Hash,
     leaf_payload: &[u8],
@@ -546,7 +549,7 @@ pub fn verify_merkle_proof_framed(
     .unwrap_or(false)
 }
 
-/// Fallible form of [`verify_merkle_proof_framed`] for budgeted execution.
+/// Verify a framed Merkle opening while preserving oracle-limit errors.
 pub fn try_verify_merkle_proof_framed(
     root: &Hash,
     leaf_payload: &[u8],
@@ -595,8 +598,9 @@ pub fn try_verify_merkle_proof_framed(
 ///
 /// Unlike [`verify_merkle_multi_proof`], this function receives the opened
 /// leaf payloads rather than pre-hashed leaves. It hashes every opened leaf and
-/// parent through the same point-oracle framing as [`merkle_tree_framed`],
+/// parent through the same point-oracle framing as [`try_merkle_tree_framed`],
 /// including the canonical `(level, index)` pair for each node.
+#[cfg(test)]
 pub fn verify_merkle_multi_proof_framed(
     root: &Hash,
     num_leaves: usize,
@@ -620,7 +624,7 @@ pub fn verify_merkle_multi_proof_framed(
     .unwrap_or(false)
 }
 
-/// Fallible form of [`verify_merkle_multi_proof_framed`] for budgeted execution.
+/// Verify a framed Merkle multi-proof while preserving oracle-limit errors.
 pub fn try_verify_merkle_multi_proof_framed(
     root: &Hash,
     num_leaves: usize,

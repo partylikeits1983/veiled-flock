@@ -3967,6 +3967,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
 ///
 /// `log_n` is the original packed-witness log size (= b_initial's logical dim).
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub fn recursive_verifier_with_basis_succinct<Ch, F>(
     config: &VerifierConfig,
     proof: &LigeritoProof,
@@ -4028,6 +4029,7 @@ where
 
 /// Succinct basis verifier with an explicit point-oracle context and channel.
 #[allow(clippy::too_many_arguments)]
+#[cfg(test)]
 pub fn recursive_verifier_with_basis_succinct_with_ro<Ch, F>(
     config: &VerifierConfig,
     proof: &LigeritoProof,
