@@ -353,6 +353,7 @@ fn answering_only_ro_context(nonce: [u8; 32], oracle: SharedOracle) -> RoContext
 pub struct OracleChallenger {
     absorbed: Vec<u8>,
     oracle: SharedOracle,
+    retain_ro_points: bool,
 }
 
 impl OracleChallenger {
@@ -360,11 +361,21 @@ impl OracleChallenger {
         let mut c = Self {
             absorbed: Vec::new(),
             oracle,
+            retain_ro_points: false,
         };
         c.absorb(&[OP_DOMAIN]);
         c.absorb(&(domain.len() as u64).to_le_bytes());
         c.absorb(domain);
         c
+    }
+
+    /// Keep full Merkle random-oracle point payloads in the shared oracle.
+    /// This is intentionally opt-in: production simulator tests normally need
+    /// only point counts, while extractor audits need the depth-0 leaf bytes.
+    pub fn new_retaining_ro_points(domain: &[u8], oracle: SharedOracle) -> Self {
+        let mut challenger = Self::new(domain, oracle);
+        challenger.retain_ro_points = true;
+        challenger
     }
 
     pub fn oracle(&self) -> &SharedOracle {
@@ -490,7 +501,11 @@ impl OracleChallenger {
 
 impl Challenger for OracleChallenger {
     fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
-        answering_only_ro_context(nonce, self.oracle.clone())
+        if self.retain_ro_points {
+            ro_context(nonce, self.oracle.clone())
+        } else {
+            answering_only_ro_context(nonce, self.oracle.clone())
+        }
     }
 
     fn observe_label(&mut self, label: &[u8]) {
