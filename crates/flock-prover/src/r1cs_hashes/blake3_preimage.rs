@@ -41,6 +41,8 @@
 //! the PIOP transcript, and proves the shifted verifier with `veil-f128`.
 //! The exact classical-pROM theorem and exclusions are in `docs/SECURITY.md`.
 
+#[cfg(feature = "veil")]
+use crate::sim_oracle::OracleChallenger;
 use flock_core::challenger::Challenger;
 #[cfg(feature = "veil")]
 use flock_core::challenger::FsChallenger;
@@ -903,12 +905,9 @@ impl Blake3PreimageZkSetup {
             flock_core::lincheck::pack_z_lincheck_from_packed(&z, self.r1cs.m, self.r1cs.k_log);
         let lig_config = self.ligerito_prover_config();
         let mut challenger = if retain_ro_points {
-            crate::sim_oracle::OracleChallenger::new_retaining_ro_points(
-                VEIL_FLOCK_FS_DOMAIN,
-                oracle.clone(),
-            )
+            OracleChallenger::new_retaining_ro_points(VEIL_FLOCK_FS_DOMAIN, oracle.clone())
         } else {
-            crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone())
+            OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone())
         };
         absorb_statement(&mut challenger, &statement);
         let source_rng = rng.fork(b"succinct-veil-zc-simulator");
@@ -924,7 +923,7 @@ impl Blake3PreimageZkSetup {
             self.r1cs.csc_lincheck_circuit(),
             &lig_config,
             rng,
-            &mut |ch: &mut crate::sim_oracle::OracleChallenger| {
+            &mut |ch: &mut OracleChallenger| {
                 let digest_challenges = DigestChallenges::sample(&statement_for_claim, ch);
                 vec![
                     crate::succinct_veil::PublicPackedDirectClaim::from_public_statement(
@@ -1334,8 +1333,7 @@ mod tests {
         let simulated = setup
             .simulate_with_seed_retaining_ro_points(&digests, [0x68; 32], oracle.clone())
             .expect("simulate with retained witness leaves");
-        let mut verifier =
-            crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+        let mut verifier = OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
         setup
             .verify_with_challenger(
                 &simulated.commitment,
@@ -1431,7 +1429,7 @@ mod tests {
         let simulated = setup
             .simulate_with_seed(&digests, [0xD2; 32], oracle.clone())
             .expect("simulated proof");
-        let mut verifier = crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle);
+        let mut verifier = OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle);
         setup
             .verify_with_challenger(
                 &simulated.commitment,
@@ -1576,8 +1574,7 @@ mod tests {
             }
         }
 
-        let mut verifier =
-            crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+        let mut verifier = OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
         setup
             .verify_with_challenger(
                 &simulated.commitment,
@@ -1620,8 +1617,7 @@ mod tests {
             simulations[1].proof.proof_nonce
         );
         for (simulated, digests) in simulations.iter().zip(&statements) {
-            let mut verifier =
-                crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+            let mut verifier = OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
             setup
                 .verify_with_challenger(
                     &simulated.commitment,
@@ -1654,8 +1650,7 @@ mod tests {
                 1 + setup.r1cs.m - flock_core::zerocheck::K_SKIP
             );
 
-            let mut verifier =
-                crate::sim_oracle::OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
+            let mut verifier = OracleChallenger::new(VEIL_FLOCK_FS_DOMAIN, oracle.clone());
             setup
                 .verify_with_challenger(
                     &simulated.commitment,
