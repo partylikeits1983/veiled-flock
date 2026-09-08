@@ -591,7 +591,7 @@ impl Blake3PreimageZkSetup {
         let (expected, _) = self
             .registered_ligerito_security_config()?
             .to_prover_verifier_configs()
-            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+            .map_err(|_| PreimageError::Uncertified)?;
         if actual.log_inv_rates == expected.log_inv_rates
             && actual.recursive_steps == expected.recursive_steps
             && actual.initial_log_msg_cols == expected.initial_log_msg_cols
@@ -619,7 +619,7 @@ impl Blake3PreimageZkSetup {
         let (_, expected) = self
             .registered_ligerito_security_config()?
             .to_prover_verifier_configs()
-            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+            .map_err(|_| PreimageError::Uncertified)?;
         if actual.log_inv_rates == expected.log_inv_rates
             && actual.recursive_steps == expected.recursive_steps
             && actual.initial_log_msg_cols == expected.initial_log_msg_cols
@@ -649,7 +649,7 @@ impl Blake3PreimageZkSetup {
             self.pcs_params.log_batch_size,
             self.pcs_params.profile,
         )
-        .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        .map_err(|_| PreimageError::Uncertified)?;
         self.prover_config_matches_registered_certificate(&config)?;
         Ok(config)
     }
@@ -664,7 +664,7 @@ impl Blake3PreimageZkSetup {
             self.pcs_params.log_batch_size,
             self.pcs_params.profile,
         )
-        .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+        .map_err(|_| PreimageError::Uncertified)?;
         self.verifier_config_matches_registered_certificate(&config)?;
         Ok(config)
     }
@@ -682,7 +682,7 @@ impl Blake3PreimageZkSetup {
         // ledger must also carry the `c` combination event.
         let bound = config
             .aggregate_soundness_bound_zk_l0()
-            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+            .map_err(|_| PreimageError::Uncertified)?;
         let probability = bound.probability();
         Self::ensure_soundness_floor(-probability.log2(), MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS)?;
         Ok(probability)
