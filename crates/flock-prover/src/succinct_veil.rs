@@ -736,7 +736,7 @@ fn validate_succinct_parameters(
     if !pcs_params.zk
         || r1cs.zk.is_none()
         || pcs_params.m != r1cs.m
-        || pcs_params.log_inv_rate != 3
+        || pcs_params.log_inv_rate != pcs_params.profile.log_inv_rate()
         || pcs_params.log_batch_size != 6
         || pcs_params.profile != pcs::ligerito::LigeritoProfile::Secure
     {

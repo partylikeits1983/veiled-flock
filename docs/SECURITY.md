@@ -144,22 +144,6 @@ Each level tuple is
 `(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`.
 Query-phase grinding, tapering, and OOD sampling are zero in these profiles.
 
-The current Rust full-ZK path swaps the outer PCS to an initial
-`log_inv_rate = 3` UDR schedule with query budgets selected to clear a
-100-bit additive ZK-L0 PCS ledger:
-
-| Slots | Committed PCS `m` | Queries |
-|---:|---:|---|
-| 256 | 23 | `[121, 114, 110]` |
-| 512 | 24 | `[121, 113, 110]` |
-| 1024 | 25 | `[121, 113, 109, 109]` |
-| 2048 | 26 | `[121, 113, 109, 108]` |
-| 4096 | 27 | `[121, 113, 109, 107]` |
-
-The matching registered config and Lean tables are intentionally not added in
-this change, so the concrete certificate APIs fail closed with `Uncertified`
-for that PCS.
-
 The Rust prover and simulator currently check returned grind nonces against
 the caps, but some search and rejection loops are not bounded while they run.
 The executable must enforce per-loop caps and the cumulative oracle-call budget
@@ -182,9 +166,13 @@ adds these errors:
 
 The RS proximity terms use the finite-length unique-decoding backoff
 `gamma = delta/2 - 3/(delta*N)` and union-bound every live binary fold. Fast
-and Slim/list-decoding profiles are rejected by the full-ZK setup. Until the
-high-rate PCS has matching registered tables, runtime code refuses to return a
-pinned interactive aggregate for it.
+and Slim/list-decoding profiles are rejected by the full-ZK setup. Missing or
+mismatched PCS registry entries fail closed instead of falling back to ad hoc
+parameters.
+
+The public full-ZK API rejects any setup whose registered PCS aggregate is below
+114 bits or whose composed interactive ledger is below 106 bits. These floors
+are enforced before proving, simulation, or verification.
 
 `rom_soundness_bound(Q, attempts)` also accounts for proof attempts and oracle
 collisions. It is a classical-ROM statement and does not make SHA-256
@@ -193,7 +181,7 @@ information-theoretic.
 ## Format and API
 
 The verifier checks the circuit digest, mask count, witness layout, Secure PCS
-profile marker, high-rate code geometry, query budget, and VEIL parameters.
+profile marker, registered code geometry, query budget, and VEIL parameters.
 The canonical bundle has a 1 MiB decode limit, rejects trailing bytes, and
 rejects parameter mismatches.
 
