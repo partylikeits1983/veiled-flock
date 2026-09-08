@@ -52,7 +52,11 @@ pub fn take_f128(n: usize) -> Vec<F128> {
 /// the commit prefault skips its page-touch thread when the pool can
 /// supply an already-resident buffer).
 pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
-    let mut pool = POOL.lock().unwrap();
+    try_take_f128_from_pool(&POOL, n)
+}
+
+fn try_take_f128_from_pool(pool: &Mutex<Vec<Vec<F128>>>, n: usize) -> Option<Vec<F128>> {
+    let mut pool = pool.lock().unwrap();
     let mut best: Option<usize> = None;
     for (i, v) in pool.iter().enumerate() {
         if v.capacity() >= n && best.is_none_or(|b| v.capacity() < pool[b].capacity()) {
@@ -77,10 +81,14 @@ pub(crate) fn try_take_f128(n: usize) -> Option<Vec<F128>> {
 /// to re-fault; a run that ramps problem sizes upward must not get its big
 /// buffers crowded out by stale small ones).
 pub fn give_f128(v: Vec<F128>) {
+    give_f128_to_pool(&POOL, v);
+}
+
+fn give_f128_to_pool(pool: &Mutex<Vec<Vec<F128>>>, v: Vec<F128>) {
     if v.capacity() == 0 {
         return;
     }
-    let mut pool = POOL.lock().unwrap();
+    let mut pool = pool.lock().unwrap();
     pool.push(v);
     if pool.len() > MAX_POOLED {
         let smallest = pool
@@ -144,27 +152,25 @@ mod tests {
 
     #[test]
     fn take_reuses_given_buffer() {
-        clear();
-        let mut v = take_f128(1024);
-        for slot in v.iter_mut() {
-            *slot = F128 { lo: 7, hi: 9 };
-        }
+        // Other parallel tests use the global pool, so test reuse in isolation.
+        let pool = Mutex::new(Vec::new());
+        let v = vec![F128 { lo: 7, hi: 9 }; 1024];
         let ptr = v.as_ptr();
-        give_f128(v);
-        // Same capacity request gets the same allocation back.
-        let v2 = take_f128(512);
+        give_f128_to_pool(&pool, v);
+        // A smaller request reuses the allocation with sufficient capacity.
+        let v2 = try_take_f128_from_pool(&pool, 512).expect("buffer should be pooled");
         assert_eq!(v2.as_ptr(), ptr);
         assert_eq!(v2.len(), 512);
-        clear();
     }
 
     #[test]
     fn pool_is_bounded() {
-        clear();
-        for _ in 0..(MAX_POOLED + 4) {
-            give_f128(take_f128(16));
+        let pool = Mutex::new(Vec::new());
+        for n in 1..=(MAX_POOLED + 4) {
+            give_f128_to_pool(&pool, vec![F128 { lo: 0, hi: 0 }; n]);
         }
-        assert!(POOL.lock().unwrap().len() <= MAX_POOLED);
-        clear();
+        let pool = pool.lock().unwrap();
+        assert_eq!(pool.len(), MAX_POOLED);
+        assert!(pool.iter().all(|v| v.capacity() > 4));
     }
 }
