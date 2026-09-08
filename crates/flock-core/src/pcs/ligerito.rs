@@ -37,6 +37,7 @@ use crate::ntt::additive_ntt_f128::AdditiveNttF128;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 
 // ===================================================================
 // Config
@@ -70,6 +71,16 @@ pub enum LigeritoProfile {
     Secure,
 }
 
+#[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
+#[error("unsupported PCS log_inv_rate {0}")]
+pub struct UnsupportedLogInvRate(pub usize);
+
+impl core::fmt::Display for LigeritoProfile {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 impl LigeritoProfile {
     /// L0 code rate index for this profile (`rho_0 = 2^-log_inv_rate`).
     pub fn log_inv_rate(self) -> usize {
@@ -100,6 +111,21 @@ impl LigeritoProfile {
             "slim" => Some(Self::Slim),
             "secure" => Some(Self::Secure),
             _ => None,
+        }
+    }
+}
+
+/// Converts the legacy PCS rate selector to its default profile. Rate 1 maps
+/// to `Fast`; `Secure` must be selected explicitly because it uses the same
+/// rate with a different soundness target and query schedule.
+impl TryFrom<usize> for LigeritoProfile {
+    type Error = UnsupportedLogInvRate;
+
+    fn try_from(log_inv_rate: usize) -> Result<Self, Self::Error> {
+        match log_inv_rate {
+            1 => Ok(Self::Fast),
+            2 => Ok(Self::Slim),
+            rate => Err(UnsupportedLogInvRate(rate)),
         }
     }
 }
@@ -5619,6 +5645,13 @@ mod tests {
     use super::*;
     use crate::challenger::Challenger;
     use std::time::Instant;
+
+    #[test]
+    fn profile_conversion_rejects_unsupported_rates() {
+        assert_eq!(LigeritoProfile::try_from(1), Ok(LigeritoProfile::Fast));
+        assert_eq!(LigeritoProfile::try_from(2), Ok(LigeritoProfile::Slim));
+        assert_eq!(LigeritoProfile::try_from(3), Err(UnsupportedLogInvRate(3)));
+    }
 
     /// Worked example: `LigeritoSecurityConfig` for BLAKE3 m=29 at rate 1/2.
     /// Paper-compatible m=29 fast example, mechanically derived in the
