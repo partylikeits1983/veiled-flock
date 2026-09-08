@@ -130,7 +130,7 @@ impl TryFrom<usize> for LigeritoProfile {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ProverConfig {
     pub log_inv_rates: Vec<usize>,
     pub recursive_steps: usize,
@@ -163,7 +163,7 @@ pub struct ProverConfig {
     pub ood_samples: Vec<usize>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct VerifierConfig {
     pub log_inv_rates: Vec<usize>,
     pub recursive_steps: usize,

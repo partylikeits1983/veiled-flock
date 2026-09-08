@@ -592,23 +592,11 @@ impl Blake3PreimageZkSetup {
             .registered_ligerito_security_config()?
             .to_prover_verifier_configs()
             .map_err(|_| PreimageError::Uncertified)?;
-        if actual.log_inv_rates == expected.log_inv_rates
-            && actual.recursive_steps == expected.recursive_steps
-            && actual.initial_log_msg_cols == expected.initial_log_msg_cols
-            && actual.initial_log_num_interleaved == expected.initial_log_num_interleaved
-            && actual.initial_k == expected.initial_k
-            && actual.recursive_log_msg_cols == expected.recursive_log_msg_cols
-            && actual.recursive_ks == expected.recursive_ks
-            && actual.queries == expected.queries
-            && actual.grinding_bits == expected.grinding_bits
-            && actual.fold_grinding_bits == expected.fold_grinding_bits
-            && actual.fold_grinding_taper == expected.fold_grinding_taper
-            && actual.ood_samples == expected.ood_samples
-        {
-            Ok(())
-        } else {
-            Err(PreimageError::Uncertified.into())
+        if actual != &expected {
+            return Err(PreimageError::Uncertified.into());
         }
+
+        Ok(())
     }
 
     #[cfg(feature = "veil")]
@@ -620,23 +608,11 @@ impl Blake3PreimageZkSetup {
             .registered_ligerito_security_config()?
             .to_prover_verifier_configs()
             .map_err(|_| PreimageError::Uncertified)?;
-        if actual.log_inv_rates == expected.log_inv_rates
-            && actual.recursive_steps == expected.recursive_steps
-            && actual.initial_log_msg_cols == expected.initial_log_msg_cols
-            && actual.initial_log_num_interleaved == expected.initial_log_num_interleaved
-            && actual.initial_k == expected.initial_k
-            && actual.recursive_log_msg_cols == expected.recursive_log_msg_cols
-            && actual.recursive_ks == expected.recursive_ks
-            && actual.queries == expected.queries
-            && actual.grinding_bits == expected.grinding_bits
-            && actual.fold_grinding_bits == expected.fold_grinding_bits
-            && actual.fold_grinding_taper == expected.fold_grinding_taper
-            && actual.ood_samples == expected.ood_samples
-        {
-            Ok(())
-        } else {
-            Err(PreimageError::Uncertified.into())
+        if actual != &expected {
+            return Err(PreimageError::Uncertified.into());
         }
+
+        Ok(())
     }
 
     #[cfg(feature = "veil")]
