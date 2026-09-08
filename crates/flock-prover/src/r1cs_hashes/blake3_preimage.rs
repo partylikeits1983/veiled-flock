@@ -586,51 +586,30 @@ impl Blake3PreimageZkSetup {
     }
 
     #[cfg(feature = "veil")]
-    fn ensure_registered_config<C: PartialEq>(
+    fn registered_ligerito_config<C>(
         &self,
-        actual: &C,
         select: impl FnOnce((ProverConfig, VerifierConfig)) -> C,
-    ) -> Result<(), SuccinctPreimageError> {
+    ) -> Result<C, SuccinctPreimageError> {
         let configs = self
             .registered_ligerito_security_config()?
             .to_prover_verifier_configs()
             .map_err(|_| PreimageError::Uncertified)?;
 
-        let expected = select(configs);
-        if actual != &expected {
-            return Err(PreimageError::Uncertified.into());
-        }
-        Ok(())
+        Ok(select(configs))
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_prover_config(
         &self,
     ) -> Result<flock_core::pcs::ligerito::ProverConfig, SuccinctPreimageError> {
-        let log_n = self.pcs_params.log_msg_len();
-        let config = flock_core::pcs::ligerito::prover_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .map_err(|_| PreimageError::Uncertified)?;
-        self.ensure_registered_config(&config, |(prover, _)| prover)?;
-        Ok(config)
+        self.registered_ligerito_config(|(prover, _)| prover)
     }
 
     #[cfg(feature = "veil")]
     fn ligerito_verifier_config(
         &self,
     ) -> Result<flock_core::pcs::ligerito::VerifierConfig, SuccinctPreimageError> {
-        let log_n = self.pcs_params.log_msg_len();
-        let config = flock_core::pcs::ligerito::verifier_config_for(
-            log_n,
-            self.pcs_params.log_batch_size,
-            self.pcs_params.profile,
-        )
-        .map_err(|_| PreimageError::Uncertified)?;
-        self.ensure_registered_config(&config, |(_, verifier)| verifier)?;
-        Ok(config)
+        self.registered_ligerito_config(|(_, verifier)| verifier)
     }
 
     /// PCS soundness contribution for the final protocol ledger.
@@ -1082,6 +1061,24 @@ mod tests {
             let verifier_config = setup
                 .ligerito_verifier_config()
                 .expect("registered Secure verifier config");
+            assert_eq!(
+                prover_config,
+                flock_core::pcs::ligerito::prover_config_for(
+                    committed_log_n,
+                    setup.pcs_params.log_batch_size,
+                    setup.pcs_params.profile,
+                )
+                .expect("core registered Secure prover config")
+            );
+            assert_eq!(
+                verifier_config,
+                flock_core::pcs::ligerito::verifier_config_for(
+                    committed_log_n,
+                    setup.pcs_params.log_batch_size,
+                    setup.pcs_params.profile,
+                )
+                .expect("core registered Secure verifier config")
+            );
             assert_eq!(prover_config.queries.as_slice(), expected_queries);
             assert_eq!(verifier_config.queries.as_slice(), expected_queries);
             assert_eq!(
@@ -1089,6 +1086,45 @@ mod tests {
                 setup.pcs_params.profile.log_inv_rate()
             );
             assert_eq!(prover_config.grinding_bits, vec![0; expected_queries.len()]);
+        }
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn registered_zk_configs_reject_mutated_parameters() {
+        let mut setup = Blake3PreimageZkSetup::new(N_TEST);
+        let registered_params = setup.pcs_params.clone();
+        let mut wrong_rate = registered_params.clone();
+        wrong_rate.log_inv_rate += 1;
+        let mut wrong_batch_width = registered_params.clone();
+        wrong_batch_width.log_batch_size += 1;
+        let mut unregistered_dimension = registered_params.clone();
+        // ZK adds one to the effective dimension; m=36 has no registry entry.
+        unregistered_dimension.m = 35;
+
+        for (case, params) in [
+            ("rate mismatch", wrong_rate),
+            ("batch-width mismatch", wrong_batch_width),
+            ("unregistered dimension", unregistered_dimension),
+        ] {
+            setup.pcs_params = registered_params.clone();
+            setup
+                .ligerito_prover_config()
+                .expect("registered Secure prover config before mutation");
+            setup
+                .ligerito_verifier_config()
+                .expect("registered Secure verifier config before mutation");
+            setup.pcs_params = params;
+            assert_eq!(
+                setup.ligerito_prover_config(),
+                Err(SuccinctPreimageError::Statement(PreimageError::Uncertified)),
+                "prover config must reject {case}"
+            );
+            assert_eq!(
+                setup.ligerito_verifier_config(),
+                Err(SuccinctPreimageError::Statement(PreimageError::Uncertified)),
+                "verifier config must reject {case}"
+            );
         }
     }
 
