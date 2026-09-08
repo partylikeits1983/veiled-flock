@@ -170,6 +170,10 @@ and Slim/list-decoding profiles are rejected by the full-ZK setup. Missing or
 mismatched PCS registry entries fail closed instead of falling back to ad hoc
 parameters.
 
+The public full-ZK API rejects any setup whose registered PCS aggregate is below
+114 bits or whose composed interactive ledger is below 106 bits. These floors
+are enforced before proving, simulation, or verification.
+
 `rom_soundness_bound(Q, attempts)` also accounts for proof attempts and oracle
 collisions. It is a classical-ROM statement and does not make SHA-256
 information-theoretic.
