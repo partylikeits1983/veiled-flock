@@ -105,10 +105,11 @@ impl PcsParams {
 
     fn validate(&self) {
         assert!(
-            self.m >= LOG_PACKING + self.log_batch_size,
-            "m={} too small (need m ≥ LOG_PACKING + log_batch_size = {})",
+            self.m >= LOG_PACKING && self.log_batch_size <= self.m - LOG_PACKING,
+            "m={} too small (need m ≥ LOG_PACKING + log_batch_size = {} + {})",
             self.m,
-            LOG_PACKING + self.log_batch_size,
+            LOG_PACKING,
+            self.log_batch_size,
         );
         assert!(
             self.log_inv_rate >= 1,
@@ -561,6 +562,16 @@ mod tests {
             profile: Default::default(),
             zk: false,
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "m=10 too small (need m ≥ LOG_PACKING + log_batch_size")]
+    fn params_validation_rejects_overflowing_batch_size() {
+        let params = PcsParams {
+            log_batch_size: usize::MAX,
+            ..default_params(10)
+        };
+        params.validate();
     }
 
     /// The replicate-fill + start-at-layer-`log_inv_rate` fast path must be
