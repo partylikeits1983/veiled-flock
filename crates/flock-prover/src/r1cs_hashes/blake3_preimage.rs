@@ -564,7 +564,7 @@ impl Blake3PreimageZkSetup {
     ) -> Result<flock_core::pcs::ligerito::LigeritoSecurityConfig, SuccinctPreimageError> {
         self.pcs_params
             .validate_profile_rate()
-            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+            .map_err(|_| PreimageError::Uncertified)?;
         let log_n = self.pcs_params.log_msg_len();
         let effective_m = log_n + flock_core::pcs::LOG_PACKING;
         let source = flock_core::pcs::ligerito::embedded_security_config(
