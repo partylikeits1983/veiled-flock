@@ -45,6 +45,8 @@ use flock_core::challenger::Challenger;
 #[cfg(feature = "veil")]
 use flock_core::challenger::FsChallenger;
 use flock_core::pcs::ligerito::LigeritoProfile;
+#[cfg(feature = "veil")]
+use flock_core::pcs::ligerito::{ProverConfig, VerifierConfig};
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csProofLigerito;
 use flock_core::r1cs::BlockR1cs;
@@ -584,34 +586,20 @@ impl Blake3PreimageZkSetup {
     }
 
     #[cfg(feature = "veil")]
-    fn prover_config_matches_registered_certificate(
+    fn ensure_registered_config<C: PartialEq>(
         &self,
-        actual: &flock_core::pcs::ligerito::ProverConfig,
+        actual: &C,
+        select: impl FnOnce((ProverConfig, VerifierConfig)) -> C,
     ) -> Result<(), SuccinctPreimageError> {
-        let (expected, _) = self
+        let configs = self
             .registered_ligerito_security_config()?
             .to_prover_verifier_configs()
             .map_err(|_| PreimageError::Uncertified)?;
+
+        let expected = select(configs);
         if actual != &expected {
             return Err(PreimageError::Uncertified.into());
         }
-
-        Ok(())
-    }
-
-    #[cfg(feature = "veil")]
-    fn verifier_config_matches_registered_certificate(
-        &self,
-        actual: &flock_core::pcs::ligerito::VerifierConfig,
-    ) -> Result<(), SuccinctPreimageError> {
-        let (_, expected) = self
-            .registered_ligerito_security_config()?
-            .to_prover_verifier_configs()
-            .map_err(|_| PreimageError::Uncertified)?;
-        if actual != &expected {
-            return Err(PreimageError::Uncertified.into());
-        }
-
         Ok(())
     }
 
@@ -626,7 +614,7 @@ impl Blake3PreimageZkSetup {
             self.pcs_params.profile,
         )
         .map_err(|_| PreimageError::Uncertified)?;
-        self.prover_config_matches_registered_certificate(&config)?;
+        self.ensure_registered_config(&config, |(prover, _)| prover)?;
         Ok(config)
     }
 
@@ -641,7 +629,7 @@ impl Blake3PreimageZkSetup {
             self.pcs_params.profile,
         )
         .map_err(|_| PreimageError::Uncertified)?;
-        self.verifier_config_matches_registered_certificate(&config)?;
+        self.ensure_registered_config(&config, |(_, verifier)| verifier)?;
         Ok(config)
     }
 
