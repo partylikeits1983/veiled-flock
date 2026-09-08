@@ -1016,6 +1016,21 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "veil")]
+    #[test]
+    fn registered_zk_query_budgets_have_concrete_pcs_certificates() {
+        for &(blocks, _, _) in REGISTERED_ZK_QUERY_CASES {
+            let setup = Blake3PreimageZkSetup::new(blocks);
+            let bits = setup
+                .ligerito_aggregate_soundness_bits()
+                .expect("registered Secure PCS ledger");
+            assert!(
+                bits >= 110.0,
+                "blocks={blocks}: aggregate PCS bits {bits:.3}"
+            );
+        }
+    }
+
     /// Exercises the largest accepted ZK shape with the registered Secure
     /// Ligerito schedule.
     #[cfg(feature = "veil")]
