@@ -573,7 +573,7 @@ impl Blake3PreimageZkSetup {
         )
         .ok_or(PreimageError::Uncertified)?;
         let config = flock_core::pcs::ligerito::LigeritoSecurityConfig::from_toml_str(source)
-            .map_err(|_| SuccinctPreimageError::from(PreimageError::Uncertified))?;
+            .map_err(|_| PreimageError::Uncertified)?;
         if config.initial_k != self.pcs_params.log_batch_size {
             return Err(PreimageError::Uncertified.into());
         }
