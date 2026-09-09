@@ -1638,13 +1638,8 @@ impl Blake3Setup {
         // the prove-cycle scratch buffers (see scratch::prewarm_prover).
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = PcsParams {
-            m: r1cs.m,
-            log_inv_rate: profile.log_inv_rate(),
-            log_batch_size: 6,
-            profile,
-            zk: false,
-        };
+        let pcs_params =
+            PcsParams::new(r1cs.m, 6, profile, false).expect("valid BLAKE3 PCS parameters");
         Self {
             n_blocks,
             r1cs,

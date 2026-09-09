@@ -10,6 +10,8 @@ use flock_core::pcs::symbolic_opening::{
 };
 use flock_core::zerocheck::univariate_skip::build_eq;
 
+// Build symbolic ZK fixtures directly: this suite also runs without the `zk`
+// feature, which `PcsParams::new` requires for runtime hiding commitments.
 fn tiny_params() -> PcsParams {
     PcsParams {
         m: 13,

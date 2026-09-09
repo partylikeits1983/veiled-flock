@@ -203,13 +203,7 @@ mod tests {
 
     #[test]
     fn recorded_leaf_queries_reconstruct_committed_message() {
-        let params = PcsParams {
-            m: 13,
-            log_inv_rate: 1,
-            log_batch_size: 2,
-            profile: LigeritoProfile::Fast,
-            zk: true,
-        };
+        let params = PcsParams::new(13, 2, LigeritoProfile::Fast, true).unwrap();
         let witness = (0..(1usize << params.witness_log_msg_len()))
             .map(|i| F128 {
                 lo: (i as u64).wrapping_mul(0x9e37_79b9),

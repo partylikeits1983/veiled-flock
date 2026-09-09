@@ -69,13 +69,7 @@ fn r1cs_prove_verify_roundtrip_ligerito() {
     assert!(r1cs.satisfies(&z));
 
     // log_batch_size = 6 so Ligerito's initial_k = 6 reuses the L0 commit.
-    let pcs_params = PcsParams {
-        m,
-        log_inv_rate: 1,
-        log_batch_size: 6,
-        profile: Default::default(),
-        zk: false,
-    };
+    let pcs_params = PcsParams::new(m, 6, Default::default(), false).unwrap();
     let mut ch_p = FsChallenger::new(b"flock-lig-r1cs");
     let z_packed = pcs::pack_witness(&z, r1cs.m);
     let (proof, commitment, claim_p) = prove_ligerito(&r1cs, z_packed, &pcs_params, &mut ch_p);

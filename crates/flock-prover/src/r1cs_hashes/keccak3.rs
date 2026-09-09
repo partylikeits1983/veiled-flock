@@ -518,13 +518,8 @@ impl KeccakSetup {
         assert!(n_keccaks >= 1);
         let n_blocks_log = min_n_blocks_log(n_keccaks);
         let r1cs = build_block_r1cs(n_blocks_log);
-        let pcs_params = PcsParams {
-            m: r1cs.m,
-            log_inv_rate: profile.log_inv_rate(),
-            log_batch_size: 6,
-            profile,
-            zk: false,
-        };
+        let pcs_params =
+            PcsParams::new(r1cs.m, 6, profile, false).expect("valid Keccak3 PCS parameters");
         Self {
             n_keccaks,
             r1cs,

@@ -202,13 +202,13 @@ fn production_mask_layout_matches_every_visible_private_coordinate() {
 
 #[test]
 fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
-    let params = flock_core::pcs::PcsParams {
-        m: 22,
-        log_inv_rate: 1,
-        log_batch_size: 6,
-        profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
-        zk: true,
-    };
+    let params = flock_core::pcs::PcsParams::new(
+        22,
+        6,
+        flock_core::pcs::ligerito::LigeritoProfile::Secure,
+        true,
+    )
+    .unwrap();
     assert!(validate_l0_hiding_budget(&params, &[512]).is_ok());
     validate_batch_opening(&params, &[512], &[0], &[1], &[false], 6, &[]).unwrap();
     assert!(matches!(

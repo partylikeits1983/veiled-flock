@@ -78,6 +78,34 @@ pub struct PcsParams {
 }
 
 impl PcsParams {
+    /// Creates PCS parameters with the code rate derived from `profile`.
+    ///
+    /// Applies the structural and feature checks in [`Self::validate`]. This
+    /// does not check whether the parameters have a registered soundness
+    /// configuration.
+    ///
+    /// # Errors
+    /// Returns [`PcsParamsError::InvalidDimensions`] if `m` is too small for
+    /// packing or `log_batch_size` exceeds the packed witness dimension.
+    /// Returns [`PcsParamsError::ZkFeatureDisabled`] if `zk` is requested
+    /// without the `zk` cargo feature.
+    pub fn new(
+        m: usize,
+        log_batch_size: usize,
+        profile: LigeritoProfile,
+        zk: bool,
+    ) -> Result<Self, PcsParamsError> {
+        let params = Self {
+            m,
+            log_inv_rate: profile.log_inv_rate(),
+            log_batch_size,
+            profile,
+            zk,
+        };
+        params.validate()?;
+        Ok(params)
+    }
+
     pub fn profile_rate_matches(&self) -> bool {
         self.log_inv_rate == self.profile.log_inv_rate()
     }
@@ -606,13 +634,59 @@ mod tests {
     }
 
     fn default_params(m: usize) -> PcsParams {
-        PcsParams {
-            m,
-            log_inv_rate: 1,
-            log_batch_size: 1,
-            profile: Default::default(),
-            zk: false,
+        PcsParams::new(m, 1, LigeritoProfile::Fast, false).unwrap()
+    }
+
+    #[test]
+    fn params_new_derives_profile_rate() {
+        for (profile, log_inv_rate) in [
+            (LigeritoProfile::Fast, 1),
+            (LigeritoProfile::Slim, 2),
+            (LigeritoProfile::Secure, 1),
+        ] {
+            for (m, log_batch_size) in [(LOG_PACKING, 0), (LOG_PACKING + 3, 3), (20, 5)] {
+                let params = PcsParams::new(m, log_batch_size, profile, false).unwrap();
+                assert_eq!(
+                    params,
+                    PcsParams {
+                        m,
+                        log_inv_rate,
+                        log_batch_size,
+                        profile,
+                        zk: false,
+                    }
+                );
+            }
         }
+    }
+
+    #[test]
+    fn params_new_rejects_invalid_dimensions() {
+        for (m, log_batch_size) in [(LOG_PACKING - 1, 0), (LOG_PACKING, 1), (10, usize::MAX)] {
+            assert_eq!(
+                PcsParams::new(m, log_batch_size, LigeritoProfile::Fast, false),
+                Err(PcsParamsError::InvalidDimensions { m, log_batch_size })
+            );
+        }
+    }
+
+    #[cfg(feature = "zk")]
+    #[test]
+    fn params_new_accepts_zk_with_feature() {
+        let params = PcsParams::new(10, 3, LigeritoProfile::Slim, true).unwrap();
+        assert!(params.zk);
+        assert_eq!(params.log_msg_len(), 4);
+        assert_eq!(params.k_code(), 3);
+        assert_eq!(params.log_lanes_committed(), 4);
+    }
+
+    #[cfg(not(feature = "zk"))]
+    #[test]
+    fn params_new_rejects_zk_without_feature() {
+        assert_eq!(
+            PcsParams::new(10, 3, LigeritoProfile::Slim, true),
+            Err(PcsParamsError::ZkFeatureDisabled)
+        );
     }
 
     #[test]
@@ -639,13 +713,7 @@ mod tests {
         let mut rng = Rng::new(0xFEED);
         for (m, log_inv_rate, log_batch_size) in [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3)] {
             let profile = LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile");
-            let params = PcsParams {
-                m,
-                log_inv_rate,
-                log_batch_size,
-                profile,
-                zk: false,
-            };
+            let params = PcsParams::new(m, log_batch_size, profile, false).unwrap();
             let z = rng.bits(1 << m);
             let z_packed = super::super::pack::pack_witness(&z, m);
 
@@ -691,13 +759,7 @@ mod tests {
         let mut rng = Rng::new(0xC0FFEE);
         for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
             let profile = LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile");
-            let params = PcsParams {
-                m,
-                log_inv_rate,
-                log_batch_size,
-                profile,
-                zk: true,
-            };
+            let params = PcsParams::new(m, log_batch_size, profile, true).unwrap();
             let z = rng.bits(1 << m);
             let z_packed = super::super::pack::pack_witness(&z, m);
             let w = z_packed.len();
@@ -760,13 +822,7 @@ mod tests {
     #[test]
     #[should_panic(expected = "zk params require commit_zk")]
     fn plain_commit_rejects_zk_params() {
-        let params = PcsParams {
-            m: 10,
-            log_inv_rate: 1,
-            log_batch_size: 1,
-            profile: Default::default(),
-            zk: true,
-        };
+        let params = PcsParams::new(10, 1, LigeritoProfile::Fast, true).unwrap();
         let z_packed = vec![F128::ZERO; 1 << 3];
         let _ = commit(&z_packed, &params);
     }

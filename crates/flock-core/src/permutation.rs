@@ -64,7 +64,7 @@ use serde::{Deserialize, Serialize};
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::merkle::Hash;
-use crate::pcs::ligerito::{ProverConfig, VerifierConfig};
+use crate::pcs::ligerito::{LigeritoProfile, ProverConfig, VerifierConfig};
 use crate::pcs::{
     self, Commitment, DirectEqInd, LOG_PACKING, PackedDirectClaim, PackedDirectClaimRef, PcsParams,
     ProverData, commit,
@@ -273,10 +273,10 @@ fn mle_eval(table: &[F128], point: &[F128]) -> F128 {
     t[0]
 }
 
-/// RS inverse rate (log₂) and interleaving batch size (log₂) for the aux-poly
+/// PCS profile and interleaving batch size (log₂) for the aux-poly
 /// commitments. Both backends' L0 commit and the Ligerito `default_config` must
 /// agree on these, so they live in one place.
-const PCS_LOG_INV_RATE: usize = 1;
+const PCS_PROFILE: LigeritoProfile = LigeritoProfile::Fast;
 const PCS_LOG_BATCH_SIZE: usize = 1;
 
 /// PCS parameters for committing an `F128` multilinear in `num_vars` variables
@@ -284,13 +284,13 @@ const PCS_LOG_BATCH_SIZE: usize = 1;
 /// packed-direct opening point has length `num_vars`. Verifier rebuilds these
 /// deterministically from `μ`, so the proof carries only the Merkle roots.
 fn pcs_params(num_vars: usize) -> PcsParams {
-    PcsParams {
-        m: num_vars + LOG_PACKING,
-        log_inv_rate: PCS_LOG_INV_RATE,
-        log_batch_size: PCS_LOG_BATCH_SIZE,
-        profile: Default::default(),
-        zk: false,
-    }
+    PcsParams::new(
+        num_vars + LOG_PACKING,
+        PCS_LOG_BATCH_SIZE,
+        PCS_PROFILE,
+        false,
+    )
+    .expect("valid PCS parameters for the permutation auxiliary polynomial")
 }
 
 /// Ligerito prover config for an `F128` multilinear in `num_vars` variables.
@@ -298,14 +298,14 @@ fn pcs_params(num_vars: usize) -> PcsParams {
 /// i.e. μ < 7 — see the module docs). Deterministic in `num_vars`, so prover
 /// and verifier build the same config.
 fn ligerito_prover_config(num_vars: usize) -> ProverConfig {
-    pcs::ligerito::default_config(num_vars, PCS_LOG_BATCH_SIZE, PCS_LOG_INV_RATE)
+    pcs::ligerito::default_config(num_vars, PCS_LOG_BATCH_SIZE, PCS_PROFILE.log_inv_rate())
         .expect("Ligerito config for the aux poly v; permutation check requires μ ≥ 7")
 }
 
 /// Verifier counterpart to [`ligerito_prover_config`]; agrees with it (both
 /// gate on the same feasibility check).
 fn ligerito_verifier_config(num_vars: usize) -> VerifierConfig {
-    pcs::ligerito::default_verifier_config(num_vars, PCS_LOG_BATCH_SIZE, PCS_LOG_INV_RATE)
+    pcs::ligerito::default_verifier_config(num_vars, PCS_LOG_BATCH_SIZE, PCS_PROFILE.log_inv_rate())
         .expect("Ligerito verifier config for the aux poly v; permutation check requires μ ≥ 7")
 }
 

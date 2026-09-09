@@ -269,19 +269,15 @@ impl Blake3PreimageSetup {
         let r1cs = build_block_r1cs_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = PcsParams {
-            m: r1cs.m,
-            log_inv_rate: 1,
-            // Small direct-preimage batches fall below the registered m=22
-            // profile floor. Keep at least seven message-column bits so the
-            // ad-hoc UDR query schedule remains feasible.
-            log_batch_size: 6.min((r1cs.m - flock_core::pcs::LOG_PACKING) - 7),
-            // The full-view ZK instantiation uses the unique-decoding
-            // profile. Fast/Slim rely on a separate Johnson/list-decoding
-            // analysis that is not part of this protocol's theorem stack.
-            profile: LigeritoProfile::Secure,
-            zk: false,
-        };
+        // Small direct-preimage batches fall below the registered m=22
+        // profile floor. Keep at least seven message-column bits so the
+        // ad-hoc UDR query schedule remains feasible.
+        let log_batch_size = 6.min((r1cs.m - flock_core::pcs::LOG_PACKING) - 7);
+        // The full-view ZK instantiation uses the unique-decoding
+        // profile. Fast/Slim rely on a separate Johnson/list-decoding
+        // analysis that is not part of this protocol's theorem stack.
+        let pcs_params = PcsParams::new(r1cs.m, log_batch_size, LigeritoProfile::Secure, false)
+            .expect("valid BLAKE3 preimage PCS parameters");
         Self {
             n_blocks,
             r1cs,
@@ -529,13 +525,8 @@ impl Blake3PreimageZkSetup {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = PcsParams {
-            m: r1cs.m,
-            log_inv_rate: LigeritoProfile::Secure.log_inv_rate(),
-            log_batch_size: 6,
-            profile: LigeritoProfile::Secure,
-            zk: true,
-        };
+        let pcs_params = PcsParams::new(r1cs.m, 6, LigeritoProfile::Secure, true)
+            .expect("valid full-ZK BLAKE3 preimage PCS parameters");
         Self {
             n_blocks,
             r1cs,

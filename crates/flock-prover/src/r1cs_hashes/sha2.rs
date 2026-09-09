@@ -1306,13 +1306,8 @@ impl Sha256HybridSetup {
         // so even the first prove performs no page faults.
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = flock_core::pcs::PcsParams {
-            m: r1cs.m,
-            log_inv_rate: profile.log_inv_rate(),
-            log_batch_size: 6,
-            profile,
-            zk: false,
-        };
+        let pcs_params = flock_core::pcs::PcsParams::new(r1cs.m, 6, profile, false)
+            .expect("valid SHA-256 PCS parameters");
         Self {
             n_compressions,
             r1cs,

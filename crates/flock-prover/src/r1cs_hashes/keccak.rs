@@ -893,13 +893,8 @@ impl KeccakSetup {
         let r1cs = build_block_r1cs(n_log);
         // Pre-fault the prove-cycle scratch buffers — see scratch::prewarm_prover.
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = PcsParams {
-            m: r1cs.m,
-            log_inv_rate: profile.log_inv_rate(),
-            log_batch_size: 6,
-            profile,
-            zk: false,
-        };
+        let pcs_params =
+            PcsParams::new(r1cs.m, 6, profile, false).expect("valid Keccak PCS parameters");
         Self {
             n_keccaks,
             r1cs,

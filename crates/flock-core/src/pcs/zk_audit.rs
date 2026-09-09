@@ -55,13 +55,7 @@ const G_SLOTS: usize = 2 * W; // blinder
 const CH_SEED: u64 = 0xA0D17;
 
 fn tiny_params() -> PcsParams {
-    PcsParams {
-        m: M,
-        log_inv_rate: 1,
-        log_batch_size: 2,
-        profile: Default::default(),
-        zk: true,
-    }
+    PcsParams::new(M, 2, Default::default(), true).expect("valid hiding PCS audit parameters")
 }
 
 fn tiny_config() -> ProverConfig {
