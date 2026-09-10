@@ -8,8 +8,10 @@
 //! On-disk format:
 //! ```text
 //!   bytes 0..5    "FLOCK"                  (5-byte magic)
-//!   byte  5       flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
-//!   bytes 6..     bincode-serialized payload
+//!   byte  5       flavor: 6 = R1CS Ligerito v2, 7 = Chain Ligerito v2,
+//!                 5 = VEIL-FLOCK BLAKE3-preimage
+//!                 (0/1 reserved: legacy BaseFold, 2/3 retired unbounded Ligerito)
+//!   bytes 6..     fixed-int bincode payload; size-limited, no trailing bytes
 //! ```
 //!
 //! ## Round-trip example
@@ -18,17 +20,15 @@
 //! let bytes = bundle.to_bytes();
 //! std::fs::write("proof.bin", &bytes)?;
 //! ...
-//! let bytes = std::fs::read("proof.bin")?;
-//! let bundle = R1csProofBundleLigerito::from_bytes(&bytes)?;
+//! let bundle = read_r1cs_bundle_ligerito_from_file("proof.bin")?;
 //! // Then call e.g. `setup.verify(&bundle.commitment, &bundle.proof, ...)`.
 //! ```
 
-use std::io;
+use std::io::{self, Read};
 use std::path::Path;
 
-#[cfg(feature = "veil")]
 use bincode::Options;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
 
 use flock_core::pcs::Commitment;
 
@@ -67,10 +67,16 @@ impl HashKind {
     }
 }
 
-/// Flavor discriminator (1 byte). Lets a generic reader peek what kind of
-/// bundle a file holds without parsing the payload first.
-const FLAVOR_R1CS_LIGERITO: u8 = 2;
-const FLAVOR_CHAIN_LIGERITO: u8 = 3;
+/// Retired Ligerito flavor bytes used by the pre-hardening variable-int,
+/// trailing-byte-tolerant bincode payloads.
+const FLAVOR_R1CS_LIGERITO_RETIRED: u8 = 2;
+const FLAVOR_CHAIN_LIGERITO_RETIRED: u8 = 3;
+const RETIRED_FLAVORS: [u8; 2] = [FLAVOR_R1CS_LIGERITO_RETIRED, FLAVOR_CHAIN_LIGERITO_RETIRED];
+
+/// Hardened flavor discriminator (1 byte). Lets a generic reader peek what
+/// kind of bundle a file holds without parsing the payload first.
+const FLAVOR_R1CS_LIGERITO: u8 = 6;
+const FLAVOR_CHAIN_LIGERITO: u8 = 7;
 /// Full-view VEIL-FLOCK proof for the fixed 64-byte BLAKE3-preimage relation.
 const FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE: u8 = 5;
 
@@ -81,22 +87,35 @@ const KNOWN_FLAVORS: [u8; 3] = [
     FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE,
 ];
 
+pub const MAX_R1CS_LIGERITO_BUNDLE_BYTES: u64 = 64 * 1024 * 1024;
+pub const MAX_CHAIN_LIGERITO_BUNDLE_BYTES: u64 = 64 * 1024 * 1024;
 #[cfg(feature = "veil")]
 pub const MAX_VEIL_FLOCK_BUNDLE_BYTES: u64 = 1024 * 1024;
 
 /// Header size = 5-byte magic + 1-byte flavor.
 const HEADER_LEN: usize = 6;
 
+const MAX_R1CS_LIGERITO_PAYLOAD_BYTES: u64 = MAX_R1CS_LIGERITO_BUNDLE_BYTES - (HEADER_LEN as u64);
+const MAX_CHAIN_LIGERITO_PAYLOAD_BYTES: u64 = MAX_CHAIN_LIGERITO_BUNDLE_BYTES - (HEADER_LEN as u64);
 #[cfg(feature = "veil")]
 const MAX_VEIL_FLOCK_PAYLOAD_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES - (HEADER_LEN as u64);
+
+const MAX_ANY_LIGERITO_BUNDLE_BYTES: u64 =
+    if MAX_R1CS_LIGERITO_BUNDLE_BYTES > MAX_CHAIN_LIGERITO_BUNDLE_BYTES {
+        MAX_R1CS_LIGERITO_BUNDLE_BYTES
+    } else {
+        MAX_CHAIN_LIGERITO_BUNDLE_BYTES
+    };
 
 /// Errors from `from_bytes` / `read_from_file`.
 #[derive(Debug)]
 pub enum DeserializeError {
     /// The 5-byte magic prefix did not match `FLOCK`.
     BadMagic,
-    /// The flavor byte was neither `2` (R1cs Ligerito) nor `3` (Chain Ligerito).
+    /// The flavor byte is not a bundle flavor this build understands.
     UnknownFlavor(u8),
+    /// The flavor byte is a retired pre-hardening Ligerito format.
+    RetiredFlavor(u8),
     /// `from_bytes` was called with a slice shorter than `HEADER_LEN`.
     Truncated,
     /// The expected flavor and the file's flavor disagree (e.g. trying to
@@ -111,6 +130,10 @@ impl std::fmt::Display for DeserializeError {
         match self {
             Self::BadMagic => write!(f, "bad magic: not a FLOCK proof file"),
             Self::UnknownFlavor(v) => write!(f, "unknown flavor byte: {v}"),
+            Self::RetiredFlavor(v) => write!(
+                f,
+                "retired proof bundle flavor byte {v}: regenerate with the hardened format"
+            ),
             Self::Truncated => write!(f, "input shorter than header ({HEADER_LEN} bytes)"),
             Self::FlavorMismatch { expected, found } => {
                 write!(f, "flavor mismatch: expected {expected}, found {found}")
@@ -176,28 +199,20 @@ impl VeilFlockProofBundle {
         }
     }
 
-    fn options() -> impl Options {
-        bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .with_limit(MAX_VEIL_FLOCK_PAYLOAD_BYTES)
-            .reject_trailing_bytes()
-    }
-
     pub fn to_bytes(&self) -> Result<Vec<u8>, bincode::Error> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
         write_header(&mut out, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE);
-        Self::options().serialize_into(&mut out, self)?;
+        serialize_payload(&mut out, self, MAX_VEIL_FLOCK_PAYLOAD_BYTES)?;
         Ok(out)
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
-        if bytes.len() as u64 > MAX_VEIL_FLOCK_BUNDLE_BYTES {
-            return Err(DeserializeError::Bincode(Box::new(
-                bincode::ErrorKind::SizeLimit,
-            )));
-        }
-        let payload = parse_header(bytes, FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE)?;
-        Ok(Self::options().deserialize(payload)?)
+        let payload = parse_payload(
+            bytes,
+            FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE,
+            MAX_VEIL_FLOCK_BUNDLE_BYTES,
+        )?;
+        deserialize_payload(payload, MAX_VEIL_FLOCK_PAYLOAD_BYTES)
     }
 }
 
@@ -205,12 +220,13 @@ impl R1csProofBundleLigerito {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
         write_header(&mut out, FLAVOR_R1CS_LIGERITO);
-        bincode::serialize_into(&mut out, self).expect("bincode serialize R1csProofBundleLigerito");
+        serialize_payload(&mut out, self, MAX_R1CS_LIGERITO_PAYLOAD_BYTES)
+            .expect("bincode serialize R1csProofBundleLigerito");
         out
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
-        let payload = parse_header(bytes, FLAVOR_R1CS_LIGERITO)?;
-        Ok(bincode::deserialize(payload)?)
+        let payload = parse_payload(bytes, FLAVOR_R1CS_LIGERITO, MAX_R1CS_LIGERITO_BUNDLE_BYTES)?;
+        deserialize_payload(payload, MAX_R1CS_LIGERITO_PAYLOAD_BYTES)
     }
 }
 
@@ -218,13 +234,17 @@ impl ChainProofBundleLigerito {
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(HEADER_LEN + 1024);
         write_header(&mut out, FLAVOR_CHAIN_LIGERITO);
-        bincode::serialize_into(&mut out, self)
+        serialize_payload(&mut out, self, MAX_CHAIN_LIGERITO_PAYLOAD_BYTES)
             .expect("bincode serialize ChainProofBundleLigerito");
         out
     }
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, DeserializeError> {
-        let payload = parse_header(bytes, FLAVOR_CHAIN_LIGERITO)?;
-        Ok(bincode::deserialize(payload)?)
+        let payload = parse_payload(
+            bytes,
+            FLAVOR_CHAIN_LIGERITO,
+            MAX_CHAIN_LIGERITO_BUNDLE_BYTES,
+        )?;
+        deserialize_payload(payload, MAX_CHAIN_LIGERITO_PAYLOAD_BYTES)
     }
 }
 
@@ -237,6 +257,17 @@ fn write_header(out: &mut Vec<u8>, flavor: u8) {
     out.push(flavor);
 }
 
+fn parse_payload(
+    bytes: &[u8],
+    expected_flavor: u8,
+    max_bundle_bytes: u64,
+) -> Result<&[u8], DeserializeError> {
+    if bytes_len_exceeds_limit(bytes.len(), max_bundle_bytes) {
+        return Err(size_limit_error());
+    }
+    parse_header(bytes, expected_flavor)
+}
+
 fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeError> {
     if bytes.len() < HEADER_LEN {
         return Err(DeserializeError::Truncated);
@@ -245,6 +276,9 @@ fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeE
         return Err(DeserializeError::BadMagic);
     }
     let flavor = bytes[5];
+    if RETIRED_FLAVORS.contains(&flavor) {
+        return Err(DeserializeError::RetiredFlavor(flavor));
+    }
     if !KNOWN_FLAVORS.contains(&flavor) {
         return Err(DeserializeError::UnknownFlavor(flavor));
     }
@@ -255,6 +289,39 @@ fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeE
         });
     }
     Ok(&bytes[HEADER_LEN..])
+}
+
+fn bundle_options(max_payload_bytes: u64) -> impl Options {
+    bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .with_limit(max_payload_bytes)
+        .reject_trailing_bytes()
+}
+
+fn serialize_payload<T: Serialize>(
+    out: &mut Vec<u8>,
+    value: &T,
+    max_payload_bytes: u64,
+) -> Result<(), bincode::Error> {
+    bundle_options(max_payload_bytes).serialize_into(out, value)
+}
+
+fn deserialize_payload<T: DeserializeOwned>(
+    payload: &[u8],
+    max_payload_bytes: u64,
+) -> Result<T, DeserializeError> {
+    Ok(bundle_options(max_payload_bytes).deserialize(payload)?)
+}
+
+fn size_limit_error() -> DeserializeError {
+    DeserializeError::Bincode(Box::new(bincode::ErrorKind::SizeLimit))
+}
+
+fn bytes_len_exceeds_limit(len: usize, limit: u64) -> bool {
+    match u64::try_from(len) {
+        Ok(len) => len > limit,
+        Err(_) => true,
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -278,9 +345,45 @@ pub fn write_bytes_to_file<P: AsRef<Path>>(path: P, bytes: &[u8]) -> io::Result<
     std::fs::rename(&tmp, path)
 }
 
-/// Read raw bytes from a file. Thin wrapper over `std::fs::read`.
+/// Read raw bytes from a proof file with the largest Ligerito bundle cap.
 pub fn read_bytes_from_file<P: AsRef<Path>>(path: P) -> io::Result<Vec<u8>> {
-    std::fs::read(path)
+    read_bytes_from_file_bounded(path, MAX_ANY_LIGERITO_BUNDLE_BYTES)
+}
+
+/// Read raw bytes from a proof file, stopping once `max_bytes + 1` bytes have
+/// been observed so hostile files cannot be read fully into memory.
+pub fn read_bytes_from_file_bounded<P: AsRef<Path>>(
+    path: P,
+    max_bytes: u64,
+) -> io::Result<Vec<u8>> {
+    let file = std::fs::File::open(path)?;
+    let mut bytes = Vec::new();
+    file.take(max_bytes.saturating_add(1))
+        .read_to_end(&mut bytes)?;
+    if bytes_len_exceeds_limit(bytes.len(), max_bytes) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!("proof bundle exceeds the {max_bytes}-byte limit"),
+        ));
+    }
+    Ok(bytes)
+}
+
+/// Write a Ligerito R1CS bundle to `path`.
+pub fn write_r1cs_bundle_ligerito_to_file<P: AsRef<Path>>(
+    path: P,
+    bundle: &R1csProofBundleLigerito,
+) -> io::Result<()> {
+    write_bytes_to_file(path, &bundle.to_bytes())
+}
+
+/// Read a Ligerito R1CS bundle from `path`.
+pub fn read_r1cs_bundle_ligerito_from_file<P: AsRef<Path>>(
+    path: P,
+) -> Result<R1csProofBundleLigerito, BundleReadError> {
+    let bytes = read_bytes_from_file_bounded(path, MAX_R1CS_LIGERITO_BUNDLE_BYTES)
+        .map_err(BundleReadError::Io)?;
+    R1csProofBundleLigerito::from_bytes(&bytes).map_err(BundleReadError::Deserialize)
 }
 
 /// Write a Ligerito chain bundle to `path`.
@@ -295,7 +398,8 @@ pub fn write_chain_bundle_ligerito_to_file<P: AsRef<Path>>(
 pub fn read_chain_bundle_ligerito_from_file<P: AsRef<Path>>(
     path: P,
 ) -> Result<ChainProofBundleLigerito, BundleReadError> {
-    let bytes = read_bytes_from_file(path).map_err(BundleReadError::Io)?;
+    let bytes = read_bytes_from_file_bounded(path, MAX_CHAIN_LIGERITO_BUNDLE_BYTES)
+        .map_err(BundleReadError::Io)?;
     ChainProofBundleLigerito::from_bytes(&bytes).map_err(BundleReadError::Deserialize)
 }
 
@@ -327,6 +431,12 @@ mod tests {
     use super::*;
     use crate::r1cs_hashes::blake3::{Blake3Setup, Compression, blake3_compress, cv_to_phys_bits};
     use flock_core::challenger::FsChallenger;
+    use flock_core::field::F128;
+    use flock_core::lincheck::LincheckProof;
+    use flock_core::pcs::ligerito::{FinalProof, LigeritoProfile, LigeritoProof, RecursiveProof};
+    use flock_core::pcs::{BatchOpeningProofLigerito, PcsParams};
+    use flock_core::proof::R1csProofLigerito;
+    use flock_core::zerocheck::ZerocheckProof;
 
     /// SplitMix64.
     struct Rng(u64);
@@ -340,6 +450,100 @@ mod tests {
             z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
             z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
             z ^ (z >> 31)
+        }
+    }
+
+    fn minimal_commitment() -> Commitment {
+        Commitment {
+            root: [0xA5; 32],
+            params: PcsParams {
+                m: 8,
+                log_inv_rate: 1,
+                log_batch_size: 1,
+                profile: LigeritoProfile::Fast,
+                zk: false,
+            },
+        }
+    }
+
+    fn empty_zerocheck_proof() -> ZerocheckProof {
+        ZerocheckProof {
+            round1_ab: Vec::new(),
+            round1_c: Vec::new(),
+            multilinear_rounds: Vec::new(),
+            final_a_eval: F128::ZERO,
+            final_b_eval: F128::ZERO,
+            final_c_eval: F128::ZERO,
+        }
+    }
+
+    fn empty_lincheck_proof() -> LincheckProof {
+        LincheckProof {
+            rounds: Vec::new(),
+            z_partial: Vec::new(),
+        }
+    }
+
+    fn empty_ligerito_proof() -> LigeritoProof {
+        LigeritoProof {
+            initial_root: [0; 32],
+            initial_proof: RecursiveProof {
+                opened_rows: Vec::new(),
+                leaf_salts: Vec::new(),
+                merkle_proof: Vec::new(),
+            },
+            recursive_roots: Vec::new(),
+            recursive_proofs: Vec::new(),
+            final_proof: FinalProof {
+                yr: Vec::new(),
+                opened_rows: Vec::new(),
+                merkle_proof: Vec::new(),
+            },
+            sumcheck_transcript: Vec::new(),
+            grinding_nonces: Vec::new(),
+            ood_values: Vec::new(),
+            fold_grinding_nonces: Vec::new(),
+        }
+    }
+
+    fn empty_pcs_opening() -> BatchOpeningProofLigerito {
+        BatchOpeningProofLigerito {
+            ring_switches: Vec::new(),
+            ligerito: empty_ligerito_proof(),
+            zk_blind: None,
+        }
+    }
+
+    fn empty_r1cs_proof() -> R1csProofLigerito {
+        R1csProofLigerito {
+            zerocheck: empty_zerocheck_proof(),
+            lincheck: empty_lincheck_proof(),
+            pcs_open: empty_pcs_opening(),
+        }
+    }
+
+    fn minimal_r1cs_bundle() -> R1csProofBundleLigerito {
+        R1csProofBundleLigerito {
+            commitment: minimal_commitment(),
+            proof: empty_r1cs_proof(),
+        }
+    }
+
+    fn minimal_chain_bundle() -> ChainProofBundleLigerito {
+        ChainProofBundleLigerito {
+            hash_kind: HashKind::Blake3,
+            commitment: minimal_commitment(),
+            proof: crate::r1cs_hashes::chain_common::ChainProofLigerito {
+                zerocheck: empty_zerocheck_proof(),
+                lincheck: empty_lincheck_proof(),
+                shift: crate::chain::ChainShiftProof {
+                    rounds: Vec::new(),
+                    g_at_point: F128::ZERO,
+                },
+                pcs_open: empty_pcs_opening(),
+            },
+            cv_0_phys: vec![false; 8],
+            cv_last_phys: vec![false; 8],
         }
     }
 
@@ -495,9 +699,77 @@ mod tests {
     }
 
     #[test]
+    fn rejects_retired_ligerito_flavors() {
+        for retired in [FLAVOR_R1CS_LIGERITO_RETIRED, FLAVOR_CHAIN_LIGERITO_RETIRED] {
+            let mut bytes = vec![0u8; HEADER_LEN + 10];
+            bytes[0..5].copy_from_slice(&MAGIC);
+            bytes[5] = retired;
+            let res = R1csProofBundleLigerito::from_bytes(&bytes);
+            assert!(matches!(res, Err(DeserializeError::RetiredFlavor(f)) if f == retired));
+        }
+    }
+
+    #[test]
     fn rejects_truncated() {
         let res = R1csProofBundleLigerito::from_bytes(&[0u8; 3]);
         assert!(matches!(res, Err(DeserializeError::Truncated)));
+    }
+
+    #[test]
+    fn hardened_ligerito_bundles_round_trip_minimal() {
+        let r1cs = minimal_r1cs_bundle();
+        let r1cs_bytes = r1cs.to_bytes();
+        assert_eq!(r1cs_bytes[5], FLAVOR_R1CS_LIGERITO);
+        let r1cs_decoded = R1csProofBundleLigerito::from_bytes(&r1cs_bytes).expect("r1cs decode");
+        assert_eq!(r1cs_decoded.commitment.root, r1cs.commitment.root);
+
+        let chain = minimal_chain_bundle();
+        let chain_bytes = chain.to_bytes();
+        assert_eq!(chain_bytes[5], FLAVOR_CHAIN_LIGERITO);
+        let chain_decoded =
+            ChainProofBundleLigerito::from_bytes(&chain_bytes).expect("chain decode");
+        assert_eq!(chain_decoded.cv_0_phys, chain.cv_0_phys);
+        assert_eq!(chain_decoded.cv_last_phys, chain.cv_last_phys);
+    }
+
+    #[test]
+    fn rejects_trailing_bytes_for_hardened_ligerito_bundles() {
+        let mut r1cs_bytes = minimal_r1cs_bundle().to_bytes();
+        r1cs_bytes.extend_from_slice(b"trailing");
+        assert!(matches!(
+            R1csProofBundleLigerito::from_bytes(&r1cs_bytes),
+            Err(DeserializeError::Bincode(_))
+        ));
+
+        let mut chain_bytes = minimal_chain_bundle().to_bytes();
+        chain_bytes.extend_from_slice(b"trailing");
+        assert!(matches!(
+            ChainProofBundleLigerito::from_bytes(&chain_bytes),
+            Err(DeserializeError::Bincode(_))
+        ));
+    }
+
+    #[test]
+    fn parse_payload_rejects_bundle_size_over_limit_before_bincode() {
+        let bytes = minimal_r1cs_bundle().to_bytes();
+        let res = parse_payload(
+            &bytes,
+            FLAVOR_R1CS_LIGERITO,
+            u64::try_from(bytes.len() - 1).unwrap(),
+        );
+        assert!(matches!(res, Err(DeserializeError::Bincode(_))));
+    }
+
+    #[test]
+    fn bounded_file_read_rejects_oversized_file() {
+        let path = std::env::temp_dir().join(format!(
+            "flock-proofio-bounded-{}-oversized.bin",
+            std::process::id()
+        ));
+        std::fs::write(&path, [0u8; 4]).expect("write oversized test file");
+        let res = read_bytes_from_file_bounded(&path, 3);
+        let _ = std::fs::remove_file(&path);
+        assert!(matches!(res, Err(error) if error.kind() == io::ErrorKind::InvalidData));
     }
 
     #[cfg(feature = "veil")]
@@ -511,7 +783,7 @@ mod tests {
         );
         let vec_len_prefix = core::mem::size_of::<u64>() as u64;
         let max_vec_len = (MAX_VEIL_FLOCK_PAYLOAD_BYTES - vec_len_prefix) as usize;
-        let payload = VeilFlockProofBundle::options()
+        let payload = bundle_options(MAX_VEIL_FLOCK_PAYLOAD_BYTES)
             .serialize(&vec![0u8; max_vec_len])
             .expect("payload at adjusted bincode limit");
         assert_eq!(payload.len() as u64, MAX_VEIL_FLOCK_PAYLOAD_BYTES);
@@ -522,7 +794,7 @@ mod tests {
         assert_eq!(bundle_bytes.len() as u64, MAX_VEIL_FLOCK_BUNDLE_BYTES);
 
         assert!(
-            VeilFlockProofBundle::options()
+            bundle_options(MAX_VEIL_FLOCK_PAYLOAD_BYTES)
                 .serialize(&vec![0u8; max_vec_len + 1])
                 .is_err()
         );
