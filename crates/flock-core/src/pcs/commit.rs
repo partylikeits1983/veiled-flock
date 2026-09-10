@@ -45,8 +45,6 @@ pub enum PcsParamsError {
     ProfileRateMismatch(#[from] ProfileRateMismatchError),
     #[error("PcsParams.zk requires the `zk` cargo feature")]
     ZkFeatureDisabled,
-    #[error("ExperimentalZk100 requires the `experimental-zk` cargo feature")]
-    ExperimentalFeatureDisabled,
 }
 
 /// PCS configuration. Polynomial-basis subspace `{1, x, x², …}` for the NTT.
@@ -193,10 +191,6 @@ impl PcsParams {
             });
         }
         self.validate_profile_rate()?;
-        #[cfg(not(feature = "experimental-zk"))]
-        if self.profile == LigeritoProfile::ExperimentalZk100 {
-            return Err(PcsParamsError::ExperimentalFeatureDisabled);
-        }
         #[cfg(not(feature = "zk"))]
         if self.zk {
             return Err(PcsParamsError::ZkFeatureDisabled);
@@ -643,28 +637,10 @@ mod tests {
         PcsParams::new(m, 1, LigeritoProfile::Fast, false).unwrap()
     }
 
-    #[cfg(not(feature = "experimental-zk"))]
+    #[cfg(feature = "zk")]
     #[test]
-    fn experimental_profile_requires_feature() {
-        for zk in [false, true] {
-            assert_eq!(
-                PcsParams::new(22, 6, LigeritoProfile::ExperimentalZk100, zk),
-                Err(PcsParamsError::ExperimentalFeatureDisabled)
-            );
-        }
-        assert!(
-            crate::pcs::ligerito::LigeritoSecurityConfig::derive_profile(
-                23,
-                LigeritoProfile::ExperimentalZk100
-            )
-            .is_err()
-        );
-    }
-
-    #[cfg(feature = "experimental-zk")]
-    #[test]
-    fn experimental_profile_preserves_rate_consistency() {
-        let mut params = PcsParams::new(22, 6, LigeritoProfile::ExperimentalZk100, true).unwrap();
+    fn zk100_profile_preserves_rate_consistency() {
+        let mut params = PcsParams::new(22, 6, LigeritoProfile::Zk100, true).unwrap();
         assert_eq!(params.log_inv_rate, 3);
         params.log_inv_rate = 1;
         assert!(matches!(

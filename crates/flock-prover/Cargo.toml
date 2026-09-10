@@ -13,8 +13,6 @@ unsound-challenger = ["flock-core/unsound-challenger"]
 zk = ["flock-core/zk"]
 veil = ["zk", "dep:veil-f128"]
 symbolic = ["flock-core/symbolic"]
-# Explicit constructor and benchmark selector; the Secure default is unchanged.
-experimental-zk = ["veil", "flock-core/experimental-zk"]
 
 [dependencies]
 flock-core = { path = "../flock-core" }

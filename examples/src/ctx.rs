@@ -1237,10 +1237,9 @@ mod tests {
 
         let mut nonce = proof.clone();
         nonce.blind_grind_nonce += 1;
-        assert_eq!(
-            verify(&pcs, nonce).unwrap_err(),
-            VeilError::InvalidGrindNonce
-        );
+        // A different nonce may also satisfy the one-bit PoW target, but
+        // changing it must invalidate the transcript-bound proof.
+        assert!(verify(&pcs, nonce).is_err());
 
         let mut huge_nonce = proof.clone();
         huge_nonce.blind_grind_nonce = MAX_BLIND_GRIND_TRIALS;
@@ -1308,7 +1307,10 @@ mod tests {
         );
 
         let mut grind = proof.clone();
-        grind.pcs_openings[0].ligerito.fold_grinding_nonces[0] = MAX_LIGERITO_GRIND_TRIALS;
+        grind.pcs_openings[0]
+            .ligerito
+            .fold_grinding_nonces
+            .push(MAX_LIGERITO_GRIND_TRIALS);
         assert_eq!(
             verify(&pcs, grind).unwrap_err(),
             VeilError::GrindingLimitExceeded

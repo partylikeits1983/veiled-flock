@@ -1,11 +1,8 @@
 //! Reproducible release benchmark for the pinned 64-byte BLAKE3-preimage
 //! relation.
 //!
-//! With `--features experimental-zk`, pass `--experimental-100` after the
-//! sample count to benchmark the opt-in rate-1/8, 100-bit schedule instead.
-//!
-//! By default, compares full-ZK VEIL-FLOCK with non-ZK FLOCK. Both select the Secure
-//! Ligerito profile at rate 1/2. The full-ZK path uses registered configs;
+//! Compares canonical full-ZK VEIL-FLOCK (Zk100, rate 1/8) with non-ZK
+//! FLOCK (Secure, rate 1/2). The full-ZK path uses registered configs;
 //! non-ZK batches below the registry floor use ad hoc configs. Full-ZK
 //! batches below 256 hashes are padded to 256 slots. Sizes count serialized
 //! proof objects, excluding commitments, public digests, and bundle framing.
@@ -43,26 +40,17 @@ fn main() {
         })
         .unwrap_or(5);
     assert!(samples > 0, "sample count must be positive");
-    let experimental = match args.next().as_deref() {
-        None => false,
-        Some("--experimental-100") => true,
-        Some(_) => panic!("usage: preimage_scaling [samples] [--experimental-100]"),
-    };
-    assert!(args.next().is_none(), "unexpected extra argument");
-    assert!(
-        !experimental || cfg!(feature = "experimental-zk"),
-        "--experimental-100 requires --features experimental-zk"
-    );
+    assert!(args.next().is_none(), "usage: preimage_scaling [samples]");
 
     println!(
         "hashes,protocol,prove_ms_median,verify_ms_median,proof_bytes_median,proof_bytes_min,proof_bytes_max"
     );
     for size in SIZES {
-        benchmark_size(size, samples, experimental);
+        benchmark_size(size, samples);
     }
 }
 
-fn benchmark_size(size: usize, samples: usize, experimental: bool) {
+fn benchmark_size(size: usize, samples: usize) {
     let messages = messages(size);
     let digests = Blake3PreimageSetup::digests_of(&messages);
 
@@ -74,40 +62,19 @@ fn benchmark_size(size: usize, samples: usize, experimental: bool) {
     print_samples(size, "FLOCK-non-ZK-Secure", &mut flock_samples);
     drop(flock);
 
-    let zk = if experimental {
-        #[cfg(feature = "experimental-zk")]
-        {
-            Blake3PreimageZkSetup::experimental_100_bit(size)
-        }
-        #[cfg(not(feature = "experimental-zk"))]
-        {
-            unreachable!("experimental flag rejected before benchmarking")
-        }
-    } else {
-        Blake3PreimageZkSetup::new(size)
-    };
-    if experimental {
-        eprintln!(
-            "{size} hashes: PCS {:.6} bits; composed interactive {:.6} bits",
-            zk.ligerito_aggregate_soundness_bits().expect("PCS bound"),
-            zk.interactive_soundness_bound()
-                .expect("composed bound")
-                .bits()
-        );
-    }
+    let zk = Blake3PreimageZkSetup::new(size);
+    eprintln!(
+        "{size} hashes: PCS {:.6} bits; composed interactive {:.6} bits",
+        zk.ligerito_aggregate_soundness_bits().expect("PCS bound"),
+        zk.interactive_soundness_bound()
+            .expect("composed bound")
+            .bits()
+    );
     let _warm_up = sample_zk(&zk, &messages, &digests);
     let mut zk_samples = (0..samples)
         .map(|_| sample_zk(&zk, &messages, &digests))
         .collect::<Vec<_>>();
-    print_samples(
-        size,
-        if experimental {
-            "VEIL-FLOCK-experimental-ZK100"
-        } else {
-            "VEIL-FLOCK-full-ZK"
-        },
-        &mut zk_samples,
-    );
+    print_samples(size, "VEIL-FLOCK-full-ZK100", &mut zk_samples);
 }
 
 fn sample_flock(

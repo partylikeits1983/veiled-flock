@@ -47,20 +47,17 @@ pub struct BitPcs {
 impl BitPcs {
     /// The committed ZK message is `[mask || z]`, so the Ligerito config is
     /// loaded for `params.log_msg_len() = m - 6`; `m = 22` therefore uses the
-    /// embedded `m23_secure` config. Every registered config must also pass
-    /// the production batch-opening certificate: the L0 query count must not
-    /// exceed the mask symbols per lane, no query-phase grinding, bounded
-    /// fold grinding, and a blind grind of 1 to `MAX_BLIND_GRINDING_BITS`
-    /// bits. `m = 21` loads `m22_secure`, which opens 298 L0 positions
-    /// against a 256-symbol mask lane and is rejected; `m = 22` is the
-    /// smallest accepted shape.
+    /// embedded `m23_zk100` config. Only m=22..=26 is registered. Every
+    /// config must pass the production batch-opening certificate: the L0
+    /// query count fits the mask symbols per lane, query-phase grinding is
+    /// disabled, and the blind grind is one bit (no fold grinds).
     pub fn new(m: usize) -> Result<Self, VeilError> {
-        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Secure, true)
+        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Zk100, true)
             .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let log_n = params.log_msg_len();
-        let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
+        let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Zk100)
             .map_err(VeilError::Ligerito)?;
-        let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
+        let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Zk100)
             .map_err(VeilError::Ligerito)?;
         let pcs = Self {
             params,
@@ -246,14 +243,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_floor_is_rejected_by_the_hiding_budget() {
-        assert_eq!(
-            BitPcs::new(21).unwrap_err(),
-            VeilError::ProofShape("L0 hiding query budget")
-        );
+    fn unregistered_shapes_are_rejected() {
+        assert!(matches!(BitPcs::new(21), Err(VeilError::Ligerito(_))));
+        assert!(matches!(BitPcs::new(27), Err(VeilError::Ligerito(_))));
         assert!(BitPcs::new(12).is_err());
         let pcs = BitPcs::new(22).unwrap();
-        assert_eq!(pcs.blind_grinding_bits().unwrap(), 2);
+        assert_eq!(pcs.blind_grinding_bits().unwrap(), 1);
         assert_eq!(pcs.packed_len(), 1 << 15);
     }
 

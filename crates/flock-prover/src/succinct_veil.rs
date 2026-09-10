@@ -730,12 +730,7 @@ impl MaskLayout {
 }
 
 fn supported_zk_profile(profile: pcs::ligerito::LigeritoProfile) -> bool {
-    match profile {
-        pcs::ligerito::LigeritoProfile::Secure => true,
-        #[cfg(feature = "experimental-zk")]
-        pcs::ligerito::LigeritoProfile::ExperimentalZk100 => true,
-        _ => false,
-    }
+    profile == pcs::ligerito::LigeritoProfile::Zk100
 }
 
 fn validate_succinct_parameters(
@@ -806,7 +801,7 @@ fn validate_batch_opening(
         return Err(SuccinctVeilError::InvalidShape("bounded grinding schedule"));
     }
     // Count one site per positive-grind fold round, not one per level.
-    // Secure full-ZK is UDR, so tapering is rejected above.
+    // Zk100 full-ZK is UDR, so tapering is rejected above.
     let positive_fold_sites = std::iter::once(initial_k)
         .chain(recursive_ks.iter().copied())
         .zip(fold_grinding_bits.iter().copied())

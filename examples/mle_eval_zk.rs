@@ -101,7 +101,7 @@ mod tests {
             compute_mask_length(Some(&pcs), mle_eval_verify).unwrap(),
             1 + 2 * RING_WIDTH
         );
-        assert_eq!(pcs.blind_grinding_bits().unwrap(), 2);
+        assert_eq!(pcs.blind_grinding_bits().unwrap(), 1);
     }
 
     #[test]

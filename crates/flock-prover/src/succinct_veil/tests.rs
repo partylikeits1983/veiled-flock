@@ -52,7 +52,7 @@ fn production_entry_point_is_pinned_to_supported_relation_and_registered_pcs() {
     );
 
     let mut wrong_rate = setup.pcs_params.clone();
-    wrong_rate.log_inv_rate = 3;
+    wrong_rate.log_inv_rate = 1;
     assert_eq!(
         validate_succinct_parameters(&setup.r1cs, &wrong_rate),
         Err(SuccinctVeilError::InvalidParameters)
@@ -98,7 +98,7 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
 }
 
 #[test]
-fn embedded_secure_profiles_match_the_formal_parameter_table() {
+fn embedded_zk100_profiles_match_the_registered_parameter_table() {
     struct ExpectedProfile {
         log_inv_rates: &'static [usize],
         log_message_columns: &'static [usize],
@@ -109,38 +109,38 @@ fn embedded_secure_profiles_match_the_formal_parameter_table() {
 
     const EXPECTED: [ExpectedProfile; 5] = [
         ExpectedProfile {
-            log_inv_rates: &[1, 2, 4],
+            log_inv_rates: &[3, 4, 5],
             log_message_columns: &[10, 7, 4],
-            queries: &[294, 182, 137],
-            fold_grinding_bits: &[1, 0, 0],
+            queries: &[121, 114, 111],
+            fold_grinding_bits: &[0, 0, 0],
             final_log_size: 4,
         },
         ExpectedProfile {
-            log_inv_rates: &[1, 2, 3],
+            log_inv_rates: &[3, 4, 5],
             log_message_columns: &[11, 8, 5],
-            queries: &[292, 180, 151],
-            fold_grinding_bits: &[2, 1, 0],
+            queries: &[121, 113, 110],
+            fold_grinding_bits: &[0, 0, 0],
             final_log_size: 5,
         },
         ExpectedProfile {
-            log_inv_rates: &[1, 2, 3, 5],
+            log_inv_rates: &[3, 4, 5, 6],
             log_message_columns: &[12, 9, 6, 3],
-            queries: &[291, 179, 148, 131],
-            fold_grinding_bits: &[3, 2, 0, 0],
+            queries: &[121, 113, 109, 109],
+            fold_grinding_bits: &[0, 0, 0, 0],
             final_log_size: 3,
         },
         ExpectedProfile {
-            log_inv_rates: &[1, 2, 3, 4],
+            log_inv_rates: &[3, 4, 5, 6],
             log_message_columns: &[13, 10, 7, 4],
-            queries: &[290, 178, 147, 137],
-            fold_grinding_bits: &[4, 3, 1, 0],
+            queries: &[121, 113, 109, 108],
+            fold_grinding_bits: &[0, 0, 0, 0],
             final_log_size: 4,
         },
         ExpectedProfile {
-            log_inv_rates: &[1, 2, 3, 4],
+            log_inv_rates: &[3, 4, 5, 6],
             log_message_columns: &[14, 11, 8, 5],
-            queries: &[290, 178, 146, 134],
-            fold_grinding_bits: &[5, 4, 2, 0],
+            queries: &[121, 113, 109, 107],
+            fold_grinding_bits: &[0, 0, 0, 0],
             final_log_size: 5,
         },
     ];
@@ -153,7 +153,7 @@ fn embedded_secure_profiles_match_the_formal_parameter_table() {
             setup.pcs_params.log_batch_size,
             setup.pcs_params.profile,
         )
-        .expect("registered Secure profile");
+        .expect("registered Zk100 profile");
 
         assert_eq!(config.log_inv_rates, expected.log_inv_rates);
         assert_eq!(config.initial_log_msg_cols, expected.log_message_columns[0]);
@@ -205,7 +205,7 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
     let params = flock_core::pcs::PcsParams::new(
         22,
         6,
-        flock_core::pcs::ligerito::LigeritoProfile::Secure,
+        flock_core::pcs::ligerito::LigeritoProfile::Zk100,
         true,
     )
     .unwrap();

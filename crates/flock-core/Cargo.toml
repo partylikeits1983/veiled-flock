@@ -29,9 +29,6 @@ zk = ["dep:getrandom"]
 # artifacts. This is not needed by production provers or verifiers.
 symbolic = []
 
-# Opt-in rate-1/8, 100-bit ZK PCS experiment; not covered by the Lean tables.
-experimental-zk = ["zk"]
-
 [dependencies]
 rayon = { workspace = true }
 sha2 = { workspace = true }

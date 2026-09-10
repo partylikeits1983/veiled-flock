@@ -77,10 +77,10 @@ pub const DIGEST_BYTES: usize = 32;
 pub const MAX_ZK_PREIMAGE_BLOCKS: usize = 4096;
 /// Minimum registered PCS aggregate soundness accepted by the public full-ZK API.
 #[cfg(feature = "veil")]
-pub const MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS: f64 = 114.0;
+pub const MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS: f64 = 100.0;
 /// Minimum composed interactive soundness accepted by the public full-ZK API.
 #[cfg(feature = "veil")]
-pub const MIN_ZK_INTERACTIVE_SOUNDNESS_BITS: f64 = 106.0;
+pub const MIN_ZK_INTERACTIVE_SOUNDNESS_BITS: f64 = 100.0;
 /// Smallest `m` for which embedded Ligerito PCS configs are registered.
 const MIN_REGISTERED_LIGERITO_M: usize = 22;
 
@@ -273,9 +273,8 @@ impl Blake3PreimageSetup {
         // profile floor. Keep at least seven message-column bits so the
         // ad-hoc UDR query schedule remains feasible.
         let log_batch_size = 6.min((r1cs.m - flock_core::pcs::LOG_PACKING) - 7);
-        // The full-view ZK instantiation uses the unique-decoding
-        // profile. Fast/Slim rely on a separate Johnson/list-decoding
-        // analysis that is not part of this protocol's theorem stack.
+        // Preserve the non-ZK preimage baseline at rate 1/2 Secure.
+        // Full ZK selects its own Zk100 profile in the separate setup below.
         let pcs_params = PcsParams::new(r1cs.m, log_batch_size, LigeritoProfile::Secure, false)
             .expect("valid BLAKE3 preimage PCS parameters");
         Self {
@@ -498,7 +497,7 @@ impl Blake3PreimageSetup {
 /// Full-ZK fixed-digest setup for the VEIL-FLOCK composition.
 ///
 /// Construction validates the exact circuit digest, mask geometry, code
-/// parameters, and registered Secure Ligerito query budget before proving.
+/// parameters, and registered Zk100 Ligerito query budget before proving.
 #[derive(Clone, Debug)]
 pub struct Blake3PreimageZkSetup {
     pub n_blocks: usize,
@@ -520,37 +519,14 @@ impl Blake3PreimageZkSetup {
         Self::with_outer_log(n_blocks, min_n_blocks_log(n_blocks).max(8))
     }
 
-    /// Opt into the rate-1/8, 100-bit small-proof experiment.
-    /// The Secure default and CLI are unchanged. This schedule has checked
-    /// Rust numerical bounds but is not covered by the Lean tables, simulator,
-    /// or the public ROM certificate API.
-    #[cfg(feature = "experimental-zk")]
-    pub fn experimental_100_bit(n_blocks: usize) -> Self {
-        let mut setup = Self::new(n_blocks);
-        setup.pcs_params =
-            PcsParams::new(setup.r1cs.m, 6, LigeritoProfile::ExperimentalZk100, true)
-                .expect("valid experimental ZK PCS parameters");
-        setup
-    }
-
     #[cfg(feature = "veil")]
     fn soundness_floors(&self) -> Result<(f64, f64), SuccinctPreimageError> {
         match self.pcs_params.profile {
-            LigeritoProfile::Secure => Ok((
+            LigeritoProfile::Zk100 => Ok((
                 MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS,
                 MIN_ZK_INTERACTIVE_SOUNDNESS_BITS,
             )),
-            #[cfg(feature = "experimental-zk")]
-            LigeritoProfile::ExperimentalZk100 => Ok((100.0, 100.0)),
             _ => Err(PreimageError::Uncertified.into()),
-        }
-    }
-
-    #[cfg(feature = "veil")]
-    fn fs_domain(&self) -> &'static [u8] {
-        match self.pcs_params.profile {
-            LigeritoProfile::ExperimentalZk100 => b"veil-flock-blake3-preimage-experimental-zk100",
-            _ => VEIL_FLOCK_FS_DOMAIN,
         }
     }
 
@@ -559,7 +535,7 @@ impl Blake3PreimageZkSetup {
         let r1cs = build_block_r1cs_zk_pinned(n_log, ParamPinning::RootHash64);
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = PcsParams::new(r1cs.m, 6, LigeritoProfile::Secure, true)
+        let pcs_params = PcsParams::new(r1cs.m, 6, LigeritoProfile::Zk100, true)
             .expect("valid full-ZK BLAKE3 preimage PCS parameters");
         Self {
             n_blocks,
@@ -595,16 +571,11 @@ impl Blake3PreimageZkSetup {
         self.soundness_floors()?;
         let log_n = self.pcs_params.log_msg_len();
         let effective_m = log_n + flock_core::pcs::LOG_PACKING;
-        #[cfg(feature = "experimental-zk")]
-        if self.pcs_params.profile == LigeritoProfile::ExperimentalZk100 {
-            if !self.pcs_params.zk
-                || self.pcs_params.m != self.r1cs.m
-                || self.pcs_params.log_batch_size != 6
-            {
-                return Err(PreimageError::Uncertified.into());
-            }
-            return flock_core::pcs::ligerito::experimental_zk100_config(effective_m)
-                .map_err(|_| PreimageError::Uncertified.into());
+        if !self.pcs_params.zk
+            || self.pcs_params.m != self.r1cs.m
+            || self.pcs_params.log_batch_size != 6
+        {
+            return Err(PreimageError::Uncertified.into());
         }
         let source = flock_core::pcs::ligerito::embedded_security_config(
             effective_m,
@@ -669,8 +640,8 @@ impl Blake3PreimageZkSetup {
     }
 
     /// Fail-closed additive bound for the interactive protocol selected by
-    /// this setup. The experimental profile has a Rust numerical ledger only;
-    /// it is not covered by the registered Lean parameter tables.
+    /// this setup, including the hiding PCS combination event. This is a Rust
+    /// numerical bound; the current Lean parameter tables cover legacy Secure.
     #[cfg(feature = "veil")]
     pub fn interactive_soundness_bound(
         &self,
@@ -696,7 +667,7 @@ impl Blake3PreimageZkSetup {
         adversary_query_log2: u32,
         completed_proof_attempts: u64,
     ) -> Result<SuccinctRomSoundnessBound, SuccinctPreimageError> {
-        if self.pcs_params.profile != LigeritoProfile::Secure {
+        if self.pcs_params.profile != LigeritoProfile::Zk100 {
             return Err(PreimageError::Uncertified.into());
         }
         if adversary_query_log2 >= 128
@@ -739,7 +710,7 @@ impl Blake3PreimageZkSetup {
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(crate::succinct_veil::SuccinctVeilProof, Commitment), SuccinctPreimageError> {
         let mut rng = flock_core::zk::ZkRng::from_entropy();
-        let mut challenger = FsChallenger::new(self.fs_domain());
+        let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
         self.prove_with_challenger(msgs, digests, &mut rng, &mut challenger)
     }
 
@@ -819,7 +790,7 @@ impl Blake3PreimageZkSetup {
         proof: &crate::succinct_veil::SuccinctVeilProof,
         digests: &[[u8; DIGEST_BYTES]],
     ) -> Result<(), SuccinctPreimageError> {
-        let mut challenger = FsChallenger::new(self.fs_domain());
+        let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
         self.verify_with_challenger(commitment, proof, digests, &mut challenger)
     }
 
@@ -900,7 +871,7 @@ impl Blake3PreimageZkSetup {
         oracle: crate::sim_oracle::SharedOracle,
         rng: &mut flock_core::zk::ZkRng,
     ) -> Result<SimulatedSuccinctPreimage, SuccinctPreimageError> {
-        if self.pcs_params.profile != LigeritoProfile::Secure {
+        if self.pcs_params.profile != LigeritoProfile::Zk100 {
             return Err(PreimageError::Uncertified.into());
         }
         if digests.len() != self.n_blocks {
@@ -1056,11 +1027,11 @@ mod tests {
     const N_TEST: usize = 256;
     #[cfg(feature = "veil")]
     const REGISTERED_ZK_QUERY_CASES: &[(usize, usize, &[usize])] = &[
-        (256, 23, &[294, 182, 137]),
-        (512, 24, &[292, 180, 151]),
-        (1024, 25, &[291, 179, 148, 131]),
-        (2048, 26, &[290, 178, 147, 137]),
-        (4096, 27, &[290, 178, 146, 134]),
+        (256, 23, &[121, 114, 111]),
+        (512, 24, &[121, 113, 110]),
+        (1024, 25, &[121, 113, 109, 109]),
+        (2048, 26, &[121, 113, 109, 108]),
+        (4096, 27, &[121, 113, 109, 107]),
     ];
 
     fn msgs_of(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
@@ -1077,12 +1048,25 @@ mod tests {
             .collect()
     }
 
-    #[cfg(feature = "experimental-zk")]
+    #[cfg(feature = "veil")]
     #[test]
-    fn experimental_shapes_clear_100_bits_and_reject_mutations() {
+    fn zk_default_does_not_change_non_zk_flock() {
+        let flock = Blake3PreimageSetup::new(256);
+        assert_eq!(flock.pcs_params.profile, LigeritoProfile::Secure);
+        assert_eq!(flock.pcs_params.log_inv_rate, 1);
+        assert!(!flock.pcs_params.zk);
+        let zk = Blake3PreimageZkSetup::new(256);
+        assert_eq!(zk.pcs_params.profile, LigeritoProfile::Zk100);
+        assert_eq!(zk.pcs_params.log_inv_rate, 3);
+        assert!(zk.pcs_params.zk);
+    }
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn canonical_shapes_clear_100_bits_and_reject_mutations() {
         for n in [64, 512, 1024, 2048, 4096] {
-            let setup = Blake3PreimageZkSetup::experimental_100_bit(n);
-            assert_eq!(setup.pcs_params.profile, LigeritoProfile::ExperimentalZk100);
+            let setup = Blake3PreimageZkSetup::new(n);
+            assert_eq!(setup.pcs_params.profile, LigeritoProfile::Zk100);
             assert_eq!(setup.pcs_params.log_inv_rate, 3);
             assert!(setup.ligerito_aggregate_soundness_bits().unwrap() >= 100.0);
             assert!(setup.interactive_soundness_bound().unwrap().bits() >= 100.0);
@@ -1109,35 +1093,24 @@ mod tests {
             wrong_commitment.root[0] ^= 1;
             assert!(setup.verify(&wrong_commitment, &proof, &digests).is_err());
 
-            let secure = Blake3PreimageZkSetup::new(n);
-            assert_eq!(secure.pcs_params.profile, LigeritoProfile::Secure);
-            assert!(
-                secure.interactive_soundness_bound().unwrap().bits()
-                    >= MIN_ZK_INTERACTIVE_SOUNDNESS_BITS
-            );
-            // Includes the normal CLI verifier, which always constructs Secure.
-            assert!(secure.verify(&commitment, &proof, &digests).is_err());
+            let mut legacy = setup.clone();
+            legacy.pcs_params =
+                PcsParams::new(setup.r1cs.m, 6, LigeritoProfile::Secure, true).unwrap();
+            assert!(legacy.prove(&messages, &digests).is_err());
+            assert!(legacy.verify(&commitment, &proof, &digests).is_err());
             let mut relabeled = commitment.clone();
-            relabeled.params = secure.pcs_params.clone();
-            assert!(secure.verify(&relabeled, &proof, &digests).is_err());
+            relabeled.params = legacy.pcs_params.clone();
+            assert!(setup.verify(&relabeled, &proof, &digests).is_err());
         }
     }
 
-    #[cfg(feature = "experimental-zk")]
+    #[cfg(feature = "veil")]
     #[test]
-    fn experimental_setup_keeps_profile_and_theorem_boundaries() {
-        let setup = Blake3PreimageZkSetup::experimental_100_bit(64);
-        assert_ne!(setup.fs_domain(), VEIL_FLOCK_FS_DOMAIN);
+    fn canonical_setup_rejects_parameter_mutations() {
+        let setup = Blake3PreimageZkSetup::new(64);
         let messages = msgs_of(0xE100, 64);
         let digests = Blake3PreimageSetup::digests_of(&messages);
-        assert!(matches!(
-            setup.rom_soundness_bound(64, 1),
-            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
-        ));
-        assert!(matches!(
-            setup.simulate(&digests, crate::sim_oracle::shared_oracle()),
-            Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
-        ));
+        assert!(setup.rom_soundness_bound(64, 1).is_ok());
         for mutation in 0..4 {
             let mut bad = setup.clone();
             match mutation {
@@ -1150,11 +1123,6 @@ mod tests {
             assert!(bad.ligerito_verifier_config().is_err());
             assert!(bad.prove(&messages, &digests).is_err());
         }
-        let secure = Blake3PreimageZkSetup::new(64);
-        let (proof, mut commitment) = secure.prove(&messages, &digests).unwrap();
-        assert!(setup.verify(&commitment, &proof, &digests).is_err());
-        commitment.params = setup.pcs_params.clone();
-        assert!(setup.verify(&commitment, &proof, &digests).is_err());
     }
 
     #[cfg(feature = "veil")]
@@ -1173,7 +1141,7 @@ mod tests {
 
     #[cfg(feature = "veil")]
     #[test]
-    fn supported_zk_shapes_use_registered_secure_query_budgets() {
+    fn supported_zk_shapes_use_registered_zk100_query_budgets() {
         for &(blocks, committed_m, expected_queries) in REGISTERED_ZK_QUERY_CASES {
             let setup = Blake3PreimageZkSetup::new(blocks);
             let committed_log_n = setup.pcs_params.log_msg_len();
@@ -1181,10 +1149,10 @@ mod tests {
 
             let prover_config = setup
                 .ligerito_prover_config()
-                .expect("registered Secure prover config");
+                .expect("registered Zk100 prover config");
             let verifier_config = setup
                 .ligerito_verifier_config()
-                .expect("registered Secure verifier config");
+                .expect("registered Zk100 verifier config");
             assert_eq!(
                 prover_config,
                 flock_core::pcs::ligerito::prover_config_for(
@@ -1192,7 +1160,7 @@ mod tests {
                     setup.pcs_params.log_batch_size,
                     setup.pcs_params.profile,
                 )
-                .expect("core registered Secure prover config")
+                .expect("core registered Zk100 prover config")
             );
             assert_eq!(
                 verifier_config,
@@ -1201,7 +1169,7 @@ mod tests {
                     setup.pcs_params.log_batch_size,
                     setup.pcs_params.profile,
                 )
-                .expect("core registered Secure verifier config")
+                .expect("core registered Zk100 verifier config")
             );
             assert_eq!(prover_config.queries.as_slice(), expected_queries);
             assert_eq!(verifier_config.queries.as_slice(), expected_queries);
@@ -1234,10 +1202,10 @@ mod tests {
             setup.pcs_params = registered_params.clone();
             setup
                 .ligerito_prover_config()
-                .expect("registered Secure prover config before mutation");
+                .expect("registered Zk100 prover config before mutation");
             setup
                 .ligerito_verifier_config()
-                .expect("registered Secure verifier config before mutation");
+                .expect("registered Zk100 verifier config before mutation");
             setup.pcs_params = params;
             assert_eq!(
                 setup.ligerito_prover_config(),
@@ -1259,7 +1227,7 @@ mod tests {
             let setup = Blake3PreimageZkSetup::new(blocks);
             let bits = setup
                 .ligerito_aggregate_soundness_bits()
-                .expect("registered Secure PCS ledger");
+                .expect("registered Zk100 PCS ledger");
             assert!(
                 bits >= MIN_ZK_LIGERITO_PCS_SOUNDNESS_BITS,
                 "blocks={blocks}: aggregate PCS bits {bits:.3}"
@@ -1284,7 +1252,7 @@ mod tests {
         }
     }
 
-    /// Exercises the largest accepted ZK shape with the registered Secure
+    /// Exercises the largest accepted ZK shape with the registered Zk100
     /// Ligerito schedule.
     #[cfg(feature = "veil")]
     #[test]
@@ -1337,11 +1305,11 @@ mod tests {
         );
         let (proof, commitment) = zk
             .prove(&messages, &digests)
-            .expect("prove registered Secure ZK PCS");
+            .expect("prove registered Zk100 ZK PCS");
         zk.verify(&commitment, &proof, &digests)
-            .expect("verify registered Secure ZK PCS");
+            .expect("verify registered Zk100 ZK PCS");
 
-        bincode::serialized_size(&proof).expect("serialize registered Secure ZK proof");
+        bincode::serialized_size(&proof).expect("serialize registered Zk100 ZK proof");
     }
 
     #[cfg(feature = "veil")]
@@ -1358,7 +1326,7 @@ mod tests {
         // block slots.
         let n = N_TEST;
         let setup = Blake3PreimageZkSetup::new(n);
-        assert_eq!(setup.pcs_params.profile, LigeritoProfile::Secure);
+        assert_eq!(setup.pcs_params.profile, LigeritoProfile::Zk100);
         assert_eq!(
             setup.pcs_params.log_inv_rate,
             setup.pcs_params.profile.log_inv_rate()
@@ -1409,7 +1377,7 @@ mod tests {
             .expect("verify succinct VEIL");
 
         let mut uncertified_setup = setup.clone();
-        uncertified_setup.pcs_params.log_inv_rate = 3;
+        uncertified_setup.pcs_params.log_inv_rate = 1;
         assert!(matches!(
             uncertified_setup.verify(&commitment, &proof, &digests),
             Err(SuccinctPreimageError::Statement(PreimageError::Uncertified))
