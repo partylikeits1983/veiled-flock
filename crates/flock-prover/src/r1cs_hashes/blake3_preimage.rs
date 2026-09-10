@@ -1027,6 +1027,51 @@ mod tests {
         (4096, 27, &[121, 113, 109, 107]),
     ];
 
+    #[cfg(feature = "veil")]
+    #[test]
+    fn portable_encoder_proof_fixtures() {
+        // Captured from the Standard prover before direct NTT initialization.
+        let fixtures = [
+            (
+                256,
+                "63e2a63274f9d9452dd588bde0bd40dfc1f77178f5262b4720f4548832358fa5",
+            ),
+            (
+                512,
+                "b4bf3608d28fbc057a2b7183af0379e26b5d4750308e78ae4d790910ec6b0931",
+            ),
+            (
+                1024,
+                "8b3d821575fdfbb80b7a04495de619444cd972c3ca76cf9cade3b691a4198711",
+            ),
+            (
+                2048,
+                "8463d2065c8a8a4e22bb8628df3ec230ef7df5d3beeca41053a93547e2414a79",
+            ),
+            (
+                4096,
+                "757c751d0e087fe7b9b9493e1492597e55e83513094533a49948d14e7f4d2a36",
+            ),
+        ];
+        for (size, expected) in fixtures {
+            let setup = Blake3PreimageZkSetup::new(size);
+            let messages = msgs_of(0xD1EC7, size);
+            let digests = Blake3PreimageSetup::digests_of(&messages);
+            let mut rng = flock_core::zk::ZkRng::from_seed([0xD1; 32]);
+            let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
+            let (proof, commitment) = setup
+                .prove_with_challenger(&messages, &digests, &mut rng, &mut challenger)
+                .unwrap();
+            setup.verify(&commitment, &proof, &digests).unwrap();
+            let encoded = bincode::serialize(&(&commitment, &proof)).unwrap();
+            assert_eq!(
+                blake3::hash(&encoded).to_hex().as_str(),
+                expected,
+                "proof bytes changed at {size} messages"
+            );
+        }
+    }
+
     fn msgs_of(seed: u64, n: usize) -> Vec<[u8; MESSAGE_BYTES]> {
         let mut s = seed | 1;
         (0..n)

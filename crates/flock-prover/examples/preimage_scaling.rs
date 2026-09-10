@@ -31,13 +31,23 @@ fn main() {
         })
         .unwrap_or(5);
     assert!(samples > 0, "sample count must be positive");
-    assert!(args.next().is_none(), "usage: preimage_scaling [samples]");
+    let selected_size = args.next().map(|value| {
+        let size = value.parse::<usize>().expect("size must be an integer");
+        assert!(SIZES.contains(&size), "unsupported benchmark size");
+        size
+    });
+    assert!(
+        args.next().is_none(),
+        "usage: preimage_scaling [samples] [size]"
+    );
 
     println!(
         "hashes,protocol,prove_ms_median,verify_ms_median,proof_bytes_median,proof_bytes_min,proof_bytes_max"
     );
     for size in SIZES {
-        benchmark_size(size, samples);
+        if selected_size.is_none_or(|selected| selected == size) {
+            benchmark_size(size, samples);
+        }
     }
 }
 
