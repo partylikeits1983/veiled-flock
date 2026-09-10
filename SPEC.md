@@ -22,21 +22,28 @@ MUST compare it with the verifier-controlled statement.
 ## 2. Algebra and profiles
 
 FLOCK's R1CS is over `GF(2)`; PIOP, PCS, and VEIL values are over
-`F=GF(2^128)`. Production MUST use the Secure unique-decoding Ligerito profile
-in ZK mode. The outer PCS uses inverse-rate log 1 and batch log 6. Fast and Slim
-profiles MUST be rejected.
+`F=GF(2^128)`. The full-ZK API MUST use the Zk100 unique-decoding Ligerito
+profile at inverse-rate log 3 (rate 1/8) and batch log 6. Other profiles MUST
+be rejected by this API. Non-ZK FLOCK profiles and defaults are unchanged.
+The PCS aggregate and composed interactive numerical bounds MUST each clear
+100 bits before proving, simulation, or verification.
 
-| Slots | R1CS `m` | Secure config | PIOP / total masks | L0 queries / blind bits |
+| Slots | R1CS `m` | Zk100 config | PIOP / total masks | L0 queries / blind bits |
 | ---: | ---: | --- | ---: | ---: |
-| 256 | 22 | `m23_secure` | 242 / 754 | 294 / 2 |
-| 512 | 23 | `m24_secure` | 244 / 756 | 292 / 3 |
-| 1,024 | 24 | `m25_secure` | 246 / 758 | 291 / 4 |
-| 2,048 | 25 | `m26_secure` | 248 / 760 | 290 / 5 |
-| 4,096 | 26 | `m27_secure` | 250 / 762 | 290 / 6 |
+| 256 | 22 | `m23_zk100` | 242 / 754 | 121 / 1 |
+| 512 | 23 | `m24_zk100` | 244 / 756 | 121 / 1 |
+| 1,024 | 24 | `m25_zk100` | 246 / 758 | 121 / 1 |
+| 2,048 | 25 | `m26_zk100` | 248 / 760 | 121 / 1 |
+| 4,096 | 26 | `m27_zk100` | 250 / 762 | 121 / 1 |
 
 The VEIL constraint layer uses 160 operand/linear padding elements, 160
 Hadamard padding elements, inverse rate 8, and 160 distinct queries. The
 verifier MUST reject any proof-carried parameter mismatch.
+
+All Zk100 fold-grinding widths are zero; the L0 blind-combination grind uses
+one bit. The complete query schedules are in [ZK_PARAMETERS.md](docs/ZK_PARAMETERS.md).
+The concrete Lean tables still describe the previous Secure configuration;
+the existing concrete theorem does not yet cover these Zk100 parameters.
 
 ## 3. ZK encoders
 

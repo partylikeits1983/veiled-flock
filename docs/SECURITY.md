@@ -2,8 +2,12 @@
 
 VEIL-FLOCK has a Lean proof of statistical zero knowledge for a formal model
 of the 64-byte BLAKE3-preimage protocol in the classical programmable
-random-oracle model (pROM). The Rust code follows the same protocol, but is
-not mechanically linked to the Lean model.
+random-oracle model (pROM). The canonical Rust ZK path uses Zk100 at rate 1/8;
+the concrete Lean model still describes the legacy Secure rate-1/2 parameters.
+Porting the concrete
+code domains and empty fold-grinding schedule is pending. The existing
+concrete theorem does not certify the canonical Zk100 configuration, and
+Rust is not mechanically linked to the Lean model.
 
 The Lean relation is broader than the Rust relation: it checks padded public
 projection, while Rust also checks BLAKE3/R1CS satisfaction and computes public
@@ -16,10 +20,10 @@ implementation is unaudited and should not be used for production secrets.
 |---|---|
 | Relation | Ordered batch of 1-4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
 | Completeness | Honest proofs verify |
-| Zero knowledge | Proved for the finite Lean uniform coin model with distance `< 2^-126`; Rust correspondence and seeded XOF instantiation not proved |
+| Zero knowledge | Proved for the legacy Secure finite Lean uniform coin model with distance `< 2^-126`; Rust correspondence and seeded XOF instantiation not proved |
 | Algebraic privacy | Perfect in the formal uniform coin model, conditioned on the public statement and accepted challenge history |
 | Noninteractive privacy loss | Random-oracle prequeries, collisions, nonce collisions, and bounded-grinding failures |
-| Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Secure Ligerito |
+| Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Zk100 Ligerito; numerical PCS and composed floors of 100 bits |
 | Fiat-Shamir soundness | Classical-ROM assumption and reduction boundary |
 | Argument of knowledge | Not claimed |
 | QROM/post-quantum ZK | Not claimed |
@@ -39,8 +43,8 @@ relation, the real adaptive adversary view is within `2^-126` statistical
 distance of a witness-free simulated view in the finite classical pROM model.
 
 Because the formal relation is broader than the Rust BLAKE3 relation, the
-privacy result applies to the Rust relation once the missing correspondence
-obligations are discharged.
+privacy result could be transferred to Rust only after the Zk100 parameter
+port and missing correspondence obligations are discharged.
 
 Rust production provers sample a 32-byte OS seed and expand it with BLAKE3 XOF
 for prover secret coins. This replaces direct OS sampling of every mask byte;
@@ -129,8 +133,10 @@ transcript.
 
 Outer blinding grinding is modeled as first success within 8192 attempts. Each
 positive Ligerito fold grind is modeled as first success within 4096 attempts,
-with sixteen reserved grind sites. The Lean-backed registered schedules
-currently checked into the repo are:
+with sixteen reserved grind sites. The legacy schedules covered by the
+concrete Lean tables are shown below.
+They are retained for the formal model and are not selected by the canonical
+Rust ZK API:
 
 | Slots | Rust profile | Levels | Final `yr_log_n` |
 |---:|---|---|---:|
@@ -162,25 +168,27 @@ adds these errors:
 - VEIL dot-product and Hadamard binding
 - operand- and product-code proximity generation
 - Hadamard reduction and linkage
-- Secure-profile Ligerito whole-opening soundness
+- Zk100-profile Ligerito whole-opening soundness
 
 The RS proximity terms use the finite-length unique-decoding backoff
 `gamma = delta/2 - 3/(delta*N)` and union-bound every live binary fold. Fast
-and Slim/list-decoding profiles are rejected by the full-ZK setup. Missing or
-mismatched PCS registry entries fail closed instead of falling back to ad hoc
-parameters.
+and Slim/list-decoding profiles, and legacy Secure, are rejected by the
+full-ZK setup. Missing or mismatched PCS registry entries fail closed instead
+of falling back to ad hoc parameters.
 
 The public full-ZK API rejects any setup whose registered PCS aggregate is below
-114 bits or whose composed interactive ledger is below 106 bits. These floors
+100 bits or whose composed interactive ledger is below 100 bits. These floors
 are enforced before proving, simulation, or verification.
 
 `rom_soundness_bound(Q, attempts)` also accounts for proof attempts and oracle
-collisions. It is a classical-ROM statement and does not make SHA-256
-information-theoretic.
+collisions. This is a Rust numerical calculation under the classical-ROM
+soundness analysis, not a new Lean certificate or an information-theoretic
+claim about SHA-256. A 100-bit interactive bound is not a 100-bit ROM guarantee
+for every adversary query budget and number of proof attempts.
 
 ## Format and API
 
-The verifier checks the circuit digest, mask count, witness layout, Secure PCS
+The verifier checks the circuit digest, mask count, witness layout, Zk100 PCS
 profile marker, registered code geometry, query budget, and VEIL parameters.
 The canonical bundle has a 1 MiB decode limit, rejects trailing bytes, and
 rejects parameter mismatches.
@@ -201,13 +209,11 @@ not hide batch size, circuit shape, parameter suite, proof length, runtime,
 memory access, allocator behavior, or host side channels. Independent
 cryptographic and side-channel review is required before production use.
 
-## Opt-in small-proof experiment
+## Canonical ZK parameters
 
-The `experimental-zk` feature exposes an explicit rate-1/8, 100-bit numerical
-soundness experiment through `Blake3PreimageZkSetup::experimental_100_bit`.
-It has a separate profile and Fiat–Shamir domain and is outside the Lean
-parameter tables and the production protocol specified here. The simulator
-and ROM certificate API reject this profile. The default constructor, CLI,
-and Secure soundness floors are unchanged. See
-[EXPERIMENTAL_ZK.md](EXPERIMENTAL_ZK.md) for the query schedule, checks, and
-benchmark methodology.
+`Blake3PreimageZkSetup::new`, the CLI, and the ZK examples use rate-1/8 Zk100.
+Non-ZK FLOCK keeps its existing profiles and defaults. The canonical ZK
+simulator and ROM numerical-bound API use the same registered configuration.
+Legacy Secure and experimental-profile proofs must be regenerated.
+See [ZK_PARAMETERS.md](ZK_PARAMETERS.md) for the complete schedules, numerical
+bounds, benchmark methodology, and pending Lean parameter port.

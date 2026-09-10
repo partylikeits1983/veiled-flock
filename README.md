@@ -46,25 +46,25 @@ and the native `GF(2^128)` VEIL backend. See the
 ## Performance
 
 The table compares non-ZK FLOCK using the Secure profile at rate 1/2 with
-**experimental ZK100** at rate 1/8. ZK100 checks a 100-bit PCS and composed
-interactive numerical bound. These profiles have different soundness budgets;
-the comparison does not isolate the intrinsic cost of ZK. The default full-ZK
-constructor and CLI continue to use Secure (114-bit PCS / 106-bit composed
-interactive floors). The experimental profile is outside the registered Lean
-tables; see [its security scope](docs/EXPERIMENTAL_ZK.md#security-scope).
+**canonical full-ZK Zk100** at rate 1/8. Zk100 enforces 100-bit PCS and composed
+interactive numerical bounds. The public ZK constructor, CLI, simulator, and
+ZK examples select it by default. Non-ZK FLOCK keeps its existing configuration.
+These profiles have different soundness budgets, so this comparison does not
+isolate the intrinsic cost of ZK. The concrete Lean tables still describe the
+legacy Secure ZK configuration; [porting them is pending](docs/ZK_PARAMETERS.md#security-scope).
 
 | Hashes | FLOCK prove | ZK100 prove | FLOCK verify | ZK100 verify | FLOCK size | ZK100 size | Size overhead | Proving ratio |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 64 | 4.660 ms | 21.741 ms | 13.458 ms | 11.858 ms | 274,609 B | 435,873 B | 58.7% | 4.67× |
-| 128 | 5.095 ms | 19.893 ms | 13.931 ms | 11.313 ms | 283,537 B | 436,577 B | 54.0% | 3.90× |
-| 256 | 6.321 ms | 20.544 ms | 13.588 ms | 11.474 ms | 377,697 B | 435,585 B | 15.3% | 3.25× |
-| 512 | 8.178 ms | 27.003 ms | 14.020 ms | 12.208 ms | 385,081 B | 446,801 B | 16.0% | 3.30× |
-| 1,024 | 10.556 ms | 38.587 ms | 14.799 ms | 12.324 ms | 398,657 B | 477,585 B | 19.8% | 3.66× |
-| 2,048 | 15.631 ms | 63.440 ms | 15.413 ms | 12.857 ms | 433,425 B | 491,657 B | 13.4% | 4.06× |
-| 4,096 | 23.728 ms | 107.718 ms | 17.007 ms | 14.797 ms | 451,937 B | 505,121 B | 11.8% | 4.54× |
+| 64 | 4.515 ms | 20.772 ms | 13.458 ms | 11.880 ms | 274,609 B | 436,001 B | 58.8% | 4.60× |
+| 128 | 5.136 ms | 20.039 ms | 13.871 ms | 11.465 ms | 283,537 B | 436,769 B | 54.0% | 3.90× |
+| 256 | 6.375 ms | 20.311 ms | 13.940 ms | 11.483 ms | 377,697 B | 435,937 B | 15.4% | 3.19× |
+| 512 | 8.143 ms | 26.301 ms | 14.248 ms | 11.712 ms | 385,081 B | 446,929 B | 16.1% | 3.23× |
+| 1,024 | 10.836 ms | 37.788 ms | 14.989 ms | 12.455 ms | 398,657 B | 477,585 B | 19.8% | 3.49× |
+| 2,048 | 15.554 ms | 63.120 ms | 15.342 ms | 13.122 ms | 433,425 B | 490,569 B | 13.2% | 4.06× |
+| 4,096 | 23.842 ms | 106.233 ms | 16.985 ms | 14.940 ms | 451,937 B | 505,633 B | 11.9% | 4.46× |
 
 Measured on an Apple M2 Pro with 16 GiB RAM, using Rust 1.98.0,
-implementation commit `5ee114573ae08f91a5c0f04769171658d78763a2`, a release build
+implementation commit `fc47c3a18847beb7bfd97d0f7da10159c3d8ca15`, a release build
 with `target-cpu=native`, and the benchmark's default thread pool. Each value
 is the median of five samples after one untimed warm-up per protocol and
 batch size. Every generated proof is verified. Setup construction, message
@@ -75,7 +75,7 @@ Sizes are bincode-serialized proof objects, excluding the separately returned
 witness commitment, public digests, and bundle framing. Size overhead is
 `(ZK100 size / FLOCK size - 1) * 100%`; the proving ratio is
 `ZK100 prove time / FLOCK prove time`. Fresh ZK randomness causes small size
-variations: the five 4,096-hash proofs ranged from 504,513 to 507,041 B.
+variations: the five 4,096-hash proofs ranged from 503,137 to 505,985 B.
 
 ZK100 pads batches below 256 hashes to 256 slots. The 64- and 128-hash non-ZK
 baselines use smaller circuit shapes with ad hoc PCS schedules below the
@@ -84,11 +84,11 @@ registry floor, so those rows also differ in circuit geometry.
 Reproduce the table with:
 
 ```sh
-cargo run --locked --release -p flock-prover --features experimental-zk \
-  --example preimage_scaling -- 5 --experimental-100
+cargo run --locked --release -p flock-prover --features veil \
+  --example preimage_scaling -- 5
 ```
 
-See [the experiment report](docs/EXPERIMENTAL_ZK.md) for the query schedule,
+See [the ZK parameter report](docs/ZK_PARAMETERS.md) for the query schedule,
 raw benchmark summaries, and the salted-Merkle implementation improvement.
 
 ## Quickstart
@@ -148,7 +148,7 @@ The `flock-prover` crate also has benchmark and development examples:
 
 | Example | Command | Notes |
 |---|---|---|
-| `preimage_scaling` | `cargo run --locked --release -p flock-prover --features experimental-zk --example preimage_scaling -- 5 --experimental-100` | Reproduces the experimental performance table with five samples. Omit the selector to benchmark default Secure full ZK. |
+| `preimage_scaling` | `cargo run --locked --release -p flock-prover --features veil --example preimage_scaling -- 5` | Reproduces the canonical ZK versus non-ZK performance table with five samples. |
 | `mle_eval_bench` | `cargo run --locked --release -p flock-prover --example mle_eval_bench` | Compares naive and Remark 1.7 MLE folding. |
 | `chain_bench` | `cargo run --locked --release -p flock-prover --features unsound-challenger --example chain_bench` | Isolates hash-chain shift sumcheck cost with the insecure test challenger. |
 | `keccak_mid_density` | `cargo run --locked --release -p flock-prover --example keccak_mid_density` | Reports midpoint Keccak R1CS row density. |
@@ -198,6 +198,6 @@ Apache-2.0 or MIT.
 
 ## Status
 
-Experimental and unaudited. The Lean proof covers statistical zero knowledge
-for the formal model; production Rust expands an OS seed with BLAKE3 XOF, and
-Rust-to-Lean correspondence remains future work.
+Experimental and unaudited. The Lean proof covers the legacy Secure parameter
+model; porting it to canonical Zk100 is pending. Production Rust expands an
+OS seed with BLAKE3 XOF, and Rust-to-Lean correspondence remains future work.
