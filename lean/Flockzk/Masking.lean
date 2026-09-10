@@ -68,12 +68,14 @@ covered by the mask image, then conditioned on the public inputs the
 transcript distribution under uniform masks is independent of the witness:
 for every value `y`, the number of mask assignments producing `y` is the
 same for `w` and `w'`. -/
+-- @audit:FlockZk.transcript_witness_indep
 theorem transcript_witness_indep (A : U →+ V) (f : W → V) (pub : W → P)
     (hcov : ∀ w w', pub w = pub w' → f w - f w' ∈ Set.range A)
     {w w' : W} (hpub : pub w = pub w') (y : V) :
     (univ.filter fun u => A u + f w = y).card
       = (univ.filter fun u => A u + f w' = y).card :=
   card_fiber_shift A y (hcov w w' hpub)
+-- @audit:end
 
 /-- **Simulation.** A simulator that knows only a public representative `r`
 of the transcript coset (any point with `f w - r ∈ Image A`, e.g. one
@@ -81,11 +83,13 @@ honest transcript published for the statement, or a canonical solution of
 the public consistency equations) and samples `A u + r` with uniform `u`
 produces **exactly** the honest prover's transcript distribution — without
 the witness. -/
+-- @audit:FlockZk.simulator_exact
 theorem simulator_exact (A : U →+ V) (f : W → V) (r : V)
     (hrep : ∀ w, f w - r ∈ Set.range A) (w : W) (y : V) :
     (univ.filter fun u => A u + f w = y).card
       = (univ.filter fun u => A u + r = y).card :=
   card_fiber_shift A y (hrep w)
+-- @audit:end
 
 /-- On its coset, the transcript is **uniform**: every attainable value has
 fiber size `|{u | A u = 0}| = |ker A|`. -/

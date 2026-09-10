@@ -1,5 +1,12 @@
 /target
 
+# Frontend build artifacts
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/public/lean/
+frontend/tsconfig.tsbuildinfo
+
 # macOS Finder metadata
 .DS_Store
 **/.DS_Store

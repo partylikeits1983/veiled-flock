@@ -114,6 +114,7 @@ theorem mixture_witness_indep_bad_set (T : W → U → B → V) (pub : W → P)
 distributions is at most `2 · |Bad| / |B|` — i.e. the statistical
 (total-variation) distance is at most `|Bad| / |B| = ε_rank`, the
 probability of drawing a rank-deficient outer mask. -/
+-- @audit:FlockZk.mixture_statistical_distance_bad_set
 theorem mixture_statistical_distance_bad_set [Nonempty U] [Nonempty B]
     (T : W → U → B → V) (pub : W → P) (Bad : Finset B)
     (hgood : ∀ w w', pub w = pub w' → ∀ b ∉ Bad, ∀ y : V,
@@ -154,5 +155,6 @@ theorem mixture_statistical_distance_bad_set [Nonempty U] [Nonempty B]
         have hU0 : (Fintype.card U : ℚ) ≠ 0 := hU.ne'
         have hB0 : (Fintype.card B : ℚ) ≠ 0 := hB.ne'
         field_simp
+-- @audit:end
 
 end FlockZk
