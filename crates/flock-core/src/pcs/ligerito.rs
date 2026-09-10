@@ -39,6 +39,11 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+#[cfg(feature = "experimental-zk")]
+mod experimental;
+#[cfg(feature = "experimental-zk")]
+pub use experimental::experimental_zk100_config;
+
 // ===================================================================
 // Config
 // ===================================================================
@@ -69,6 +74,9 @@ pub enum LigeritoProfile {
     Fast,
     Slim,
     Secure,
+    /// Opt-in rate-1/8 UDR experiment, targeting 100-bit aggregate ZK PCS
+    /// soundness. Requires `experimental-zk`; no matching Lean tables.
+    ExperimentalZk100,
 }
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -87,6 +95,7 @@ impl LigeritoProfile {
         match self {
             Self::Fast | Self::Secure => 1,
             Self::Slim => 2,
+            Self::ExperimentalZk100 => 3,
         }
     }
     /// Round-by-round soundness target (bits) the profile's configs are derived
@@ -94,7 +103,7 @@ impl LigeritoProfile {
     /// min over rounds, per the Fiat-Shamir / `soundcalc` convention).
     pub fn security_bits(self) -> usize {
         match self {
-            Self::Fast | Self::Slim => 100,
+            Self::Fast | Self::Slim | Self::ExperimentalZk100 => 100,
             Self::Secure => 120,
         }
     }
@@ -103,6 +112,7 @@ impl LigeritoProfile {
             Self::Fast => "fast",
             Self::Slim => "slim",
             Self::Secure => "secure",
+            Self::ExperimentalZk100 => "experimental_zk100",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -110,6 +120,8 @@ impl LigeritoProfile {
             "fast" => Some(Self::Fast),
             "slim" => Some(Self::Slim),
             "secure" => Some(Self::Secure),
+            #[cfg(feature = "experimental-zk")]
+            "experimental_zk100" => Some(Self::ExperimentalZk100),
             _ => None,
         }
     }
@@ -1391,13 +1403,21 @@ impl LigeritoSecurityConfig {
     ///             every level, 100 bits per round.
     /// - `Secure`: Udr, rate 1/2, ε* = 1e-3, 120 bits per round.
     pub fn derive_profile(m: usize, profile: LigeritoProfile) -> Result<Self, String> {
+        if profile == LigeritoProfile::ExperimentalZk100 {
+            #[cfg(feature = "experimental-zk")]
+            return experimental_zk100_config(m);
+            #[cfg(not(feature = "experimental-zk"))]
+            return Err("experimental_zk100 requires the experimental-zk feature".into());
+        }
         /// Johnson slack below the Johnson radius, flat across levels.
         const JOHNSON_ETA: f64 = 0.02;
         let target_bits = profile.security_bits();
         let log_inv_rate = profile.log_inv_rate();
         let query_grind: usize = match profile {
             LigeritoProfile::Slim => 16,
-            LigeritoProfile::Fast | LigeritoProfile::Secure => 0,
+            LigeritoProfile::Fast
+            | LigeritoProfile::Secure
+            | LigeritoProfile::ExperimentalZk100 => 0,
         };
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
@@ -1410,7 +1430,9 @@ impl LigeritoSecurityConfig {
         // below uses the n-aware `udr_per_query_bits`.
         let per_query_bits_feas = |rate: usize| -> f64 {
             match profile {
-                LigeritoProfile::Secure => udr_per_query_bits_asymptotic(rate),
+                LigeritoProfile::Secure | LigeritoProfile::ExperimentalZk100 => {
+                    udr_per_query_bits_asymptotic(rate)
+                }
                 LigeritoProfile::Fast | LigeritoProfile::Slim => {
                     paper_per_query_bits(rate, JOHNSON_ETA)
                 }
@@ -1448,7 +1470,9 @@ impl LigeritoSecurityConfig {
             // Actual per-level per-query bits: n-aware (maximal radius) for
             // UDR, length-agnostic Johnson otherwise.
             let per_q = match profile {
-                LigeritoProfile::Secure => udr_per_query_bits(rate, cols, UDR_PROXIMITY_LOSS),
+                LigeritoProfile::Secure | LigeritoProfile::ExperimentalZk100 => {
+                    udr_per_query_bits(rate, cols, UDR_PROXIMITY_LOSS)
+                }
                 LigeritoProfile::Fast | LigeritoProfile::Slim => {
                     paper_per_query_bits(rate, JOHNSON_ETA)
                 }
@@ -1463,7 +1487,7 @@ impl LigeritoSecurityConfig {
             let eps_query = queries as f64 * per_q;
 
             let (regime, eta, proximity_loss, eps_pg, ood_samples, eps_ood) = match profile {
-                LigeritoProfile::Secure => {
+                LigeritoProfile::Secure | LigeritoProfile::ExperimentalZk100 => {
                     // No row-union penalty in the unique-decoding regime (list
                     // size 1): per Diamond and Gruen, MCA-commutes holds with
                     // error ε directly (vs the Johnson regime's 2^{ℓ-1} factor).
@@ -1523,7 +1547,9 @@ impl LigeritoSecurityConfig {
         }
 
         let analysis = match profile {
-            LigeritoProfile::Secure => "no_row_union_over_ben_sasson_2025_cor_1_4",
+            LigeritoProfile::Secure | LigeritoProfile::ExperimentalZk100 => {
+                "no_row_union_over_ben_sasson_2025_cor_1_4"
+            }
             LigeritoProfile::Fast | LigeritoProfile::Slim => {
                 "johnson_ood_row_union_over_bchks25_thm_4_6"
             }

@@ -729,6 +729,15 @@ impl MaskLayout {
     }
 }
 
+fn supported_zk_profile(profile: pcs::ligerito::LigeritoProfile) -> bool {
+    match profile {
+        pcs::ligerito::LigeritoProfile::Secure => true,
+        #[cfg(feature = "experimental-zk")]
+        pcs::ligerito::LigeritoProfile::ExperimentalZk100 => true,
+        _ => false,
+    }
+}
+
 fn validate_succinct_parameters(
     r1cs: &BlockR1cs,
     pcs_params: &PcsParams,
@@ -738,7 +747,7 @@ fn validate_succinct_parameters(
         || pcs_params.m != r1cs.m
         || pcs_params.log_inv_rate != pcs_params.profile.log_inv_rate()
         || pcs_params.log_batch_size != 6
-        || pcs_params.profile != pcs::ligerito::LigeritoProfile::Secure
+        || !supported_zk_profile(pcs_params.profile)
     {
         return Err(SuccinctVeilError::InvalidParameters);
     }
