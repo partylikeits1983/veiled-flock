@@ -1,0 +1,10 @@
+[package]
+name = "zk-certify"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Rust certificate runner for the VEIL-FLOCK full-ZK path."
+
+[lints]
+workspace = true

@@ -5,6 +5,7 @@ members = [
     "crates/veil-f128",
     "examples",
     "tools/formal-proof",
+    "tools/zk-certify",
 ]
 resolver = "2"
 
