@@ -8,7 +8,7 @@
 //! On-disk format:
 //! ```text
 //!   bytes 0..5    "FLOCK"                  (5-byte magic)
-//!   byte  5       flavor: 2 = R1cs, 3 = Chain (0/1 reserved: legacy BaseFold)
+//!   byte  5       flavor: 6 = R1cs, 7 = Chain, 5 = VEIL-FLOCK BLAKE3
 //!   bytes 6..     bincode-serialized payload
 //! ```
 //!
@@ -69,17 +69,25 @@ impl HashKind {
 
 /// Flavor discriminator (1 byte). Lets a generic reader peek what kind of
 /// bundle a file holds without parsing the payload first.
-const FLAVOR_R1CS_LIGERITO: u8 = 2;
-const FLAVOR_CHAIN_LIGERITO: u8 = 3;
+///
+/// Flavor bytes 2 and 3 were used before `RecursiveProof` gained its
+/// `leaf_salts` field. Because bincode is positional, those payloads cannot
+/// be decoded as the current schema without shifting the remaining fields.
+const FLAVOR_LEGACY_R1CS_LIGERITO: u8 = 2;
+const FLAVOR_LEGACY_CHAIN_LIGERITO: u8 = 3;
+const FLAVOR_R1CS_LIGERITO: u8 = 6;
+const FLAVOR_CHAIN_LIGERITO: u8 = 7;
 /// Full-view VEIL-FLOCK proof for the fixed 64-byte BLAKE3-preimage relation.
 const FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE: u8 = 5;
 
-/// All flavor bytes this build understands (for the unknown-flavor check).
+/// Current flavor bytes this build understands (for the unknown-flavor check).
 const KNOWN_FLAVORS: [u8; 3] = [
     FLAVOR_R1CS_LIGERITO,
     FLAVOR_CHAIN_LIGERITO,
     FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE,
 ];
+const LEGACY_LIGERITO_FLAVORS: [u8; 2] =
+    [FLAVOR_LEGACY_R1CS_LIGERITO, FLAVOR_LEGACY_CHAIN_LIGERITO];
 
 #[cfg(feature = "veil")]
 pub const MAX_VEIL_FLOCK_BUNDLE_BYTES: u64 = 1024 * 1024;
@@ -95,8 +103,10 @@ const MAX_VEIL_FLOCK_PAYLOAD_BYTES: u64 = MAX_VEIL_FLOCK_BUNDLE_BYTES - (HEADER_
 pub enum DeserializeError {
     /// The 5-byte magic prefix did not match `FLOCK`.
     BadMagic,
-    /// The flavor byte was neither `2` (R1cs Ligerito) nor `3` (Chain Ligerito).
+    /// The flavor byte does not identify a bundle schema this build can read.
     UnknownFlavor(u8),
+    /// The flavor byte identifies a pre-`leaf_salts` Ligerito proof bundle.
+    LegacyLigeritoFlavor(u8),
     /// `from_bytes` was called with a slice shorter than `HEADER_LEN`.
     Truncated,
     /// The expected flavor and the file's flavor disagree (e.g. trying to
@@ -111,6 +121,10 @@ impl std::fmt::Display for DeserializeError {
         match self {
             Self::BadMagic => write!(f, "bad magic: not a FLOCK proof file"),
             Self::UnknownFlavor(v) => write!(f, "unknown flavor byte: {v}"),
+            Self::LegacyLigeritoFlavor(v) => write!(
+                f,
+                "legacy Ligerito proof flavor byte {v}: this proof predates the current RecursiveProof payload layout; regenerate it or migrate it with a legacy reader"
+            ),
             Self::Truncated => write!(f, "input shorter than header ({HEADER_LEN} bytes)"),
             Self::FlavorMismatch { expected, found } => {
                 write!(f, "flavor mismatch: expected {expected}, found {found}")
@@ -245,6 +259,9 @@ fn parse_header(bytes: &[u8], expected_flavor: u8) -> Result<&[u8], DeserializeE
         return Err(DeserializeError::BadMagic);
     }
     let flavor = bytes[5];
+    if LEGACY_LIGERITO_FLAVORS.contains(&flavor) {
+        return Err(DeserializeError::LegacyLigeritoFlavor(flavor));
+    }
     if !KNOWN_FLAVORS.contains(&flavor) {
         return Err(DeserializeError::UnknownFlavor(flavor));
     }
@@ -491,6 +508,24 @@ mod tests {
             bytes[5] = legacy;
             let res = R1csProofBundleLigerito::from_bytes(&bytes);
             assert!(matches!(res, Err(DeserializeError::UnknownFlavor(f)) if f == legacy));
+        }
+    }
+
+    #[test]
+    fn rejects_legacy_ligerito_flavors_before_bincode() {
+        for legacy in [FLAVOR_LEGACY_R1CS_LIGERITO, FLAVOR_LEGACY_CHAIN_LIGERITO] {
+            let mut bytes = Vec::from(MAGIC);
+            bytes.push(legacy);
+
+            let r1cs_res = R1csProofBundleLigerito::from_bytes(&bytes);
+            assert!(
+                matches!(r1cs_res, Err(DeserializeError::LegacyLigeritoFlavor(f)) if f == legacy)
+            );
+
+            let chain_res = ChainProofBundleLigerito::from_bytes(&bytes);
+            assert!(
+                matches!(chain_res, Err(DeserializeError::LegacyLigeritoFlavor(f)) if f == legacy)
+            );
         }
     }
 
