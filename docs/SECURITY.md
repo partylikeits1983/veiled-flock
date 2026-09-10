@@ -215,5 +215,4 @@ cryptographic and side-channel review is required before production use.
 Non-ZK FLOCK keeps its existing profiles and defaults. The canonical ZK
 simulator and ROM numerical-bound API use the same registered configuration.
 Legacy Secure and experimental-profile proofs must be regenerated.
-See [ZK_PARAMETERS.md](ZK_PARAMETERS.md) for the complete schedules, numerical
-bounds, benchmark methodology, and pending Lean parameter port.
+Query schedules are registered in the [PCS configs](../crates/flock-core/configs/ligerito/).

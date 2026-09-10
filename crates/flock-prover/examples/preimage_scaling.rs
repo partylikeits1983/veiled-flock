@@ -1,6 +1,6 @@
 //! Compare the public ZK and non-ZK BLAKE3-preimage APIs.
 //! Reports medians after one warm-up. Timings exclude setup and serialization;
-//! sizes count proof objects only. See docs/ZK_PARAMETERS.md for methodology.
+//! sizes count proof objects only.
 
 use std::time::{Duration, Instant};
 

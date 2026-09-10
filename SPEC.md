@@ -41,7 +41,7 @@ Hadamard padding elements, inverse rate 8, and 160 distinct queries. The
 verifier MUST reject any proof-carried parameter mismatch.
 
 All Standard fold-grinding widths are zero; the L0 blind-combination grind uses
-one bit. The complete query schedules are in [ZK_PARAMETERS.md](docs/ZK_PARAMETERS.md).
+one bit. Query schedules are registered in the [PCS configs](crates/flock-core/configs/ligerito/).
 The concrete Lean tables still describe the previous Secure configuration;
 the existing concrete theorem does not yet cover these Standard parameters.
 

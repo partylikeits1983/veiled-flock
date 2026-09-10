@@ -51,7 +51,7 @@ composed interactive numerical bounds. The public ZK constructor, CLI, simulator
 ZK examples select it by default. Non-ZK FLOCK keeps its existing configuration.
 These profiles have different soundness budgets, so this comparison does not
 isolate the intrinsic cost of ZK. The concrete Lean tables still describe the
-legacy Secure ZK configuration; [porting them is pending](docs/ZK_PARAMETERS.md#security-scope).
+legacy Secure ZK configuration; porting them is pending.
 
 | Hashes | FLOCK prove | ZK prove | FLOCK verify | ZK verify | FLOCK size | ZK size | Size overhead | Proving ratio |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
@@ -88,9 +88,6 @@ Reproduce the table with:
 cargo run --locked --release -p flock-prover --features veil \
   --example preimage_scaling -- 5
 ```
-
-See [the ZK parameter report](docs/ZK_PARAMETERS.md) for the query schedule,
-raw benchmark summaries, and the salted-Merkle implementation improvement.
 
 ## Quickstart
 
