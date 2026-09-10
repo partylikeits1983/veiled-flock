@@ -200,3 +200,14 @@ The construction hides messages and witness-dependent transcript data. It does
 not hide batch size, circuit shape, parameter suite, proof length, runtime,
 memory access, allocator behavior, or host side channels. Independent
 cryptographic and side-channel review is required before production use.
+
+## Opt-in small-proof experiment
+
+The `experimental-zk` feature exposes an explicit rate-1/8, 100-bit numerical
+soundness experiment through `Blake3PreimageZkSetup::experimental_100_bit`.
+It has a separate profile and Fiat–Shamir domain and is outside the Lean
+parameter tables and the production protocol specified here. The simulator
+and ROM certificate API reject this profile. The default constructor, CLI,
+and Secure soundness floors are unchanged. See
+[EXPERIMENTAL_ZK.md](EXPERIMENTAL_ZK.md) for the query schedule, checks, and
+benchmark methodology.

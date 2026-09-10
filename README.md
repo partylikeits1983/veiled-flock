@@ -86,6 +86,11 @@ cargo run --locked --release -p flock-prover --features veil \
   --example preimage_scaling -- 5
 ```
 
+The opt-in [100-bit small-proof experiment](docs/EXPERIMENTAL_ZK.md) measures
+rate-1/8 PCS schedules and a streaming salted-Merkle implementation. It uses
+a separate experimental profile; the table above records the Secure baseline
+at the stated commit.
+
 ## Quickstart
 
 Run commands from the workspace root. The `veiled_flock` binary is gated behind
