@@ -380,7 +380,6 @@ pub fn merkle_tree_framed(
     tree
 }
 
-/// Complete the shared internal-node layout after every leaf has been hashed.
 fn fill_framed_internal_nodes(
     tree: &mut [Hash],
     num_leaves: usize,
@@ -489,9 +488,7 @@ pub fn merkle_tree_framed_salted(
     let leaf_hasher = RoTreeHasher::new(ctx, ROLE_LEAF, channel, tree_depth, payload_len as u64);
     let mut tree: Vec<Hash> = crate::alloc_uninit_vec(2 * num_leaves - 1);
 
-    // Gather only four salted leaves at a time. Materializing the whole
-    // salted codeword adds a serial copy, page faults, and a large allocation
-    // (260 MiB for the 4096-slot rate-1/8 experiment).
+    // Hash four salted leaves at a time without copying the entire codeword.
     const LEAVES_PER_CHUNK: usize = 64;
     let hash_chunk = |scratch: &mut Vec<u8>, (chunk, outs): (usize, &mut [Hash])| {
         scratch.resize(4 * payload_len, 0);
@@ -1210,8 +1207,7 @@ mod tests {
 
     #[test]
     fn streamed_salted_tree_matches_materialized_tree_and_oracle_trace() {
-        // Include one/two-leaf tails, multiple work chunks, SHA padding
-        // boundaries after the 32-byte salt, and the wide ZK leaf geometry.
+        // Cover short trees, chunk tails, SHA padding boundaries, and wide leaves.
         for n in [1, 2, 4, 64, 128] {
             for leaf_size in [1, 7, 8, 15, 16, 23, 24, 31, 32, 33, 64, 2048] {
                 let data = random_data(n, leaf_size, 0x5A17);

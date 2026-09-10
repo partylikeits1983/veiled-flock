@@ -1,15 +1,6 @@
-//! Reproducible release benchmark for the pinned 64-byte BLAKE3-preimage
-//! relation.
-//!
-//! Compares canonical full-ZK VEIL-FLOCK (Zk100, rate 1/8) with non-ZK
-//! FLOCK (Secure, rate 1/2). The full-ZK path uses registered configs;
-//! non-ZK batches below the registry floor use ad hoc configs. Full-ZK
-//! batches below 256 hashes are padded to 256 slots. Sizes count serialized
-//! proof objects, excluding commitments, public digests, and bundle framing.
-//! Setup construction, message
-//! generation, digest generation, and serialization are excluded from the
-//! prove/verify timings; checks performed by the public prove APIs remain
-//! included. One untimed warm-up precedes the reported median samples.
+//! Compare the public ZK and non-ZK BLAKE3-preimage APIs.
+//! Reports medians after one warm-up. Timings exclude setup and serialization;
+//! sizes count proof objects only. See docs/ZK_PARAMETERS.md for methodology.
 
 use std::time::{Duration, Instant};
 
@@ -74,7 +65,7 @@ fn benchmark_size(size: usize, samples: usize) {
     let mut zk_samples = (0..samples)
         .map(|_| sample_zk(&zk, &messages, &digests))
         .collect::<Vec<_>>();
-    print_samples(size, "VEIL-FLOCK-full-ZK100", &mut zk_samples);
+    print_samples(size, "VEIL-FLOCK-full-ZK", &mut zk_samples);
 }
 
 fn sample_flock(

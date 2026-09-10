@@ -639,8 +639,8 @@ mod tests {
 
     #[cfg(feature = "zk")]
     #[test]
-    fn zk100_profile_preserves_rate_consistency() {
-        let mut params = PcsParams::new(22, 6, LigeritoProfile::Zk100, true).unwrap();
+    fn standard_profile_preserves_rate_consistency() {
+        let mut params = PcsParams::new(22, 6, LigeritoProfile::Standard, true).unwrap();
         assert_eq!(params.log_inv_rate, 3);
         params.log_inv_rate = 1;
         assert!(matches!(

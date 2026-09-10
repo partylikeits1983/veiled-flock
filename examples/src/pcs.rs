@@ -45,19 +45,14 @@ pub struct BitPcs {
 }
 
 impl BitPcs {
-    /// The committed ZK message is `[mask || z]`, so the Ligerito config is
-    /// loaded for `params.log_msg_len() = m - 6`; `m = 22` therefore uses the
-    /// embedded `m23_zk100` config. Only m=22..=26 is registered. Every
-    /// config must pass the production batch-opening certificate: the L0
-    /// query count fits the mask symbols per lane, query-phase grinding is
-    /// disabled, and the blind grind is one bit (no fold grinds).
+    /// Load and validate registered ZK parameters for the witness dimension.
     pub fn new(m: usize) -> Result<Self, VeilError> {
-        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Zk100, true)
+        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Standard, true)
             .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let log_n = params.log_msg_len();
-        let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Zk100)
+        let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Standard)
             .map_err(VeilError::Ligerito)?;
-        let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Zk100)
+        let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Standard)
             .map_err(VeilError::Ligerito)?;
         let pcs = Self {
             params,

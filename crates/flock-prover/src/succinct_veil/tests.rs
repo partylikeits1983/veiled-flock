@@ -98,7 +98,7 @@ fn every_registered_batch_shape_has_checked_mask_and_soundness_parameters() {
 }
 
 #[test]
-fn embedded_zk100_profiles_match_the_registered_parameter_table() {
+fn embedded_standard_profiles_match_the_registered_parameter_table() {
     struct ExpectedProfile {
         log_inv_rates: &'static [usize],
         log_message_columns: &'static [usize],
@@ -153,7 +153,7 @@ fn embedded_zk100_profiles_match_the_registered_parameter_table() {
             setup.pcs_params.log_batch_size,
             setup.pcs_params.profile,
         )
-        .expect("registered Zk100 profile");
+        .expect("registered Standard profile");
 
         assert_eq!(config.log_inv_rates, expected.log_inv_rates);
         assert_eq!(config.initial_log_msg_cols, expected.log_message_columns[0]);
@@ -205,7 +205,7 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
     let params = flock_core::pcs::PcsParams::new(
         22,
         6,
-        flock_core::pcs::ligerito::LigeritoProfile::Zk100,
+        flock_core::pcs::ligerito::LigeritoProfile::Standard,
         true,
     )
     .unwrap();

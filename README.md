@@ -46,14 +46,14 @@ and the native `GF(2^128)` VEIL backend. See the
 ## Performance
 
 The table compares non-ZK FLOCK using the Secure profile at rate 1/2 with
-**canonical full-ZK Zk100** at rate 1/8. Zk100 enforces 100-bit PCS and composed
-interactive numerical bounds. The public ZK constructor, CLI, simulator, and
+**full-ZK Standard** at rate 1/8. Standard enforces 100-bit PCS and
+composed interactive numerical bounds. The public ZK constructor, CLI, simulator, and
 ZK examples select it by default. Non-ZK FLOCK keeps its existing configuration.
 These profiles have different soundness budgets, so this comparison does not
 isolate the intrinsic cost of ZK. The concrete Lean tables still describe the
 legacy Secure ZK configuration; [porting them is pending](docs/ZK_PARAMETERS.md#security-scope).
 
-| Hashes | FLOCK prove | ZK100 prove | FLOCK verify | ZK100 verify | FLOCK size | ZK100 size | Size overhead | Proving ratio |
+| Hashes | FLOCK prove | ZK prove | FLOCK verify | ZK verify | FLOCK size | ZK size | Size overhead | Proving ratio |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 64 | 4.515 ms | 20.772 ms | 13.458 ms | 11.880 ms | 274,609 B | 436,001 B | 58.8% | 4.60× |
 | 128 | 5.136 ms | 20.039 ms | 13.871 ms | 11.465 ms | 283,537 B | 436,769 B | 54.0% | 3.90× |
@@ -64,8 +64,9 @@ legacy Secure ZK configuration; [porting them is pending](docs/ZK_PARAMETERS.md#
 | 4,096 | 23.842 ms | 106.233 ms | 16.985 ms | 14.940 ms | 451,937 B | 505,633 B | 11.9% | 4.46× |
 
 Measured on an Apple M2 Pro with 16 GiB RAM, using Rust 1.98.0,
-implementation commit `fc47c3a18847beb7bfd97d0f7da10159c3d8ca15`, a release build
-with `target-cpu=native`, and the benchmark's default thread pool. Each value
+implementation commit `fc47c3a18847beb7bfd97d0f7da10159c3d8ca15` (before the
+profile rename to `Standard`), a release build with `target-cpu=native`,
+and the benchmark's default thread pool. Each value
 is the median of five samples after one untimed warm-up per protocol and
 batch size. Every generated proof is verified. Setup construction, message
 and digest generation, and serialization are excluded from the timings;
@@ -73,11 +74,11 @@ the public prove APIs' witness checks are included.
 
 Sizes are bincode-serialized proof objects, excluding the separately returned
 witness commitment, public digests, and bundle framing. Size overhead is
-`(ZK100 size / FLOCK size - 1) * 100%`; the proving ratio is
-`ZK100 prove time / FLOCK prove time`. Fresh ZK randomness causes small size
+`(ZK size / FLOCK size - 1) * 100%`; the proving ratio is
+`ZK prove time / FLOCK prove time`. Fresh ZK randomness causes small size
 variations: the five 4,096-hash proofs ranged from 503,137 to 505,985 B.
 
-ZK100 pads batches below 256 hashes to 256 slots. The 64- and 128-hash non-ZK
+ZK pads batches below 256 hashes to 256 slots. The 64- and 128-hash non-ZK
 baselines use smaller circuit shapes with ad hoc PCS schedules below the
 registry floor, so those rows also differ in circuit geometry.
 
@@ -198,6 +199,6 @@ Apache-2.0 or MIT.
 
 ## Status
 
-Experimental and unaudited. The Lean proof covers the legacy Secure parameter
-model; porting it to canonical Zk100 is pending. Production Rust expands an
+Unaudited. The Lean proof covers the legacy Secure parameter model;
+porting it to Standard is pending. Production Rust expands an
 OS seed with BLAKE3 XOF, and Rust-to-Lean correspondence remains future work.

@@ -133,13 +133,13 @@ they do not make a standalone pROM theorem for this package.
 ## Parameters and scope
 
 The hiding PCS uses `PcsParams { m: 22, log_inv_rate: 3, log_batch_size: 6,
-profile: Zk100, zk: true }`, the production floor. The committed message is
-`[mask || z]`, so the Ligerito config is the embedded `m23_zk100` profile
+profile: Standard, zk: true }`, the production floor. The committed message is
+`[mask || z]`, so the Ligerito config is the embedded `m23_standard` profile
 and the blind grind uses one bit. `BitPcs::new` runs the production
 batch-opening certificate on both configs: the L0 query count must fit in
 the mask symbols of one lane, query-phase grinding is not allowed, fold
 grinding is bounded per site and in the number of sites, and the blind grind
-is in range. Only `m = 22..=26` has registered Zk100 schedules; other dimensions
+is in range. Only `m = 22..=26` has registered Standard schedules; other dimensions
 are rejected without an ad hoc fallback.
 The grind bounds are the production values from `succinct_veil.rs`. The VEIL constraint layer uses
 `ConstraintParameters::succinct_flock_secure()` and every circuit passes

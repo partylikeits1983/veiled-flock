@@ -1,6 +1,6 @@
 # Canonical 100-bit ZK PCS
 
-The full-ZK prover, verifier, simulator, CLI, and ZK examples use the `Zk100`
+The full-ZK prover, verifier, simulator, CLI, and ZK examples use the `Standard`
 profile at rate 1/8 (`log_inv_rate = 3`). Non-ZK FLOCK retains its existing
 profiles and defaults; the preimage benchmark baseline uses Secure at rate 1/2.
 
@@ -11,15 +11,14 @@ cargo run --locked --release -p flock-prover --features veil \
   --example preimage_scaling -- 5
 ```
 
-Library callers use `Blake3PreimageZkSetup::new(n)`. No experimental feature,
-constructor, or benchmark selector is required.
+Library callers use `Blake3PreimageZkSetup::new(n)`.
 
 ## Security scope
 
 Before proving, simulation, or verification, the ZK setup checks the profile,
 rate, circuit geometry, query schedule, and computed PCS and composed
 interactive soundness bounds. Both numerical bounds must be at least 100 bits.
-Prover and verifier load the same registered `m23_zk100` through `m27_zk100`
+Prover and verifier load the same registered `m23_standard` through `m27_standard`
 configs. Legacy Secure proofs and proofs from the former experimental
 transcript domain must be regenerated for this configuration.
 
@@ -31,12 +30,12 @@ security certificate for these parameters.
 
 **Lean coverage is pending.** The concrete Lean model still uses the legacy
 rate-1/2 Secure tables, positive fold-grinding schedules, and larger L0 query
-counts. Its concrete statistical-ZK theorem must not be attributed to Zk100.
+counts. Its concrete statistical-ZK theorem must not be attributed to Standard.
 Porting it requires updating the code domains and handling an empty
 fold-grinding schedule in the formal sampling state machine. Rust-to-Lean
 correspondence and the seeded-XOF instantiation also remain unproved.
 
-All Zk100 levels disable query grinding, fold grinding, tapering, and OOD
+All Standard levels disable query grinding, fold grinding, tapering, and OOD
 sampling. The separate L0 blind-combination challenge uses one grinding bit.
 
 | Slots | Committed m | Queries by level | PCS bits | Composed interactive bits |
@@ -71,7 +70,9 @@ that bound.
 ## Measurements
 
 Results correspond to implementation commit
-`fc47c3a18847beb7bfd97d0f7da10159c3d8ca15`.
+`fc47c3a18847beb7bfd97d0f7da10159c3d8ca15`, before the profile was renamed
+from `Zk100` to `Standard`. The raw CSV retains its original protocol labels;
+the rename leaves parameters and binary proof encoding unchanged.
 
 Measured on an Apple M2 Pro with 16 GiB RAM, Rust 1.98.0, release mode,
 `target-cpu=native`, and the benchmark's default thread pool. Values are
@@ -83,11 +84,11 @@ Sizes count bincode-serialized proof objects, excluding commitments, public
 digests, and bundle framing. The two protocols prove the same public batch,
 but full ZK pads batches below 256 to 256 slots. The 64/128-hash non-ZK
 baselines use smaller shapes and ad hoc below-registry PCS schedules. The
-Secure baseline and Zk100 profile have different soundness budgets;
+Secure baseline and Standard profile have different soundness budgets;
 this is an implementation comparison, not a security-matched measurement of
 the intrinsic cost of ZK.
 
-| Hashes | FLOCK prove | ZK100 prove | FLOCK verify | ZK100 verify | FLOCK size | ZK100 size | Size overhead | Proving ratio |
+| Hashes | FLOCK prove | ZK prove | FLOCK verify | ZK verify | FLOCK size | ZK size | Size overhead | Proving ratio |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 64 | 4.515 ms | 20.772 ms | 13.458 ms | 11.880 ms | 274,609 B | 436,001 B | 58.8% | 4.60× |
 | 128 | 5.136 ms | 20.039 ms | 13.871 ms | 11.465 ms | 283,537 B | 436,769 B | 54.0% | 3.90× |
@@ -97,8 +98,8 @@ the intrinsic cost of ZK.
 | 2,048 | 15.554 ms | 63.120 ms | 15.342 ms | 13.122 ms | 433,425 B | 490,569 B | 13.2% | 4.06× |
 | 4,096 | 23.842 ms | 106.233 ms | 16.985 ms | 14.940 ms | 451,937 B | 505,633 B | 11.9% | 4.46× |
 
-[Raw samples summary](benchmarks/zk100.csv) includes the minimum
-and maximum proof sizes. At 4,096 hashes, Zk100 proof sizes ranged
+[Raw samples summary](benchmarks/standard.csv) includes the minimum
+and maximum proof sizes. At 4,096 hashes, Standard proof sizes ranged
 from 503,137 to 505,985 B. Fresh ZK randomness accounts for that variation.
 
 ## Implementation improvement
@@ -113,8 +114,8 @@ materialized construction, including SHA padding boundaries and short trees.
 
 In the earlier five-sample experimental runs on the same machine, the
 4,096-hash proving median decreased from 133.450 ms to 107.718 ms (19.3%). See the
-[before-change results](benchmarks/experimental-zk100-before-merkle-streaming.csv)
-and [after-change results](benchmarks/experimental-zk100.csv), measured before
+[before-change results](benchmarks/zk-before-merkle-streaming.csv)
+and [after-change results](benchmarks/zk-after-merkle-streaming.csv), measured before
 the canonical profile/domain switch.
 The hashing inputs and proof format are unchanged. This implementation
 improvement is retained by the canonical ZK path.

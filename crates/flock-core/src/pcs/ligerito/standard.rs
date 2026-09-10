@@ -1,12 +1,7 @@
-//! Canonical full-ZK rate-1/8 UDR schedules for the registered batch shapes.
-
 use super::LigeritoSecurityConfig;
 
-/// Reproduce the small-proof schedule at committed dimensions 23..=27.
-/// Keep L0 at 121 queries and pay aggregate slack at narrower levels.
-/// The 256-slot case adds one final-level query to the original experiment
-/// so the composed FLOCK + VEIL + PCS bound also clears 100 bits.
-pub fn zk100_config(m: usize) -> Result<LigeritoSecurityConfig, String> {
+/// Build the Standard ZK schedule for a supported committed dimension.
+pub fn standard_config(m: usize) -> Result<LigeritoSecurityConfig, String> {
     let queries: &[usize] = match m {
         23 => &[121, 114, 111],
         24 => &[121, 113, 110],
@@ -38,7 +33,7 @@ mod tests {
     #[test]
     fn canonical_schedules_validate_and_roundtrip() {
         for m in 23..=27 {
-            let config = zk100_config(m).unwrap();
+            let config = standard_config(m).unwrap();
             assert!(config.aggregate_soundness_bound_zk_l0().unwrap().bits() >= 100.0);
             assert_eq!(config.levels[0].log_inv_rate, 3);
             assert!(
@@ -53,7 +48,7 @@ mod tests {
             assert_eq!(prover.queries, verifier.queries);
             let encoded = config.to_toml_string().unwrap();
             assert_eq!(
-                super::super::embedded_security_config(m, LigeritoProfile::Zk100).unwrap(),
+                super::super::embedded_security_config(m, LigeritoProfile::Standard).unwrap(),
                 encoded
             );
             let decoded = LigeritoSecurityConfig::from_toml_str(&encoded).unwrap();
@@ -62,7 +57,7 @@ mod tests {
                 (prover, verifier)
             );
             assert_eq!(
-                LigeritoSecurityConfig::derive_profile(m, LigeritoProfile::Zk100)
+                LigeritoSecurityConfig::derive_profile(m, LigeritoProfile::Standard)
                     .unwrap()
                     .to_toml_string()
                     .unwrap(),
@@ -73,7 +68,7 @@ mod tests {
             assert!(untuned.aggregate_soundness_bound_zk_l0().unwrap().bits() < 100.0);
         }
         for m in [0, 22, 28, usize::MAX] {
-            assert!(zk100_config(m).is_err());
+            assert!(standard_config(m).is_err());
         }
     }
 }

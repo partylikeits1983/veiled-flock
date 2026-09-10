@@ -2,11 +2,11 @@
 
 VEIL-FLOCK has a Lean proof of statistical zero knowledge for a formal model
 of the 64-byte BLAKE3-preimage protocol in the classical programmable
-random-oracle model (pROM). The canonical Rust ZK path uses Zk100 at rate 1/8;
+random-oracle model (pROM). The canonical Rust ZK path uses Standard at rate 1/8;
 the concrete Lean model still describes the legacy Secure rate-1/2 parameters.
 Porting the concrete
 code domains and empty fold-grinding schedule is pending. The existing
-concrete theorem does not certify the canonical Zk100 configuration, and
+concrete theorem does not certify the canonical Standard configuration, and
 Rust is not mechanically linked to the Lean model.
 
 The Lean relation is broader than the Rust relation: it checks padded public
@@ -23,7 +23,7 @@ implementation is unaudited and should not be used for production secrets.
 | Zero knowledge | Proved for the legacy Secure finite Lean uniform coin model with distance `< 2^-126`; Rust correspondence and seeded XOF instantiation not proved |
 | Algebraic privacy | Perfect in the formal uniform coin model, conditioned on the public statement and accepted challenge history |
 | Noninteractive privacy loss | Random-oracle prequeries, collisions, nonce collisions, and bounded-grinding failures |
-| Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Zk100 Ligerito; numerical PCS and composed floors of 100 bits |
+| Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Standard Ligerito; numerical PCS and composed floors of 100 bits |
 | Fiat-Shamir soundness | Classical-ROM assumption and reduction boundary |
 | Argument of knowledge | Not claimed |
 | QROM/post-quantum ZK | Not claimed |
@@ -43,7 +43,7 @@ relation, the real adaptive adversary view is within `2^-126` statistical
 distance of a witness-free simulated view in the finite classical pROM model.
 
 Because the formal relation is broader than the Rust BLAKE3 relation, the
-privacy result could be transferred to Rust only after the Zk100 parameter
+privacy result could be transferred to Rust only after the Standard parameter
 port and missing correspondence obligations are discharged.
 
 Rust production provers sample a 32-byte OS seed and expand it with BLAKE3 XOF
@@ -168,7 +168,7 @@ adds these errors:
 - VEIL dot-product and Hadamard binding
 - operand- and product-code proximity generation
 - Hadamard reduction and linkage
-- Zk100-profile Ligerito whole-opening soundness
+- Standard-profile Ligerito whole-opening soundness
 
 The RS proximity terms use the finite-length unique-decoding backoff
 `gamma = delta/2 - 3/(delta*N)` and union-bound every live binary fold. Fast
@@ -188,7 +188,7 @@ for every adversary query budget and number of proof attempts.
 
 ## Format and API
 
-The verifier checks the circuit digest, mask count, witness layout, Zk100 PCS
+The verifier checks the circuit digest, mask count, witness layout, Standard PCS
 profile marker, registered code geometry, query budget, and VEIL parameters.
 The canonical bundle has a 1 MiB decode limit, rejects trailing bytes, and
 rejects parameter mismatches.
@@ -211,7 +211,7 @@ cryptographic and side-channel review is required before production use.
 
 ## Canonical ZK parameters
 
-`Blake3PreimageZkSetup::new`, the CLI, and the ZK examples use rate-1/8 Zk100.
+`Blake3PreimageZkSetup::new`, the CLI, and the ZK examples use rate-1/8 Standard.
 Non-ZK FLOCK keeps its existing profiles and defaults. The canonical ZK
 simulator and ROM numerical-bound API use the same registered configuration.
 Legacy Secure and experimental-profile proofs must be regenerated.

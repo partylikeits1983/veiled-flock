@@ -1,22 +1,5 @@
-//! Regenerator for the Ligerito security configs.
-//!
-//! For each `m` in 22..=35 it mechanically derives the security config of
-//! the non-ZK named profiles via `LigeritoSecurityConfig::derive_profile`:
-//!
-//! - `fast`:   JohnsonOod, rate 1/2, η = 0.02, 100-bit overall soundness.
-//! - `slim`:   JohnsonOod, rate 1/4, η = 0.02, 16-bit query grinding,
-//!             100-bit overall.
-//! - `secure`: Udr, rate 1/2, ε* = 1e-3, 120-bit overall.
-//!
-//! Also generates `zk100` for committed m=23..=27: UDR at rate 1/8,
-//! tuned for at least 100-bit aggregate full-ZK interactive soundness.
-//!
-//! Each derived config is validated (including the whole-protocol union
-//! bound), serialized, round-trip checked, and written to
-//! `crates/flock-core/configs/ligerito/m<m>_<profile>.toml` (these are the
-//! configs `flock-core` embeds via `include_str!`).
-//!
-//! Run: `cargo run --release --example gen_ligerito_configs`
+//! Regenerate and validate the embedded Ligerito security configs.
+//! Run with `cargo run --release --example gen_ligerito_configs`.
 
 use std::path::Path;
 
@@ -27,7 +10,7 @@ fn main() {
         LigeritoProfile::Fast,
         LigeritoProfile::Slim,
         LigeritoProfile::Secure,
-        LigeritoProfile::Zk100,
+        LigeritoProfile::Standard,
     ];
     // Configs live in the flock-core crate (which embeds them via include_str!).
     let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../flock-core/configs/ligerito");
@@ -35,7 +18,7 @@ fn main() {
 
     for m in 22..=35usize {
         for &profile in &profiles {
-            if profile == LigeritoProfile::Zk100 && !(23..=27).contains(&m) {
+            if profile == LigeritoProfile::Standard && !(23..=27).contains(&m) {
                 continue;
             }
             let path = dir.join(format!("m{m}_{}.toml", profile.as_str()));

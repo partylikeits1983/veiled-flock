@@ -39,34 +39,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
-mod zk100;
-pub use zk100::zk100_config;
+mod standard;
+pub use standard::standard_config;
 
 // ===================================================================
 // Config
 // ===================================================================
 
-/// Per-level Reed-Solomon inverse rate (log₂). The CORE Ligerito idea is to
-/// **decrease the rate at deeper levels**: at level i, lower rate ⟹ Johnson
-/// list-decoding per-query error = √ρ ≈ 2^(-log_inv_rate/2) ⟹ fewer queries
-/// needed for the same security ⟹ drastically smaller opened-rows cost at
-/// deeper levels.
-///
-/// `log_inv_rates[i]` is the log inverse rate at commit i (so wtns_0 uses
-/// `log_inv_rates[0]`, wtns_1 uses `log_inv_rates[1]`, …). Length = R + 1.
-/// Named parameter profile for the Ligerito PCS. Decouples "which security
-/// config" from the raw code rate: `Fast` and `Secure` share rate 1/2 but
-/// differ in regime/target, so the rate alone cannot key the config lookup.
-///
-/// - `Fast`:   rate 1/2, Johnson list-decoding regime with OOD binding,
-///             100-bit overall soundness. Default.
-/// - `Slim`:   rate 1/4, Johnson + OOD + 16-bit query grinding, 100-bit
-///             overall. Roughly half the proof, ~2x the L0 encoding work.
-/// - `Secure`: rate 1/2, unique-decoding regime (list size 1, no OOD),
-///             120-bit overall soundness. Largest proof, most conservative
-///             analysis.
-/// - `Zk100`: rate 1/8 UDR, tuned for 100-bit aggregate interactive soundness
-///             in the full-ZK BLAKE3-preimage composition.
+/// Named PCS security configuration; the code rate alone does not identify a profile.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LigeritoProfile {
@@ -74,9 +54,8 @@ pub enum LigeritoProfile {
     Fast,
     Slim,
     Secure,
-    /// Canonical full-ZK rate-1/8 UDR profile, targeting 100-bit aggregate
-    /// interactive soundness for the registered BLAKE3-preimage shapes.
-    Zk100,
+    /// Default profile for full-ZK proofs.
+    Standard,
 }
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -95,15 +74,13 @@ impl LigeritoProfile {
         match self {
             Self::Fast | Self::Secure => 1,
             Self::Slim => 2,
-            Self::Zk100 => 3,
+            Self::Standard => 3,
         }
     }
-    /// Round-by-round soundness target (bits) the profile's configs are derived
-    /// for: every round must individually clear this level (total security =
-    /// min over rounds, per the Fiat-Shamir / `soundcalc` convention).
+    /// Security target used to derive the profile.
     pub fn security_bits(self) -> usize {
         match self {
-            Self::Fast | Self::Slim | Self::Zk100 => 100,
+            Self::Fast | Self::Slim | Self::Standard => 100,
             Self::Secure => 120,
         }
     }
@@ -112,7 +89,7 @@ impl LigeritoProfile {
             Self::Fast => "fast",
             Self::Slim => "slim",
             Self::Secure => "secure",
-            Self::Zk100 => "zk100",
+            Self::Standard => "standard",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -120,7 +97,7 @@ impl LigeritoProfile {
             "fast" => Some(Self::Fast),
             "slim" => Some(Self::Slim),
             "secure" => Some(Self::Secure),
-            "zk100" => Some(Self::Zk100),
+            "standard" => Some(Self::Standard),
             _ => None,
         }
     }
@@ -436,13 +413,13 @@ const EMBEDDED_CONFIGS: &[((usize, LigeritoProfile), &str)] =
 /// Look up the embedded security config TOML for `(m, profile)`.
 /// Returns `None` if no config has been derived for this combination yet.
 pub fn embedded_security_config(m: usize, profile: LigeritoProfile) -> Option<&'static str> {
-    if profile == LigeritoProfile::Zk100 {
+    if profile == LigeritoProfile::Standard {
         return match m {
-            23 => Some(include_str!("../../configs/ligerito/m23_zk100.toml")),
-            24 => Some(include_str!("../../configs/ligerito/m24_zk100.toml")),
-            25 => Some(include_str!("../../configs/ligerito/m25_zk100.toml")),
-            26 => Some(include_str!("../../configs/ligerito/m26_zk100.toml")),
-            27 => Some(include_str!("../../configs/ligerito/m27_zk100.toml")),
+            23 => Some(include_str!("../../configs/ligerito/m23_standard.toml")),
+            24 => Some(include_str!("../../configs/ligerito/m24_standard.toml")),
+            25 => Some(include_str!("../../configs/ligerito/m25_standard.toml")),
+            26 => Some(include_str!("../../configs/ligerito/m26_standard.toml")),
+            27 => Some(include_str!("../../configs/ligerito/m27_standard.toml")),
             _ => None,
         };
     }
@@ -1399,24 +1376,10 @@ impl LigeritoSecurityConfig {
         Ok(cfg)
     }
 
-    /// Derive the security config for a named [`LigeritoProfile`] at witness
-    /// size `m`. Each profile targets its bit level under **round-by-round
-    /// soundness**: every error term (pg + fold grinding, query + query
-    /// grinding, OOD) clears the target individually, and the protocol's
-    /// security is the *minimum* over rounds — the notion that governs
-    /// Fiat-Shamir security (cf. Ethereum's `soundcalc`), not a whole-protocol
-    /// union bound over terms. The three shipped profiles:
-    ///
-    /// - `Fast`:   JohnsonOod, rate 1/2, η = 0.02, 100 bits per round.
-    /// - `Slim`:   JohnsonOod, rate 1/4, η = 0.02, 16-bit query grinding at
-    ///             every level, 100 bits per round.
-    /// - `Secure`: Udr, rate 1/2, ε* = 1e-3, 120 bits per round.
-    ///
-    /// `Zk100` instead uses the registered 100-bit aggregate ZK schedules
-    /// from [`zk100_config`], for committed m=23..=27 only.
+    /// Derive security parameters for a named profile and committed dimension.
     pub fn derive_profile(m: usize, profile: LigeritoProfile) -> Result<Self, String> {
-        if profile == LigeritoProfile::Zk100 {
-            return zk100_config(m);
+        if profile == LigeritoProfile::Standard {
+            return standard_config(m);
         }
         /// Johnson slack below the Johnson radius, flat across levels.
         const JOHNSON_ETA: f64 = 0.02;
@@ -1424,7 +1387,7 @@ impl LigeritoSecurityConfig {
         let log_inv_rate = profile.log_inv_rate();
         let query_grind: usize = match profile {
             LigeritoProfile::Slim => 16,
-            LigeritoProfile::Fast | LigeritoProfile::Secure | LigeritoProfile::Zk100 => 0,
+            LigeritoProfile::Fast | LigeritoProfile::Secure | LigeritoProfile::Standard => 0,
         };
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
@@ -1437,7 +1400,7 @@ impl LigeritoSecurityConfig {
         // below uses the n-aware `udr_per_query_bits`.
         let per_query_bits_feas = |rate: usize| -> f64 {
             match profile {
-                LigeritoProfile::Secure | LigeritoProfile::Zk100 => {
+                LigeritoProfile::Secure | LigeritoProfile::Standard => {
                     udr_per_query_bits_asymptotic(rate)
                 }
                 LigeritoProfile::Fast | LigeritoProfile::Slim => {
@@ -1477,7 +1440,7 @@ impl LigeritoSecurityConfig {
             // Actual per-level per-query bits: n-aware (maximal radius) for
             // UDR, length-agnostic Johnson otherwise.
             let per_q = match profile {
-                LigeritoProfile::Secure | LigeritoProfile::Zk100 => {
+                LigeritoProfile::Secure | LigeritoProfile::Standard => {
                     udr_per_query_bits(rate, cols, UDR_PROXIMITY_LOSS)
                 }
                 LigeritoProfile::Fast | LigeritoProfile::Slim => {
@@ -1494,7 +1457,7 @@ impl LigeritoSecurityConfig {
             let eps_query = queries as f64 * per_q;
 
             let (regime, eta, proximity_loss, eps_pg, ood_samples, eps_ood) = match profile {
-                LigeritoProfile::Secure | LigeritoProfile::Zk100 => {
+                LigeritoProfile::Secure | LigeritoProfile::Standard => {
                     // No row-union penalty in the unique-decoding regime (list
                     // size 1): per Diamond and Gruen, MCA-commutes holds with
                     // error ε directly (vs the Johnson regime's 2^{ℓ-1} factor).
@@ -1554,7 +1517,7 @@ impl LigeritoSecurityConfig {
         }
 
         let analysis = match profile {
-            LigeritoProfile::Secure | LigeritoProfile::Zk100 => {
+            LigeritoProfile::Secure | LigeritoProfile::Standard => {
                 "no_row_union_over_ben_sasson_2025_cor_1_4"
             }
             LigeritoProfile::Fast | LigeritoProfile::Slim => {
