@@ -47,25 +47,37 @@ and the native `GF(2^128)` VEIL backend. See the
 
 | Hashes | FLOCK prove | FLOCK verify | FLOCK size | Full-ZK prove | Full-ZK verify | Full-ZK size | Size overhead vs. non-ZK FLOCK |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 64 | 5.402 ms | 12.705 ms | 274,676 B | 21.898 ms | 15.549 ms | 803,764 B | 192.6% |
-| 128 | 6.086 ms | 13.121 ms | 283,604 B | 21.832 ms | 15.189 ms | 805,556 B | 184.0% |
-| 256 | 7.685 ms | 13.192 ms | 377,764 B | 21.804 ms | 14.940 ms | 809,364 B | 114.3% |
-| 512 | 10.003 ms | 13.578 ms | 385,148 B | 26.817 ms | 16.263 ms | 828,412 B | 115.1% |
-| 1,024 | 10.280 ms | 14.698 ms | 398,724 B | 39.577 ms | 16.389 ms | 880,364 B | 120.8% |
-| 2,048 | 14.888 ms | 14.599 ms | 433,492 B | 78.313 ms | 17.229 ms | 929,468 B | 114.4% |
-| 4,096 | 23.771 ms | 17.193 ms | 452,004 B | 134.793 ms | 19.671 ms | 1,017,308 B | 125.1% |
+| 64 | 4.944 ms | 13.123 ms | 274,609 B | 19.350 ms | 11.454 ms | 801,705 B | 191.9% |
+| 128 | 5.140 ms | 13.544 ms | 283,537 B | 18.987 ms | 11.338 ms | 801,865 B | 182.8% |
+| 256 | 6.447 ms | 13.467 ms | 377,697 B | 19.485 ms | 11.534 ms | 802,185 B | 112.4% |
+| 512 | 7.961 ms | 14.042 ms | 385,081 B | 24.723 ms | 12.499 ms | 811,281 B | 110.7% |
+| 1,024 | 10.381 ms | 14.460 ms | 398,657 B | 32.597 ms | 11.974 ms | 847,489 B | 112.6% |
+| 2,048 | 15.925 ms | 15.033 ms | 433,425 B | 49.119 ms | 13.442 ms | 863,857 B | 99.3% |
+| 4,096 | 23.917 ms | 16.476 ms | 451,937 B | 81.780 ms | 15.662 ms | 885,585 B | 96.0% |
 
-Measured on an AMD Ryzen 7 7840HS.
+Measured on an Apple M2 Pro with 16 GiB RAM, using Rust 1.98.0,
+commit `9a369670ba5ad3d9a450b859572760b179085666`, a release build with
+`target-cpu=native`, and the benchmark's default thread pool. Each value is
+the median of five samples after one untimed warm-up per protocol and batch
+size. Every generated proof is verified. Setup construction, message and
+digest generation, and serialization are excluded from the timings; the
+public prove APIs' witness checks are included.
 
-The [VEIL paper](https://eprint.iacr.org/2026/683) reports 12% proof-size
-overhead for a much larger `2^29`-element trace over a 31-bit prime field. These
-benchmarks use smaller instances over `GF(2^128)`, so the results are not
-directly comparable. Wider field elements increase serialized size, but they
-are not the only source of overhead. The ZK PCS doubles the committed message
-dimension with `[mask || witness]` and doubles the initial Merkle leaf width
-with a same-length blinding vector `g`. The smaller instances also provide less
-opportunity to amortize these costs. Separate VEIL constraint and ring-linkage
-proofs, plus the public digest list, add more bytes.
+Sizes are the bincode-serialized proof objects, excluding the separately
+returned witness commitment, public digests, and bundle framing. Size overhead
+is `(full-ZK size / FLOCK size - 1) * 100%`. Fresh ZK randomness causes small
+size variations: the five 4,096-hash proofs ranged from 882,737 to 887,089 B.
+
+Both setups select the Secure profile at rate 1/2 (`log_inv_rate = 1`). The
+full-ZK path uses registered PCS configurations and pads batches below 256
+hashes to 256 slots. The 64- and 128-hash non-ZK baselines use smaller circuit
+shapes with ad hoc PCS schedules below the registry floor, so those rows do
+not compare identical circuit geometry or registered security budgets.
+
+The ZK PCS doubles the committed message dimension with `[mask || witness]`
+and doubles the initial Merkle leaf width with a same-length blinding vector
+`g`. VEIL constraint and ring-linkage proofs add further overhead. These
+measurements establish a baseline for future size and proving-time experiments.
 
 Reproduce the benchmark with:
 
@@ -182,4 +194,5 @@ Apache-2.0 or MIT.
 ## Status
 
 Experimental and unaudited. The Lean proof covers statistical zero knowledge
-for the formal model; Rust-to-Lean correspondence remains future work.
+for the formal model; production Rust expands an OS seed with BLAKE3 XOF, and
+Rust-to-Lean correspondence remains future work.

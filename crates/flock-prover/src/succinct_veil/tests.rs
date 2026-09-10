@@ -20,9 +20,13 @@ fn succinct_shape_rejects_nonidentity_c() {
 }
 
 #[test]
-fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
+fn production_entry_point_is_pinned_to_supported_relation_and_registered_pcs() {
     let setup = Blake3PreimageZkSetup::new(2);
     assert!(super::supported_mask_count(&setup.r1cs).is_some());
+    assert_eq!(
+        setup.pcs_params.log_inv_rate,
+        setup.pcs_params.profile.log_inv_rate()
+    );
     validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
     let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
         .expect("production PIOP soundness certificate");
@@ -44,6 +48,13 @@ fn production_entry_point_is_pinned_to_the_certified_relation_and_secure_pcs() {
     wrong_profile.profile = flock_core::pcs::ligerito::LigeritoProfile::Fast;
     assert_eq!(
         validate_succinct_parameters(&setup.r1cs, &wrong_profile),
+        Err(SuccinctVeilError::InvalidParameters)
+    );
+
+    let mut wrong_rate = setup.pcs_params.clone();
+    wrong_rate.log_inv_rate = 3;
+    assert_eq!(
+        validate_succinct_parameters(&setup.r1cs, &wrong_rate),
         Err(SuccinctVeilError::InvalidParameters)
     );
 }
@@ -191,13 +202,13 @@ fn production_mask_layout_matches_every_visible_private_coordinate() {
 
 #[test]
 fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
-    let params = flock_core::pcs::PcsParams {
-        m: 22,
-        log_inv_rate: 1,
-        log_batch_size: 6,
-        profile: flock_core::pcs::ligerito::LigeritoProfile::Secure,
-        zk: true,
-    };
+    let params = flock_core::pcs::PcsParams::new(
+        22,
+        6,
+        flock_core::pcs::ligerito::LigeritoProfile::Secure,
+        true,
+    )
+    .unwrap();
     assert!(validate_l0_hiding_budget(&params, &[512]).is_ok());
     validate_batch_opening(&params, &[512], &[0], &[1], &[false], 6, &[]).unwrap();
     assert!(matches!(

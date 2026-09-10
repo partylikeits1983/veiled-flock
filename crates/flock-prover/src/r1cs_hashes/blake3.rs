@@ -91,6 +91,7 @@
 use super::common::{BitRecord, add_carry_parts, or_bit_at, or_u32_at_bit, xor_dedup};
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
+use flock_core::pcs::ligerito::{LigeritoProfile, UnsupportedLogInvRate};
 use flock_core::pcs::{Commitment, PcsParams};
 use flock_core::proof::R1csClaim;
 use flock_core::r1cs::{BlockR1cs, SparseBinaryMatrix};
@@ -1610,34 +1611,25 @@ impl Blake3Setup {
     }
 
     pub fn new(n_blocks: usize) -> Self {
-        Self::with_log_inv_rate(n_blocks, 1)
+        Self::with_profile(n_blocks, LigeritoProfile::Fast)
     }
 
-    /// Build a setup with a custom PCS `log_inv_rate`.
-    pub fn with_log_inv_rate(n_blocks: usize, log_inv_rate: usize) -> Self {
-        // Rate keys the legacy profiles: 1 -> Fast, 2 -> Slim.
-        let profile = match log_inv_rate {
-            1 => flock_core::pcs::ligerito::LigeritoProfile::Fast,
-            2 => flock_core::pcs::ligerito::LigeritoProfile::Slim,
-            _ => flock_core::pcs::ligerito::LigeritoProfile::Fast, // other rates default to Fast
-        };
-        Self::with_profile_and_rate(n_blocks, profile, log_inv_rate)
+    /// Build a setup from the legacy PCS rate selector: 1 = Fast, 2 = Slim.
+    /// Use [`Self::with_profile`] to select Secure.
+    ///
+    /// # Errors
+    /// Returns [`UnsupportedLogInvRate`] when the rate is not 1 or 2.
+    pub fn try_with_log_inv_rate(
+        n_blocks: usize,
+        log_inv_rate: usize,
+    ) -> Result<Self, UnsupportedLogInvRate> {
+        let profile = LigeritoProfile::try_from(log_inv_rate)?;
+        Ok(Self::with_profile(n_blocks, profile))
     }
 
     /// Build a setup for a named Ligerito profile (fast/slim/secure);
     /// the PCS rate follows the profile.
-    pub fn with_profile(
-        n_blocks: usize,
-        profile: flock_core::pcs::ligerito::LigeritoProfile,
-    ) -> Self {
-        Self::with_profile_and_rate(n_blocks, profile, profile.log_inv_rate())
-    }
-
-    fn with_profile_and_rate(
-        n_blocks: usize,
-        profile: flock_core::pcs::ligerito::LigeritoProfile,
-        log_inv_rate: usize,
-    ) -> Self {
+    pub fn with_profile(n_blocks: usize, profile: LigeritoProfile) -> Self {
         assert!(n_blocks >= 1, "n_blocks must be ≥ 1");
         let n_log = min_n_blocks_log(n_blocks);
         let r1cs = build_block_r1cs(n_log);
@@ -1646,13 +1638,8 @@ impl Blake3Setup {
         // the prove-cycle scratch buffers (see scratch::prewarm_prover).
         r1cs.csc_lincheck_circuit();
         flock_core::scratch::prewarm_prover(r1cs.m);
-        let pcs_params = PcsParams {
-            m: r1cs.m,
-            log_inv_rate,
-            log_batch_size: 6,
-            profile,
-            zk: false,
-        };
+        let pcs_params =
+            PcsParams::new(r1cs.m, 6, profile, false).expect("valid BLAKE3 PCS parameters");
         Self {
             n_blocks,
             r1cs,

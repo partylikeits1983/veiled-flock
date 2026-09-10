@@ -33,8 +33,8 @@ mod zk_audit;
 #[cfg(feature = "zk")]
 pub use commit::commit_zk_with_ro;
 pub use commit::{
-    Commitment, PcsParams, ProverData, commit, commit_into, commit_into_with_ro, commit_with_ro,
-    prefault_codeword_during,
+    Commitment, PcsParams, PcsParamsError, ProfileRateMismatchError, ProverData, commit,
+    commit_into, commit_into_with_ro, commit_with_ro, prefault_codeword_during,
 };
 pub use pack::{LOG_PACKING, pack_witness, unpack_witness};
 pub use ring_switch::{RingSwitchProof, SparseEqTensor};
@@ -1456,13 +1456,8 @@ mod tests {
         let x_outer: Vec<F128> = (0..(m - 6)).map(|_| rng.f128()).collect();
         let rs_claim = zhat_skip_reference(&z, m, z_skip, &x_outer);
 
-        let params = PcsParams {
-            m,
-            log_inv_rate: 1,
-            log_batch_size: 2,
-            profile: Default::default(),
-            zk: true,
-        };
+        let params = PcsParams::new(m, 2, Default::default(), true)
+            .expect("valid hiding PCS test parameters");
         let z_packed = pack_witness(&z, m);
 
         // Packed-direct claim at a random point.
@@ -1581,13 +1576,8 @@ mod tests {
         let spec = SmallMaskSpec::default();
         let p_small = (0..spec.d(m)).map(|_| rng.f128()).collect::<Vec<_>>();
 
-        let params = PcsParams {
-            m,
-            log_inv_rate: 1,
-            log_batch_size: 2,
-            profile: Default::default(),
-            zk: true,
-        };
+        let params = PcsParams::new(m, 2, Default::default(), true)
+            .expect("valid hiding PCS test parameters");
         let p_packed = p_small.clone();
         let (lig_p, lig_v) = tiny_zk_configs();
         let pad = PaddingSpec::dense(m);
@@ -1707,13 +1697,8 @@ mod tests {
 
         // PcsParams MUST set log_batch_size = ligerito_initial_k for L0 reuse.
         let initial_k = 6;
-        let params = PcsParams {
-            m,
-            log_inv_rate: 1,
-            log_batch_size: initial_k,
-            profile: Default::default(),
-            zk: false,
-        };
+        let params = PcsParams::new(m, initial_k, Default::default(), false)
+            .expect("valid Ligerito PCS test parameters");
         let z_packed = pack_witness(&z, m);
         let (commitment, prover_data) = commit(&z_packed, &params);
 

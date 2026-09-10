@@ -55,19 +55,8 @@ impl BitPcs {
     /// against a 256-symbol mask lane and is rejected; `m = 22` is the
     /// smallest accepted shape.
     pub fn new(m: usize) -> Result<Self, VeilError> {
-        if m < LOG_PACKING + LOG_BATCH_SIZE {
-            return Err(VeilError::Ligerito(format!(
-                "m = {m} is below the PCS floor {}",
-                LOG_PACKING + LOG_BATCH_SIZE
-            )));
-        }
-        let params = PcsParams {
-            m,
-            log_inv_rate: 1,
-            log_batch_size: LOG_BATCH_SIZE,
-            profile: LigeritoProfile::Secure,
-            zk: true,
-        };
+        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Secure, true)
+            .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let log_n = params.log_msg_len();
         let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
             .map_err(VeilError::Ligerito)?;
