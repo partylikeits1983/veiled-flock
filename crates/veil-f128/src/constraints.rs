@@ -30,6 +30,14 @@ use crate::{
     },
 };
 
+/// Maximum RS code length accepted by the VEIL constraint compiler.
+///
+/// The production succinct FLOCK profile currently uses at most 8192 rows.
+/// This ceiling leaves room for larger tests and callers while rejecting
+/// adversarial parameter/circuit shapes before they drive oversized
+/// commitment/codeword allocations.
+pub const MAX_CONSTRAINT_CODE_LENGTH: usize = 1 << 20;
+
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LinearCombination {
     pub constant: F128,
@@ -335,6 +343,8 @@ impl ConstraintParameters {
         {
             return Err(ConstraintError::InvalidParameters);
         }
+        checked_code_length(self.linear_padding, self.inverse_rate)?;
+        checked_code_length(self.hadamard_padding, self.inverse_rate)?;
         Ok(self)
     }
 }
@@ -468,7 +478,7 @@ fn constraint_soundness_geometry(
     parameters: ConstraintParameters,
 ) -> Result<ConstraintSoundnessGeometry, ConstraintError> {
     validate_certified_circuit_shape(circuit)?;
-    let padded = padded_circuit(circuit);
+    let padded = padded_circuit(circuit)?;
     let linear_dimension = checked_dimension(padded.num_variables, parameters.linear_padding)?;
     let hadamard_dimension =
         checked_dimension(padded.multiplications.len(), parameters.hadamard_padding)?;
@@ -514,16 +524,20 @@ fn checked_dimension(size: usize, padding: usize) -> Result<usize, ConstraintErr
 }
 
 fn checked_code_length(dimension: usize, inverse_rate: usize) -> Result<usize, ConstraintError> {
-    dimension
-        .next_power_of_two()
-        .checked_mul(inverse_rate)
-        .ok_or(ConstraintError::InvalidParameters)
+    let length = dimension
+        .checked_next_power_of_two()
+        .and_then(|length| length.checked_mul(inverse_rate))
+        .ok_or(ConstraintError::InvalidParameters)?;
+    if length > MAX_CONSTRAINT_CODE_LENGTH {
+        return Err(ConstraintError::InvalidParameters);
+    }
+    Ok(length)
 }
 
 fn checked_hadamard_product_dimension(hadamard_dimension: usize) -> Result<usize, ConstraintError> {
     hadamard_dimension
-        .next_power_of_two()
-        .checked_mul(HADAMARD_PRODUCT_DIMENSION_FACTOR)
+        .checked_next_power_of_two()
+        .and_then(|length| length.checked_mul(HADAMARD_PRODUCT_DIMENSION_FACTOR))
         .and_then(|length| length.checked_sub(1))
         .ok_or(ConstraintError::InvalidParameters)
 }
@@ -734,7 +748,7 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
     if !circuit.is_satisfied(inputs)? {
         return Err(ConstraintError::UnsatisfiedCircuit);
     }
-    let padded = padded_circuit(circuit);
+    let padded = padded_circuit(circuit)?;
     if !padded.is_satisfied(&commitment.padded_witness)? {
         return Err(ConstraintError::UnsatisfiedCircuit);
     }
@@ -802,7 +816,11 @@ pub fn verify_constraints<C: Challenger>(
     hadamard_ro: &RoContext,
 ) -> Result<(), ConstraintError> {
     let parameters = proof.parameters.validate()?;
-    certify_constraint_soundness(circuit, parameters)?;
+    let geometry = constraint_soundness_geometry(circuit, parameters)?;
+    let bound = constraint_soundness_from_geometry(geometry);
+    if !bound.bits().is_finite() || bound.bits() < SUCCINCT_FLOCK_MIN_SOUNDNESS_BITS {
+        return Err(ConstraintError::InsufficientSoundness);
+    }
     if circuit.num_variables != circuit.num_inputs
         || circuit
             .multiplications
@@ -811,7 +829,7 @@ pub fn verify_constraints<C: Challenger>(
     {
         return Err(ConstraintError::MalformedCircuit);
     }
-    let padded = padded_circuit(circuit);
+    let padded = padded_circuit(circuit)?;
     if proof.num_variables != padded.num_variables
         || proof.num_multiplications != padded.multiplications.len()
         || proof.linear.parameters.vector_length != padded.num_variables
@@ -819,12 +837,8 @@ pub fn verify_constraints<C: Challenger>(
         || proof.linear.parameters.padding_length != parameters.linear_padding
         || proof.hadamard.parameters.padding_length != parameters.hadamard_padding
         || proof.hadamard.parameters.vector_length != padded.multiplications.len()
-        || proof.hadamard.parameters.code_length
-            != (padded.multiplications.len() + parameters.hadamard_padding).next_power_of_two()
-                * parameters.inverse_rate
-        || proof.linear.parameters.code_length
-            != (padded.num_variables + parameters.linear_padding).next_power_of_two()
-                * parameters.inverse_rate
+        || proof.hadamard.parameters.code_length != geometry.hadamard_code_length
+        || proof.linear.parameters.code_length != geometry.linear_code_length
     {
         return Err(ConstraintError::WrongProofShape);
     }
@@ -860,8 +874,9 @@ pub fn verify_constraints<C: Challenger>(
     Ok(())
 }
 
-fn padded_circuit(circuit: &ArithmeticCircuit) -> ArithmeticCircuit {
+fn padded_circuit(circuit: &ArithmeticCircuit) -> Result<ArithmeticCircuit, ConstraintError> {
     let n = circuit.num_variables;
+    let padded_variables = n.checked_add(6).ok_or(ConstraintError::InvalidParameters)?;
     let r = LinearCombination::variable(n);
     let s = LinearCombination::variable(n + 1);
     let rs = LinearCombination::variable(n + 2);
@@ -887,12 +902,12 @@ fn padded_circuit(circuit: &ArithmeticCircuit) -> ArithmeticCircuit {
         r.add(&r_plus_one)
             .add(&LinearCombination::constant(F128::ONE)),
     );
-    ArithmeticCircuit {
-        num_inputs: n + 6,
-        num_variables: n + 6,
+    Ok(ArithmeticCircuit {
+        num_inputs: padded_variables,
+        num_variables: padded_variables,
         multiplications,
         linear_constraints,
-    }
+    })
 }
 
 fn multiplication_vectors(
@@ -972,6 +987,53 @@ mod tests {
 
     use super::*;
 
+    fn empty_opening() -> crate::commitment::MerkleMatrixOpening {
+        crate::commitment::MerkleMatrixOpening {
+            positions: Vec::new(),
+            rows: Vec::new(),
+            salts: Vec::new(),
+            siblings: Vec::new(),
+        }
+    }
+
+    fn dummy_constraint_proof(parameters: ConstraintParameters) -> ConstraintProof {
+        ConstraintProof {
+            parameters,
+            num_variables: 0,
+            num_multiplications: 0,
+            hadamard: HadamardProof {
+                parameters: VectorParameters {
+                    vector_length: 1,
+                    padding_length: 1,
+                    code_length: 4,
+                    num_vectors: 3,
+                },
+                commitment: [0; 32],
+                gamma: F128::ZERO,
+                phi: Vec::new(),
+                claimed_dot_products: [F128::ZERO; 3],
+                mask_dot_product: F128::ZERO,
+                rlc_vector: Vec::new(),
+                rlc_padding: Vec::new(),
+                opening: empty_opening(),
+            },
+            linear: DotProductProof {
+                parameters: VectorParameters {
+                    vector_length: 1,
+                    padding_length: 1,
+                    code_length: 4,
+                    num_vectors: 1,
+                },
+                commitment: [0; 32],
+                claimed_dot_products: vec![F128::ZERO],
+                mask_dot_product: F128::ZERO,
+                rlc_vector: Vec::new(),
+                rlc_padding: Vec::new(),
+                opening: empty_opening(),
+            },
+        }
+    }
+
     fn root_circuit(public_constant: F128, masked: F128) -> ArithmeticCircuit {
         // The private input is h. Reconstruct v = masked + h and prove
         // v^2 + v + public_constant = 0. This is the intermediate VEIL shift
@@ -986,6 +1048,56 @@ mod tests {
         let output = builder.add(&v, &builder.constant(public_constant));
         builder.assert_mul(&v, &v, &output);
         builder.finish()
+    }
+
+    #[test]
+    fn constraint_parameters_reject_oversized_padding_profiles() {
+        let oversized_linear = ConstraintParameters {
+            linear_padding: MAX_CONSTRAINT_CODE_LENGTH,
+            hadamard_padding: 160,
+            inverse_rate: 2,
+        };
+        assert_eq!(
+            oversized_linear.validate(),
+            Err(ConstraintError::InvalidParameters)
+        );
+
+        let oversized_hadamard = ConstraintParameters {
+            linear_padding: 160,
+            hadamard_padding: MAX_CONSTRAINT_CODE_LENGTH,
+            inverse_rate: 2,
+        };
+        assert_eq!(
+            oversized_hadamard.validate(),
+            Err(ConstraintError::InvalidParameters)
+        );
+    }
+
+    #[test]
+    fn verifier_rejects_oversized_derived_code_lengths() {
+        let circuit = CircuitBuilder::new(MAX_CONSTRAINT_CODE_LENGTH / 2).finish();
+        let parameters = ConstraintParameters {
+            linear_padding: 160,
+            hadamard_padding: 160,
+            inverse_rate: 2,
+        };
+        let proof = dummy_constraint_proof(parameters);
+        let ro = RoContext::native([41; 32]);
+        let mut challenger = FsChallenger::new(b"veil-f128-oversized-constraints-test");
+
+        assert_eq!(
+            verify_constraints(&circuit, &proof, &mut challenger, &ro, &ro),
+            Err(ConstraintError::InvalidParameters)
+        );
+    }
+
+    #[test]
+    fn soundness_certificate_rejects_circuits_that_cannot_be_padded() {
+        let circuit = CircuitBuilder::new(usize::MAX - 5).finish();
+        assert_eq!(
+            certify_constraint_soundness(&circuit, ConstraintParameters::succinct_flock_secure()),
+            Err(ConstraintError::InvalidParameters)
+        );
     }
 
     #[test]
