@@ -1,0 +1,46 @@
+{
+  "after_sha256": {
+    "analysis.json": "6713e2b598d25afd95a76adf38216e90818105055a857e1347fd6ef57bdb902c",
+    "attempt.json": "274520beac6734e983be8f3e940d93d8713d64b4c03f5a56e450664f0627522a",
+    "flamegraph.svg": "1d87431da49dbf6ecebd0b78f1adcbb9ab107fb4273840dd21b8089b1f249f66",
+    "preview.png": "d89640689bada51680ef1521de118cd85d46657e89c236a2217f3a7bfd673591",
+    "stacks.folded": "f5d250b327cdfb2bb439a3e409411c08e7bd7d85ede094878351a96eeba57695",
+    "symbol-names.json": "ea232a050ec2a80d34c3cd28c7246096cbae1759ec0b0e93d1650b01a57e5e69"
+  },
+  "attempt_id": "full-zk-prove-0064-primary-001",
+  "before_sha256": {
+    "analysis.json": "258924882e86467480cfd67732362e5c20fbc8841364cdd19bd911948b898778",
+    "attempt.json": "c849ccfd18b527041b23283a8631b63f305bdf486a65df85ecd5175d71cc97e1",
+    "flamegraph.svg": "819c3443171403ed0b25a55706fb53f2a3c8607e2f6a5ff3946d18c3c4a1d48e",
+    "preview.png": "4526e05bcc24ccfd83efc88704d35818555301eaef11b40c9a8d02fc9d4f3290",
+    "stacks.folded": "c492a7eada1ab3c828facdee276d10e1720a8f07445704d4fa2cb4e64507cb0d"
+  },
+  "collapse": {
+    "maximum_real_stack_depth": 93,
+    "samples_with_transformed_frames": 11604,
+    "spurious_separator_occurrences_removed": 246201,
+    "transformed_frames": 222,
+    "unique_backtraces": 32823,
+    "unique_frames": 9745,
+    "usable_rows": 105131,
+    "xml_rows": 105143
+  },
+  "display_transformation": "In each demangled frame replace ASCII semicolon with fullwidth ；, and CR/LF with spaces; only then join frames with ASCII semicolon.",
+  "input_sha256": {
+    "export-status.json": "96f7679ee6a6a01428abcc6015dccb8be9f893425e9404f5b83cd805418a7960",
+    "harness.json": "5d994ee469196e14a2e3f0a2b0513b440e14543775962a5d259b33b2aa1d281b",
+    "raw/time-profile.xml": "ce77a3185a1cc2d75dc6e910c06e71e7a6a4a57db815b159206cbafe91495d7f",
+    "record-status.json": "1fce76e4304451aae411e34fd8c526e72e02f317c5f0e91510b4a6b3abc37ba8"
+  },
+  "input_sha256_after": {
+    "export-status.json": "96f7679ee6a6a01428abcc6015dccb8be9f893425e9404f5b83cd805418a7960",
+    "harness.json": "5d994ee469196e14a2e3f0a2b0513b440e14543775962a5d259b33b2aa1d281b",
+    "raw/time-profile.xml": "ce77a3185a1cc2d75dc6e910c06e71e7a6a4a57db815b159206cbafe91495d7f",
+    "record-status.json": "1fce76e4304451aae411e34fd8c526e72e02f317c5f0e91510b4a6b3abc37ba8"
+  },
+  "originals": "original/",
+  "processing_tool_sha256": "59c07bfa5112236eee9b11efbaef291c5545c5deea096c33601c986be09948fa",
+  "raw_recording_unchanged": true,
+  "schema_version": 1,
+  "status": "complete"
+}

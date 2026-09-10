@@ -1,0 +1,33 @@
+{
+  "attempt_id": "flock-prove-4096-repeat-001",
+  "error": "runner interrupted; child process group stopped and evidence remains incomplete",
+  "executable": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/performance-symbols/release/examples/preimage_profile",
+    "sha256": "dcd64fe89102ed700fc72c04c540171ccd44ca71f1f5eb03c00ad5ad018c6391"
+  },
+  "hashes": 4096,
+  "kind": "repeat",
+  "load_before": {
+    "load": {
+      "stderr": "",
+      "stdout": "{ 7.63 7.03 8.74 }\n",
+      "success": true
+    },
+    "power": {
+      "stderr": "",
+      "stdout": "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=23658595)\t8%; discharging; 0:14 remaining present: true\n\tBattery Warning: Early\n",
+      "success": true
+    },
+    "thermal": {
+      "stderr": "",
+      "stdout": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+      "success": true
+    },
+    "time": 1789052621.314584
+  },
+  "operation": "prove",
+  "protocol": "flock",
+  "requested_seconds": 30.0,
+  "snapshot_id": "54cc47530ad38ffbb467b0a42f1b2fb66bc8eb5f1f4b08ef800c31a0ac76b72c",
+  "status": "incomplete"
+}

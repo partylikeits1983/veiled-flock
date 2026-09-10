@@ -1,0 +1,61 @@
+
+running 3 tests
+test report::tests::baseline_requires_complete_unique_finite_matrix ... ok
+test report::tests::capture_counts_rows_deduplicates_recursion_and_reconciles_folded ... ok
+test snapshot::tests::source_changed_during_preparation_is_rejected ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.15s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test tests::post_process_quote_preserves_spaces_and_single_quotes ... ok
+test tests::acceptance_rejects_stale_short_and_failed_metadata ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+test environment_policy_child_probe ... ok
+test failed_writer_does_not_stop_draining_a_child_pipe ... ok
+test scratch_archive_overlap_including_symlink_aliases_is_rejected ... ok
+test recorder_clears_diagnostics_and_archives_before_upstream_cleanup ... ok
+test copying_or_writing_failures_cannot_report_success_or_overwrite_evidence ... ok
+test export_and_folded_streams_preserve_large_binary_payloads ... ok
+test all_policy_keys_are_removed_from_real_children_without_global_mutation ... ok
+test failures_and_signals_normalize_to_one_and_preserve_original_status ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.45s
+
+
+running 2 tests
+test frozen_run_rejects_changed_executable_before_launching_any_capture ... ok
+test frozen_run_rejects_byte_identical_runner_from_unregistered_location ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.70s
+
+
+running 6 tests
+test ancestor_cargo_configuration_is_not_silently_lost ... ok
+test external_local_dependency_requires_explicit_freezing ... ok
+test escaping_symlinks_and_hardlinks_are_rejected ... ok
+test seal_prevents_writes_and_verifier_rejects_changed_private_input ... ok
+test compiler_reads_private_bytes_during_live_edit_and_restore ... ok
+test reconstructs_final_bytes_modes_links_and_deletions_without_touching_index ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

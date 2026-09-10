@@ -1,0 +1,17 @@
+ M Cargo.lock
+ M Cargo.toml
+ M crates/flock-prover/Cargo.toml
+?? crates/flock-prover/examples/preimage_profile.rs
+?? reports/performance/preimage-flamegraphs/20260910T142700Z/source/base-revision.txt
+?? tools/performance/Cargo.toml
+?? tools/performance/README.md
+?? tools/performance/measurement-env.json
+?? tools/performance/src/bin/folded_capture.rs
+?? tools/performance/src/bin/profile_preimages.rs
+?? tools/performance/src/bin/xctrace_capture.rs
+?? tools/performance/src/lib.rs
+?? tools/performance/src/report.rs
+?? tools/performance/src/snapshot.rs
+?? tools/performance/tests/helpers.rs
+?? tools/performance/tests/runner.rs
+?? tools/performance/tests/snapshot.rs

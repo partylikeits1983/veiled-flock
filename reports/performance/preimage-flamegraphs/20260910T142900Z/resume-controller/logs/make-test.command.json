@@ -1,0 +1,27 @@
+{
+  "args": [
+    "test"
+  ],
+  "cwd": "/private/tmp/flock-profile-source-40934-1789058443482158000",
+  "environment_overrides": {
+    "CARGO_PROFILE_RELEASE_DEBUG": null,
+    "CARGO_PROFILE_RELEASE_STRIP": null,
+    "CARGO_TARGET_DIR": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks",
+    "FLOCK_COMMIT_TIMING": null,
+    "FLOCK_NO_PREFAULT": null,
+    "FLOCK_ZC_TIMING": null,
+    "LIGERITO_TRACE": null,
+    "LIG_PROVE_TRACE": null,
+    "LIG_VERIFY_TRACE": null,
+    "LINCHECK_TRACE": null,
+    "MERKLE_TRACE": null,
+    "PATH": "/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin:/opt/homebrew/Caskroom/codex/0.154.0/codex-path:/opt/homebrew/opt/llvm/bin:/Users/ai/go/bin:/Users/ai/.elan/bin:/opt/homebrew/bin:/opt/homebrew/sbin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/local/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/bin:/var/run/com.apple.security.cryptexd/codex.system/bootstrap/usr/appleinternal/bin:/opt/pmk/env/global/bin:/Library/Apple/usr/bin:/usr/local/go/bin:/Users/ai/.codex/tmp/arg0/codex-arg0BZFKtg:/opt/homebrew/Caskroom/codex/0.154.0/codex-path:/Users/ai/.local/bin:/opt/homebrew/opt/llvm/bin:/Users/ai/go/bin:/Users/ai/.elan/bin:/Users/ai/.cargo/bin:/Users/ai/.sp1/bin:/Users/ai/.foundry/bin:/Users/ai/.risc0/bin:/Users/ai/.risc0/bin:/Users/ai/.sp1/bin:/Users/ai/.foundry/bin",
+    "PCS_TRACE": null,
+    "PERM_TRACE": null,
+    "RAYON_NUM_THREADS": null,
+    "RUSTUP_TOOLCHAIN": "1.98.0",
+    "VERIFY_TRACE": null
+  },
+  "program": "make",
+  "started_unix_seconds": 1789058445.197093
+}

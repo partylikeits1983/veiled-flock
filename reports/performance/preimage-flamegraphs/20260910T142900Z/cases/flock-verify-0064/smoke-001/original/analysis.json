@@ -1,0 +1,2298 @@
+{
+  "usable_rows": 5973,
+  "total_weight": 5973,
+  "has_workload_symbols": true,
+  "has_verifier_worker": true,
+  "has_rayon_worker": true,
+  "xml_rows": 5981,
+  "missing_or_empty_backtrace_rows": 8,
+  "unknown_frame_rows": 88,
+  "unknown_leaf_rows": 0,
+  "marked_truncated_rows": 0,
+  "inclusive": [
+    {
+      "symbol": "<rayon_core::registry::ThreadBuilder>::run",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "<rayon_core::registry::WorkerThread>::wait_until_cold",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "<std::sys::thread::unix::Thread>::new::thread_start",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "<std::thread::lifecycle::spawn_unchecked<<rayon_core::registry::DefaultSpawn as rayon_core::registry::ThreadSpawn>::spawn::{closure#0}, ()>::{closure#1} as core::ops::function::FnOnce<()>>::call_once::{shim:vtable#0}",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "_pthread_start",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "std::sys::backtrace::__rust_begin_short_backtrace::<<rayon_core::registry::DefaultSpawn as rayon_core::registry::ThreadSpawn>::spawn::{closure#0}, ()>",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "thread_start",
+      "samples": 5283,
+      "percent": 88.44801607232546
+    },
+    {
+      "symbol": "flock_core::verifier::verify_core::<flock_core::challenger::FsChallenger>::{closure#0}",
+      "samples": 4698,
+      "percent": 78.65394274234053
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#1}, (), ()>::{closure#0}",
+      "samples": 4573,
+      "percent": 76.56119203080529
+    },
+    {
+      "symbol": "<&<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1} as core::ops::function::FnMut<((usize, &mut flock_core::field::gf2_128::F128),)>>::call_mut",
+      "samples": 4568,
+      "percent": 76.47748200234388
+    },
+    {
+      "symbol": "flock_core::lincheck::verify::<flock_core::challenger::FsChallenger>",
+      "samples": 4565,
+      "percent": 76.42725598526704
+    },
+    {
+      "symbol": "flock_core::lincheck::verify_masked::<flock_core::challenger::FsChallenger>",
+      "samples": 4564,
+      "percent": 76.41051397957476
+    },
+    {
+      "symbol": "<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched",
+      "samples": 4461,
+      "percent": 74.68608739326972
+    },
+    {
+      "symbol": "<rayon::iter::plumbing::bridge::Callback<rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>> as rayon::iter::plumbing::ProducerCallback<(usize, &mut flock_core::field::gf2_128::F128)>>::callback::<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>>",
+      "samples": 4459,
+      "percent": 74.65260338188516
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>",
+      "samples": 1205,
+      "percent": 20.17411685919973
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#1}>::{closure#0}, ()>>::run_inline",
+      "samples": 1201,
+      "percent": 20.107148836430603
+    },
+    {
+      "symbol": "start",
+      "samples": 690,
+      "percent": 11.551983927674534
+    },
+    {
+      "symbol": "<fn() -> std::process::ExitCode as core::ops::function::FnOnce<()>>::call_once",
+      "samples": 688,
+      "percent": 11.518499916289972
+    },
+    {
+      "symbol": "main",
+      "samples": 688,
+      "percent": 11.518499916289972
+    },
+    {
+      "symbol": "preimage_profile::run",
+      "samples": 688,
+      "percent": 11.518499916289972
+    },
+    {
+      "symbol": "std::rt::lang_start::<std::process::ExitCode>::{closure#0}",
+      "samples": 688,
+      "percent": 11.518499916289972
+    },
+    {
+      "symbol": "std::rt::lang_start_internal",
+      "samples": 688,
+      "percent": 11.518499916289972
+    },
+    {
+      "symbol": "<std::sys::sync::once::queue::Once>::call",
+      "samples": 430,
+      "percent": 7.199062447681233
+    },
+    {
+      "symbol": "<flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageSetup>::prove::<flock_core::challenger::FsChallenger>",
+      "samples": 381,
+      "percent": 6.378704168759418
+    },
+    {
+      "symbol": "preimage_profile::run::{closure#3}",
+      "samples": 381,
+      "percent": 6.378704168759418
+    },
+    {
+      "symbol": "flock_core::verifier::verify_claims_ligerito_with_config_pd_ro::<flock_core::challenger::FsChallenger>::{closure#0}",
+      "samples": 374,
+      "percent": 6.261510128913445
+    },
+    {
+      "symbol": "flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro::<flock_core::challenger::FsChallenger>",
+      "samples": 373,
+      "percent": 6.244768123221162
+    },
+    {
+      "symbol": "flock_core::verifier::verify_claims_ligerito_inner::<flock_core::challenger::FsChallenger>",
+      "samples": 373,
+      "percent": 6.244768123221162
+    },
+    {
+      "symbol": " 32]>>::get_or_init<<flock_core::r1cs::BlockR1cs>::statement_digest::{closure#0}>::{closure#0}, !>",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": " 32]>>::get_or_init<<flock_core::r1cs::BlockR1cs>::statement_digest::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": " 32]>>::initialize::<<std::sync::once_lock::OnceLock<[u8",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": " 32]>>::initialize<<std::sync::once_lock::OnceLock<[u8",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": "<flock_core::r1cs::BlockR1cs>::statement_digest",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": "<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<[u8",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": "<std::sync::once_lock::OnceLock<[u8",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": "flock_core::proof::bind_statement::<flock_core::challenger::FsChallenger>",
+      "samples": 372,
+      "percent": 6.22802611752888
+    },
+    {
+      "symbol": "flock_core::r1cs::absorb_matrix",
+      "samples": 365,
+      "percent": 6.110832077682907
+    },
+    {
+      "symbol": "<blake3::Hasher>::update",
+      "samples": 326,
+      "percent": 5.457893855683911
+    },
+    {
+      "symbol": "<flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageSetup>::new",
+      "samples": 281,
+      "percent": 4.7045035995312245
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::blake3::build_block_r1cs_pinned",
+      "samples": 223,
+      "percent": 3.7334672693788713
+    },
+    {
+      "symbol": "blake3::portable::compress_in_place",
+      "samples": 205,
+      "percent": 3.4321111669177964
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::blake3::build_matrices_rows_pinned",
+      "samples": 205,
+      "percent": 3.4321111669177964
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::<flock_core::challenger::FsChallenger, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#4}>",
+      "samples": 199,
+      "percent": 3.331659132764105
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::common::xor_dedup",
+      "samples": 164,
+      "percent": 2.7456889335342374
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::lagrange_weights_naive",
+      "samples": 161,
+      "percent": 2.6954629164573913
+    },
+    {
+      "symbol": "flock_core::verifier::verify_core_inner::<flock_core::challenger::FsChallenger>",
+      "samples": 133,
+      "percent": 2.226686757073497
+    },
+    {
+      "symbol": "flock_core::zerocheck::verify::<flock_core::challenger::FsChallenger>",
+      "samples": 133,
+      "percent": 2.226686757073497
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::blake3::write_add_carry_rows",
+      "samples": 129,
+      "percent": 2.15971873430437
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::verify_succinct::<flock_core::challenger::FsChallenger>",
+      "samples": 114,
+      "percent": 1.9085886489201405
+    },
+    {
+      "symbol": "_platform_memmove",
+      "samples": 110,
+      "percent": 1.841620626151013
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#1}>::{closure#0}, ()> as rayon_core::job::Job>::execute",
+      "samples": 109,
+      "percent": 1.8248786204587308
+    },
+    {
+      "symbol": "<flock_core::pcs::tensor_algebra::TensorAlgebra>::transpose",
+      "samples": 84,
+      "percent": 1.4063284781516825
+    },
+    {
+      "symbol": "<flock_prover::r1cs_hashes::blake3::Word>::add_sum",
+      "samples": 84,
+      "percent": 1.4063284781516825
+    },
+    {
+      "symbol": "core::slice::sort::stable::driftsort_main::<usize, <usize as core::cmp::PartialOrd>::lt, alloc::vec::Vec<usize>>",
+      "samples": 80,
+      "percent": 1.3393604553825549
+    },
+    {
+      "symbol": "core::slice::sort::stable::drift::sort::<usize, <usize as core::cmp::PartialOrd>::lt>",
+      "samples": 79,
+      "percent": 1.3226184496902729
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::build_claim_weights",
+      "samples": 79,
+      "percent": 1.3226184496902729
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::interpolate_at_z_on_lambda",
+      "samples": 74,
+      "percent": 1.2389084212288632
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::lagrange_weights_lambda_naive",
+      "samples": 74,
+      "percent": 1.2389084212288632
+    },
+    {
+      "symbol": "<blake3::ChunkState>::update",
+      "samples": 69,
+      "percent": 1.1551983927674536
+    },
+    {
+      "symbol": "sha2::sha256::compress256",
+      "samples": 65,
+      "percent": 1.0882303699983258
+    },
+    {
+      "symbol": "<flock_core::lincheck::CscCircuit>::from_matrices",
+      "samples": 58,
+      "percent": 0.9710363301523522
+    },
+    {
+      "symbol": "<flock_core::r1cs::BlockR1cs>::csc_lincheck_circuit",
+      "samples": 58,
+      "percent": 0.9710363301523522
+    },
+    {
+      "symbol": "<std::sync::once::Once>::call_once_force::<<std::sync::once_lock::OnceLock<flock_core::lincheck::CscCircuit>>::initialize<<std::sync::once_lock::OnceLock<flock_core::lincheck::CscCircuit>>::get_or_init<<flock_core::r1cs::BlockR1cs>::csc_lincheck_circuit::{closure#0}>::{closure#0}, !>::{closure#0}>::{closure#0}",
+      "samples": 58,
+      "percent": 0.9710363301523522
+    },
+    {
+      "symbol": "<std::sync::once_lock::OnceLock<flock_core::lincheck::CscCircuit>>::initialize::<<std::sync::once_lock::OnceLock<flock_core::lincheck::CscCircuit>>::get_or_init<<flock_core::r1cs::BlockR1cs>::csc_lincheck_circuit::{closure#0}>::{closure#0}, !>",
+      "samples": 58,
+      "percent": 0.9710363301523522
+    },
+    {
+      "symbol": "flock_core::lincheck::csc_from_rows",
+      "samples": 58,
+      "percent": 0.9710363301523522
+    },
+    {
+      "symbol": "<alloc::vec::Vec<alloc::vec::Vec<flock_core::field::gf2_128::F128>> as core::iter::traits::collect::FromIterator<alloc::vec::Vec<flock_core::field::gf2_128::F128>>>::from_iter::<core::iter::adapters::map::Map<core::slice::iter::Iter<flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::LevelCtx>, flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl<flock_core::challenger::FsChallenger, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#4}>::{closure#3}>>",
+      "samples": 57,
+      "percent": 0.9542943244600702
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::slice::iter::Iter<flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::LevelCtx>, flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl<flock_core::challenger::FsChallenger, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#4}>::{closure#3}> as core::iter::traits::iterator::Iterator>::for_each::<<alloc::vec::Vec<alloc::vec::Vec<flock_core::field::gf2_128::F128>>>::extend_trusted<core::iter::adapters::map::Map<core::slice::iter::Iter<flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::LevelCtx>, flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl<flock_core::challenger::FsChallenger, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#4}>::{closure#3}>>::{closure#0}>",
+      "samples": 57,
+      "percent": 0.9542943244600702
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual",
+      "samples": 57,
+      "percent": 0.9542943244600702
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::<flock_core::challenger::FsChallenger, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#4}>::{closure#3}",
+      "samples": 57,
+      "percent": 0.9542943244600702
+    },
+    {
+      "symbol": "flock_core::lincheck::build_quirky_eq_table",
+      "samples": 54,
+      "percent": 0.9040683073832245
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::verify_level_opens_maybe_ro",
+      "samples": 53,
+      "percent": 0.8873263016909426
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::interpolate_at_z_combined",
+      "samples": 53,
+      "percent": 0.8873263016909426
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::interpolate_at_z_combined_weights",
+      "samples": 53,
+      "percent": 0.8873263016909426
+    },
+    {
+      "symbol": "<alloc::vec::Vec<flock_core::pcs::tensor_algebra::TensorAlgebra> as core::iter::traits::collect::FromIterator<flock_core::pcs::tensor_algebra::TensorAlgebra>>::from_iter::<core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::slice::iter::Iter<flock_core::pcs::ring_switch::RingSwitchVerifierOutput>, core::slice::iter::Iter<&[flock_core::field::gf2_128::F128]>>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#0}>>",
+      "samples": 51,
+      "percent": 0.8538422903063787
+    },
+    {
+      "symbol": "flock_core::merkle::verify_merkle_multi_proof_framed",
+      "samples": 51,
+      "percent": 0.8538422903063787
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::eval_rs_eq_prefix",
+      "samples": 51,
+      "percent": 0.8538422903063787
+    },
+    {
+      "symbol": "flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro::<flock_core::challenger::FsChallenger>::{closure#3}::{closure#0}",
+      "samples": 51,
+      "percent": 0.8538422903063787
+    },
+    {
+      "symbol": "cthread_yield",
+      "samples": 50,
+      "percent": 0.8371002846140967
+    },
+    {
+      "symbol": "swtch_pri",
+      "samples": 50,
+      "percent": 0.8371002846140967
+    },
+    {
+      "symbol": " 32]), <alloc::vec::Vec<(usize, [u8",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": " 32]), core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::iter::adapters::copied::Copied<core::slice::iter::Iter<usize>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<&[u8]>>>, flock_core::merkle::verify_merkle_multi_proof_framed::{closure#1}>>>::from_iter",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": " 32])> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<(usize, [u8",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": " 32])>>::extend_trusted<core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::iter::adapters::copied::Copied<core::slice::iter::Iter<usize>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<&[u8]>>>, flock_core::merkle::verify_merkle_multi_proof_framed::{closure#1}>>::{closure#0}>::{closure#0}>",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": "<alloc::vec::Vec<(usize, [u8",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": "<alloc::vec::Vec<flock_core::field::gf2_128::F128> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<flock_core::field::gf2_128::F128, core::iter::adapters::map::Map<core::ops::range::Range<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#2}>>>::from_iter",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::iter::adapters::copied::Copied<core::slice::iter::Iter<usize>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<&[u8]>>>, flock_core::merkle::verify_merkle_multi_proof_framed::{closure#1}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<(usize, [u8",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::ops::range::Range<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#2}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<flock_core::field::gf2_128::F128, <alloc::vec::Vec<flock_core::field::gf2_128::F128>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#2}>>::{closure#0}>::{closure#0}>",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": "<&mut &flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3} as core::ops::function::FnOnce<(usize,)>>::call_once",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro::<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "rayon::iter::collect::special_extend::<rayon::iter::map::Map<rayon::range::Iter<usize>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>, flock_core::field::gf2_128::F128>",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "rayon::iter::from_par_iter::collect_extended::<alloc::vec::Vec<flock_core::field::gf2_128::F128>, rayon::iter::map::Map<rayon::range::Iter<usize>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::<rayon::range::IterProducer<usize>, rayon::iter::map::MapConsumer<rayon::iter::collect::consumer::CollectConsumer<flock_core::field::gf2_128::F128>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::map::MapConsumer<rayon::iter::collect::consumer::CollectConsumer<flock_core::field::gf2_128::F128>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::map::MapConsumer<rayon::iter::collect::consumer::CollectConsumer<flock_core::field::gf2_128::F128>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>::{closure#1}, rayon::iter::collect::consumer::CollectResult<flock_core::field::gf2_128::F128>, rayon::iter::collect::consumer::CollectResult<flock_core::field::gf2_128::F128>>",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::map::MapConsumer<rayon::iter::collect::consumer::CollectConsumer<flock_core::field::gf2_128::F128>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::map::MapConsumer<rayon::iter::collect::consumer::CollectConsumer<flock_core::field::gf2_128::F128>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>::{closure#1}, rayon::iter::collect::consumer::CollectResult<flock_core::field::gf2_128::F128>, rayon::iter::collect::consumer::CollectResult<flock_core::field::gf2_128::F128>>::{closure#0}",
+      "samples": 41,
+      "percent": 0.6864222333835593
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::eval_rs_eq_finish_from_prefix_binary_q",
+      "samples": 40,
+      "percent": 0.6696802276912774
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::tensor_algebra_transpose",
+      "samples": 35,
+      "percent": 0.5859701992298677
+    },
+    {
+      "symbol": "0x7c3d776ff",
+      "samples": 34,
+      "percent": 0.5692281935375858
+    },
+    {
+      "symbol": "0x7c41ba6ff",
+      "samples": 32,
+      "percent": 0.5357441821530219
+    },
+    {
+      "symbol": "<flock_core::challenger::FsChallenger as flock_core::challenger::Challenger>::sample_f128",
+      "samples": 31,
+      "percent": 0.51900217646074
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::sample_distinct_queries::<flock_core::challenger::FsChallenger>",
+      "samples": 29,
+      "percent": 0.4855181650761761
+    },
+    {
+      "symbol": "<flock_core::challenger::FsChallenger>::squeeze_into",
+      "samples": 24,
+      "percent": 0.4018081366147665
+    },
+    {
+      "symbol": "preimage_profile::run::{closure#4}",
+      "samples": 21,
+      "percent": 0.3515821195379206
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::range::IterProducer<usize>, rayon::iter::map::MapConsumer<rayon::iter::collect::consumer::CollectConsumer<flock_core::field::gf2_128::F128>, flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro<flock_core::challenger::FsChallenger>::{closure#3}::{closure#3}>>::{closure#1}",
+      "samples": 21,
+      "percent": 0.3515821195379206
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#1}, (), ()>::{closure#0}, ((), ())>::{closure#0}::{closure#0}, ((), ())> as rayon_core::job::Job>::execute",
+      "samples": 16,
+      "percent": 0.26787209107651094
+    },
+    {
+      "symbol": " 64]), ([flock_core::field::gf2_128::F128",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": " 64])>::{closure#0}",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": " 64], [flock_core::field::gf2_128::F128",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": "0x7c45e46ff",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": "DYLD-STUB$$memcpy",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::range::IterProducer<usize>, rayon::iter::fold::FoldConsumer<rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#4}, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#3}>, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#2}>, <flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV>::new, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1}>>",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::fold::FoldConsumer<rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#4}, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#3}>, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#2}>, <flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV>::new, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::fold::FoldConsumer<rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#4}, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#3}>, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#2}>, <flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV>::new, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1}>>::{closure#1}, ([flock_core::field::gf2_128::F128",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": " 64]), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::fold::FoldConsumer<rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#4}, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#3}>, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#2}>, <flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV>::new, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1}>>::{closure#1}>::{closure#0}, ([flock_core::field::gf2_128::F128",
+      "samples": 14,
+      "percent": 0.23438807969194708
+    },
+    {
+      "symbol": " 64])> as rayon_core::job::Job>::execute",
+      "samples": 14,
+      "percent": 0.23438807969194708
+    },
+    {
+      "symbol": "<alloc::raw_vec::RawVecInner>::finish_grow",
+      "samples": 14,
+      "percent": 0.23438807969194708
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<([flock_core::field::gf2_128::F128",
+      "samples": 14,
+      "percent": 0.23438807969194708
+    },
+    {
+      "symbol": "_realloc",
+      "samples": 14,
+      "percent": 0.23438807969194708
+    },
+    {
+      "symbol": "_malloc_zone_realloc",
+      "samples": 13,
+      "percent": 0.21764607399966515
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>",
+      "samples": 13,
+      "percent": 0.21764607399966515
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}",
+      "samples": 13,
+      "percent": 0.21764607399966515
+    },
+    {
+      "symbol": "<hashbrown::set::HashSet<usize, std::hash::random::RandomState>>::insert",
+      "samples": 12,
+      "percent": 0.20090406830738325
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}>::{closure#0}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)> as rayon_core::job::Job>::execute",
+      "samples": 12,
+      "percent": 0.20090406830738325
+    },
+    {
+      "symbol": "_xzm_free",
+      "samples": 11,
+      "percent": 0.1841620626151013
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_small_freelist",
+      "samples": 10,
+      "percent": 0.16742005692281936
+    },
+    {
+      "symbol": "<alloc::raw_vec::RawVecInner>::grow_amortized",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "<alloc::vec::Vec<flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::PerQuery> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::PerQuery, core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#1}>>>::from_iter",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#1}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::PerQuery, <alloc::vec::Vec<flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::PerQuery>>::extend_trusted<core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#1}>>::{closure#0}>::{closure#0}>",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "<flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageSetup>::verify::<flock_core::challenger::FsChallenger>",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "__psynch_cvwait",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "_platform_memset",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "_pthread_cond_wait",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_freelist_outlined",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": " 64])>>::run_inline",
+      "samples": 8,
+      "percent": 0.13393604553825547
+    },
+    {
+      "symbol": "<alloc::raw_vec::RawVec<usize>>::grow_one",
+      "samples": 8,
+      "percent": 0.13393604553825547
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::induce_sumcheck_enforced_sum",
+      "samples": 8,
+      "percent": 0.13393604553825547
+    },
+    {
+      "symbol": "<&flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0} as core::ops::function::FnMut<((usize, (&mut [flock_core::field::gf2_128::F128], &mut [flock_core::field::gf2_128::F128])),)>>::call_mut",
+      "samples": 7,
+      "percent": 0.11719403984597354
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::ops::range::Range<usize>, core::iter::adapters::zip::Zip<core::slice::iter::ChunksMut<flock_core::field::gf2_128::F128>, core::slice::iter::ChunksMut<flock_core::field::gf2_128::F128>>>, &flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}> as core::iter::traits::iterator::Iterator>::fold::<(flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), &flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}>",
+      "samples": 7,
+      "percent": 0.11719403984597354
+    },
+    {
+      "symbol": "<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>> as rayon::iter::plumbing::Producer>::fold_with::<rayon::iter::map::MapFolder<rayon::iter::reduce::ReduceFolder<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>",
+      "samples": 7,
+      "percent": 0.11719403984597354
+    },
+    {
+      "symbol": "<alloc::raw_vec::RawVecInner<_>>::reserve::do_reserve_and_handle::<alloc::alloc::Global>",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "<flock_core::ro::RoTreeHasher>::hash",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "<flock_prover::digest_bind::DigestStatement>::public_digest",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}>::{closure#0}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>>::run_inline",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "<rayon_core::latch::LockLatch>::wait_and_reset",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "flock_core::lincheck::sumcheck_bind_top_in_place_par",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "flock_prover::digest_bind::digest_claim_value",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::blake3_preimage::absorb_statement::<flock_core::challenger::FsChallenger>",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "pthread_cond_broadcast",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "<&flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1} as core::ops::function::FnMut<(flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV, usize)>>::call_mut",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "<hashbrown::raw::RawTable<(usize, ())>>::reserve::<hashbrown::map::make_hasher<usize, (), std::hash::random::RandomState>::{closure#0}>",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "<rayon_core::registry::WorkerThread>::find_work",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "__psynch_cvbroad",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "flock_core::field::f128_slice::aarch64::fold_pairs",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "xzm_realloc",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<[u8",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>::{closure#1}, (), ()>::{closure#0}",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>::{closure#1}>::{closure#0}, ()> as rayon_core::job::Job>::execute",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<<rayon::iter::zip::Zip<_, _> as rayon::iter::IndexedParallelIterator>::with_producer::CallbackB<rayon::iter::plumbing::bridge::Callback<rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>> as rayon::iter::plumbing::ProducerCallback<&flock_core::field::gf2_128::F128>>::callback::<rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<core::iter::adapters::chain::Chain<core::ops::range::Range<usize>, core::ops::range::Range<usize>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::adapters::filter::filter_try_fold<usize, (), core::ops::control_flow::ControlFlow<rayon_core::job::JobRef>, <rayon_core::registry::WorkerThread>::steal::{closure#0}, core::iter::traits::iterator::Iterator::find_map::check<usize, rayon_core::job::JobRef, <rayon_core::registry::WorkerThread>::steal::{closure#1}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<rayon_core::job::JobRef>>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<core::num::nonzero::NonZero<u64>>::trailing_zeros",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<hashbrown::raw::RawTable<(usize, ())>>::reserve_rehash::<hashbrown::map::make_hasher<usize, (), std::hash::random::RandomState>::{closure#0}>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<rayon::iter::plumbing::bridge::Callback<rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>> as rayon::iter::plumbing::ProducerCallback<(&mut flock_core::field::gf2_128::F128, &flock_core::field::gf2_128::F128)>>::callback::<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<[u8",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<rayon_core::latch::LockLatch as rayon_core::latch::Latch>::set",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<rayon_core::registry::Registry>::in_worker_cold::<<rayon_core::thread_pool::ThreadPool>::install<flock_core::verifier::verify_core<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>>::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<rayon_core::registry::Registry>::in_worker_cold::<<rayon_core::thread_pool::ThreadPool>::install<flock_core::verifier::verify_core<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>>::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>>::{closure#0}",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<rayon_core::sleep::Sleep>::sleep::<<rayon_core::registry::WorkerThread>::wait_until_cold::{closure#0}>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_tiny",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "alloc::alloc::dealloc_nonnull",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "crossbeam_epoch::default::with_handle::<crossbeam_epoch::default::pin::{closure#0}, crossbeam_epoch::guard::Guard>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "flock_core::pcs::compute_combined_basis_and_target::<flock_core::challenger::FsChallenger>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "mach_absolute_time",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<[u8",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<[u8",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>::{closure#1}, (), ()>::{closure#0}",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": " 64]))> as rayon_core::job::Job>::execute",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": " 64]))>::{closure#0}::{closure#0}, (([flock_core::field::gf2_128::F128",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": " 64])>::{closure#0}, (([flock_core::field::gf2_128::F128",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "<crossbeam_deque::deque::Stealer<rayon_core::job::JobRef>>::steal",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "<flock_core::challenger::FsChallenger as flock_core::challenger::Challenger>::sample_f128_vec",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<<rayon_core::thread_pool::ThreadPool>::install<flock_core::verifier::verify_core<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>>::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>>::{closure#0}::{closure#0}, core::result::Result<(flock_core::proof::ZClaim, flock_core::proof::ZClaim), flock_core::verifier::VerifyError>> as rayon_core::job::Job>::execute",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::fold::FoldConsumer<rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#4}, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#3}>, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#2}>, <flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV>::new, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::range::IterProducer<usize>, rayon::iter::fold::FoldConsumer<rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#4}, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#3}>, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#2}>, <flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV>::new, flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1}>>::{closure#1}, ([flock_core::field::gf2_128::F128",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "core::slice::sort::shared::smallsort::small_sort_network::<usize, <usize as core::cmp::PartialOrd>::lt>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "core::slice::sort::unstable::quicksort::quicksort::<usize, <usize as core::cmp::PartialOrd>::lt>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "core::slice::sort::unstable::sort::<usize, <usize as core::cmp::PartialOrd>::lt>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::recursive_prover_with_basis_impl::<flock_core::challenger::FsChallenger>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::recursive_prover_with_basis_precomputed_round0_with_ro::<flock_core::challenger::FsChallenger>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "flock_core::zerocheck::sample_eq_point::<flock_core::challenger::FsChallenger>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "mach_vm_reclaim_update_kernel_accounting_trap",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "xzm_segment_group_free_chunk",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": " 32]>)>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": " 64]>, alloc::vec::Vec<[u8",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<&flock_core::lincheck::kernels::aarch64::partial_fold_packed_z_neon_iblock_padded::{closure#0} as core::ops::function::FnMut<((usize, &mut [flock_core::field::gf2_128::F128]),)>>::call_mut",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<flock_core::challenger::FsChallenger as flock_core::challenger::Challenger>::observe_f128",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))>::{closure#0}::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))> as rayon_core::job::Job>::execute",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::kernels::aarch64::partial_fold_packed_z_neon_iblock_padded::{closure#0}>>::{closure#1}>::{closure#0}, ()> as rayon_core::job::Job>::execute",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>::{closure#1}>::{closure#0}, ()>>::run_inline",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch> as rayon_core::latch::Latch>::set",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::registry::Registry>::in_worker_cold::<<rayon_core::thread_pool::ThreadPool>::install<flock_core::verifier::verify_claims_ligerito_with_config_pd_ro<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::registry::Registry>::in_worker_cold::<<rayon_core::thread_pool::ThreadPool>::install<flock_core::verifier::verify_claims_ligerito_with_config_pd_ro<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>::{closure#0}",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<rayon_core::thread_pool::ThreadPool>::install::<flock_core::verifier::verify_claims_ligerito_with_config_pd_ro<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&usize>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<std::sys::pal::unix::time::Timespec>::now",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_malloc_zone_malloc",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_reclaim_mark_used",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_segment_group_segment_span_free_coalesce",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_segment_group_span_mark_used",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_xzone_free_freelist",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_xzone_malloc",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "alloc::alloc::alloc",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "core::intrinsics::likely",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "core::mem::drop::<(flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageSetup, alloc::vec::Vec<[u8",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "core::ptr::drop_glue::<flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageSetup>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "dyld4::prepare(dyld4::APIs&, mach_o::Header const*)",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_core::lincheck::build_eq_table",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed::<flock_core::challenger::FsChallenger>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_core::zerocheck::fold_sumcheck_round",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_prover::digest_bind::digest_claim_point",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::kernels::aarch64::partial_fold_packed_z_neon_iblock_padded::{closure#0}>>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#2}, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#1}>, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#0}>>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::kernels::aarch64::partial_fold_packed_z_neon_iblock_padded::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::kernels::aarch64::partial_fold_packed_z_neon_iblock_padded::{closure#0}>>::{closure#1}, (), ()>::{closure#0}",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#2}, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#1}>, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#2}, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#1}>, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": " 16], u64, u32, u32), flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_pinned::{closure#0}>::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::chunks::ChunksMutProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_prover::r1cs_hashes::common::drive_witness_packed_and_lincheck_zk<([u32",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": " 16], u64, u32, u32), flock_prover::r1cs_hashes::blake3::generate_witness_with_ab_packed_and_lincheck_pinned::{closure#0}>::{closure#0}>>::{closure#1}, (), ()>::{closure#0}, ((), ())>::{closure#0}::{closure#0}, ((), ())> as rayon_core::job::Job>::execute",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>> as rayon::iter::plumbing::Producer>::fold_with::<rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>::{closure#1}, (), ()>::{closure#0}, ((), ())>::{closure#0}::{closure#0}, ((), ())> as rayon_core::job::Job>::execute",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": " 32]>, rayon::slice::chunks::ChunksProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_core::merkle::merkle_tree_framed::{closure#0}>>::{closure#1}>::{closure#0}, ()>>::run_inline",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": " 32]], &[u8])),)>>::call_mut",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": " 8], [u32",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0x10267e893",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0x1026a20df",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0x1144b8259573bd3",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0x16e7de34f",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0x7c461f6ff",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0x7c49887af",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "0xc0e0ec571196ffdb",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<&flock_core::merkle::merkle_tree_framed::{closure#0} as core::ops::function::FnMut<((usize, (&mut [[u8",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<&flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0} as core::ops::function::FnMut<((usize, (&mut [flock_core::field::gf2_128::F128], &mut [flock_core::field::gf2_128::F128])),)>>::call_mut",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<&mut serde_json::ser::Serializer<&mut std::fs::File, serde_json::ser::PrettyFormatter> as serde_core::ser::Serializer>::serialize_str",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<alloc::raw_vec::RawVecInner>::reserve",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<alloc::vec::Vec<(flock_core::pcs::ring_switch::RingSwitchProof, flock_core::pcs::ring_switch::RingSwitchBatchOutput)> as core::iter::traits::collect::FromIterator<(flock_core::pcs::ring_switch::RingSwitchProof, flock_core::pcs::ring_switch::RingSwitchBatchOutput)>>::from_iter::<core::iter::adapters::map::Map<core::iter::adapters::enumerate::Enumerate<core::iter::adapters::zip::Zip<alloc::vec::into_iter::IntoIter<flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed::ClaimWork>, core::slice::iter::Iter<flock_core::field::gf2_128::F128>>>, flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed<flock_core::challenger::FsChallenger>::{closure#9}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<alloc::vec::Vec<alloc::vec::Vec<flock_core::field::gf2_128::F128>> as core::iter::traits::collect::FromIterator<alloc::vec::Vec<flock_core::field::gf2_128::F128>>>::from_iter::<core::iter::adapters::map::Map<core::slice::iter::Iter<flock_core::proof::ZClaim>, flock_core::verifier::verify_claims_ligerito_inner<flock_core::challenger::FsChallenger>::{closure#2}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<alloc::vec::Vec<flock_core::field::gf2_128::F128> as core::iter::traits::collect::FromIterator<flock_core::field::gf2_128::F128>>::from_iter::<core::iter::adapters::map::Map<core::ops::range::Range<usize>, flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed<flock_core::challenger::FsChallenger>::{closure#8}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<alloc::vec::Vec<flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::LevelCtx>>::as_slice",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::iter::adapters::enumerate::Enumerate<core::iter::adapters::zip::Zip<alloc::vec::into_iter::IntoIter<flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed::ClaimWork>, core::slice::iter::Iter<flock_core::field::gf2_128::F128>>>, flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed<flock_core::challenger::FsChallenger>::{closure#9}> as core::iter::traits::iterator::Iterator>::for_each::<<alloc::vec::Vec<(flock_core::pcs::ring_switch::RingSwitchProof, flock_core::pcs::ring_switch::RingSwitchBatchOutput)>>::extend_trusted<core::iter::adapters::map::Map<core::iter::adapters::enumerate::Enumerate<core::iter::adapters::zip::Zip<alloc::vec::into_iter::IntoIter<flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed::ClaimWork>, core::slice::iter::Iter<flock_core::field::gf2_128::F128>>>, flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed<flock_core::challenger::FsChallenger>::{closure#9}>>::{closure#0}>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::ops::range::Range<usize>, core::iter::adapters::zip::Zip<core::slice::iter::ChunksMut<flock_core::field::gf2_128::F128>, core::slice::iter::ChunksMut<flock_core::field::gf2_128::F128>>>, &flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}> as core::iter::traits::iterator::Iterator>::fold::<(flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), &flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::slice::iter::Iter<flock_core::proof::ZClaim>, flock_core::verifier::verify_claims_ligerito_inner<flock_core::challenger::FsChallenger>::{closure#2}> as core::iter::traits::iterator::Iterator>::for_each::<<alloc::vec::Vec<alloc::vec::Vec<flock_core::field::gf2_128::F128>>>::extend_trusted<core::iter::adapters::map::Map<core::slice::iter::Iter<flock_core::proof::ZClaim>, flock_core::verifier::verify_claims_ligerito_inner<flock_core::challenger::FsChallenger>::{closure#2}>>::{closure#0}>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::recursive_prover_with_basis_impl<flock_core::challenger::FsChallenger>::{closure#3}> as core::iter::traits::iterator::Iterator>::for_each::<<alloc::vec::Vec<alloc::vec::Vec<flock_core::field::gf2_128::F128>>>::extend_trusted<core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::recursive_prover_with_basis_impl<flock_core::challenger::FsChallenger>::{closure#3}>>::{closure#0}>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<crossbeam_deque::deque::Worker<rayon_core::job::JobRef>>::pop",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<crossbeam_epoch::internal::Global>::collect",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<crossbeam_epoch::internal::Global>::try_advance",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<deduplicated_symbol>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<flock_core::pcs::ligerito::RoundQuad>::eval",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<flock_core::zerocheck::multilinear::UniSkipFoldTable>::new",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<flock_prover::r1cs_hashes::blake3_preimage::Blake3PreimageSetup>::ligerito_verifier_config",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<[u8",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>> as rayon::iter::plumbing::Producer>::fold_with::<rayon::iter::map::MapFolder<rayon::iter::reduce::ReduceFolder<flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<<rayon_core::thread_pool::ThreadPool>::install<flock_core::verifier::verify_claims_ligerito_with_config_pd_ro<flock_core::challenger::FsChallenger>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>>::{closure#0}::{closure#0}, core::result::Result<(), flock_core::pcs::VerifyError>> as rayon_core::job::Job>::execute",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::chunks::ChunksMutProducer<u8>>>, rayon::iter::for_each::ForEachConsumer<flock_prover::r1cs_hashes::common::drive_witness_packed_and_lincheck_zk<([u32",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<[u8",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#1}>, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#1}>, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))>::{closure#0}::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))> as rayon_core::job::Job>::execute",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::LatchRef<rayon_core::latch::LockLatch>, <rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#2}, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#1}>, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#2}, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#1}>, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))>::{closure#0}::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))> as rayon_core::job::Job>::execute",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::job::StackJob<rayon_core::latch::SpinLatch, rayon_core::join::join_context::call_b<(flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#2}, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#1}>, flock_core::lincheck::sumcheck_bind_both_and_eval_next::{closure#0}>>::{closure#1}>::{closure#0}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)> as rayon_core::job::Job>::execute",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::sleep::Sleep>::wake_any_threads",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::sleep::Sleep>::wake_specific_thread",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<serde_json::ser::Compound<&mut std::fs::File, serde_json::ser::PrettyFormatter> as serde_core::ser::SerializeStruct>::serialize_field::<usize>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::fs::File as std::io::Write>::write",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::fs::File as std::io::Write>::write_all",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::hash::random::DefaultHasher as core::hash::Hasher>::write",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::process::Command>::output",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::sys::pal::unix::sync::mutex::Mutex>::unlock",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::sys::process::unix::common::Command>::spawn",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::thread::local::LocalKey<rayon_core::latch::LockLatch>>::with::<<rayon_core::registry::Registry>::in_worker_cold<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::fold::FoldConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#3}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#2}>, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#0}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::fold::FoldConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#3}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#2}>, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#0}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#1}>>::{closure#1}, alloc::vec::Vec<flock_core::field::gf2_128::F128>, alloc::vec::Vec<flock_core::field::gf2_128::F128>>::{closure#0}, (alloc::vec::Vec<flock_core::field::gf2_128::F128>, alloc::vec::Vec<flock_core::field::gf2_128::F128>)>::{closure#0}, (alloc::vec::Vec<flock_core::field::gf2_128::F128>, alloc::vec::Vec<flock_core::field::gf2_128::F128>)>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<u64>::wrapping_add",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "DYLD-STUB$$free",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "DYLD-STUB$$realloc",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "__psynch_cvsignal",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "__psynch_mutexdrop",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_libxpc_initializer",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_pthread_mutex_firstfit_unlock_slow",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_pthread_mutex_firstfit_wake",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_free_outlined",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_reclaim_mark_free",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_segment_group_span_mark_free",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_xzone_madvise_batch",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_from_freelist_chunk",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "clock_gettime",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "clock_gettime_nsec_np",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld3::MachOAnalyzer::forEachInitializer(Diagnostics&, dyld3::MachOAnalyzer::VMAddrConverter const&, void (unsigned int) block_pointer, void const*) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld3::MachOAnalyzer::withVMLayout(Diagnostics&, void (mach_o::Layout const&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::APIs::runAllInitializersForMain()",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::JustInTimeLoader::applyFixups(Diagnostics&, dyld4::RuntimeState&, dyld4::DyldCacheDataConstLazyScopedWriter&, bool, lsl::Vector<std::__1::pair<dyld4::Loader const*, char const*>>*) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::Loader::findAndRunAllInitializers(dyld4::RuntimeState&) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::Loader::forEachBindTarget(Diagnostics&, dyld4::RuntimeState&, void (unsigned int, unsigned int, dyld4::Loader::ResolvedSymbol const&) block_pointer, bool, void (dyld4::Loader::ResolvedSymbol const&, bool&) block_pointer, void (dyld4::Loader::ResolvedSymbol const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::Loader::hasExportedSymbol(Diagnostics&, dyld4::RuntimeState&, char const*, dyld4::Loader::ExportedSymbolMode, dyld4::Loader::ResolverMode, dyld4::Loader::ResolvedSymbol*, dyld3::Array<dyld4::Loader const*>*) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::Loader::resolveSymbol(Diagnostics&, dyld4::RuntimeState&, int, char const*, bool, bool, void (unsigned int, unsigned int, dyld4::Loader::ResolvedSymbol const&) block_pointer, bool) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::PrebuiltLoader::dependent(dyld4::RuntimeState const&, unsigned int, mach_o::LinkedDylibAttributes*) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::PrebuiltLoader::runInitializers(dyld4::RuntimeState&) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "exp2",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::field::gf2_128::aarch64::ghash_mul_binius",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::init_perf_thread_pool",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::lincheck::kernels::aarch64::process_block_neon_single",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::merkle::sha256x4::hash4_equal_len_from_midstate",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::default_config",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::default_verifier_config",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::build_fold_byte_table",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::prove_batched_padded_with_precomputed::<flock_core::challenger::FsChallenger>::{closure#9}",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::s_hat_v_from_z_vec",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::perf_core_count",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::zerocheck::prove_packed_padded_inner::<flock_core::challenger::FsChallenger>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::zerocheck::univariate_skip_optimized::kernels::shift_reduce_inner_ab",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::zerocheck::univariate_skip_optimized::medium_challenges_ghash",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_prover::prover::prove_fast_core_impl::<flock_core::challenger::FsChallenger>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "getsectbynamefromheader_64",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "invocation function for block in dyld3::MachOAnalyzer::forEachInitializer(Diagnostics&, dyld3::MachOAnalyzer::VMAddrConverter const&, void (unsigned int) block_pointer, void const*) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "invocation function for block in dyld4::Loader::findAndRunAllInitializers(dyld4::RuntimeState&) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "invocation function for block in dyld4::Loader::forEachBindTarget(Diagnostics&, dyld4::RuntimeState&, void (unsigned int, unsigned int, dyld4::Loader::ResolvedSymbol const&) block_pointer, bool, void (dyld4::Loader::ResolvedSymbol const&, bool&) block_pointer, void (dyld4::Loader::ResolvedSymbol const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "invocation function for block in mach_o::Fixups::forEachBindTarget_Opcodes(Diagnostics&, bool, void (mach_o::Fixups::BindTargetInfo const&, bool&) block_pointer, void (mach_o::Fixups::BindTargetInfo const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "invocation function for block in mach_o::Header::forEachSection(void (mach_o::Header::SectionInfo const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "libSystem_initializer",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "linkat",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_msg2_internal",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_msg2_trap",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_o::Fixups::forEachBindTarget_Opcodes(Diagnostics&, bool, void (mach_o::Fixups::BindTargetInfo const&, bool&) block_pointer, void (mach_o::Fixups::BindTargetInfo const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_o::Fixups::forEachBindUnified_Opcodes(Diagnostics&, bool, void (unsigned long long, unsigned int, mach_o::Fixups::BindTargetInfo const&, bool&) block_pointer, void (unsigned long long, unsigned int, mach_o::Fixups::BindTargetInfo const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_o::Fixups::forEachBind_OpcodesLazy(Diagnostics&, void (char const*, bool, bool, unsigned int, int, unsigned int, unsigned int, unsigned long long, unsigned char, char const*, bool, bool, unsigned long long, bool, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_o::Header::forEachLoadCommand(void (load_command const*, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_o::Header::forEachSection(void (mach_o::Header::SectionInfo const&, bool&) block_pointer) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_timebase_info",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_vm_deferred_reclamation_buffer_resize",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_vm_reclaim_ring_resize",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_vm_reclaim_update_kernel_accounting",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "pthread_cond_signal",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#1}>, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::fold::FoldConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#3}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#2}>, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#0}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#1}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#1}>, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#2}, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#1}>, flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon_core::registry::in_worker::<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon_core::registry::in_worker::<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::fold::FoldConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#3}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#2}>, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#0}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::fold::FoldConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#3}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#2}>, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#0}, flock_core::pcs::ring_switch::s_hat_v_from_z_vec::{closure#1}>>::{closure#1}, alloc::vec::Vec<flock_core::field::gf2_128::F128>, alloc::vec::Vec<flock_core::field::gf2_128::F128>>::{closure#0}, (alloc::vec::Vec<flock_core::field::gf2_128::F128>, alloc::vec::Vec<flock_core::field::gf2_128::F128>)>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "stat",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "std::fs::hard_link::<&std::path::PathBuf, &std::path::Path>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "std::sys::fs::hard_link",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "write",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "xzm_reclaim_mark_free_locked",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "xzm_reclaim_sync_and_resize",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    }
+  ],
+  "self_samples": [
+    {
+      "symbol": "<&<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1} as core::ops::function::FnMut<((usize, &mut flock_core::field::gf2_128::F128),)>>::call_mut",
+      "samples": 4568,
+      "percent": 76.47748200234388
+    },
+    {
+      "symbol": "blake3::portable::compress_in_place",
+      "samples": 205,
+      "percent": 3.4321111669177964
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::lagrange_weights_naive",
+      "samples": 161,
+      "percent": 2.6954629164573913
+    },
+    {
+      "symbol": "_platform_memmove",
+      "samples": 110,
+      "percent": 1.841620626151013
+    },
+    {
+      "symbol": "<flock_core::pcs::tensor_algebra::TensorAlgebra>::transpose",
+      "samples": 82,
+      "percent": 1.3728444667671187
+    },
+    {
+      "symbol": "core::slice::sort::stable::drift::sort::<usize, <usize as core::cmp::PartialOrd>::lt>",
+      "samples": 79,
+      "percent": 1.3226184496902729
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::lagrange_weights_lambda_naive",
+      "samples": 73,
+      "percent": 1.2221664155365812
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::common::xor_dedup",
+      "samples": 73,
+      "percent": 1.2221664155365812
+    },
+    {
+      "symbol": "sha2::sha256::compress256",
+      "samples": 65,
+      "percent": 1.0882303699983258
+    },
+    {
+      "symbol": "flock_core::lincheck::csc_from_rows",
+      "samples": 58,
+      "percent": 0.9710363301523522
+    },
+    {
+      "symbol": "<blake3::ChunkState>::update",
+      "samples": 54,
+      "percent": 0.9040683073832245
+    },
+    {
+      "symbol": "flock_core::zerocheck::multilinear::interpolate_at_z_combined_weights",
+      "samples": 53,
+      "percent": 0.8873263016909426
+    },
+    {
+      "symbol": "swtch_pri",
+      "samples": 50,
+      "percent": 0.8371002846140967
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::ops::range::Range<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#2}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<flock_core::field::gf2_128::F128, <alloc::vec::Vec<flock_core::field::gf2_128::F128>>::extend_trusted<core::iter::adapters::map::Map<core::ops::range::Range<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#2}>>::{closure#0}>::{closure#0}>",
+      "samples": 45,
+      "percent": 0.7533902561526872
+    },
+    {
+      "symbol": "<blake3::Hasher>::update",
+      "samples": 37,
+      "percent": 0.6194542106144316
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::tensor_algebra_transpose",
+      "samples": 35,
+      "percent": 0.5859701992298677
+    },
+    {
+      "symbol": "DYLD-STUB$$memcpy",
+      "samples": 15,
+      "percent": 0.25113008538422904
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_small_freelist",
+      "samples": 10,
+      "percent": 0.16742005692281936
+    },
+    {
+      "symbol": "flock_core::lincheck::build_quirky_eq_table",
+      "samples": 10,
+      "percent": 0.16742005692281936
+    },
+    {
+      "symbol": "__psynch_cvwait",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "_platform_memset",
+      "samples": 9,
+      "percent": 0.15067805123053743
+    },
+    {
+      "symbol": "_xzm_free",
+      "samples": 8,
+      "percent": 0.13393604553825547
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_freelist_outlined",
+      "samples": 8,
+      "percent": 0.13393604553825547
+    },
+    {
+      "symbol": "flock_core::r1cs::absorb_matrix",
+      "samples": 8,
+      "percent": 0.13393604553825547
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::induce_sumcheck_enforced_sum",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "flock_prover::digest_bind::digest_claim_value",
+      "samples": 6,
+      "percent": 0.10045203415369162
+    },
+    {
+      "symbol": "__psynch_cvbroad",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "flock_core::field::f128_slice::aarch64::fold_pairs",
+      "samples": 5,
+      "percent": 0.08371002846140968
+    },
+    {
+      "symbol": "<&flock_core::zerocheck::univariate_skip_optimized::round1_shift_reduce_extract_c_packed_padded_with_s_hat_v::{closure#1} as core::ops::function::FnMut<(flock_core::zerocheck::univariate_skip_optimized::WorkerStateWithSHatV, usize)>>::call_mut",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#1}> as core::iter::traits::iterator::Iterator>::fold::<(), core::iter::traits::iterator::Iterator::for_each::call<flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::PerQuery, <alloc::vec::Vec<flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::PerQuery>>::extend_trusted<core::iter::adapters::map::Map<core::slice::iter::Iter<usize>, flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual::{closure#1}>>::{closure#0}>::{closure#0}>",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<core::num::nonzero::NonZero<u64>>::trailing_zeros",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<flock_prover::digest_bind::DigestStatement>::public_digest",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_tiny",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::eval_rs_eq_finish_from_prefix_binary_q",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "mach_absolute_time",
+      "samples": 4,
+      "percent": 0.06696802276912774
+    },
+    {
+      "symbol": "<flock_core::challenger::FsChallenger>::squeeze_into",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "<flock_core::ro::RoTreeHasher>::hash",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "<rayon_core::registry::WorkerThread>::wait_until_cold",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "core::slice::sort::shared::smallsort::small_sort_network::<usize, <usize as core::cmp::PartialOrd>::lt>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "crossbeam_epoch::default::with_handle::<crossbeam_epoch::default::pin::{closure#0}, crossbeam_epoch::guard::Guard>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "mach_vm_reclaim_update_kernel_accounting_trap",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>",
+      "samples": 3,
+      "percent": 0.05022601707684581
+    },
+    {
+      "symbol": " 32])>>::extend_trusted<core::iter::adapters::map::Map<core::iter::adapters::zip::Zip<core::iter::adapters::copied::Copied<core::slice::iter::Iter<usize>>, core::iter::adapters::copied::Copied<core::slice::iter::Iter<&[u8]>>>, flock_core::merkle::verify_merkle_multi_proof_framed::{closure#1}>>::{closure#0}>::{closure#0}>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<&flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0} as core::ops::function::FnMut<((usize, (&mut [flock_core::field::gf2_128::F128], &mut [flock_core::field::gf2_128::F128])),)>>::call_mut",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<hashbrown::raw::RawTable<(usize, ())>>::reserve_rehash::<hashbrown::map::make_hasher<usize, (), std::hash::random::RandomState>::{closure#0}>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_malloc_zone_malloc",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_xzone_free_freelist",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "_xzm_xzone_malloc",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "core::intrinsics::likely",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_core::lincheck::sumcheck_bind_top_in_place_par",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_core::pcs::ligerito::induce_sumcheck_evaluate_at_residual",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "flock_core::zerocheck::fold_sumcheck_round",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<<flock_core::lincheck::CscCircuit as flock_core::lincheck::LincheckCircuit>::fold_alpha_batched::{closure#1}>>::{closure#1}, (), ()>::{closure#0}",
+      "samples": 2,
+      "percent": 0.03348401138456387
+    },
+    {
+      "symbol": "<&flock_core::lincheck::kernels::aarch64::partial_fold_packed_z_neon_iblock_padded::{closure#0} as core::ops::function::FnMut<((usize, &mut [flock_core::field::gf2_128::F128]),)>>::call_mut",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<&flock_core::zerocheck::multilinear::uni_skip_fold_and_round_pair_optimized_packed_padded::{closure#0} as core::ops::function::FnMut<((usize, (&mut [flock_core::field::gf2_128::F128], &mut [flock_core::field::gf2_128::F128])),)>>::call_mut",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<alloc::vec::Vec<flock_core::pcs::ligerito::recursive_verifier_with_basis_succinct_impl::LevelCtx>>::as_slice",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<core::iter::adapters::chain::Chain<core::ops::range::Range<usize>, core::ops::range::Range<usize>> as core::iter::traits::iterator::Iterator>::try_fold::<(), core::iter::adapters::filter::filter_try_fold<usize, (), core::ops::control_flow::ControlFlow<rayon_core::job::JobRef>, <rayon_core::registry::WorkerThread>::steal::{closure#0}, core::iter::traits::iterator::Iterator::find_map::check<usize, rayon_core::job::JobRef, <rayon_core::registry::WorkerThread>::steal::{closure#1}>::{closure#0}>::{closure#0}, core::ops::control_flow::ControlFlow<rayon_core::job::JobRef>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<crossbeam_deque::deque::Worker<rayon_core::job::JobRef>>::pop",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<crossbeam_epoch::internal::Global>::try_advance",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<deduplicated_symbol>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<flock_core::challenger::FsChallenger as flock_core::challenger::Challenger>::sample_f128",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<flock_core::pcs::ligerito::RoundQuad>::eval",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<flock_prover::r1cs_hashes::blake3::Word>::add_sum",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<hashbrown::raw::RawTable<(usize, ())>>::reserve::<hashbrown::map::make_hasher<usize, (), std::hash::random::RandomState>::{closure#0}>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<rayon_core::sleep::Sleep>::sleep::<<rayon_core::registry::WorkerThread>::wait_until_cold::{closure#0}>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::hash::random::DefaultHasher as core::hash::Hasher>::write",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::hash::random::RandomState as core::hash::BuildHasher>::hash_one::<&usize>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::sys::pal::unix::sync::mutex::Mutex>::unlock",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<std::sys::pal::unix::time::Timespec>::now",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "<u64>::wrapping_add",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "DYLD-STUB$$free",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "DYLD-STUB$$realloc",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "__psynch_cvsignal",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "__psynch_mutexdrop",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_malloc_zone_realloc",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_realloc",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_free_outlined",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "_xzm_xzone_malloc_from_freelist_chunk",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "dyld4::PrebuiltLoader::dependent(dyld4::RuntimeState const&, unsigned int, mach_o::LinkedDylibAttributes*) const",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "exp2",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::field::gf2_128::aarch64::ghash_mul_binius",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::lincheck::build_eq_table",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::lincheck::kernels::aarch64::process_block_neon_single",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::merkle::sha256x4::hash4_equal_len_from_midstate",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::merkle::verify_merkle_multi_proof_framed",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::build_fold_byte_table",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::ring_switch::eval_rs_eq_prefix",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::pcs::verify_opening_batch_ligerito_mixed_linear_mode_ro::<flock_core::challenger::FsChallenger>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::zerocheck::univariate_skip_optimized::kernels::shift_reduce_inner_ab",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_core::zerocheck::univariate_skip_optimized::medium_challenges_ghash",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_prover::digest_bind::digest_claim_point",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "flock_prover::r1cs_hashes::blake3::build_matrices_rows_pinned",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "getsectbynamefromheader_64",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "linkat",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_msg2_trap",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "mach_timebase_info",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "pthread_cond_broadcast",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon::iter::plumbing::bridge_producer_consumer::helper::<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon_core::join::join_context::<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::zip::ZipProducer<rayon::slice::IterMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::IterProducer<flock_core::field::gf2_128::F128>>, rayon::iter::for_each::ForEachConsumer<flock_core::lincheck::sumcheck_bind_top_in_place_par::{closure#0}>>::{closure#1}, (), ()>::{closure#0}",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "rayon_core::registry::in_worker::<rayon_core::join::join_context<rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#0}, rayon::iter::plumbing::bridge_producer_consumer::helper<rayon::iter::enumerate::EnumerateProducer<rayon::iter::zip::ZipProducer<rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>, rayon::slice::chunks::ChunksMutProducer<flock_core::field::gf2_128::F128>>>, rayon::iter::map::MapConsumer<rayon::iter::reduce::ReduceConsumer<flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#2}, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#1}>, flock_core::zerocheck::multilinear::fold_and_compute_round_pair_into::{closure#0}>>::{closure#1}, (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128)>::{closure#0}, ((flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128), (flock_core::field::gf2_128::F128, flock_core::field::gf2_128::F128))>",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "stat",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    },
+    {
+      "symbol": "write",
+      "samples": 1,
+      "percent": 0.016742005692281934
+    }
+  ],
+  "self_categories": [
+    {
+      "symbol": "field arithmetic and transforms",
+      "samples": 4584,
+      "percent": 76.74535409342039
+    },
+    {
+      "symbol": "sumchecks and constraint checks",
+      "samples": 377,
+      "percent": 6.311736145990289
+    },
+    {
+      "symbol": "transcript, hashing, and randomness",
+      "samples": 374,
+      "percent": 6.261510128913445
+    },
+    {
+      "symbol": "other or unresolved",
+      "samples": 267,
+      "percent": 4.470115519839276
+    },
+    {
+      "symbol": "allocation and copying",
+      "samples": 215,
+      "percent": 3.5995312238406165
+    },
+    {
+      "symbol": "PCS and Merkle work",
+      "samples": 127,
+      "percent": 2.1262347229198055
+    },
+    {
+      "symbol": "scheduling and synchronization",
+      "samples": 29,
+      "percent": 0.4855181650761761
+    }
+  ]
+}

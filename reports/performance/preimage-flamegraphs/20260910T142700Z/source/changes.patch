@@ -1,0 +1,65 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index bc0871e03d893eee96b406cb1c04e6dd149f5f7e..fda68f5a776fd41c61365d0cc991d2db55a76aa9 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -164,6 +164,18 @@ dependencies = [
+  "toml",
+ ]
+ 
++[[package]]
++name = "flock-performance"
++version = "0.1.0"
++dependencies = [
++ "libc",
++ "quick-xml",
++ "serde",
++ "serde_json",
++ "sha2",
++ "toml",
++]
++
+ [[package]]
+ name = "flock-prover"
+ version = "0.1.0"
+@@ -256,6 +268,15 @@ dependencies = [
+  "unicode-ident",
+ ]
+ 
++[[package]]
++name = "quick-xml"
++version = "0.39.4"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cdcc8dd4e2f670d309a5f0e83fe36dfdc05af317008fea29144da1a2ac858e5e"
++dependencies = [
++ "memchr",
++]
++
+ [[package]]
+ name = "quote"
+ version = "1.0.45"
+diff --git a/Cargo.toml b/Cargo.toml
+index dc725e28b40d98fc7443d106095539817eb98f26..6120a7f3a01e2b1ce3f243db7e0d05037b97d4a5 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -5,6 +5,7 @@ members = [
+     "crates/veil-f128",
+     "examples",
+     "tools/formal-proof",
++    "tools/performance",
+ ]
+ resolver = "2"
+ 
+diff --git a/crates/flock-prover/Cargo.toml b/crates/flock-prover/Cargo.toml
+index 637b1756d627f140d0a06d49c2ab796dfedf0874..7569359178263cc640bced87d37426dbf93bef60 100644
+--- a/crates/flock-prover/Cargo.toml
++++ b/crates/flock-prover/Cargo.toml
+@@ -53,5 +53,9 @@ required-features = ["unsound-challenger"]
+ name = "preimage_scaling"
+ required-features = ["veil"]
+ 
++[[example]]
++name = "preimage_profile"
++required-features = ["veil"]
++
+ [lints]
+ workspace = true

@@ -1,0 +1,12 @@
+   Compiling libc v0.2.186
+   Compiling memchr v2.8.1
+   Compiling serde_json v1.0.150
+   Compiling cpufeatures v0.2.17
+   Compiling getrandom v0.2.17
+   Compiling sha2 v0.10.9
+   Compiling keccak v0.1.6
+   Compiling sha3 v0.10.9
+   Compiling flock-core v0.1.0 (/private/tmp/flock-profile-source-13341-1789050686471632000/crates/flock-core)
+   Compiling veil-f128 v0.1.0 (/private/tmp/flock-profile-source-13341-1789050686471632000/crates/veil-f128)
+   Compiling flock-prover v0.1.0 (/private/tmp/flock-profile-source-13341-1789050686471632000/crates/flock-prover)
+    Finished `release` profile [optimized] target(s) in 13.12s

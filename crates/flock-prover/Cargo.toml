@@ -53,5 +53,9 @@ required-features = ["unsound-challenger"]
 name = "preimage_scaling"
 required-features = ["veil"]
 
+[[example]]
+name = "preimage_profile"
+required-features = ["veil"]
+
 [lints]
 workspace = true

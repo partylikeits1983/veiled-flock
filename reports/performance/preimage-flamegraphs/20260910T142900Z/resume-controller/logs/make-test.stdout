@@ -1,0 +1,726 @@
+/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin/cargo check --locked --release --workspace --all-targets --all-features
+/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin/cargo fmt --all -- --check
+/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin/cargo clippy --locked --release --workspace --all-targets --all-features -- -D warnings
+rustup target add x86_64-apple-darwin
+CARGO_TARGET_X86_64_APPLE_DARWIN_RUSTFLAGS="-C target-cpu=x86-64-v3 -C target-feature=+pclmulqdq,+sha,+aes" \
+		/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin/cargo clippy --locked --release --workspace --all-targets --all-features --target x86_64-apple-darwin -- -D warnings
+/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/bin/cargo test --locked --release --workspace --all-targets --all-features
+
+running 332 tests
+test bits::tests::transpose_8_u64s_matches_scalar ... ok
+test bits::tests::matches_naive ... ok
+test bits::tests::transpose_is_involution ... ok
+test challenger::tests::fs_challenger_different_observations_diverge ... ok
+test challenger::tests::fs_challenger_identical_scripts_produce_identical_output ... ok
+test challenger::tests::fs_challenger_different_domains_diverge ... ok
+test challenger::tests::fs_challenger_label_changes_output ... ok
+test challenger::tests::fs_challenger_pow_rejects_wrong_nonce ... ok
+test challenger::tests::fs_challenger_pow_zero_bits_requires_canonical_nonce ... ok
+test challenger::tests::fs_challenger_sample_advances_state ... ok
+test challenger::tests::fs_challenger_sample_one_vs_sample_vec_one_differ ... ok
+test challenger::tests::fs_challenger_scalar_vs_slice_dont_collide ... ok
+test challenger::tests::fs_challenger_two_scalars_dont_collide_with_one_slice_of_two ... ok
+test challenger::tests::random_challenger_is_deterministic_per_seed ... ok
+test challenger::tests::random_challenger_observe_is_noop ... ok
+test challenger::tests::random_challenger_pow_is_noop ... ok
+test challenger::tests::sample_f128_vec_matches_individual_samples ... ok
+test field::gf2_128::tests::add_identities ... ok
+test field::f128_slice::tests::selected_fold_matches_portable_with_offset_and_tail ... ok
+test field::gf2_128::tests::all_neon_variants_agree ... ok
+test field::gf2_128::tests::associativity_random ... ok
+test field::gf2_128::tests::deferred_reduction_matches_direct ... ok
+test field::gf2_128::tests::deferred_xor_commutes_with_reduction ... ok
+test field::gf2_128::tests::mul_by_x_matches_mul_by_gen ... ok
+test field::gf2_128::tests::high_bit_inputs_reduce_correctly ... ok
+test field::gf2_128::tests::ghash_reduction_smoking_gun ... ok
+test field::gf2_128::tests::mul_commutativity ... ok
+test field::gf2_128::tests::neon_mul_vec2_matches_scalar ... ok
+test field::gf2_128::tests::mul_identities ... ok
+test field::gf2_8::tests::add_is_xor ... ok
+test field::gf2_128::tests::inverse_roundtrip ... ok
+test challenger::tests::fs_challenger_pow_roundtrip ... ok
+test field::gf2_8::tests::associativity_random ... ok
+test field::gf2_8::tests::fips_197_test_vectors ... ok
+test field::gf2_8::tests::inv_roundtrip ... ok
+test field::gf2_8::tests::mul_identities ... ok
+test field::gf2_8::tests::mul_known_values ... ok
+test field::gf2_8::tests::neon_gf8_mul_vec16_matches_scalar ... ok
+test field::gf2_8::tests::software_matches_neon ... ok
+test field::gf2_8::tests::mul_commutativity_exhaustive ... ok
+test field::phi8::tests::zero_and_one_map_correctly ... ok
+test linalg::tests::batch_inverse_preserves_zeroes ... ok
+test linalg::tests::conditioned_image_applies_r_to_kernel_of_l ... ok
+test field::phi8::tests::homomorphism_full ... ok
+test linalg::tests::rank_det_solve_and_kernel_agree ... ok
+test lincheck::tests::eq_table_matches_direct_formula ... ok
+test lincheck::tests::partial_fold_dispatch_handles_small_k ... ok
+test field::gf2_8::tests::fermat_little_theorem ... ok
+test lincheck::tests::sparse_row_fold_matches_dense ... ok
+test lincheck::tests::partial_fold_matches_direct ... ok
+test lincheck::tests::partial_fold_fast_matches_serial ... ok
+test merkle::tests::external_framed_tree_matches_native_and_records_every_node ... ok
+test merkle::tests::framed_merkle_multi_proof_roundtrips ... ok
+test merkle::tests::framed_merkle_proof_rejects_malformed_inputs ... ok
+test merkle::tests::framed_midstate_simd_matches_scalar_all_tail_shapes ... ok
+test merkle::tests::merkle_proof_rejects_tampered_path ... ok
+test merkle::tests::merkle_proof_rejects_wrong_index ... ok
+test lincheck::tests::partial_fold_padded_matches_dense ... ok
+test merkle::tests::merkle_proof_roundtrips_at_every_leaf ... ok
+test merkle::tests::multi_proof_full_query_set_is_root_only ... ok
+test merkle::tests::multi_proof_random_subsets_roundtrip ... ok
+test merkle::tests::multi_proof_beats_independent_paths_at_scale ... ok
+test merkle::tests::multi_proof_rejects_extra_or_missing_hashes ... ok
+test merkle::tests::multi_proof_rejects_unsorted_positions ... ok
+test merkle::tests::multi_proof_rejects_tampered_proof_hash ... ok
+test lincheck::tests::verify_rejects_shape_errors ... ok
+test lincheck::tests::verify_rejects_mutations ... ok
+test merkle::tests::multi_proof_sibling_pair_emits_no_hashes_at_leaf_level ... ok
+test merkle::tests::multi_proof_rejects_wrong_leaf ... ok
+test merkle::tests::one_leaf_root_is_the_leaf_hash ... ok
+test merkle::tests::multi_proof_single_position_matches_single_proof ... ok
+test lincheck::tests::masked_verify_rejects_sigma_tamper ... ok
+test merkle::tests::power_of_two_assertion ... ok
+test merkle::tests::root_changes_when_any_leaf_changes ... ok
+test lincheck::tests::partial_fold_is_mle_at_outer_point ... ok
+test merkle::tests::two_leaves_matches_hand_computation ... ok
+test merkle::tests::tree_root_separates_nonce_channel_depth_level_index ... ok
+test merkle::tests::parallel_matches_sequential_tail_shapes ... ok
+test merkle::tests::rejects_non_power_of_two - should panic ... ok
+test ntt::additive_ntt_f128::tests::deepest_layer_twiddle_count ... ok
+test merkle::tests::parallel_matches_sequential ... ok
+test ntt::additive_ntt_f128::tests::forward_is_linear ... ok
+test ntt::additive_ntt_f128::tests::forward_inverse_roundtrip ... ok
+test ntt::additive_ntt_f128::tests::inverse_forward_roundtrip ... ok
+test ntt::additive_ntt_f128::tests::ntt_of_zero_is_zero ... ok
+test ntt::additive_ntt_f128::tests::interleaved_matches_per_lane ... ok
+test ntt::additive_ntt_f128::tests::twiddle_at_layer_0_uses_full_basis_minus_one ... ok
+test ntt::inv_table::tests::apply_triple_matches_three_singles ... ok
+test ntt::inv_table::tests::apply_neon_matches_apply_scalar ... ok
+test ntt::inv_table::tests::matches_naive_k3 ... ok
+test ntt::inv_table::tests::matches_naive_k4 ... ok
+test ntt::inv_table::tests::matches_naive_k6_protocol_size ... ok
+test ntt::additive_ntt_f128::tests::neon_matches_scalar ... ok
+test ntt::inv_table::tests::table_storage_is_cache_line_aligned ... ok
+test ntt::inv_table_deg4::tests::first_64_lanes_match_input_bits ... ok
+test ntt::inv_table_deg4::tests::apply_matches_apply_scalar ... ok
+test ntt::inv_table_deg4::tests::apply_matches_naive_random ... ok
+test ntt::parallel_f128::tests::forward_is_linear ... ok
+test ntt::parallel_f128::tests::neon_matches_scalar_for_random_inputs ... ok
+test ntt::parallel_f128::tests::ntt_of_zero_is_zero ... ok
+test ntt::tests::forward_is_linear ... ok
+test ntt::tests::forward_inverse_roundtrip ... ok
+test ntt::tests::nonzero_beta_roundtrip ... ok
+test ntt::tests::inverse_forward_roundtrip ... ok
+test ntt::tests::twiddles_size ... ok
+test pcs::commit::tests::codeword_doubles_message_length ... ok
+test pcs::commit::tests::commit_is_deterministic ... ok
+test pcs::commit::tests::commit_rejects_profile_rate_mismatch - should panic ... ok
+test lincheck::tests::prove_verify_roundtrip_honest ... ok
+test pcs::commit::tests::commit_root_sensitive_to_witness ... ok
+test pcs::commit::tests::commit_runs_and_produces_root ... ok
+test pcs::commit::tests::commit_zk_matches_wide_oracle ... ok
+test pcs::commit::tests::params_new_derives_profile_rate ... ok
+test pcs::commit::tests::commit_matches_full_ntt_oracle ... ok
+test lincheck::tests::masked_roundtrip_recovers_the_unmasked_claim ... ok
+test pcs::commit::tests::params_new_accepts_zk_with_feature ... ok
+test ntt::parallel_f128::tests::parallel_matches_sequential ... ok
+test lincheck::tests::partial_fold_neon_single_matches_serial ... ok
+test pcs::commit::tests::params_new_rejects_invalid_dimensions ... ok
+test pcs::commit::tests::params_validation_rejects_overflowing_batch_size ... ok
+test pcs::commit::tests::params_validation_returns_structured_errors ... ok
+test pcs::commit::tests::plain_commit_rejects_zk_params - should panic ... ok
+test pcs::commit::tests::profile_rate_validation_returns_structured_error ... ok
+test pcs::jagged::tests::runtime_m25 ... ignored, heavy benchmark; run explicitly with --release --ignored --nocapture
+test pcs::commit::tests::rs_encoding_is_linear ... ok
+test pcs::jagged::tests::scaling_diag ... ignored, diagnostic; run with --release --ignored --nocapture
+test pcs::jagged::tests::sumcheck_rejects_tampered_proof ... ok
+test pcs::jagged::tests::sumcheck_rejects_wrong_value ... ok
+test pcs::jagged::tests::f_hat_t_matches_bruteforce ... ok
+test pcs::jagged::tests::sumcheck_roundtrip ... ok
+test pcs::ligerito::fold_grind_taper_tests::secure_nonce_count_matches_the_ledger_fold_count ... ok
+test pcs::jagged::tests::f_hat_t_eq4_at_boolean_points ... ok
+test pcs::ligerito::fold_grind_taper_tests::secure_aggregate_bits_are_pinned ... ok
+test pcs::ligerito::fold_grind_taper_tests::zk_l0_ledger_charges_the_c_combination ... ok
+test pcs::ligerito::fold_grind_taper_tests::zk_l0_ledger_rejects_a_johnson_level ... ok
+test pcs::ligerito::tests::estimate_ligerito_m29_initial_k6 ... ok
+test pcs::ligerito::tests::estimate_ligerito_m29 ... ok
+test pcs::ligerito::tests::estimate_ligerito_m30 ... ok
+test pcs::ligerito::tests::estimate_ligerito_m30_initial_k6 ... ok
+test pcs::ligerito::tests::final_level_binding_pins_yr_to_committed_codeword ... ok
+test pcs::ligerito::tests::induce_sumcheck_evaluate_at_residual_matches_dense ... ok
+test pcs::ligerito::tests::induce_sumcheck_poly_consistent_with_codeword ... ok
+test pcs::ligerito::tests::induce_sumcheck_poly_with_interleaving_and_v_challenges ... ok
+test pcs::ligerito::tests::ligerito_derive_paper_compatible_for_all_embedded ... ok
+test pcs::ligerito::fold_grind_taper_tests::regime_selects_the_fold_grind_taper ... ok
+test pcs::ligerito::fold_grind_taper_tests::udr_level_grinds_every_fold_round_at_full_width ... ok
+test pcs::ligerito::tests::ligerito_all_embedded_configs_validate ... ok
+test pcs::ligerito::tests::ligerito_prover_config_for_lookup ... ok
+test lincheck::tests::partial_fold_oblock_matches_iblock ... ok
+test pcs::ligerito::tests::ligerito_fast_profile_m22_roundtrip ... ok
+test pcs::ligerito::tests::ligerito_proof_bincode_roundtrip ... ok
+test pcs::ligerito::tests::ligerito_ood_and_fold_grinding_roundtrip_and_tamper ... ok
+test pcs::ligerito::tests::ligerito_security_config_m29_toml_loads ... ok
+test pcs::ligerito::tests::ligerito_security_config_matches_default_config ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_insufficient_queries ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_johnson_with_proximity_loss ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_paper_inconsistent_eps_pg ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_paper_inconsistent_eps_query ... ok
+test ntt::additive_ntt_f128::tests::parallel_matches_scalar ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_udr_outside_theorem_range ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_udr_with_eta ... ok
+test pcs::ligerito::tests::ligerito_security_config_rejects_udr_without_proximity_loss ... ok
+test pcs::ligerito::tests::ligerito_security_config_serde_roundtrip ... ok
+test pcs::ligerito::tests::ligerito_security_config_udr_regime_validates ... ok
+test pcs::ligerito::tests::ligerito_security_config_validates ... ok
+test pcs::ligerito::tests::ligerito_security_config_toml_roundtrip ... ok
+test pcs::ligerito::tests::ligerito_r1_rejects_mutated_yr ... ok
+test pcs::ligerito::tests::induce_sumcheck_poly_via_ntt_matches_dense ... ok
+test pcs::ligerito::tests::ligerito_security_config_drives_roundtrip_with_grinding ... ok
+test pcs::ligerito::tests::ligerito_size_breakdown_m22 ... ignored
+test pcs::ligerito::tests::ligerito_size_breakdown_m22_initial_k6 ... ignored
+test pcs::ligerito::tests::ligerito_size_breakdown_m23 ... ignored
+test pcs::ligerito::tests::ligerito_size_breakdown_m24_aggressive ... ignored
+test pcs::ligerito::tests::ligerito_size_breakdown_m24_decreasing_rate ... ignored
+test pcs::ligerito::tests::ligerito_size_breakdown_m24_uniform_rate ... ignored
+test pcs::ligerito::tests::partial_eval_then_eval_equals_full_eval ... ok
+test pcs::ligerito::tests::profile_conversion_rejects_unsupported_rates ... ok
+test pcs::ligerito::tests::ligero_commit_encoding_roundtrips_via_inv_ntt ... ok
+test pcs::ligerito::tests::ligerito_r1_roundtrip_accepts ... ok
+test pcs::ligerito::tests::recursive_prover_with_l0_matches_full ... ok
+test pcs::ligerito::tests::recursive_prover_with_basis_roundtrip_single_claim ... ok
+test pcs::ligerito::tests::recursive_verifiers_reject_recursive_leaf_salts ... ok
+test pcs::ligerito::tests::regen_embedded_tomls ... ignored
+test pcs::ligerito::tests::secure_profile_reports_additive_whole_opening_soundness ... ok
+test pcs::ligerito::tests::stateful_sumcheck_introduce_glue ... ok
+test pcs::ligerito::tests::stateful_sumcheck_single_basis_roundtrip ... ok
+test pcs::ligerito::tests::recursive_verifier_with_basis_succinct_matches_dense ... ok
+test pcs::ligerito::tests::verify_level_opens_maybe_ro_keeps_leaf_salts_domain_explicit ... ok
+test pcs::pack::tests::pack_independent_chunks ... ok
+test pcs::pack::tests::pack_layout_matches_natural_bit_order ... ok
+test pcs::pack::tests::pack_unpack_roundtrip ... ok
+test pcs::pack::tests::rejects_undersized_witness - should panic ... ok
+test pcs::ring_switch::tests::build_eq_sparse_matches_dense ... ok
+test pcs::ring_switch::tests::build_eq_split_reconstructs_full ... ok
+test pcs::ring_switch::tests::claim_check_recovers_zhat_skip ... ok
+test pcs::ring_switch::tests::distinct_scalars_act_differently_on_a_nonzero_slice_vector ... ok
+test pcs::ring_switch::tests::dp24_identity_holds ... ok
+test pcs::ring_switch::tests::eval_rs_eq_finish_binary_q_matches_general ... ok
+test pcs::ring_switch::tests::eval_rs_eq_matches_dense ... ok
+test pcs::ligerito::tests::recursive_prover_with_basis_roundtrip_batched_claims ... ok
+test pcs::ring_switch::tests::fold_1b_rows_sparse_matches_naive ... ok
+test pcs::ring_switch::tests::fold_1b_rows_split_2way_matches_per_claim ... ok
+test pcs::ring_switch::tests::fold_1b_padded_matches_dense ... ok
+test pcs::ring_switch::tests::fold_b128_elems_matches_naive ... ok
+test pcs::ring_switch::tests::fold_b128_elems_sparse_matches_dense ... ok
+test pcs::ring_switch::tests::fold_1b_rows_split_matches_16wide ... ok
+test pcs::ring_switch::tests::fold_b128_elems_split_matches_dense ... ok
+test pcs::ring_switch::tests::mfr_fold_8wide_matches_scalar ... ok
+test pcs::ring_switch::tests::mfr_fold_matches_scalar_bit_scan ... ok
+test pcs::ring_switch::tests::packed_scaling_commutes_with_slice_evaluation ... ok
+test pcs::ring_switch::tests::mfr_fold_16wide_2way_matches_scalar ... ok
+test pcs::ring_switch::tests::prove_batched_matches_sequential ... ok
+test pcs::ring_switch::tests::prove_batched_with_sparse_claim_matches_sequential ... ok
+test pcs::ring_switch::tests::prove_batched_with_precomputed_matches_unprecomputed ... ok
+test pcs::ring_switch::tests::s_hat_v_from_z_vec_degenerate_tail ... ok
+test pcs::ring_switch::tests::s_hat_v_from_z_vec_matches_fold_1b_rows_ab ... ok
+test pcs::ring_switch::tests::s_hat_v_is_linear_in_witness ... ok
+test pcs::ring_switch::tests::subset_sums_4_correctness ... ok
+test pcs::ring_switch::tests::prove_verify_roundtrip ... ok
+test pcs::ring_switch::tests::transpose_is_involution ... ok
+test pcs::ring_switch::tests::weights_have_correct_length ... ok
+test pcs::ring_switch::tests::zzz_bench_fold_1b ... ignored
+test pcs::tensor_algebra::tests::add_is_xor_pairwise ... ok
+test pcs::tensor_algebra::tests::add_zero_is_identity ... ok
+test pcs::ring_switch::tests::verify_rejects_mutated_proof ... ok
+test pcs::tensor_algebra::tests::fold_vertical_with_zero_coeffs_is_zero ... ok
+test pcs::tensor_algebra::tests::from_vertical_scale_vertical ... ok
+test pcs::tensor_algebra::tests::one_from_vertical_one ... ok
+test pcs::tensor_algebra::tests::scale_vertical_distributes_over_add ... ok
+test pcs::tensor_algebra::tests::transpose_bit_semantics ... ok
+test pcs::tensor_algebra::tests::scale_horizontal_via_transpose ... ok
+test pcs::tests::pcs_ligerito_backend_roundtrip ... ignored
+test pcs::tensor_algebra::tests::transpose_involution ... ok
+test pcs::tests::pcs_zk_roundtrip_and_negatives ... ok
+test pcs::tests::zk_field_mask_hiding_open_roundtrip ... ok
+test pcs::ligerito::tests::ligerito_r2_roundtrip_accepts ... ok
+test permutation::tests::claim_matches_direct_mle ... ok
+test permutation::tests::honest_roundtrip_and_claim_match ... ok
+test ntt::additive_ntt_f128::tests::batched_matches_scalar ... ok
+test permutation::tests::non_permutation_relation_rejected ... ok
+test permutation::tests::tampered_pcs_opening_rejected ... ok
+test r1cs::tests::identity_matrices_accept_any_witness ... ok
+test r1cs::tests::packed_matches_bool_apply ... ok
+test r1cs::tests::statement_digest_binds_zk_layout ... ok
+test r1cs::tests::zero_matrices_require_zero_witness ... ok
+test ro::tests::external_backend_reproduces_native_digests_and_records ... ok
+test ro::tests::leaf_point_cannot_parse_as_pow_point ... ok
+test ro::tests::level_and_index_separate_nodes ... ok
+test ro::tests::native_tree_hasher_matches_one_shot_reference ... ok
+test ro::tests::nonce_separates_otherwise_identical_points ... ok
+test ro::tests::ro_first_byte_roles_are_disjoint ... ok
+test scratch::tests::pool_is_bounded ... ok
+test scratch::tests::take_reuses_given_buffer ... ok
+test verifier::tests::verifier_pool_is_single_threaded ... ok
+test permutation::tests::tampered_witness_rejected ... ok
+test zerocheck::multilinear::tests::deterministic ... ok
+test zerocheck::multilinear::tests::fold_at_node_recovers_witness_slice ... ok
+test zerocheck::multilinear::tests::fold_in_place_pair_matches_formula ... ok
+test zerocheck::multilinear::tests::fold_is_xor_linear ... ok
+test zerocheck::multilinear::tests::fold_one_row_neon_matches_scalar ... ok
+test zerocheck::multilinear::tests::fold_table_one_row_matches_direct_lagrange ... ok
+test zerocheck::multilinear::tests::c_eval_from_round1_c_matches_direct_fold ... ok
+test zerocheck::multilinear::tests::fused_round_matches_unfused ... ok
+test zerocheck::multilinear::tests::lagrange_at_node_is_indicator ... ok
+test zerocheck::multilinear::tests::lagrange_weights_sum_to_one ... ok
+test zerocheck::multilinear::tests::optimized_matches_naive ... ok
+test zerocheck::multilinear::tests::parallel_matches_serial ... ok
+test zerocheck::multilinear::tests::round_pair_message_has_degree_two ... ok
+test zerocheck::multilinear::tests::round_pair_symmetric_in_ab ... ok
+test zerocheck::multilinear::tests::zero_witness_gives_zero_round_message ... ok
+test zerocheck::tests::equality_point_rejects_noninvertible_outer_coordinates ... ok
+test zerocheck::tests::false_statement_rejected ... ok
+test zerocheck::tests::final_ab_claims_bound_to_transcript ... ok
+test zerocheck::tests::prove_deterministic ... ok
+test zerocheck::multilinear::tests::uni_skip_fold_round_pair_padded_matches_dense ... ok
+test zerocheck::tests::prove_verify_roundtrip_honest ... ok
+test zerocheck::tests::prove_verify_zk_roundtrip_honest ... ok
+test zerocheck::tests::round1_c_output_is_independent_of_ab ... ok
+test zerocheck::tests::shared_round_weights_match_quadratic_reconstruction ... ok
+test zerocheck::tests::verify_rejects_mutations ... ok
+test zerocheck::tests::prove_verify_zk_round1_mask_roundtrip ... ok
+test zerocheck::tests::verify_rejects_shape_errors ... ok
+test zerocheck::tests::zk_gamma_cancellation_unique_and_fs_ordering ... ok
+test zerocheck::tests::verify_zk_rejects_mutations ... ok
+test zerocheck::univariate_skip::tests::build_eq_basic ... ok
+test zerocheck::univariate_skip::tests::extract_c_deterministic ... ok
+test zerocheck::univariate_skip::tests::extract_c_honest_witness_combined_matches_naive ... ok
+test zerocheck::tests::zk_invalid_witness_rejected ... ok
+test zerocheck::univariate_skip::tests::extract_c_output_shape ... ok
+test zerocheck::univariate_skip::tests::extract_c_matches_naive ... ok
+test zerocheck::univariate_skip::tests::extract_c_with_s_hat_v_matches_fold_1b_rows ... ok
+test zerocheck::univariate_skip::tests::ntt_extend_round_trips_naive_c_path ... ok
+test zerocheck::univariate_skip::tests::round1_all_zero_witness_gives_zero_message ... ok
+test zerocheck::univariate_skip::tests::round1_at_s_nonzero_for_random_witness ... ok
+test zerocheck::univariate_skip::tests::round1_at_s_zero_for_honest_witness ... ok
+test zerocheck::univariate_skip::tests::extract_c_with_s_hat_v_matches_original_wire ... ok
+test zerocheck::univariate_skip::tests::round1_deterministic ... ok
+test zerocheck::univariate_skip::tests::round1_message_nonzero_for_random_witness ... ok
+test zerocheck::univariate_skip::tests::round1_output_shape ... ok
+test zerocheck::univariate_skip::tests::round1_p_c_is_xor_linear_in_c ... ok
+test zerocheck::univariate_skip::tests::split_eq_basic ... ok
+test zerocheck::univariate_skip_deg4::tests::linear_only_path ... ok
+test zerocheck::univariate_skip_deg4::tests::degree4_reduces_to_degree2_when_cd_one ... ok
+test zerocheck::univariate_skip_deg4::tests::ntt_extend_roundtrips_on_s ... ok
+test zerocheck::univariate_skip_deg4_optimized::tests::extend_row_recovers_input_on_s ... ok
+test zerocheck::univariate_skip_deg4::tests::round1_deg4_output_shape ... ok
+test zerocheck::univariate_skip_deg4_optimized::tests::optimized_matches_naive_modulo_cs ... ok
+test zerocheck::univariate_skip_optimized::tests::convert_table_structure ... ok
+test zerocheck::univariate_skip_optimized::tests::deterministic ... ok
+test zerocheck::univariate_skip_optimized::tests::friendly_challenges_f2_independent ... ok
+test zerocheck::univariate_skip_deg4_optimized::tests::optimized_matches_naive_modulo_cs_m14 ... ok
+test zerocheck::univariate_skip_optimized::tests::matches_naive_with_c_s_factor ... ok
+test zerocheck::univariate_skip_optimized::tests::neon_bit_transpose_matches_scalar ... ok
+test zerocheck::univariate_skip_optimized::tests::fusion_matches_existing_and_scalar_oracle ... ok
+test zerocheck::univariate_skip_optimized::tests::neon_fused_inner_matches_scalar_inner ... ok
+test zerocheck::univariate_skip_optimized::tests::neon_inner_matches_scalar_inner ... ok
+test zerocheck::univariate_skip_optimized::tests::output_shape ... ok
+test zerocheck::univariate_skip_optimized::tests::parallel_matches_serial ... ok
+test zerocheck::univariate_skip_optimized::tests::small_and_medium_challenges_sanity ... ok
+test zk::tests::drbg_deterministic_and_forks_independent ... ok
+test zk::tests::layout_math ... ok
+test zk::tests::playback_and_zero_samplers ... ok
+test zk::tests::sized_for_is_sane ... ok
+test zerocheck::univariate_skip_optimized::tests::padded_matches_dense_with_zero_padding ... ok
+test pcs::zk_audit::pcs_rank_audit_negative_control_without_g ... ok
+test pcs::ligerito::tests::estimator_matches_actual_m20 ... ok
+test pcs::ligerito::tests::ligerito_size_breakdown_m20_uniform_rate ... ok
+test pcs::ligerito::tests::ligerito_size_breakdown_m20_decreasing_rate ... ok
+test pcs::ligerito::tests::transpose_sparse_matches_dense ... ok
+test pcs::ligerito::tests::ligerito_size_breakdown_m20_decreasing_rate_thin ... ok
+test pcs::zk_audit::pcs_rank_audit_witness_image_covered ... ok
+test ntt::additive_ntt_f128::tests::interleaved_parallel_matches_scalar ... ok
+
+test result: ok. 321 passed; 0 failed; 11 ignored; 0 measured; 0 filtered out; finished in 0.95s
+
+
+running 3 tests
+test challenge_dependent_inversion_is_not_part_of_sym_scalar ... ok
+test toy_exact_polynomials_match_evaluation_and_degree_semantics ... ok
+test concrete_symbolic_kernels_match_native_references ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test symbolic_mask_matrix_matches_native_and_has_100_bit_margin ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.78s
+
+
+running 3 tests
+test l0_entropy_counting_gate_holds_for_fixture_and_production ... ok
+test closed_form_translation_preserves_open_rows_and_combined_vector ... ok
+test structural_l0_rank_certificate_matches_actual_ntt_on_every_small_query_set ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+
+running 8 tests
+test repair::tests::normalization_keeps_exact_names_and_removes_embedded_line_breaks ... ok
+test repair::tests::normalization_collision_is_rejected_instead_of_merging_symbols ... ok
+test repair::tests::invalid_references_and_truncated_xml_cannot_yield_repaired_stacks ... ok
+test report::tests::baseline_requires_complete_unique_finite_matrix ... ok
+test report::tests::categories_recognize_scheduler_and_polynomial_intrinsics ... ok
+test repair::tests::arrays_and_frame_references_preserve_real_depth_leaves_and_counts ... ok
+test report::tests::capture_counts_rows_deduplicates_recursion_and_reconciles_folded ... ok
+test snapshot::tests::source_changed_during_preparation_is_rejected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::post_process_quote_preserves_spaces_and_single_quotes ... ok
+test tests::resume_allocates_after_every_existing_repeat_without_reusing_interrupted_evidence ... ok
+test tests::acceptance_rejects_stale_short_and_failed_metadata ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 8 tests
+test environment_policy_child_probe ... ok
+test failed_writer_does_not_stop_draining_a_child_pipe ... ok
+test scratch_archive_overlap_including_symlink_aliases_is_rejected ... ok
+test recorder_clears_diagnostics_and_archives_before_upstream_cleanup ... ok
+test all_policy_keys_are_removed_from_real_children_without_global_mutation ... ok
+test copying_or_writing_failures_cannot_report_success_or_overwrite_evidence ... ok
+test export_and_folded_streams_preserve_large_binary_payloads ... ok
+test failures_and_signals_normalize_to_one_and_preserve_original_status ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.75s
+
+
+running 2 tests
+test frozen_run_rejects_changed_executable_before_launching_any_capture ... ok
+test frozen_run_rejects_byte_identical_runner_from_unregistered_location ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.59s
+
+
+running 6 tests
+test ancestor_cargo_configuration_is_not_silently_lost ... ok
+test external_local_dependency_requires_explicit_freezing ... ok
+test escaping_symlinks_and_hardlinks_are_rejected ... ok
+test compiler_reads_private_bytes_during_live_edit_and_restore ... ok
+test seal_prevents_writes_and_verifier_rejects_changed_private_input ... ok
+test reconstructs_final_bytes_modes_links_and_deletions_without_touching_index ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+
+running 132 tests
+test chain::tests::fold_region_naive_matches_direct ... ok
+test chain::tests::broken_chain_rejects ... ok
+test chain::tests::shift_mle_top_has_no_successor ... ok
+test chain::tests::honest_roundtrip_accepts ... ok
+test chain::tests::wrong_output_endpoint_rejects ... ok
+test digest_bind::tests::claim_point_respects_batch_major ... ok
+test chain::tests::wrong_input_endpoint_rejects ... ok
+test digest_bind::tests::claim_point_selects_the_output_slot ... ok
+test chain::tests::shift_equals_shifted_eq ... ok
+test digest_bind::tests::distinct_digest_lists_give_distinct_targets ... ok
+test digest_bind::tests::duplicate_digests_are_allowed ... ok
+test digest_bind::tests::padding_instances_fold_to_the_padding_rule ... ok
+test digest_bind::tests::non_power_of_two_batch_records_its_length ... ok
+test digest_bind::tests::padding_rule_is_bound ... ok
+test digest_bind::tests::reordering_changes_statement_and_target ... ok
+test digest_bind::tests::value_at_boolean_instance_point_is_that_digest ... ok
+test chain::tests::fold_contiguous_regions_matches_per_region ... ok
+test merkle_path::tests::broken_chain_rejects ... ok
+test proof_io::tests::chain_bundle_roundtrip_and_verify ... ignored
+test merkle_path::tests::wrong_leaf_rejects ... ok
+test proof_io::tests::r1cs_bundle_roundtrip ... ignored
+test merkle_path::tests::wrong_root_rejects ... ok
+test merkle_path::tests::honest_roundtrip_accepts ... ok
+test proof_io::tests::rejects_bad_magic ... ok
+test proof_io::tests::rejects_flavor_mismatch ... ok
+test proof_io::tests::rejects_legacy_basefold_flavor ... ok
+test proof_io::tests::rejects_truncated ... ok
+test r1cs_hashes::blake3::chain_e2e_tests::chain_broken_link_rejects ... ignored
+test r1cs_hashes::blake3::chain_e2e_tests::chain_prove_verify_ligerito_roundtrip ... ignored
+test r1cs_hashes::blake3::chain_e2e_tests::chain_wrong_endpoint_rejects ... ignored
+test r1cs_hashes::blake3::tests::batch_major_prove_fast_roundtrip ... ignored
+test preimage_extractor::tests::recorded_leaf_queries_reconstruct_committed_message ... ok
+test r1cs_hashes::blake3::tests::const_pin_all_zero_rejected ... ignored
+test r1cs_hashes::blake3::tests::compress_matches_blake3_crate_64_bytes ... ok
+test r1cs_hashes::blake3::tests::compress_matches_blake3_crate_empty ... ok
+test r1cs_hashes::blake3::tests::layout_constants ... ok
+test r1cs_hashes::blake3::tests::batch_major_witness_matches_row_major_transposed ... ok
+test r1cs_hashes::blake3::tests::padding_digest_is_the_hash_of_zeros_not_zero ... ok
+test proof_io::tests::veil_bincode_limit_leaves_room_for_header ... ok
+test chain::tests::shift_mle_boolean_is_successor ... ok
+test r1cs_hashes::blake3::tests::prove_fast_ligerito_roundtrip ... ignored
+test r1cs_hashes::blake3::tests::pinned_witness_satisfies_and_carries_the_digest ... ok
+test r1cs_hashes::blake3::tests::root_hash_pinning_matches_the_blake3_crate ... ok
+test r1cs_hashes::blake3::tests::mutated_witness_fails ... ok
+test r1cs_hashes::blake3::tests::witness_encodes_correct_output ... ok
+test r1cs_hashes::blake3::tests::lincheck_circuit_matches_sparse ... ok
+test r1cs_hashes::blake3::tests::pinned_rows_reject_off_parameter_compressions ... ok
+test r1cs_hashes::blake3::tests::generate_witness_with_ab_packed_matches_apply ... ok
+test r1cs_hashes::blake3::tests::prove_ligerito_generic_matches_prove_fast ... ok
+test r1cs_hashes::blake3::tests::fused_lincheck_matches_separate ... ok
+test r1cs_hashes::blake3::tests::honest_witness_satisfies_r1cs ... ok
+test r1cs_hashes::blake3_preimage::tests::registered_zk_configs_reject_mutated_parameters ... ok
+test r1cs_hashes::blake3::tests::pinning_changes_the_statement_digest ... ok
+test r1cs_hashes::blake3_preimage::tests::preimage_roundtrip ... ok
+test r1cs_hashes::blake3_preimage::tests::soundness_floor_accepts_infinite_bits ... ok
+test r1cs_hashes::blake3_preimage::tests::largest_supported_zk_shape_accepts_registered_secure_pcs ... ok
+test r1cs_hashes::blake3_preimage::tests::proof_for_other_digests_does_not_transfer ... ok
+test r1cs_hashes::blake3_preimage::tests::registered_secure_zk_pcs_roundtrips ... ok
+test r1cs_hashes::blake3_preimage::tests::reordered_digests_rejected ... ok
+test r1cs_hashes::blake3_preimage::tests::small_preimage_roundtrip_uses_explicit_ad_hoc_config ... ok
+test r1cs_hashes::blake3::tests::setup_sizes_correctly ... ok
+test r1cs_hashes::blake3_preimage::tests::succinct_ring_messages_use_fresh_masks ... ok
+test r1cs_hashes::blake3_preimage::tests::succinct_simulator_aborts_on_a_prequeried_programming_point ... ok
+test r1cs_hashes::blake3::tests::prove_verify_ligerito_all_profiles ... ok
+test r1cs_hashes::blake3_preimage::tests::zk_setup_rejects_batches_above_supported_shape_ceiling - should panic ... ok
+test r1cs_hashes::keccak3::tests::all_zero_witness_rejected ... ok
+test r1cs_hashes::keccak3::tests::fold_matches_witness_consistency ... ok
+test r1cs_hashes::keccak3::tests::layout_constants_consistent ... ok
+test r1cs_hashes::keccak3::tests::pack_win ... ignored, timing comparison; run manually with --nocapture
+test r1cs_hashes::keccak3::tests::prove_fast_ligerito_roundtrip ... ignored
+test r1cs_hashes::blake3_preimage::tests::registered_zk_query_budgets_have_concrete_pcs_certificates ... ok
+test r1cs_hashes::keccak3::tests::prove_fast_timed_roundtrip ... ignored
+test r1cs_hashes::keccak3::tests::setup_sizes_correctly ... ok
+test r1cs_hashes::keccak3::tests::witness_layout_round_trip ... ok
+test r1cs_hashes::keccak::tests::batch_major_chain_fold_matches_row_major ... ok
+test r1cs_hashes::keccak::tests::batch_major_prove_chain_ligerito_roundtrip ... ignored
+test r1cs_hashes::keccak::tests::batch_major_prove_fast_roundtrip ... ignored
+test r1cs_hashes::keccak::tests::batch_major_witness_matches_row_major_transposed ... ok
+test r1cs_hashes::keccak::tests::bit_keccak_f_matches_u64_lane ... ok
+test r1cs_hashes::keccak::tests::const_pin_all_zero_rejected ... ignored
+test r1cs_hashes::keccak::tests::fold_matches_witness_consistency ... ok
+test r1cs_hashes::keccak::tests::layout_constants_consistent ... ok
+test r1cs_hashes::keccak::tests::prove_chain_roundtrip ... ignored
+test r1cs_hashes::keccak::tests::prove_fast_roundtrip ... ignored
+test r1cs_hashes::blake3_preimage::tests::wrong_preimage_refused_by_prover ... ok
+test r1cs_hashes::keccak::tests::setup_sizes_correctly ... ok
+test r1cs_hashes::keccak::tests::theta_rho_pi_preimage_has_no_duplicates ... ok
+test r1cs_hashes::keccak::tests::theta_rho_pi_preimage_matches_pipeline ... ok
+test r1cs_hashes::keccak::tests::witness_layout_round_trip ... ok
+test r1cs_hashes::sha2::tests::batch_major_prove_fast_roundtrip ... ignored
+test r1cs_hashes::sha2::tests::batch_major_prove_merkle_path_ligerito_roundtrip ... ignored
+test r1cs_hashes::sha2::tests::batch_major_witness_matches_row_major_transposed ... ok
+test r1cs_hashes::sha2::tests::block_r1cs_satisfies_for_one_block ... ok
+test r1cs_hashes::sha2::tests::block_witness_satisfies_matrix_and_matches_reference ... ok
+test r1cs_hashes::sha2::tests::cv_to_phys_bits_roundtrips ... ok
+test r1cs_hashes::sha2::tests::lincheck_circuit_matches_sparse ... ok
+test r1cs_hashes::keccak3::tests::prove_fast_roundtrip ... ok
+test r1cs_hashes::sha2::tests::prove_chain_ligerito_roundtrip ... ignored
+test r1cs_hashes::sha2::tests::prove_chain_panics_on_padding - should panic ... ok
+test r1cs_hashes::sha2::tests::prove_fast_ligerito_roundtrip ... ignored
+test r1cs_hashes::blake3_preimage::tests::succinct_simulator_composes_on_one_shared_oracle ... ok
+test r1cs_hashes::blake3_preimage::tests::wrong_digest_rejected ... ok
+test r1cs_hashes::sha2::tests::const_pin_all_zero_rejected ... ok
+test r1cs_hashes::sha2::tests::multi_path_log0_matches_single_path ... ok
+test r1cs_hashes::sha2::tests::useful_bits_matches_constants ... ok
+test sim_game::tests::active_bound_composes_across_proofs ... ok
+test sim_oracle::tests::oracle_pow_state_digest_is_an_oracle_query ... ok
+test sim_oracle::tests::pow_points_are_framed_and_oracle_visible ... ok
+test sim_oracle::tests::programming_forces_the_next_challenge ... ok
+test sim_oracle::tests::reprogramming_a_queried_point_is_refused ... ok
+test sim_oracle::tests::reprogramming_an_unqueried_defined_point_is_refused ... ok
+test sim_oracle::tests::scalar_programming_keeps_the_unused_half_random ... ok
+test sim_oracle::tests::unprogrammed_oracle_reproduces_fiat_shamir ... ok
+test sim_oracle::tests::unreached_programming_is_inert ... ok
+test sim_oracle::tests::verifier_side_sees_the_programmed_value ... ok
+test r1cs_hashes::blake3_preimage::tests::succinct_veil_public_only_simulator_is_accepted ... ok
+test r1cs_hashes::sha2::tests::prove_merkle_paths_ligerito_roundtrip_p2 ... ok
+test succinct_veil::tests::l0_hiding_budget_fails_closed_above_the_mask_dimension ... ok
+test r1cs_hashes::sha2::tests::prove_merkle_path_ligerito_roundtrip ... ok
+test r1cs_hashes::sha2::tests::prove_merkle_paths_ligerito_roundtrip_p4 ... ok
+test r1cs_hashes::sha2::tests::prove_ligerito_generic_matches_prove_fast ... ok
+test succinct_veil::tests::simulator_sumcheck_solve_preserves_uniform_zero_and_one_challenges ... ok
+test succinct_veil::tests::ring_constraint_map_matches_packed_field_scaling ... ok
+test succinct_veil::tests::production_mask_layout_matches_every_visible_private_coordinate ... ok
+test succinct_veil::tests::succinct_shape_rejects_nonidentity_c ... ok
+test r1cs_hashes::blake3_preimage::tests::supported_zk_shapes_use_registered_secure_query_budgets ... ok
+test r1cs_hashes::blake3_preimage::tests::succinct_veil_preimage_roundtrip_and_mutations ... ok
+test succinct_veil::tests::production_entry_point_is_pinned_to_supported_relation_and_registered_pcs ... ok
+test succinct_veil::tests::embedded_secure_profiles_match_the_formal_parameter_table ... ok
+test r1cs_hashes::blake3_preimage::tests::registered_zk_query_budgets_clear_composed_soundness_floor ... ok
+test succinct_veil::tests::every_registered_batch_shape_has_checked_mask_and_soundness_parameters ... ok
+test r1cs_hashes::blake3_preimage::tests::succinct_simulator_query_cap_covers_every_supported_shape ... ok
+
+test result: ok. 112 passed; 0 failed; 20 ignored; 0 measured; 0 filtered out; finished in 7.57s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::decoder_rejects_oversized_input ... ok
+test tests::decoder_rejects_bare_legacy_bincode ... ok
+test tests::decoder_rejects_an_unbounded_digest_vector ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 1 test
+test r1cs_prove_verify_roundtrip_ligerito ... ignored
+
+test result: ok. 0 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+run 1/3: 9.36 Mhash/s (106.81ms, [84, bc, c5, 97])
+run 2/3: 12.08 Mhash/s (82.79ms, [84, bc, c5, 97])
+run 3/3: 12.11 Mhash/s (82.55ms, [84, bc, c5, 97])
+best: 82.55ms
+run 1/3: 4.07 Mhash/s (245.52ms, [21, 6e, 88, e5])
+run 2/3: 4.47 Mhash/s (223.74ms, [21, 6e, 88, e5])
+run 3/3: 4.48 Mhash/s (223.44ms, [21, 6e, 88, e5])
+best: 223.44ms
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test tests::final_verification_failure_rejects_workload ... ok
+test tests::prove_bounds_retention_and_validates_final_output ... ok
+test tests::verify_rotates_corpus_without_reproving_inside_loop ... ok
+test tests::environment_policy_tests_presence_including_empty_and_non_unicode ... ok
+test tests::rejects_invalid_and_duplicate_arguments ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test tests::parses_lake_progress ... ok
+test tests::parses_wrapped_axiom_reports ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 10 tests
+test flock::tests::block_shape_rejects_unaddressable_batch_major_layout ... ok
+test flock::tests::quirky_point_shape_is_guarded ... ok
+test pcs::tests::batch_opening_certificate_rejects_bad_schedules ... ok
+test pcs::tests::registry_floor_is_rejected_by_the_hiding_budget ... ok
+test ctx::tests::out_of_range_oracle_handle_is_an_error ... ok
+test ctx::tests::verifier_without_pcs_rejects_commitments ... ok
+test ctx::tests::transcript_and_ring_values_use_disjoint_one_time_pads ... ok
+test ctx::tests::three_oracle_roundtrip ... ok
+test ctx::tests::value_mutations_are_rejected_by_the_constraints ... ok
+test ctx::tests::shape_guards_return_exact_errors ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+
+running 5 tests
+test tests::mask_count_matches_the_transcript ... ok
+test tests::mutations_are_rejected ... ok
+test tests::mle_eval_proof_roundtrip ... ok
+test tests::simulator_style_independent_view_verifies ... ok
+test tests::proof_surface_omits_unmasked_eval_and_slices ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.10s
+
+
+running 11 tests
+test tests::gf8_arithmetic_is_consistent ... ok
+test tests::randomizer_rows_are_private_and_non_fixed ... ok
+test tests::malformed_block_shape_is_an_error ... ok
+test tests::mask_count_matches_the_transcript ... ok
+test tests::witness_satisfies_the_r1cs_and_wrong_root_does_not ... ok
+test tests::wrong_root_is_not_provable ... ok
+test tests::wrong_statement_is_rejected ... ok
+test tests::mutations_are_rejected ... ok
+test tests::root_proof_roundtrip ... ok
+test tests::same_public_statement_accepts_multiple_roots ... ok
+test tests::proof_surface_omits_unmasked_terminal_data ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+
+running 6 tests
+test tests::mask_count_matches_the_transcript ... ok
+test tests::false_product_is_not_provable ... ok
+test tests::mutations_are_rejected ... ok
+test tests::zerocheck_proof_roundtrip ... ok
+test tests::simulator_style_independent_view_verifies ... ok
+test tests::proof_surface_omits_unmasked_evals_and_slices ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.63s
+
+
+running 20 tests
+test code::tests::malformed_parameters_fail_closed ... ok
+test code::tests::zk_certificate_uses_exact_operand_and_product_dimensions ... ok
+test code::tests::square_encoder_rejects_the_extra_highest_degree_coefficient ... ok
+test constraints::tests::succinct_flock_profile_has_a_concrete_additive_soundness_bound ... ok
+test code::tests::encode_decode_roundtrip ... ok
+test code::tests::every_two_queries_are_masked_by_two_padding_symbols_in_tiny_code ... ok
+test constraints::tests::succinct_soundness_certificate_rejects_an_underqueried_profile ... ok
+test code::tests::hadamard_reduction_identity_holds_on_every_basis_pair ... ok
+test commitment::tests::multi_opening_roundtrip_and_mutation_rejection ... ok
+test code::tests::product_code_is_multiplicative_and_reduces_pointwise ... ok
+test ntt::tests::transform_is_linear ... ok
+test ntt::tests::forward_inverse_roundtrip_on_linear_and_affine_domains ... ok
+test dot_product::tests::dot_product_proof_roundtrip ... ok
+test hadamard::tests::opening_mutation_is_rejected ... ok
+test dot_product::tests::dot_product_proof_rejects_claim_and_opening_mutations ... ok
+test hadamard::tests::false_hadamard_relation_is_rejected ... ok
+test hadamard::tests::hadamard_and_dot_roundtrip ... ok
+test constraints::tests::unsatisfied_shifted_circuit_is_not_provable ... ok
+test constraints::tests::linear_only_circuit_roundtrip ... ok
+test constraints::tests::shifted_circuit_proves_and_verifies ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+

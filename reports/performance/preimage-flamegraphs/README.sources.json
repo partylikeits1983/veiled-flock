@@ -1,0 +1,3997 @@
+{
+  "accepted_attempts_and_embedded_svgs": [
+    {
+      "anchor": "figure-primary-flock-prove-0064",
+      "attempt_id": "flock-prove-0064-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-0064/primary-001/attempt.json",
+      "attempt_sha256": "0961365de279be1bbf22ee1ccd50e910698a2162d8ccd1462c8a816593c04484",
+      "case": {
+        "hashes": 64,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-0064/primary-001/preview.png",
+      "png_sha256": "4d6733bbc914755e3b71c7b52f50a6246087caa4cb986a3cf3ac7e9eee02739f",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-0064.svg",
+      "svg_sha256": "563f489165a935e0a4757e4adb3256fd03ce726a4654e6592966be2747254f1d"
+    },
+    {
+      "anchor": "figure-primary-flock-prove-0128",
+      "attempt_id": "flock-prove-0128-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-0128/primary-001/attempt.json",
+      "attempt_sha256": "5439cf7ef49e65856c895b6aea669ec82127bdb0e83ff040ede3b73b5e2a86f3",
+      "case": {
+        "hashes": 128,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-0128/primary-001/preview.png",
+      "png_sha256": "d25171c3ae13f0c728bc07c271cb0614f9f4765b84f9c303ed5f0c2af257581a",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-0128.svg",
+      "svg_sha256": "1d2dcad39e41cceaabcf73ed17feafa17eace1f0dbd7e9320ce50122f7a542af"
+    },
+    {
+      "anchor": "figure-primary-flock-prove-0256",
+      "attempt_id": "flock-prove-0256-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-0256/primary-001/attempt.json",
+      "attempt_sha256": "77ae6ecf1a6da6bb88e802f1c76b5ef5bc3515ffff784d7e8c961fbab3b4991a",
+      "case": {
+        "hashes": 256,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-0256/primary-001/preview.png",
+      "png_sha256": "c52cee6a50125226d37ef03da367ed79d74e5154cd3c7ae843b9f9f1921dc13b",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-0256.svg",
+      "svg_sha256": "7eafa8b15c18b2f456e05a1e486e66e3e9058f05303fadaac7632924c692b8a7"
+    },
+    {
+      "anchor": "figure-primary-flock-prove-0512",
+      "attempt_id": "flock-prove-0512-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-0512/primary-001/attempt.json",
+      "attempt_sha256": "29beae792673b664442852d535fb7608cd133ae8afc090ebcd60c02b2da76542",
+      "case": {
+        "hashes": 512,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-0512/primary-001/preview.png",
+      "png_sha256": "5f3738f41a2eed6d1ffa33a94ebcf2c477bef04686de8e94b4c75ea58533fc36",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-0512.svg",
+      "svg_sha256": "fe7755f8ac6cb0c02060835e38355bf8f6ed6da64f8084e3a4c9f1b0965548d8"
+    },
+    {
+      "anchor": "figure-primary-flock-prove-1024",
+      "attempt_id": "flock-prove-1024-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-1024/primary-001/attempt.json",
+      "attempt_sha256": "3dd76b8c0c5d55d1fadf82b389c41f2b36333065e6266ce02ebe9a499749128f",
+      "case": {
+        "hashes": 1024,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-1024/primary-001/preview.png",
+      "png_sha256": "19e3c2ba3b1dd5e2ec46b9c7c816b2772fc7ac1040ef313787e3202d42bdb051",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-1024.svg",
+      "svg_sha256": "642c3605a5626658bc064ea4a20e62e08902e542a498fec844764e156a2e79b6"
+    },
+    {
+      "anchor": "figure-primary-flock-prove-2048",
+      "attempt_id": "flock-prove-2048-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-2048/primary-001/attempt.json",
+      "attempt_sha256": "c8661e2b49480d602bd4621ab14a988b219572ee45ba37d4b6286f59acc2260a",
+      "case": {
+        "hashes": 2048,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-2048/primary-001/preview.png",
+      "png_sha256": "0ddc764a15cafaedf437dec8a4c204f75f9baf3bbd855d8f65f23c04b75099da",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-2048.svg",
+      "svg_sha256": "b7466b0b7559fad7008af1138cb0a35fad6a3b4db5de0109db821ce5a5f22141"
+    },
+    {
+      "anchor": "figure-primary-flock-prove-4096",
+      "attempt_id": "flock-prove-4096-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-4096/primary-001/attempt.json",
+      "attempt_sha256": "923c47e14b7025755b48dba4c97972f0c656b4be9bd855d802f32708dfe35fa3",
+      "case": {
+        "hashes": 4096,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-4096/primary-001/preview.png",
+      "png_sha256": "351275d2eb94d97ccd76f97a3bf30a3bc02ead00574e98f2eba78b71daebc955",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-prove-4096.svg",
+      "svg_sha256": "82bb857fce5987d0951a7570ced0b97d61a216ac18e36b854bd5710ba74fe03d"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-0064",
+      "attempt_id": "flock-verify-0064-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-0064/primary-001/attempt.json",
+      "attempt_sha256": "9be2964c37de286489861918368157046bed2d426e5f273a536b2c7e3aa78ea0",
+      "case": {
+        "hashes": 64,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-0064/primary-001/preview.png",
+      "png_sha256": "ace4a9e711e8988232dc4660c35608bab307e9c580b60bc2e8994fba348f2675",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-0064.svg",
+      "svg_sha256": "7b925066c00ad5fea92431017acac65731c4a44a135afdc24c1f4038af19fc57"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-0128",
+      "attempt_id": "flock-verify-0128-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-0128/primary-001/attempt.json",
+      "attempt_sha256": "015520ea1275bc325345246f70653f0ec5d77d93afe636e429b6cc78288b678e",
+      "case": {
+        "hashes": 128,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-0128/primary-001/preview.png",
+      "png_sha256": "d38c5789a52ed15ba68e0072dc4846835eb144c39a40d9a5e62f5beb1343c6ac",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-0128.svg",
+      "svg_sha256": "6c90c521353e7e14f1e534a8de5ed487489072b843a01f9acee02a3ef00f57e0"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-0256",
+      "attempt_id": "flock-verify-0256-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-0256/primary-001/attempt.json",
+      "attempt_sha256": "77b14aa7145dfa72c5d2365a76030a3270552b5a73bfcae7aea00da7acaa87b4",
+      "case": {
+        "hashes": 256,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-0256/primary-001/preview.png",
+      "png_sha256": "4c7a53bfd0fb99cdd666dad01ca705dc9f95962e34127486e4768c1f64dd2fbf",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-0256.svg",
+      "svg_sha256": "bdd20c0e6317b93f45c64a7118bf594a38893dcc4bf9e4a9039a811719600646"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-0512",
+      "attempt_id": "flock-verify-0512-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-0512/primary-001/attempt.json",
+      "attempt_sha256": "159e8faa6a99dcc5d9ed36685f6b353f394c93b5a261e4954de3cf6fe89ac61d",
+      "case": {
+        "hashes": 512,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-0512/primary-001/preview.png",
+      "png_sha256": "8e176d0d4a4e389da7ae830d86ca02577b502743103172cbddc50981d806021b",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-0512.svg",
+      "svg_sha256": "61a73c698465b1d119af1fa089ec9bc1c39d596403a68b99dfaf9404569070e3"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-1024",
+      "attempt_id": "flock-verify-1024-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-1024/primary-001/attempt.json",
+      "attempt_sha256": "2161ef34e9274c15bac88a390af74929a870677f839187fe1c3e9a36a8fbd6a8",
+      "case": {
+        "hashes": 1024,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-1024/primary-001/preview.png",
+      "png_sha256": "a43794527ba94e28e6d2768ca9be99a01a3918434bba36151083b3fb000c18ea",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-1024.svg",
+      "svg_sha256": "25a1d9b982620c4e9261ff2fe23d6dff92159b3e823456cec621097fe3930301"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-2048",
+      "attempt_id": "flock-verify-2048-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-2048/primary-001/attempt.json",
+      "attempt_sha256": "b3daf740f203b83bb8acec2f21410a9590c6f66c8a19a554f0946774338f5bbc",
+      "case": {
+        "hashes": 2048,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-2048/primary-001/preview.png",
+      "png_sha256": "6d9176b5ed5ad4e928c38a16dd685290d122ae47566eb8ab8b51340cf04158fb",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-2048.svg",
+      "svg_sha256": "d222191356a3e59b8ec406f2512827892282d60a9b3c2787b9f72c517fa08b38"
+    },
+    {
+      "anchor": "figure-primary-flock-verify-4096",
+      "attempt_id": "flock-verify-4096-primary-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-4096/primary-001/attempt.json",
+      "attempt_sha256": "f49bc5f5ef23beb4eb9dda63fefded5fb89bb78f1dea945f98d17a2859128683",
+      "case": {
+        "hashes": 4096,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-4096/primary-001/preview.png",
+      "png_sha256": "8d555d398a29037b8e13c636b97c99f56e619963d2a03759fd949dfceed97ef7",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/flock-verify-4096.svg",
+      "svg_sha256": "75c852c78d27be962a64031eb3d4dc3f969018d106ced8253a952543a1ad24f4"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-0064",
+      "attempt_id": "full-zk-prove-0064-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-0064/primary-001/attempt.json",
+      "attempt_sha256": "274520beac6734e983be8f3e940d93d8713d64b4c03f5a56e450664f0627522a",
+      "case": {
+        "hashes": 64,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-0064/primary-001/preview.png",
+      "png_sha256": "d89640689bada51680ef1521de118cd85d46657e89c236a2217f3a7bfd673591",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-0064.svg",
+      "svg_sha256": "1d87431da49dbf6ecebd0b78f1adcbb9ab107fb4273840dd21b8089b1f249f66"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-0128",
+      "attempt_id": "full-zk-prove-0128-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-0128/primary-001/attempt.json",
+      "attempt_sha256": "3224ef0b14cd8be779179651ba6bc550d5e23e56e015de25b44e998bb1d8aa47",
+      "case": {
+        "hashes": 128,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-0128/primary-001/preview.png",
+      "png_sha256": "4732d740c59e925cdf7c932b96951a5aec618a5a9d9a36e21ff2bfd264d8b27b",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-0128.svg",
+      "svg_sha256": "ab89f8a3e57cabf2d68d137bee0311b1c11573d4d34a59a79538d4c23c6b3038"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-0256",
+      "attempt_id": "full-zk-prove-0256-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-0256/primary-001/attempt.json",
+      "attempt_sha256": "3c4a34a63a5550c1639c9afc11e53cef11f7775e35af5d295f029e6221d9903e",
+      "case": {
+        "hashes": 256,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-0256/primary-001/preview.png",
+      "png_sha256": "d66c23fdecd134a87e7cfd3f85991456b93ee7b262be81bd91c11eac0066eaf5",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-0256.svg",
+      "svg_sha256": "2ccad1ee48ea3561584df5bb9c4252a8fa17a4c50b0855ecd1696260bdc4c4c1"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-0512",
+      "attempt_id": "full-zk-prove-0512-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-0512/primary-001/attempt.json",
+      "attempt_sha256": "66186e2f5cb4b8dabf1bcb161e9165394d8bffc8815c1fa82e91ec8833dbb0fa",
+      "case": {
+        "hashes": 512,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-0512/primary-001/preview.png",
+      "png_sha256": "f7605e1427b9a9fadec91dbe56b06b36a7f45b6e7ac6ccb256b16ec91dee1073",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-0512.svg",
+      "svg_sha256": "13510fe964f384c2d097a030458a13eb2945d4d76da2958fd26d4b80a666a205"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-1024",
+      "attempt_id": "full-zk-prove-1024-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-1024/primary-001/attempt.json",
+      "attempt_sha256": "319bfe16bb068df924d6ea884a55f08a50dfde52528ed0a71d3ba55b86d686e5",
+      "case": {
+        "hashes": 1024,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-1024/primary-001/preview.png",
+      "png_sha256": "3d133b7b8b5bad397f383a3084735c16288f73babb5042a01e1076ec29fc8155",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-1024.svg",
+      "svg_sha256": "11633c688155d93d7848d10131003217490f8dcd03e048b51006f718c65caffb"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-2048",
+      "attempt_id": "full-zk-prove-2048-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-2048/primary-001/attempt.json",
+      "attempt_sha256": "55fb00240e175c1b126d6318ed2b202e7d08101bae2ed83f026ec93c7ea210a7",
+      "case": {
+        "hashes": 2048,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-2048/primary-001/preview.png",
+      "png_sha256": "5a17ec673e503665bfae21a06636ad754ca590d2bd610e894cd5e53e100113c1",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-2048.svg",
+      "svg_sha256": "a81cf47710aa3ac6086c273b19062b4223644f99dc216b16e96d8e7481ae7690"
+    },
+    {
+      "anchor": "figure-primary-full-zk-prove-4096",
+      "attempt_id": "full-zk-prove-4096-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-4096/primary-001/attempt.json",
+      "attempt_sha256": "383fec77356cf012c664f38b862ea53937de1025d78f068a3fb6de4cb018bb4e",
+      "case": {
+        "hashes": 4096,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-4096/primary-001/preview.png",
+      "png_sha256": "77e750c0ad2f2bba49ad3ebb47e87d24fa1cdb76a4f46b2992f69188945149d9",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-prove-4096.svg",
+      "svg_sha256": "f1fcda6d52cb9ab2164a240e3bb30fa802edc0fb70864c30a5d06883ebea1350"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-0064",
+      "attempt_id": "full-zk-verify-0064-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-0064/primary-001/attempt.json",
+      "attempt_sha256": "866f994b0367bb7ca4e107c54789315187c0b41d310a5db212350d949052ddee",
+      "case": {
+        "hashes": 64,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-0064/primary-001/preview.png",
+      "png_sha256": "8bdf3954ec0d4e66b7f266a2eccdd1f5bed34c01c57cbafe550f14dd07ef1e95",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-0064.svg",
+      "svg_sha256": "a06002f11934026c7fe04dd537222c1733f401173d12222eed8375fd4e00b5a3"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-0128",
+      "attempt_id": "full-zk-verify-0128-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-0128/primary-001/attempt.json",
+      "attempt_sha256": "a68254590993abd0cae3b26532fed1eeb4a2e0db76a9b4ea70c3ddd8a08f5ef9",
+      "case": {
+        "hashes": 128,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-0128/primary-001/preview.png",
+      "png_sha256": "8c0f3efd0f699e1739fc1df3cd75cce42b30a53096e8a56dcf3161a6646d8b35",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-0128.svg",
+      "svg_sha256": "153d38ca646271890e4a1e5a145fd0f57c94bfb3b87f9b276cd49d828d23ceef"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-0256",
+      "attempt_id": "full-zk-verify-0256-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-0256/primary-001/attempt.json",
+      "attempt_sha256": "899bd6aa39da207a8c4c768b2f6c1010442a5a2c3cb198b2975c119a29992110",
+      "case": {
+        "hashes": 256,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-0256/primary-001/preview.png",
+      "png_sha256": "8df9a41c3295ade47d366c6149924404c25c54161c353be2808516f2282bda08",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-0256.svg",
+      "svg_sha256": "68fac9c084823b440ac75ad2fd667e65c81fbd8a1404fb1dbea47f1786db7d35"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-0512",
+      "attempt_id": "full-zk-verify-0512-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-0512/primary-001/attempt.json",
+      "attempt_sha256": "665c4e060d7995976ccf2f059660d8f1437303aa4feb6fe78d284f25c3b19e06",
+      "case": {
+        "hashes": 512,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-0512/primary-001/preview.png",
+      "png_sha256": "5be78d352b0cece897dd371aa8cf1804c5bc953e97b644afe01099ffdbe650fb",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-0512.svg",
+      "svg_sha256": "1d01e8c670fef2284cb145228a20e3e5f6c6522f2485f96d67438fc3a0195462"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-1024",
+      "attempt_id": "full-zk-verify-1024-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-1024/primary-001/attempt.json",
+      "attempt_sha256": "877cc3effbb54a889e82027d2bdd9fc7244c019e7b3931d74e062e1cf9bf043c",
+      "case": {
+        "hashes": 1024,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-1024/primary-001/preview.png",
+      "png_sha256": "d3dd0d158bf078d2fc9d28b8afc71e68a0855e9cc09d4a846ff709e3ce7f2394",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-1024.svg",
+      "svg_sha256": "5386bf0766f79cad9964d71f71be81ef236aff6035c4d247bdc79ee922ec0050"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-2048",
+      "attempt_id": "full-zk-verify-2048-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-2048/primary-001/attempt.json",
+      "attempt_sha256": "e47b8a06c6888e0c3d862aaa88ce2213c8142904de45b9c686d2c299362dc310",
+      "case": {
+        "hashes": 2048,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-2048/primary-001/preview.png",
+      "png_sha256": "63ce75edb74b59975d2a8d02f718742506bcf7f535ce93656c23bb73a0cf9297",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-2048.svg",
+      "svg_sha256": "b691b7541d74ce02d71f47c619bf45728eced356d39d99628791a3b349dce517"
+    },
+    {
+      "anchor": "figure-primary-full-zk-verify-4096",
+      "attempt_id": "full-zk-verify-4096-primary-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-4096/primary-001/attempt.json",
+      "attempt_sha256": "35b20e1d47aeefcc3ffbd92201f85ed32775f1894ba012cafa94c5e546bb9670",
+      "case": {
+        "hashes": 4096,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-4096/primary-001/preview.png",
+      "png_sha256": "763f06d221db95fd850b06bd07c4e84faa993661f11a6c521c3ec6358dc1347d",
+      "role": "primary",
+      "svg": "20260910T142900Z/svg/full-zk-verify-4096.svg",
+      "svg_sha256": "b1ae550918702ff64bbd22353490c9abfe7b2fcc59d7efff15a01a6fec705726"
+    },
+    {
+      "anchor": "figure-repeat-flock-prove-0064",
+      "attempt_id": "flock-prove-0064-repeat-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-0064/repeat-001/attempt.json",
+      "attempt_sha256": "ecf6f067aef751e1416e3ba499812666cd775528744316af0f4593c19b7190e4",
+      "case": {
+        "hashes": 64,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-0064/repeat-001/preview.png",
+      "png_sha256": "6879e8ca5d309d7c2efd9904764ada74626f711ae8179f1270f9705a9ba67b9c",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/flock-prove-0064/repeat-001/flamegraph.svg",
+      "svg_sha256": "81851a77f178107528bd2f083150105e65fce2131499d48fc77bc8ec5c802644"
+    },
+    {
+      "anchor": "figure-repeat-flock-prove-4096",
+      "attempt_id": "flock-prove-4096-repeat-002",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-4096/repeat-002/attempt.json",
+      "attempt_sha256": "49cc747950373ac0eed548e6d8fb2ad3aed27cdfed250ee186ea22ec955961ac",
+      "case": {
+        "hashes": 4096,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 2: resumed",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-4096/repeat-002/preview.png",
+      "png_sha256": "c7171888a6350b256d8e71dcbdab55a0306446f1a6090da7633082e3bffb3879",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/flock-prove-4096/repeat-002/flamegraph.svg",
+      "svg_sha256": "888212604b8f81ad6e75d5b4a428b26234373ce97b6bb8cd6c91a210d0310fee"
+    },
+    {
+      "anchor": "figure-repeat-flock-verify-0064",
+      "attempt_id": "flock-verify-0064-repeat-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-0064/repeat-001/attempt.json",
+      "attempt_sha256": "f6d0679da53327d3ad782501849330194af7ce071ed24e2eec778b0552410359",
+      "case": {
+        "hashes": 64,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-0064/repeat-001/preview.png",
+      "png_sha256": "42bc4d944ac6d1746cda1d0622de4bcbfc57230e3f59268080e87cabcdcdf1fd",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/flock-verify-0064/repeat-001/flamegraph.svg",
+      "svg_sha256": "21e21e5e7a722faa97712b81cd00beb5b25ab79237ddb018c52a8eb62263635a"
+    },
+    {
+      "anchor": "figure-repeat-flock-verify-4096",
+      "attempt_id": "flock-verify-4096-repeat-002",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-4096/repeat-002/attempt.json",
+      "attempt_sha256": "820341e86052514980c90a868da8fce95e017231c0177abd83a3fabebcbae709",
+      "case": {
+        "hashes": 4096,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 2: resumed",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-4096/repeat-002/preview.png",
+      "png_sha256": "c7afd0afa69cbe3916b42df32ab3b628bf9a258e4e418310cddcb9ccf11a6838",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/flock-verify-4096/repeat-002/flamegraph.svg",
+      "svg_sha256": "2866001071b5025fbb5652d6d633d1adebd5becebfdfd5cf5482d68f057862e8"
+    },
+    {
+      "anchor": "figure-repeat-full-zk-prove-0064",
+      "attempt_id": "full-zk-prove-0064-repeat-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-0064/repeat-001/attempt.json",
+      "attempt_sha256": "c90050c5f0e0992f8e8f17fdfbe25ac2effa3e525f6a4641cbad7d4c8ad7f18a",
+      "case": {
+        "hashes": 64,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-0064/repeat-001/preview.png",
+      "png_sha256": "df0e6209ecb88d46a479b91570fbd58771a48e51b82863269907e4bd277038f6",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/full-zk-prove-0064/repeat-001/flamegraph.svg",
+      "svg_sha256": "9142f07fbbaab2dcf4a7a75254d17f302a64a56551a3057001df67aaa1bc8904"
+    },
+    {
+      "anchor": "figure-repeat-full-zk-prove-4096",
+      "attempt_id": "full-zk-prove-4096-repeat-002",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-4096/repeat-002/attempt.json",
+      "attempt_sha256": "b58454c9432e171d57da100e87e87596323ff63e23f8d2ab27e16c99dd8145e4",
+      "case": {
+        "hashes": 4096,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 2: resumed",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-4096/repeat-002/preview.png",
+      "png_sha256": "d389ece496b25dc4a1134055b5f0ff53630de0707ec657209d5a4ed65063ae74",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/full-zk-prove-4096/repeat-002/flamegraph.svg",
+      "svg_sha256": "f235d71ea49e32592bed83eaccacfaca2f351ab3c879d47e778e2d6a1d81eb06"
+    },
+    {
+      "anchor": "figure-repeat-full-zk-verify-0064",
+      "attempt_id": "full-zk-verify-0064-repeat-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-0064/repeat-001/attempt.json",
+      "attempt_sha256": "75acba047faa82d9cfa0e086d5785a605205fe737964acb64d12ccc68c52c801",
+      "case": {
+        "hashes": 64,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-0064/repeat-001/preview.png",
+      "png_sha256": "ddba209f8e8ad6f6fabe5d5ecdc93d4cc8f1f64169c7263e8e8eb69997d759ab",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/full-zk-verify-0064/repeat-001/flamegraph.svg",
+      "svg_sha256": "73560e9232d8a6fae83a864fe8da0948b42c6a3eb0843120397bacfd56065a6a"
+    },
+    {
+      "anchor": "figure-repeat-full-zk-verify-4096",
+      "attempt_id": "full-zk-verify-4096-repeat-002",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-4096/repeat-002/attempt.json",
+      "attempt_sha256": "ebd6ebe9c55213a0bf8ddf84f1a768520754527c9b858259b83c1f41236a2587",
+      "case": {
+        "hashes": 4096,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 2: resumed",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-4096/repeat-002/preview.png",
+      "png_sha256": "3bb057e83e940f1a28b494592aad997fa9aa658c80bdbf5f0ac0058f2dff3778",
+      "role": "repeat",
+      "svg": "20260910T142900Z/cases/full-zk-verify-4096/repeat-002/flamegraph.svg",
+      "svg_sha256": "d016c2fcb862cb3637ebac36983a5cc3dc9c279b6892b9a9bba9349c18e61525"
+    },
+    {
+      "anchor": "figure-smoke-flock-prove-0064",
+      "attempt_id": "flock-prove-0064-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-0064/smoke-001/attempt.json",
+      "attempt_sha256": "6d8c79d88ff4f8c303bcffe6c4e88dbddeb6ee8b2db773607cec438564f145f6",
+      "case": {
+        "hashes": 64,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-0064/smoke-001/preview.png",
+      "png_sha256": "4759a0c3d19e2af9a426622073555a9c60ee30ba2d00b29da0ffab30a6abbe47",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/flock-prove-0064/smoke-001/flamegraph.svg",
+      "svg_sha256": "8052ad1c8b92e98349062d17e3a094a95b5df057c97810cd2dcd527eb71857b1"
+    },
+    {
+      "anchor": "figure-smoke-flock-prove-4096",
+      "attempt_id": "flock-prove-4096-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/flock-prove-4096/smoke-001/attempt.json",
+      "attempt_sha256": "9b85b4df9c2c6e7f9c3bdddacc64cae3e13dbc792de3ed86aaf8b05b13c96d7a",
+      "case": {
+        "hashes": 4096,
+        "operation": "prove",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-prove-4096/smoke-001/preview.png",
+      "png_sha256": "2b14bd47dd9db9c5e8a06713966175da3ed31c35c4a716134ea494cf466b402d",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/flock-prove-4096/smoke-001/flamegraph.svg",
+      "svg_sha256": "57e788a016b1565356b6a79bf118fe4342189534855dce348300b6f4c8bc1cad"
+    },
+    {
+      "anchor": "figure-smoke-flock-verify-0064",
+      "attempt_id": "flock-verify-0064-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-0064/smoke-001/attempt.json",
+      "attempt_sha256": "06859a45b5f709b2251d11579cffbfb715c7234cf10d6e7168de32781a34d774",
+      "case": {
+        "hashes": 64,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-0064/smoke-001/preview.png",
+      "png_sha256": "97d9fbd42b5448baa47258fbfd0f420b78a7e77105bb35d05cebcf72a0df7f94",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/flock-verify-0064/smoke-001/flamegraph.svg",
+      "svg_sha256": "461e6ef5c091f07cde20fb6b63fbc524b1f815441f53da2926b473284fe00629"
+    },
+    {
+      "anchor": "figure-smoke-flock-verify-4096",
+      "attempt_id": "flock-verify-4096-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/flock-verify-4096/smoke-001/attempt.json",
+      "attempt_sha256": "6d94d90098263812bccefec97005810373fb4c85ce77ca78e43bf6f5e99dfacc",
+      "case": {
+        "hashes": 4096,
+        "operation": "verify",
+        "protocol": "flock"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/flock-verify-4096/smoke-001/preview.png",
+      "png_sha256": "a18ee2e29518c84cac9011f6c75e544fd03f7120f612a6914e1bc68335f78ec3",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/flock-verify-4096/smoke-001/flamegraph.svg",
+      "svg_sha256": "3244149dff868ad07a408894180cffbc5c929c7de41a571f21fefefaf8347d1c"
+    },
+    {
+      "anchor": "figure-smoke-full-zk-prove-0064",
+      "attempt_id": "full-zk-prove-0064-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-0064/smoke-001/attempt.json",
+      "attempt_sha256": "96f2360f0072cdbc808025cc41f92f6d3c9764881517074a42f0f826ec68f4ce",
+      "case": {
+        "hashes": 64,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-0064/smoke-001/preview.png",
+      "png_sha256": "8f6cfa9e20f77dad4c6ac227215f5f0a043aa2530cec331623877f1b5473236f",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/full-zk-prove-0064/smoke-001/flamegraph.svg",
+      "svg_sha256": "ed16c53730853796913a84e254bfbadba26829d18bb070fbe6f5c924380c2219"
+    },
+    {
+      "anchor": "figure-smoke-full-zk-prove-4096",
+      "attempt_id": "full-zk-prove-4096-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-prove-4096/smoke-001/attempt.json",
+      "attempt_sha256": "7369539ec32ab2fcc327a879434c6f37c19279279cb8ca50db09f86f3194c550",
+      "case": {
+        "hashes": 4096,
+        "operation": "prove",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-prove-4096/smoke-001/preview.png",
+      "png_sha256": "5211805e1a64de097e8c6d00749e92e88bcf3b9053aa3ba263ea177dc4c1df6b",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/full-zk-prove-4096/smoke-001/flamegraph.svg",
+      "svg_sha256": "89826feb74e8b699866b4c31bcff9746f9e98c19613a45fdd37107decade8d0f"
+    },
+    {
+      "anchor": "figure-smoke-full-zk-verify-0064",
+      "attempt_id": "full-zk-verify-0064-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-0064/smoke-001/attempt.json",
+      "attempt_sha256": "6f11b6c2fb059a3a316645145c0ba86056dfd061349b415397d5cda481538601",
+      "case": {
+        "hashes": 64,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-0064/smoke-001/preview.png",
+      "png_sha256": "bbb2f9360e363dfbce46956efc3e130fe323db685f5e3fa6f77bb3ef812d701b",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/full-zk-verify-0064/smoke-001/flamegraph.svg",
+      "svg_sha256": "25fa59ac3866a119b71b10a46621957b685e5f3e253d7406494604da811c1a4f"
+    },
+    {
+      "anchor": "figure-smoke-full-zk-verify-4096",
+      "attempt_id": "full-zk-verify-4096-smoke-001",
+      "attempt_path": "20260910T142900Z/cases/full-zk-verify-4096/smoke-001/attempt.json",
+      "attempt_sha256": "3527810928bd928c3f664245cc194e027452fe4a0693ec43934c3db79587ca50",
+      "case": {
+        "hashes": 4096,
+        "operation": "verify",
+        "protocol": "full-zk"
+      },
+      "episode": "Episode 1: original",
+      "png_fallback": "20260910T142900Z/cases/full-zk-verify-4096/smoke-001/preview.png",
+      "png_sha256": "87ad2a064b977fe1909018edcc23098e348c09844d7778777db5c11d81b73d43",
+      "role": "smoke",
+      "svg": "20260910T142900Z/cases/full-zk-verify-4096/smoke-001/flamegraph.svg",
+      "svg_sha256": "6e8a6e9411df702093b0fb31c6f4340290b592f95d5e1c7f970353d984c81484"
+    }
+  ],
+  "assembler": {
+    "cargo_lock_sha256": "ed830ac74f6ba1a5c20735eca59e98dd3897ab274d3448c360ac4cc559df9580",
+    "source_sha256": "0cb97573d7ba4ab6904ec52e877b334d58f084699dd9bd0c8e5583ec38ab9599"
+  },
+  "completion_sha256": "c97f7887169704fcfe2a64fca47c8ae120778e799cbdb4049964d25c7ad96371",
+  "controller_snapshot_id": "792d1aee964adbd7e2a4e9b0a1ea9c43824a830367a54035bd51a653ce044da5",
+  "earlier_bootstrap_failure": {
+    "path": "20260910T142700Z/incomplete.json",
+    "sha256": "3727e5a2bf73549a59e02f442d9fb5a19a40c5487ce24ab29a23141f88625d6b"
+  },
+  "historical_evidence_unchanged": true,
+  "historical_inventory_sha256": "f98778ac3aa853f44d9b642b1b05b9b17eca7a119a889f0abf7165ceb833bbcb",
+  "kind": "editorial-markdown-assembly",
+  "measurement_snapshot_id": "54cc47530ad38ffbb467b0a42f1b2fb66bc8eb5f1f4b08ef800c31a0ac76b72c",
+  "measurements_run": false,
+  "output": {
+    "path": "README.md",
+    "sha256": "c683fc4767da10fd6047a8c2a362839405b87b91987e8e835718ad77aa85a830"
+  },
+  "overview": {
+    "interpretation": "newly authored overview; PRIMARY_MATRIX replaced",
+    "path": "../../../tools/performance/assets/preimage-report-overview.md",
+    "sha256": "2e8e1e23a0e978f71cdccb5de06af616a77ff5ddc270299cecd1f25c8258e677"
+  },
+  "run": "20260910T142900Z",
+  "schema_version": 1,
+  "source_hashes": {
+    "baseline-after.csv": "3a426c31d705ce6142d2641223282356304d759ccb4e70460796b2f924be5bbe",
+    "baseline-before.csv": "8f75d2126772ee55bf4a060f24b76761ca08e0275ce7fa544bc13611adeb2193",
+    "baseline-resume-before.csv": "70f7e283cec5b04e661241ca431065d5663ec38994ad5b8e8425a349342c28a5",
+    "baseline-symbols.csv": "016b29923f556914982ad289e34c6c3e089ebde6e16db1109610047c8b9db81c",
+    "cases/flock-prove-0064/primary-001/attempt.json": "0961365de279be1bbf22ee1ccd50e910698a2162d8ccd1462c8a816593c04484",
+    "cases/flock-prove-0064/primary-001/export-status.json": "fabff5666797bc982e9d66f732a3022fe22474fa480fae2e345ba01c06ea6a77",
+    "cases/flock-prove-0064/primary-001/flamegraph.svg": "563f489165a935e0a4757e4adb3256fd03ce726a4654e6592966be2747254f1d",
+    "cases/flock-prove-0064/primary-001/harness.json": "ad2b77558e2d19bc1656fa6eded75603e9392120eccb8c5dfe6f2280fbacb127",
+    "cases/flock-prove-0064/primary-001/original/attempt.json": "3508794bb3edb42c57b3167276b1fe3dc8eb2f57c9f06f9c2c2fc72a50efefbd",
+    "cases/flock-prove-0064/primary-001/preview.png": "4d6733bbc914755e3b71c7b52f50a6246087caa4cb986a3cf3ac7e9eee02739f",
+    "cases/flock-prove-0064/primary-001/record-status.json": "379e6ad1b4a1f38c6b931cfc5edbfd78c69c8facf164a333344c6cf2cf8a6185",
+    "cases/flock-prove-0064/primary-001/repair.json": "0ad31377571b94ed9fd8f98f0ef5f9c3caca41e4e0867c3a475ea57016f0c517",
+    "cases/flock-prove-0064/repeat-001/attempt.json": "ecf6f067aef751e1416e3ba499812666cd775528744316af0f4593c19b7190e4",
+    "cases/flock-prove-0064/repeat-001/export-status.json": "556beef870323480e12d8226fb9bc16d7ee01e4a6ec2287a73a000041b9eb6dd",
+    "cases/flock-prove-0064/repeat-001/flamegraph.svg": "81851a77f178107528bd2f083150105e65fce2131499d48fc77bc8ec5c802644",
+    "cases/flock-prove-0064/repeat-001/harness.json": "c1baf8f58f610dded04ffa0c84cedfa59334c8221c05b4b55d79c6b23c8b8024",
+    "cases/flock-prove-0064/repeat-001/original/attempt.json": "6f3c87c2d7ae414a654f83d104a61b72708af7253860e8dfce3321df1724da94",
+    "cases/flock-prove-0064/repeat-001/preview.png": "6879e8ca5d309d7c2efd9904764ada74626f711ae8179f1270f9705a9ba67b9c",
+    "cases/flock-prove-0064/repeat-001/record-status.json": "3cd37e8ae00f9e1dc5c95c33772641ac18732256eeee05d95f0bb2bb521fc377",
+    "cases/flock-prove-0064/repeat-001/repair.json": "773ec7db26ac13eff7ac5c4d775ee5b34f2420da863f638914e2ddb76aa4c36d",
+    "cases/flock-prove-0064/smoke-001/attempt.json": "6d8c79d88ff4f8c303bcffe6c4e88dbddeb6ee8b2db773607cec438564f145f6",
+    "cases/flock-prove-0064/smoke-001/export-status.json": "da9f1630c460ccfd02f758271c1fa252f94c391a19f15f3bf47b79d80c08ce74",
+    "cases/flock-prove-0064/smoke-001/flamegraph.svg": "8052ad1c8b92e98349062d17e3a094a95b5df057c97810cd2dcd527eb71857b1",
+    "cases/flock-prove-0064/smoke-001/harness.json": "aeedf2abd43b82d69e1b3901f9a70ab363d1d5f2557aea2d003b65da4ffedf51",
+    "cases/flock-prove-0064/smoke-001/original/attempt.json": "bc7b9aa7c5a0f1eaf93319dc68c63e3b79873263899a9064723750efad477df7",
+    "cases/flock-prove-0064/smoke-001/preview.png": "4759a0c3d19e2af9a426622073555a9c60ee30ba2d00b29da0ffab30a6abbe47",
+    "cases/flock-prove-0064/smoke-001/record-status.json": "f30e22ec6c4478f14b071f34dc22cfd52b49e297739c09427f38f8cb6d7d4fc2",
+    "cases/flock-prove-0064/smoke-001/repair.json": "69b7d4d46ae6bb493ba50d0df65eeacda5c103681c991dabdacb8d84c9a5f774",
+    "cases/flock-prove-0128/primary-001/attempt.json": "5439cf7ef49e65856c895b6aea669ec82127bdb0e83ff040ede3b73b5e2a86f3",
+    "cases/flock-prove-0128/primary-001/export-status.json": "69b5fc9efda8cd3286440588adf2de254deca2735b2d8f5801e33839705629ef",
+    "cases/flock-prove-0128/primary-001/flamegraph.svg": "1d2dcad39e41cceaabcf73ed17feafa17eace1f0dbd7e9320ce50122f7a542af",
+    "cases/flock-prove-0128/primary-001/harness.json": "94a4f214d91238f3818bd0fbec92ef45d8ee78bfc9d60738b3e2f6cba041de31",
+    "cases/flock-prove-0128/primary-001/original/attempt.json": "3359e1b7e04274bc53996ac22eb8e5f02a0f4c41475e90b782aa88935aeddc40",
+    "cases/flock-prove-0128/primary-001/preview.png": "d25171c3ae13f0c728bc07c271cb0614f9f4765b84f9c303ed5f0c2af257581a",
+    "cases/flock-prove-0128/primary-001/record-status.json": "e56a162d40109421ed4f59de9166c0aacdbd5fae46a7386c7f8086ece1253f63",
+    "cases/flock-prove-0128/primary-001/repair.json": "c8d86388e9fbb417183554444fe6bb3c1225dd271698b5022f80b66e8cde5e05",
+    "cases/flock-prove-0256/primary-001/attempt.json": "77ae6ecf1a6da6bb88e802f1c76b5ef5bc3515ffff784d7e8c961fbab3b4991a",
+    "cases/flock-prove-0256/primary-001/export-status.json": "2b67f1e40e6d49a177674dd42206036a8c9d664b45b89aabae68bc8eb3feb4da",
+    "cases/flock-prove-0256/primary-001/flamegraph.svg": "7eafa8b15c18b2f456e05a1e486e66e3e9058f05303fadaac7632924c692b8a7",
+    "cases/flock-prove-0256/primary-001/harness.json": "0c2ced0af73633594dcec5f66a3736eb6dfbd6d290f9d6364f0ef21d5b0e0d2c",
+    "cases/flock-prove-0256/primary-001/original/attempt.json": "dd88e1cd33c0f574b78cf265809537cb46c50e2e355bcb99370a651f2141902d",
+    "cases/flock-prove-0256/primary-001/preview.png": "c52cee6a50125226d37ef03da367ed79d74e5154cd3c7ae843b9f9f1921dc13b",
+    "cases/flock-prove-0256/primary-001/record-status.json": "5096fab7e759a97e25efa981a82a41f89d0df38c1286f2393919c4e04c199437",
+    "cases/flock-prove-0256/primary-001/repair.json": "08886d519f43f1f3b0036b7e5319132b1ea39b1627b8fe815fcc2da4d0e2ee4e",
+    "cases/flock-prove-0512/primary-001/attempt.json": "29beae792673b664442852d535fb7608cd133ae8afc090ebcd60c02b2da76542",
+    "cases/flock-prove-0512/primary-001/export-status.json": "c289b36b421c05a723985dbd68c01463fb2bf27447609d147488f0b5eff44f0b",
+    "cases/flock-prove-0512/primary-001/flamegraph.svg": "fe7755f8ac6cb0c02060835e38355bf8f6ed6da64f8084e3a4c9f1b0965548d8",
+    "cases/flock-prove-0512/primary-001/harness.json": "8203ae5200ebc7a25902a405a2347a88d252f5c8a6e720e50da88ff0e2e539e4",
+    "cases/flock-prove-0512/primary-001/original/attempt.json": "2e0b1fd13c67ed6e0d11ca1a3ea9be1ff11008cbb7e080d8ae48c8205c2c390a",
+    "cases/flock-prove-0512/primary-001/preview.png": "5f3738f41a2eed6d1ffa33a94ebcf2c477bef04686de8e94b4c75ea58533fc36",
+    "cases/flock-prove-0512/primary-001/record-status.json": "86220a21d790d052f1e53cbc022da1e45b116171929d75c9feaaceeb1cf7ba23",
+    "cases/flock-prove-0512/primary-001/repair.json": "222177d4625250880aa22ef28d9a92710ad896a0aff79accf1a43532e8dee02e",
+    "cases/flock-prove-1024/primary-001/attempt.json": "3dd76b8c0c5d55d1fadf82b389c41f2b36333065e6266ce02ebe9a499749128f",
+    "cases/flock-prove-1024/primary-001/export-status.json": "012da0e6aa22d5173eae7a8e5a094a11e64503cfbd9cf61cab8a90c4664199df",
+    "cases/flock-prove-1024/primary-001/flamegraph.svg": "642c3605a5626658bc064ea4a20e62e08902e542a498fec844764e156a2e79b6",
+    "cases/flock-prove-1024/primary-001/harness.json": "991678f701c61c4a99716851c80977784eb9f2892e321317353042ba3c5b105f",
+    "cases/flock-prove-1024/primary-001/original/attempt.json": "81aea09ac86e117a50a123373ba194cb0159f185e0d3e160b867d0241dc99fd0",
+    "cases/flock-prove-1024/primary-001/preview.png": "19e3c2ba3b1dd5e2ec46b9c7c816b2772fc7ac1040ef313787e3202d42bdb051",
+    "cases/flock-prove-1024/primary-001/record-status.json": "fe60889f8cd768740017176999cc13d61ed8df0b576a34edbb9af2c198285296",
+    "cases/flock-prove-1024/primary-001/repair.json": "736b7d55d47daa650081edd2ee3be6aea54d88567ebea2f8779104f70c1662f3",
+    "cases/flock-prove-2048/primary-001/attempt.json": "c8661e2b49480d602bd4621ab14a988b219572ee45ba37d4b6286f59acc2260a",
+    "cases/flock-prove-2048/primary-001/export-status.json": "49c95a0445c0f5459db2938c8c4ecc6f3517144d78e9c9370db8d0b98ea87bd0",
+    "cases/flock-prove-2048/primary-001/flamegraph.svg": "b7466b0b7559fad7008af1138cb0a35fad6a3b4db5de0109db821ce5a5f22141",
+    "cases/flock-prove-2048/primary-001/harness.json": "57e77c33b0f45e66f624832ec9ebf7c9aee9a9bd1666516a60269675f2cd4132",
+    "cases/flock-prove-2048/primary-001/original/attempt.json": "3cb9f7dc3bb8afa3f66c139ba7511d61b14051cc612475c53da65c7ce18a6719",
+    "cases/flock-prove-2048/primary-001/preview.png": "0ddc764a15cafaedf437dec8a4c204f75f9baf3bbd855d8f65f23c04b75099da",
+    "cases/flock-prove-2048/primary-001/record-status.json": "fe01cd0f3fe6b8088570ecc2fd29f6a36d84a0c824fc7def68c53e88408f2cea",
+    "cases/flock-prove-2048/primary-001/repair.json": "52de999f513ced9ce1fda84c978ed8011d991c23af53b00725a67b56c482666a",
+    "cases/flock-prove-4096/primary-001/attempt.json": "923c47e14b7025755b48dba4c97972f0c656b4be9bd855d802f32708dfe35fa3",
+    "cases/flock-prove-4096/primary-001/export-status.json": "3a8c802f3e457e78f4ea324bb715fee1385175a0fe1ed1ad51f1b06d292d7c4e",
+    "cases/flock-prove-4096/primary-001/flamegraph.svg": "82bb857fce5987d0951a7570ced0b97d61a216ac18e36b854bd5710ba74fe03d",
+    "cases/flock-prove-4096/primary-001/harness.json": "dab9f8347a323257388ebe1f997e61a376b78fc867dfe6e581333aa6e4c35ca6",
+    "cases/flock-prove-4096/primary-001/original/attempt.json": "f7c24c72482de11bc9d9b6195fe3574493c5564585ed834c8993e7ea5e09b02e",
+    "cases/flock-prove-4096/primary-001/preview.png": "351275d2eb94d97ccd76f97a3bf30a3bc02ead00574e98f2eba78b71daebc955",
+    "cases/flock-prove-4096/primary-001/record-status.json": "02a6f5b4d344e329b53db2c563ce4053b9c8e78e563fb36d618be076b7ea72c1",
+    "cases/flock-prove-4096/primary-001/repair.json": "2d56dcc77219940821b8a804880a27e8fdb3808d7c4980ea341284b9fab442de",
+    "cases/flock-prove-4096/repeat-002/attempt.json": "49cc747950373ac0eed548e6d8fb2ad3aed27cdfed250ee186ea22ec955961ac",
+    "cases/flock-prove-4096/repeat-002/export-status.json": "b35e96cc5c80247a74486ef1a571f3e0fbd5b5e13405afc5698eaae951911e34",
+    "cases/flock-prove-4096/repeat-002/flamegraph.svg": "888212604b8f81ad6e75d5b4a428b26234373ce97b6bb8cd6c91a210d0310fee",
+    "cases/flock-prove-4096/repeat-002/harness.json": "3ab429c06464d384253573d101c0e011ab73c98d1c7c915162ccb112cdd675d4",
+    "cases/flock-prove-4096/repeat-002/original/attempt.json": "9cf75142c12b738e1f03e0f9ee1ba589f7032de4dcfbcfb2f74a8f0cdea69e9b",
+    "cases/flock-prove-4096/repeat-002/preview.png": "c7171888a6350b256d8e71dcbdab55a0306446f1a6090da7633082e3bffb3879",
+    "cases/flock-prove-4096/repeat-002/record-status.json": "941e73b232eee9d54537643164ee6fbbfedc0e810d1cc1c1e2f24b7f0cd1663c",
+    "cases/flock-prove-4096/repeat-002/repair.json": "4337547b1ea1792c98a0269f8e7b934fa1ac6a5a7172824daead4771066019dd",
+    "cases/flock-prove-4096/smoke-001/attempt.json": "9b85b4df9c2c6e7f9c3bdddacc64cae3e13dbc792de3ed86aaf8b05b13c96d7a",
+    "cases/flock-prove-4096/smoke-001/export-status.json": "f8a8a476205bfcc9a77bac421170384b2cd60acabd3f0bcdc0aed620218cc4fd",
+    "cases/flock-prove-4096/smoke-001/flamegraph.svg": "57e788a016b1565356b6a79bf118fe4342189534855dce348300b6f4c8bc1cad",
+    "cases/flock-prove-4096/smoke-001/harness.json": "437771fd1877c09c4fb232fc8e304b2687a0dba6f8c99b648c7bbe6d33fe9b7c",
+    "cases/flock-prove-4096/smoke-001/original/attempt.json": "3504b0254cb19539cc839e100ea48d49d64544683f8cbaa6bcc95b9be10bf85a",
+    "cases/flock-prove-4096/smoke-001/preview.png": "2b14bd47dd9db9c5e8a06713966175da3ed31c35c4a716134ea494cf466b402d",
+    "cases/flock-prove-4096/smoke-001/record-status.json": "44f33b9299a78f39a8f4b9e5d2b8a279fe1fc410973cde9a9da924e89163ba0e",
+    "cases/flock-prove-4096/smoke-001/repair.json": "c0219882dc76ada3067e524df6a2a2c7654dad7ff1906cb2f88d90fd30bfacf5",
+    "cases/flock-verify-0064/primary-001/attempt.json": "9be2964c37de286489861918368157046bed2d426e5f273a536b2c7e3aa78ea0",
+    "cases/flock-verify-0064/primary-001/export-status.json": "08ed0f05ae9e9f5c070d7a3c09d72798e0c0e4c3a609afa3465c7887a602dac2",
+    "cases/flock-verify-0064/primary-001/flamegraph.svg": "7b925066c00ad5fea92431017acac65731c4a44a135afdc24c1f4038af19fc57",
+    "cases/flock-verify-0064/primary-001/harness.json": "cb884679fa0af79daecf298b62f8008b46750a28daf200a2bfe10a596c028d83",
+    "cases/flock-verify-0064/primary-001/original/attempt.json": "7a79d43dc29d6d7069c302e30f61e767b7e85d639078c34b97ec734d04996343",
+    "cases/flock-verify-0064/primary-001/preview.png": "ace4a9e711e8988232dc4660c35608bab307e9c580b60bc2e8994fba348f2675",
+    "cases/flock-verify-0064/primary-001/record-status.json": "e26d7352771fe56a61d2dac272646b38e40ea8eb5212670d5dcb301123c388a4",
+    "cases/flock-verify-0064/primary-001/repair.json": "dd632b5787ce6d4ad24d6ebd30fcfc606f22104a3557289e52aaaea30448afb4",
+    "cases/flock-verify-0064/repeat-001/attempt.json": "f6d0679da53327d3ad782501849330194af7ce071ed24e2eec778b0552410359",
+    "cases/flock-verify-0064/repeat-001/export-status.json": "4ee93c7046fab119a6bff2bd9402df61deae4eb6733f30006acbeca90faaaaf7",
+    "cases/flock-verify-0064/repeat-001/flamegraph.svg": "21e21e5e7a722faa97712b81cd00beb5b25ab79237ddb018c52a8eb62263635a",
+    "cases/flock-verify-0064/repeat-001/harness.json": "2e2717cf0ff9b6671e779a93bf387faf8e773080811ceb36b053ec0509f4f331",
+    "cases/flock-verify-0064/repeat-001/original/attempt.json": "ca728f45381c42aa34608cba1a1819a69af3a7fb8d0e4ee8de5c213bc5e8084a",
+    "cases/flock-verify-0064/repeat-001/preview.png": "42bc4d944ac6d1746cda1d0622de4bcbfc57230e3f59268080e87cabcdcdf1fd",
+    "cases/flock-verify-0064/repeat-001/record-status.json": "fa959f59159bca456f89005408a6349813c58b4a807135d86bba59ab369a0dac",
+    "cases/flock-verify-0064/repeat-001/repair.json": "4852cc6c9e205c70d383ccc3442cccead2821f93925bd023c89a1e31a72672b6",
+    "cases/flock-verify-0064/smoke-001/attempt.json": "06859a45b5f709b2251d11579cffbfb715c7234cf10d6e7168de32781a34d774",
+    "cases/flock-verify-0064/smoke-001/export-status.json": "ad15f3fd01ad1ed2b1259c9362056038263364efff160faadb45fec9fd7474cf",
+    "cases/flock-verify-0064/smoke-001/flamegraph.svg": "461e6ef5c091f07cde20fb6b63fbc524b1f815441f53da2926b473284fe00629",
+    "cases/flock-verify-0064/smoke-001/harness.json": "b0c7c640f517c4485861d7850901cc398acc5b263c46dfc6407031612e64004f",
+    "cases/flock-verify-0064/smoke-001/original/attempt.json": "f08c7398b315989060359021d2dddc82af2933364710fb79c353eea1e50cffa4",
+    "cases/flock-verify-0064/smoke-001/preview.png": "97d9fbd42b5448baa47258fbfd0f420b78a7e77105bb35d05cebcf72a0df7f94",
+    "cases/flock-verify-0064/smoke-001/record-status.json": "4ffc543161c0f6805bb0cd3b01db3e4775ba235e9d2b8cde30e67d79a601c9a6",
+    "cases/flock-verify-0064/smoke-001/repair.json": "f9af60cb2cb5dcd623217c47ac1997c576433854324758ff43ef0fdea4cca81f",
+    "cases/flock-verify-0128/primary-001/attempt.json": "015520ea1275bc325345246f70653f0ec5d77d93afe636e429b6cc78288b678e",
+    "cases/flock-verify-0128/primary-001/export-status.json": "2e0568c37fc272633d470a252ecf9f6d0c6f52c8024385f9e73aa292977ad8e0",
+    "cases/flock-verify-0128/primary-001/flamegraph.svg": "6c90c521353e7e14f1e534a8de5ed487489072b843a01f9acee02a3ef00f57e0",
+    "cases/flock-verify-0128/primary-001/harness.json": "28ad6c0f841cc8ecd0343e5af00e4fc41ba3481aa97be586a43356bd0cb7e49f",
+    "cases/flock-verify-0128/primary-001/original/attempt.json": "c2e06d16d5925c1f71bfa33dec0e48786155850f47afdb50c6a3a0e3141b3c31",
+    "cases/flock-verify-0128/primary-001/preview.png": "d38c5789a52ed15ba68e0072dc4846835eb144c39a40d9a5e62f5beb1343c6ac",
+    "cases/flock-verify-0128/primary-001/record-status.json": "11ac279af16b09eb4f0825517373b6d21e45cccda9406bdb7ae0e64504c3d814",
+    "cases/flock-verify-0128/primary-001/repair.json": "29c44bd8bcfec32692e26c8788110f933f14ba1569244490ff78cffbe78feb70",
+    "cases/flock-verify-0256/primary-001/attempt.json": "77b14aa7145dfa72c5d2365a76030a3270552b5a73bfcae7aea00da7acaa87b4",
+    "cases/flock-verify-0256/primary-001/export-status.json": "250e01fa0399c6599b228a596cbde1ea124341b4d113d9a6cdafa6c5f669d7f9",
+    "cases/flock-verify-0256/primary-001/flamegraph.svg": "bdd20c0e6317b93f45c64a7118bf594a38893dcc4bf9e4a9039a811719600646",
+    "cases/flock-verify-0256/primary-001/harness.json": "35393de3aad2f76fe8a0a72b323bbb0d674fbefaaa855be4d09b60dd205ff64a",
+    "cases/flock-verify-0256/primary-001/original/attempt.json": "601a3d665bb4fc55b8002b71ac4b13d531e0e6f8725ce85bf46600462e5876ad",
+    "cases/flock-verify-0256/primary-001/preview.png": "4c7a53bfd0fb99cdd666dad01ca705dc9f95962e34127486e4768c1f64dd2fbf",
+    "cases/flock-verify-0256/primary-001/record-status.json": "5209801f1293432187d3ff26c59411e402fb616a71ab64ed6c233d5916a6840e",
+    "cases/flock-verify-0256/primary-001/repair.json": "395fca8f3472e570475407415a3401876dc24665d34b4c6035d6249caba9f6e2",
+    "cases/flock-verify-0512/primary-001/attempt.json": "159e8faa6a99dcc5d9ed36685f6b353f394c93b5a261e4954de3cf6fe89ac61d",
+    "cases/flock-verify-0512/primary-001/export-status.json": "01960035803e425758b9a0955cf7c88dc73c9be2b1e6b948ba8ea58f1d3a39db",
+    "cases/flock-verify-0512/primary-001/flamegraph.svg": "61a73c698465b1d119af1fa089ec9bc1c39d596403a68b99dfaf9404569070e3",
+    "cases/flock-verify-0512/primary-001/harness.json": "49862d014d18d7e928f42075a471309b963bb3f408f49ac8c7b23665b55aebe4",
+    "cases/flock-verify-0512/primary-001/original/attempt.json": "5cda9e31eea50ccb12a8b8360eb85ea54ef8d39f9f33265aa8cfaf98f52c8252",
+    "cases/flock-verify-0512/primary-001/preview.png": "8e176d0d4a4e389da7ae830d86ca02577b502743103172cbddc50981d806021b",
+    "cases/flock-verify-0512/primary-001/record-status.json": "26136b821db76d5ce83df20dd3474dcbe3ccfb7ab3f1294f594cb2d05e3febca",
+    "cases/flock-verify-0512/primary-001/repair.json": "47fcaf7fc8b8c2b47bffb02b884eb71c26529547a195d579ace13290521195a6",
+    "cases/flock-verify-1024/primary-001/attempt.json": "2161ef34e9274c15bac88a390af74929a870677f839187fe1c3e9a36a8fbd6a8",
+    "cases/flock-verify-1024/primary-001/export-status.json": "b77b2cde1ad6cc78846095c648078c30ca22d6c417ba66c7283641aed2870714",
+    "cases/flock-verify-1024/primary-001/flamegraph.svg": "25a1d9b982620c4e9261ff2fe23d6dff92159b3e823456cec621097fe3930301",
+    "cases/flock-verify-1024/primary-001/harness.json": "e1a5720265515aaf0613232603820ec3d47063bb06b78a594f84c7457c019cfd",
+    "cases/flock-verify-1024/primary-001/original/attempt.json": "0e8ba3e9ebeb42802a18079409405cb9f6050eba97dd5c2756b43f8cfe462d45",
+    "cases/flock-verify-1024/primary-001/preview.png": "a43794527ba94e28e6d2768ca9be99a01a3918434bba36151083b3fb000c18ea",
+    "cases/flock-verify-1024/primary-001/record-status.json": "a0e56a734e575f5fe654d9ca79c253f0028426ea26c4327cacadeeab4fc18170",
+    "cases/flock-verify-1024/primary-001/repair.json": "82d556bd9abd7e402362d16e77546aa00b577951d04bf5226fd45d37b94aed9e",
+    "cases/flock-verify-2048/primary-001/attempt.json": "b3daf740f203b83bb8acec2f21410a9590c6f66c8a19a554f0946774338f5bbc",
+    "cases/flock-verify-2048/primary-001/export-status.json": "33fc20aefd0c3504007cb8ad4dd481a2ff46cc454df6423f5c3631b9f7c67342",
+    "cases/flock-verify-2048/primary-001/flamegraph.svg": "d222191356a3e59b8ec406f2512827892282d60a9b3c2787b9f72c517fa08b38",
+    "cases/flock-verify-2048/primary-001/harness.json": "a364ea3728a0fb2e7d843455d5ff8500210f16b2acf0ea30fccc89dcaffa78b0",
+    "cases/flock-verify-2048/primary-001/original/attempt.json": "070a3f4105b961c60d1d70f179c6e1972a51ef9dbfd7bbcb849763605db46f5d",
+    "cases/flock-verify-2048/primary-001/preview.png": "6d9176b5ed5ad4e928c38a16dd685290d122ae47566eb8ab8b51340cf04158fb",
+    "cases/flock-verify-2048/primary-001/record-status.json": "d62e2c83a2065259746d31b2a4b625e8f733a5c62d999d86f96ff0b0016a266d",
+    "cases/flock-verify-2048/primary-001/repair.json": "4c31e68ae89a33bb18fdc5a225d67361b4a4e3a5dd677ab36de209f93462380c",
+    "cases/flock-verify-4096/primary-001/attempt.json": "f49bc5f5ef23beb4eb9dda63fefded5fb89bb78f1dea945f98d17a2859128683",
+    "cases/flock-verify-4096/primary-001/export-status.json": "11374c0bc0e754b19b117835b7324f81056bfe6a8a8cf2afd89f3ca8f4059f51",
+    "cases/flock-verify-4096/primary-001/flamegraph.svg": "75c852c78d27be962a64031eb3d4dc3f969018d106ced8253a952543a1ad24f4",
+    "cases/flock-verify-4096/primary-001/harness.json": "b74758f68f55f372f298abc4a427b14fa0246fe8c9f1c11daa3c70f16b2e5828",
+    "cases/flock-verify-4096/primary-001/original/attempt.json": "d423ee861e321a6820fd7849a2466af64fb7fe93f4a1a13aaf8a051afd8035e9",
+    "cases/flock-verify-4096/primary-001/preview.png": "8d555d398a29037b8e13c636b97c99f56e619963d2a03759fd949dfceed97ef7",
+    "cases/flock-verify-4096/primary-001/record-status.json": "662206ea620696c4d2d129f9bb001f138725136708728b7413bb5235bb8daab8",
+    "cases/flock-verify-4096/primary-001/repair.json": "bd257f96d02b3c86cb2572260ecdfca692a5c3e5108c50d60232441882cbf99f",
+    "cases/flock-verify-4096/repeat-002/attempt.json": "820341e86052514980c90a868da8fce95e017231c0177abd83a3fabebcbae709",
+    "cases/flock-verify-4096/repeat-002/export-status.json": "665a3fe33cef8b9249e2dac66e2e3b4782fe60da2f263be12a2c3ce7a7b761aa",
+    "cases/flock-verify-4096/repeat-002/flamegraph.svg": "2866001071b5025fbb5652d6d633d1adebd5becebfdfd5cf5482d68f057862e8",
+    "cases/flock-verify-4096/repeat-002/harness.json": "8fd390b484d71d615563a65d60cd98ea55219d1ecd3720a7a88fcb13227894d5",
+    "cases/flock-verify-4096/repeat-002/original/attempt.json": "31a34d8a8410a2e0277890cc84e23f0ee417a4233a4310057d795ee93c5f4017",
+    "cases/flock-verify-4096/repeat-002/preview.png": "c7afd0afa69cbe3916b42df32ab3b628bf9a258e4e418310cddcb9ccf11a6838",
+    "cases/flock-verify-4096/repeat-002/record-status.json": "9062142b5c5ec1d803488b2b3a61228d259d5d59734b91fefd7e5c221b434c19",
+    "cases/flock-verify-4096/repeat-002/repair.json": "d2a4a8dacea6a38115015713d97c468d5ae3670c107f2464b95b1930eedcb381",
+    "cases/flock-verify-4096/smoke-001/attempt.json": "6d94d90098263812bccefec97005810373fb4c85ce77ca78e43bf6f5e99dfacc",
+    "cases/flock-verify-4096/smoke-001/export-status.json": "ad69edc0671cb384c07a75123f9ae78cefa05313eafd426422b2eaa113f7b0f0",
+    "cases/flock-verify-4096/smoke-001/flamegraph.svg": "3244149dff868ad07a408894180cffbc5c929c7de41a571f21fefefaf8347d1c",
+    "cases/flock-verify-4096/smoke-001/harness.json": "45d54a72aa3b338258fbc6f310785bf54e0278d2d2e2b0268e4b97020f919cb4",
+    "cases/flock-verify-4096/smoke-001/original/attempt.json": "710c26a330855621a3310717733172b916a9b7db64e6d60bc19558094301dc85",
+    "cases/flock-verify-4096/smoke-001/preview.png": "a18ee2e29518c84cac9011f6c75e544fd03f7120f612a6914e1bc68335f78ec3",
+    "cases/flock-verify-4096/smoke-001/record-status.json": "1deb6264b820f9df1c59f5bf0c2807c261b3a6609187021f1233ceee62d34868",
+    "cases/flock-verify-4096/smoke-001/repair.json": "7dc38312acb9137c0e9731c156784dc281c2d3b32e9c321c312adc3e041f8e0c",
+    "cases/full-zk-prove-0064/primary-001/attempt.json": "274520beac6734e983be8f3e940d93d8713d64b4c03f5a56e450664f0627522a",
+    "cases/full-zk-prove-0064/primary-001/export-status.json": "96f7679ee6a6a01428abcc6015dccb8be9f893425e9404f5b83cd805418a7960",
+    "cases/full-zk-prove-0064/primary-001/flamegraph.svg": "1d87431da49dbf6ecebd0b78f1adcbb9ab107fb4273840dd21b8089b1f249f66",
+    "cases/full-zk-prove-0064/primary-001/harness.json": "5d994ee469196e14a2e3f0a2b0513b440e14543775962a5d259b33b2aa1d281b",
+    "cases/full-zk-prove-0064/primary-001/original/attempt.json": "c849ccfd18b527041b23283a8631b63f305bdf486a65df85ecd5175d71cc97e1",
+    "cases/full-zk-prove-0064/primary-001/preview.png": "d89640689bada51680ef1521de118cd85d46657e89c236a2217f3a7bfd673591",
+    "cases/full-zk-prove-0064/primary-001/record-status.json": "1fce76e4304451aae411e34fd8c526e72e02f317c5f0e91510b4a6b3abc37ba8",
+    "cases/full-zk-prove-0064/primary-001/repair.json": "833330706f77e10e1cfae03d3cb1ce9dcf8b2845c4617f21d1e16507dbc61f53",
+    "cases/full-zk-prove-0064/repeat-001/attempt.json": "c90050c5f0e0992f8e8f17fdfbe25ac2effa3e525f6a4641cbad7d4c8ad7f18a",
+    "cases/full-zk-prove-0064/repeat-001/export-status.json": "4a9bf5649165e8943f8ae9db16c7a1377bef297b3af8a56a06c8fec79e29dcf6",
+    "cases/full-zk-prove-0064/repeat-001/flamegraph.svg": "9142f07fbbaab2dcf4a7a75254d17f302a64a56551a3057001df67aaa1bc8904",
+    "cases/full-zk-prove-0064/repeat-001/harness.json": "b898cbe2dad53836d19b7d1facbb734747613332bc2e9170a00118a674258a3d",
+    "cases/full-zk-prove-0064/repeat-001/original/attempt.json": "70f69dc7576db6e4bf369b2befeed63bb7dfbade914931792e6913343a93faf6",
+    "cases/full-zk-prove-0064/repeat-001/preview.png": "df0e6209ecb88d46a479b91570fbd58771a48e51b82863269907e4bd277038f6",
+    "cases/full-zk-prove-0064/repeat-001/record-status.json": "b35268d62429f07e259da80e5d4b08b299dcd8cf6e1d935f9dcd85d67d1fcd7d",
+    "cases/full-zk-prove-0064/repeat-001/repair.json": "373919b9082bce5b9e9cf84eeb6a7c45bd2d421deb5d71d31f2174a16c9add18",
+    "cases/full-zk-prove-0064/smoke-001/attempt.json": "96f2360f0072cdbc808025cc41f92f6d3c9764881517074a42f0f826ec68f4ce",
+    "cases/full-zk-prove-0064/smoke-001/export-status.json": "937693b68436b23bd05429e6ff17d306d52d32fe919926380887d44d3ed5366f",
+    "cases/full-zk-prove-0064/smoke-001/flamegraph.svg": "ed16c53730853796913a84e254bfbadba26829d18bb070fbe6f5c924380c2219",
+    "cases/full-zk-prove-0064/smoke-001/harness.json": "de9c76fd6ad39c8534e9eba2ccbde5f0b0edb8680f780e38895ed00807cd81a2",
+    "cases/full-zk-prove-0064/smoke-001/original/attempt.json": "58c33c5642c1712c79ad0bd06399610b9175fd8886410d346ea840e57cf4ef07",
+    "cases/full-zk-prove-0064/smoke-001/preview.png": "8f6cfa9e20f77dad4c6ac227215f5f0a043aa2530cec331623877f1b5473236f",
+    "cases/full-zk-prove-0064/smoke-001/record-status.json": "b752b0a2894293587426fd7225d1165cbd14490b1a4195876afba6d987e7ca36",
+    "cases/full-zk-prove-0064/smoke-001/repair.json": "7ce63efecec3c4f4da96898537daed874d69120103e4c1f417f341de65956518",
+    "cases/full-zk-prove-0128/primary-001/attempt.json": "3224ef0b14cd8be779179651ba6bc550d5e23e56e015de25b44e998bb1d8aa47",
+    "cases/full-zk-prove-0128/primary-001/export-status.json": "558685bcc059ef4bdbe89903bd0a0844720c9046646e44e625d8e9ea91d99833",
+    "cases/full-zk-prove-0128/primary-001/flamegraph.svg": "ab89f8a3e57cabf2d68d137bee0311b1c11573d4d34a59a79538d4c23c6b3038",
+    "cases/full-zk-prove-0128/primary-001/harness.json": "63c7fba80974ad2ac9f08d862ee52f9ef824121eaa2ae30945e77d8fd2778c54",
+    "cases/full-zk-prove-0128/primary-001/original/attempt.json": "7b6dae2a858ce1e98d7f81e004e7714059030c210dfbe503c77992e39c696846",
+    "cases/full-zk-prove-0128/primary-001/preview.png": "4732d740c59e925cdf7c932b96951a5aec618a5a9d9a36e21ff2bfd264d8b27b",
+    "cases/full-zk-prove-0128/primary-001/record-status.json": "07158bd2f80bee8eed0437ce923ebdfd357d85da0dd596b483b88e3916838277",
+    "cases/full-zk-prove-0128/primary-001/repair.json": "ed7a2c7ee8fa1e111d64c958a13bdaceb5998ec1b647bfe531f710409e8f3b57",
+    "cases/full-zk-prove-0256/primary-001/attempt.json": "3c4a34a63a5550c1639c9afc11e53cef11f7775e35af5d295f029e6221d9903e",
+    "cases/full-zk-prove-0256/primary-001/export-status.json": "c557c7f48fe0e8944685e85d3b262b8561fcfba271d1558af020e4fd88f5a104",
+    "cases/full-zk-prove-0256/primary-001/flamegraph.svg": "2ccad1ee48ea3561584df5bb9c4252a8fa17a4c50b0855ecd1696260bdc4c4c1",
+    "cases/full-zk-prove-0256/primary-001/harness.json": "1b1983eb95c5e9f2807766e1367a01f42f45c4078e5d8f7c0dd288902f7cfb4b",
+    "cases/full-zk-prove-0256/primary-001/original/attempt.json": "93ef7b81a1d929fdb4f00305caecdc261bbda685d46302afcf84c24f6f656ee9",
+    "cases/full-zk-prove-0256/primary-001/preview.png": "d66c23fdecd134a87e7cfd3f85991456b93ee7b262be81bd91c11eac0066eaf5",
+    "cases/full-zk-prove-0256/primary-001/record-status.json": "3865b5111723e95abec76ed8930ce8d44a04262e2073e5fd3f1e479b534135ad",
+    "cases/full-zk-prove-0256/primary-001/repair.json": "38b26683f1df34407426e800eebf087527e5ef50851f34242c0652f9c2f44b15",
+    "cases/full-zk-prove-0512/primary-001/attempt.json": "66186e2f5cb4b8dabf1bcb161e9165394d8bffc8815c1fa82e91ec8833dbb0fa",
+    "cases/full-zk-prove-0512/primary-001/export-status.json": "e3c8c1fe7e8a945261189571b92a0599889c8bc9e12560cb32c682b0eeddb21e",
+    "cases/full-zk-prove-0512/primary-001/flamegraph.svg": "13510fe964f384c2d097a030458a13eb2945d4d76da2958fd26d4b80a666a205",
+    "cases/full-zk-prove-0512/primary-001/harness.json": "b71f96018cb7d28c679145de2624396b2ba73b6b165527a834aff1d49ff020fd",
+    "cases/full-zk-prove-0512/primary-001/original/attempt.json": "ce74dc8f497baa4fb96efa29e94c9b165a24177d5f033c9faa2f1cf9f6d71d01",
+    "cases/full-zk-prove-0512/primary-001/preview.png": "f7605e1427b9a9fadec91dbe56b06b36a7f45b6e7ac6ccb256b16ec91dee1073",
+    "cases/full-zk-prove-0512/primary-001/record-status.json": "2f68c44819bef31990a9e291959ebfb06704a5d59ad9c4b8ff4b5a07d3381af1",
+    "cases/full-zk-prove-0512/primary-001/repair.json": "c47c81da47adf1964ad7f663e9067b5f0c64fb816e004aa5df4251527157852d",
+    "cases/full-zk-prove-1024/primary-001/attempt.json": "319bfe16bb068df924d6ea884a55f08a50dfde52528ed0a71d3ba55b86d686e5",
+    "cases/full-zk-prove-1024/primary-001/export-status.json": "1928b5987fffb7a9889685aa5479fd51ab81a4b3f0bb9d5713f4fc498c71dceb",
+    "cases/full-zk-prove-1024/primary-001/flamegraph.svg": "11633c688155d93d7848d10131003217490f8dcd03e048b51006f718c65caffb",
+    "cases/full-zk-prove-1024/primary-001/harness.json": "d5028a5d27117bccaf2fe212ab9f2a2a0d87db5c9f653ffe087aa4b228b121c6",
+    "cases/full-zk-prove-1024/primary-001/original/attempt.json": "1278983bf6632782181d21dbc66fff0ea347e147869f211b3bd0386b7b66c41c",
+    "cases/full-zk-prove-1024/primary-001/preview.png": "3d133b7b8b5bad397f383a3084735c16288f73babb5042a01e1076ec29fc8155",
+    "cases/full-zk-prove-1024/primary-001/record-status.json": "adf6a9ada5ea458585f03ef506d1e77d83db51fe0a31b5879fc89a2cb08b81d4",
+    "cases/full-zk-prove-1024/primary-001/repair.json": "d3273b86bc76249465ebf0e1353e96602ed42b9fc44b87898759e31dc5e05a41",
+    "cases/full-zk-prove-2048/primary-001/attempt.json": "55fb00240e175c1b126d6318ed2b202e7d08101bae2ed83f026ec93c7ea210a7",
+    "cases/full-zk-prove-2048/primary-001/export-status.json": "f65e1573578ae9ac79b804e445d82594b75b938f75754ffb7411218be1efd363",
+    "cases/full-zk-prove-2048/primary-001/flamegraph.svg": "a81cf47710aa3ac6086c273b19062b4223644f99dc216b16e96d8e7481ae7690",
+    "cases/full-zk-prove-2048/primary-001/harness.json": "a4911b65930da38819a0404c329914e0957ad1d4c27f3e45f5ce7d7d8885ad3b",
+    "cases/full-zk-prove-2048/primary-001/original/attempt.json": "7a06d9409dc1df24ddce87dd15b37a6c34928d8bae0a78c63bb7880ef5fc1af0",
+    "cases/full-zk-prove-2048/primary-001/preview.png": "5a17ec673e503665bfae21a06636ad754ca590d2bd610e894cd5e53e100113c1",
+    "cases/full-zk-prove-2048/primary-001/record-status.json": "ec972f4b5a4604a2256b936b1df172fd8c6966621b4f13dacb64ce724602856c",
+    "cases/full-zk-prove-2048/primary-001/repair.json": "9d40962dda4bf6f439b5d2adb6cb6fda75cdd9004e7439de65943043b84ba4f9",
+    "cases/full-zk-prove-4096/primary-001/attempt.json": "383fec77356cf012c664f38b862ea53937de1025d78f068a3fb6de4cb018bb4e",
+    "cases/full-zk-prove-4096/primary-001/export-status.json": "80a4a7a1d0c330588bfbad8065911db695c339f84bb1ca153c12702159860a33",
+    "cases/full-zk-prove-4096/primary-001/flamegraph.svg": "f1fcda6d52cb9ab2164a240e3bb30fa802edc0fb70864c30a5d06883ebea1350",
+    "cases/full-zk-prove-4096/primary-001/harness.json": "f29e58f454f1d14c7789c8c7911bead904c30110fa6c3e5d535d8fdc02c52eee",
+    "cases/full-zk-prove-4096/primary-001/original/attempt.json": "c2c8b422e8704f6bfeef21097d0369fe77223148357fe3380824efb7ceb06203",
+    "cases/full-zk-prove-4096/primary-001/preview.png": "77e750c0ad2f2bba49ad3ebb47e87d24fa1cdb76a4f46b2992f69188945149d9",
+    "cases/full-zk-prove-4096/primary-001/record-status.json": "b92b708a5b066faec4491065017fc5e8a6cee44f896df1c5df72286cde2abc38",
+    "cases/full-zk-prove-4096/primary-001/repair.json": "2efcb51b9d59080e23ce16516bcb3e915b303bd38aca9d2e1c6d175656de1402",
+    "cases/full-zk-prove-4096/repeat-002/attempt.json": "b58454c9432e171d57da100e87e87596323ff63e23f8d2ab27e16c99dd8145e4",
+    "cases/full-zk-prove-4096/repeat-002/export-status.json": "bd3f9b1f4f569b22db8f5724d9947e1c13db31f42d0faf8b45d1352da22d7fee",
+    "cases/full-zk-prove-4096/repeat-002/flamegraph.svg": "f235d71ea49e32592bed83eaccacfaca2f351ab3c879d47e778e2d6a1d81eb06",
+    "cases/full-zk-prove-4096/repeat-002/harness.json": "9f8a1d89eafd4bc3c09f5c9748c3ae45248c7ac31ccd41817ca044a17352fd65",
+    "cases/full-zk-prove-4096/repeat-002/original/attempt.json": "d550a7fe7f6eadcb68fc0dc7f99e2298ffb49673af1cb13570607448074a0ee1",
+    "cases/full-zk-prove-4096/repeat-002/preview.png": "d389ece496b25dc4a1134055b5f0ff53630de0707ec657209d5a4ed65063ae74",
+    "cases/full-zk-prove-4096/repeat-002/record-status.json": "02319ac14458d08d401c3bb99d9b108e24597c1635d56bf9b11931f02289744f",
+    "cases/full-zk-prove-4096/repeat-002/repair.json": "c5f53af857ec02089ded940eb20fa7bcece79c4c92886281e7fe625ebfa7a02c",
+    "cases/full-zk-prove-4096/smoke-001/attempt.json": "7369539ec32ab2fcc327a879434c6f37c19279279cb8ca50db09f86f3194c550",
+    "cases/full-zk-prove-4096/smoke-001/export-status.json": "d58a2caff17cde789d44bfad9115237abec67da99bf5007a9d47f7b4012939de",
+    "cases/full-zk-prove-4096/smoke-001/flamegraph.svg": "89826feb74e8b699866b4c31bcff9746f9e98c19613a45fdd37107decade8d0f",
+    "cases/full-zk-prove-4096/smoke-001/harness.json": "a8e98b916122a963768ce913f4dde756c1c1c103ce4ac3990383ba3dade9c9d4",
+    "cases/full-zk-prove-4096/smoke-001/original/attempt.json": "dfa0d093edfbea993812d1a93714e5c3500bcc06419e3300e8d357647178c30c",
+    "cases/full-zk-prove-4096/smoke-001/preview.png": "5211805e1a64de097e8c6d00749e92e88bcf3b9053aa3ba263ea177dc4c1df6b",
+    "cases/full-zk-prove-4096/smoke-001/record-status.json": "7b4e44861ca190a4274ba1f8957270df8669763ec672746cb492dc0a062f8613",
+    "cases/full-zk-prove-4096/smoke-001/repair.json": "c99a693ab3902b9dc42e8e038114eab75ef0f322ec3f349af24bf229ca2a3abb",
+    "cases/full-zk-verify-0064/primary-001/attempt.json": "866f994b0367bb7ca4e107c54789315187c0b41d310a5db212350d949052ddee",
+    "cases/full-zk-verify-0064/primary-001/export-status.json": "94a3ab5b4d24c35cad0017256daaea76dab9350e7312d2990e5a58a67f48bd7a",
+    "cases/full-zk-verify-0064/primary-001/flamegraph.svg": "a06002f11934026c7fe04dd537222c1733f401173d12222eed8375fd4e00b5a3",
+    "cases/full-zk-verify-0064/primary-001/harness.json": "d7764c698ac1a4943afd1b0e83aef4eeab0fd6e6592e14be67d704437035dc73",
+    "cases/full-zk-verify-0064/primary-001/original/attempt.json": "948100ae3cac063c6603ed9edb69141d65404240781fb774027d06c504b6dd67",
+    "cases/full-zk-verify-0064/primary-001/preview.png": "8bdf3954ec0d4e66b7f266a2eccdd1f5bed34c01c57cbafe550f14dd07ef1e95",
+    "cases/full-zk-verify-0064/primary-001/record-status.json": "4342bb825111ad9266c51da60d2304ea7e18fe1670854bfb6b07833dc2259388",
+    "cases/full-zk-verify-0064/primary-001/repair.json": "3468b9b3e76ea493f1cc10cbc540bee477c2a1c137a6fd6173a26c6cb9a6b08b",
+    "cases/full-zk-verify-0064/repeat-001/attempt.json": "75acba047faa82d9cfa0e086d5785a605205fe737964acb64d12ccc68c52c801",
+    "cases/full-zk-verify-0064/repeat-001/export-status.json": "213f38a8e11440add0e07141c556665d1254b46aa1a3c3267a2e0165941ec99b",
+    "cases/full-zk-verify-0064/repeat-001/flamegraph.svg": "73560e9232d8a6fae83a864fe8da0948b42c6a3eb0843120397bacfd56065a6a",
+    "cases/full-zk-verify-0064/repeat-001/harness.json": "45ceeb52423e623effa07a2bc3a4b85e7924fe76f5783192ddb0be5dea10dbf9",
+    "cases/full-zk-verify-0064/repeat-001/original/attempt.json": "7fe573096cd492b8ba0d2cc125ae99521e0b26f579552b03753f65914bb45dab",
+    "cases/full-zk-verify-0064/repeat-001/preview.png": "ddba209f8e8ad6f6fabe5d5ecdc93d4cc8f1f64169c7263e8e8eb69997d759ab",
+    "cases/full-zk-verify-0064/repeat-001/record-status.json": "8730fb2d2d05a6450e896b8e4cb22c2ed6e23326ebde197be0dced724419d48b",
+    "cases/full-zk-verify-0064/repeat-001/repair.json": "c32fce2dbf923de1a7922b976bc7e5cc57a90529d7bd9863178faa3d5540e121",
+    "cases/full-zk-verify-0064/smoke-001/attempt.json": "6f11b6c2fb059a3a316645145c0ba86056dfd061349b415397d5cda481538601",
+    "cases/full-zk-verify-0064/smoke-001/export-status.json": "c4fba6a9636b26d5e6df1d198b24b9b657581276a3f77e8a7c86e94d88b59265",
+    "cases/full-zk-verify-0064/smoke-001/flamegraph.svg": "25fa59ac3866a119b71b10a46621957b685e5f3e253d7406494604da811c1a4f",
+    "cases/full-zk-verify-0064/smoke-001/harness.json": "25e96419afd1c41bb43bba5a377ee582b4c7ab1e78b4b258153a0e0a845e0b9f",
+    "cases/full-zk-verify-0064/smoke-001/original/attempt.json": "a9200508d31834840f77dab6793fefc33df777be42a91818426f33766bb5f578",
+    "cases/full-zk-verify-0064/smoke-001/preview.png": "bbb2f9360e363dfbce46956efc3e130fe323db685f5e3fa6f77bb3ef812d701b",
+    "cases/full-zk-verify-0064/smoke-001/record-status.json": "1af186105e463b007cab5e8b3f28445fcec694874b6a3ed3c572991b1cf77c7d",
+    "cases/full-zk-verify-0064/smoke-001/repair.json": "ea10aca9ae2f561d99160ec8cd27b1f587c481b09fde3e016dd465b604b1df26",
+    "cases/full-zk-verify-0128/primary-001/attempt.json": "a68254590993abd0cae3b26532fed1eeb4a2e0db76a9b4ea70c3ddd8a08f5ef9",
+    "cases/full-zk-verify-0128/primary-001/export-status.json": "67497a87fb7af51b7d25279f6b0f299b913232d6ec37e734384b024a84cc686d",
+    "cases/full-zk-verify-0128/primary-001/flamegraph.svg": "153d38ca646271890e4a1e5a145fd0f57c94bfb3b87f9b276cd49d828d23ceef",
+    "cases/full-zk-verify-0128/primary-001/harness.json": "35f2b4c2fc54ced2d86b75234b7025c3f2c5e626d8bbbc5006a34b2a6cd82114",
+    "cases/full-zk-verify-0128/primary-001/original/attempt.json": "891464b3903cefb2bfdb3ca923f1673c44f52284fed09eb407d376f4cd0627c7",
+    "cases/full-zk-verify-0128/primary-001/preview.png": "8c0f3efd0f699e1739fc1df3cd75cce42b30a53096e8a56dcf3161a6646d8b35",
+    "cases/full-zk-verify-0128/primary-001/record-status.json": "1a1c2a437d6454e4630328af37e18387f028177e3a424b8092a0e75099c6b7a5",
+    "cases/full-zk-verify-0128/primary-001/repair.json": "2367da9fb18e7424aee975bece0a399a7a56f0be379d8c20fffecbc8e3a7dc51",
+    "cases/full-zk-verify-0256/primary-001/attempt.json": "899bd6aa39da207a8c4c768b2f6c1010442a5a2c3cb198b2975c119a29992110",
+    "cases/full-zk-verify-0256/primary-001/export-status.json": "46b6e8cdc8c9a323eab02c2bdaceb98d1b922d44715a38e3b9d4829b3adf09c0",
+    "cases/full-zk-verify-0256/primary-001/flamegraph.svg": "68fac9c084823b440ac75ad2fd667e65c81fbd8a1404fb1dbea47f1786db7d35",
+    "cases/full-zk-verify-0256/primary-001/harness.json": "bcde82b90a8455548b127cefd24515cb26f325f8793025faf91a97c0df92ff5c",
+    "cases/full-zk-verify-0256/primary-001/original/attempt.json": "1526c8693cb4a28afd5a078753207aa124578df1c71ae4db3a84e6516ddd45ca",
+    "cases/full-zk-verify-0256/primary-001/preview.png": "8df9a41c3295ade47d366c6149924404c25c54161c353be2808516f2282bda08",
+    "cases/full-zk-verify-0256/primary-001/record-status.json": "823c3af80cc3f59702bfae1f61bed304be11b6b5129a567555046571304807d3",
+    "cases/full-zk-verify-0256/primary-001/repair.json": "f0f4f574881abd80db067afa48aeedddcdbd1b416ff11a2adf26b2a9b793d173",
+    "cases/full-zk-verify-0512/primary-001/attempt.json": "665c4e060d7995976ccf2f059660d8f1437303aa4feb6fe78d284f25c3b19e06",
+    "cases/full-zk-verify-0512/primary-001/export-status.json": "b9570179bed59b93737560741711a7c8d1b4697637633b7ccf3dea003c36200f",
+    "cases/full-zk-verify-0512/primary-001/flamegraph.svg": "1d01e8c670fef2284cb145228a20e3e5f6c6522f2485f96d67438fc3a0195462",
+    "cases/full-zk-verify-0512/primary-001/harness.json": "6ba339eac5406caadd04889b13dcea658e35a0885402731b93d6c6e65f54e263",
+    "cases/full-zk-verify-0512/primary-001/original/attempt.json": "fb507d55eabde9e4601bb076adbe36f9a1aa9147db129f510da919c0a1ee1c4d",
+    "cases/full-zk-verify-0512/primary-001/preview.png": "5be78d352b0cece897dd371aa8cf1804c5bc953e97b644afe01099ffdbe650fb",
+    "cases/full-zk-verify-0512/primary-001/record-status.json": "b4e4f3db2b5ed198d8adc03b1985011ccd54ce0d20d40e8c358f2232d1523bd2",
+    "cases/full-zk-verify-0512/primary-001/repair.json": "7afea917b6e9e0164d7b3a17262b3c0475cfaa04c7ba90b47b6c86e105a2c4a0",
+    "cases/full-zk-verify-1024/primary-001/attempt.json": "877cc3effbb54a889e82027d2bdd9fc7244c019e7b3931d74e062e1cf9bf043c",
+    "cases/full-zk-verify-1024/primary-001/export-status.json": "2024e120754cda30b5125f3803b5b175212610c4ea3db71b9a45dc7358f75e3e",
+    "cases/full-zk-verify-1024/primary-001/flamegraph.svg": "5386bf0766f79cad9964d71f71be81ef236aff6035c4d247bdc79ee922ec0050",
+    "cases/full-zk-verify-1024/primary-001/harness.json": "5872f15776746fb77b537558503402aa6cc999c55dc6fa89c8c193b2cb64925f",
+    "cases/full-zk-verify-1024/primary-001/original/attempt.json": "453bc0d0da969ffc3b2876ec870e04bc6cd729170bf7b9840e4e370d7b62fc39",
+    "cases/full-zk-verify-1024/primary-001/preview.png": "d3dd0d158bf078d2fc9d28b8afc71e68a0855e9cc09d4a846ff709e3ce7f2394",
+    "cases/full-zk-verify-1024/primary-001/record-status.json": "9ea8e82938b0fecbe09527d0913911484d535a485edbe71530d6558c75bea8cb",
+    "cases/full-zk-verify-1024/primary-001/repair.json": "421eaee27a8781ae5b86081ce1d43221ef3c6887e037096a0446265c6b0a8442",
+    "cases/full-zk-verify-2048/primary-001/attempt.json": "e47b8a06c6888e0c3d862aaa88ce2213c8142904de45b9c686d2c299362dc310",
+    "cases/full-zk-verify-2048/primary-001/export-status.json": "3c20a54a4db59bbaf17f2e9a8bc1e095a909f835b3972254f18cad2ebdde9c9f",
+    "cases/full-zk-verify-2048/primary-001/flamegraph.svg": "b691b7541d74ce02d71f47c619bf45728eced356d39d99628791a3b349dce517",
+    "cases/full-zk-verify-2048/primary-001/harness.json": "213483479363b22d445fdec1d673b8331f777d336b689852c4029b4d0882eb6d",
+    "cases/full-zk-verify-2048/primary-001/original/attempt.json": "566deadbabdbf28e77c51ac0dd528efcbaaeee9584df3f782fcc72107dfa94f3",
+    "cases/full-zk-verify-2048/primary-001/preview.png": "63ce75edb74b59975d2a8d02f718742506bcf7f535ce93656c23bb73a0cf9297",
+    "cases/full-zk-verify-2048/primary-001/record-status.json": "8635c87b0927dc17ee5bebdcefa0d4d4dd792c58e75afa82765a51c747a26385",
+    "cases/full-zk-verify-2048/primary-001/repair.json": "57420f7dd5b386efb0c34113a3cd3bd570b349c555a2fe308dcc01c472a983e8",
+    "cases/full-zk-verify-4096/primary-001/attempt.json": "35b20e1d47aeefcc3ffbd92201f85ed32775f1894ba012cafa94c5e546bb9670",
+    "cases/full-zk-verify-4096/primary-001/export-status.json": "ce0e6304d699ef878ed8a252b035e72a05877a936e1e2e38cb800e95cdbb0aca",
+    "cases/full-zk-verify-4096/primary-001/flamegraph.svg": "b1ae550918702ff64bbd22353490c9abfe7b2fcc59d7efff15a01a6fec705726",
+    "cases/full-zk-verify-4096/primary-001/harness.json": "5907ff5ce624d129e25e53544720f6e09a95b11487ec4b5646f916b92da90339",
+    "cases/full-zk-verify-4096/primary-001/original/attempt.json": "fc54391d14c2e9e92a87f4e183601e2f8869d8d7a2ac3b0ccd351a98a26475ec",
+    "cases/full-zk-verify-4096/primary-001/preview.png": "763f06d221db95fd850b06bd07c4e84faa993661f11a6c521c3ec6358dc1347d",
+    "cases/full-zk-verify-4096/primary-001/record-status.json": "a72a5fd9b347942e3ba40451d7eb45739c80949c731da7053785acc2aabd50d6",
+    "cases/full-zk-verify-4096/primary-001/repair.json": "0887a95175d018bc42d2a8c7761e976a1f7517757401dd0e555a20752ea1c854",
+    "cases/full-zk-verify-4096/repeat-002/attempt.json": "ebd6ebe9c55213a0bf8ddf84f1a768520754527c9b858259b83c1f41236a2587",
+    "cases/full-zk-verify-4096/repeat-002/export-status.json": "57c9d484ed794065e29469675b2847ad134bd6cd402993b590719ed1baae6f44",
+    "cases/full-zk-verify-4096/repeat-002/flamegraph.svg": "d016c2fcb862cb3637ebac36983a5cc3dc9c279b6892b9a9bba9349c18e61525",
+    "cases/full-zk-verify-4096/repeat-002/harness.json": "9f29b71f781c60bdf6985c955e2571a7683252351240864bf08ea20de7070087",
+    "cases/full-zk-verify-4096/repeat-002/original/attempt.json": "0b036213c2ddcfdd277026e6ea290977af64b8d244d28c50bfb8422cef4d98b8",
+    "cases/full-zk-verify-4096/repeat-002/preview.png": "3bb057e83e940f1a28b494592aad997fa9aa658c80bdbf5f0ac0058f2dff3778",
+    "cases/full-zk-verify-4096/repeat-002/record-status.json": "278e7763506cd834cbe0a23916c41a094d04a32f7eebc20cb2f61976afe1a67f",
+    "cases/full-zk-verify-4096/repeat-002/repair.json": "3d05c3cd8edf0fce0e018360e87ef05f7abfbc875eeb33de70c820363b8b6eb8",
+    "cases/full-zk-verify-4096/smoke-001/attempt.json": "3527810928bd928c3f664245cc194e027452fe4a0693ec43934c3db79587ca50",
+    "cases/full-zk-verify-4096/smoke-001/export-status.json": "2d4e133ec3d2961542b53e33c86bacc3e3c00109b78a84137c1f1f6912dc508f",
+    "cases/full-zk-verify-4096/smoke-001/flamegraph.svg": "6e8a6e9411df702093b0fb31c6f4340290b592f95d5e1c7f970353d984c81484",
+    "cases/full-zk-verify-4096/smoke-001/harness.json": "3532392f4d73c65bf0fc7d9007126c622f790b8a404715e68c23f7d36393b962",
+    "cases/full-zk-verify-4096/smoke-001/original/attempt.json": "57ea126930bef5f33b152ae3cbab12671261f7ae6b301aa0edba8f4f0d21116b",
+    "cases/full-zk-verify-4096/smoke-001/preview.png": "87ad2a064b977fe1909018edcc23098e348c09844d7778777db5c11d81b73d43",
+    "cases/full-zk-verify-4096/smoke-001/record-status.json": "b13d4efe30aa9f2e901ce178cf89681682ad371bef7069dc93185341e64d8d02",
+    "cases/full-zk-verify-4096/smoke-001/repair.json": "822415e77fb0bea3af86cb485f998ba0d357dd8e7a62997a75b6e7c42a0f0b54",
+    "editorial-review.json": "63c050b0696720399784598bef23fcf9ec27583217f94e153eb692026c9e62ac",
+    "findings.md": "1afbcd0329d9a89aced0c35ec5180cbe6d8cff2c31e9477d93422fc537f1927a",
+    "manifest.json": "d5d166a24c0b437b545ced5d15972360b2ea14bd7e141cb8333f6457df4039e0",
+    "measurements-complete.json": "f6f4f5c0bd9c1bbe90a0a58e04cd5176c6237f1ae095fef5ea588890a9ef8a5d",
+    "reference.csv": "f1fbe14d7d4533cf7208adea34d19621f1c1a373d592d689d7a09105374305d5",
+    "report-generated.md": "0c8f05b7fac5d35fedd3fc00ad1db68b5ed97bd1da5f336abdcf73aa404f922e",
+    "report-processing.json": "3fff6ef14453ca3db8ab27bb752949d83c04b6cf403da2a817bc2acd0e81c75a",
+    "report.md": "7ef3513ece0116275c9ba33c0645706666bd417b9f7125eacc422ce9b1272675",
+    "resume-controller/manifest.json": "42b939f49f69c63f0dddd342ebe5b000fc099b9ab83a6211613028ba0d585bbf",
+    "resume.json": "7fbdd06dddb9d8aebeff7596e8df4fa1e3bdc3ad85690b1f705697b9c0971225",
+    "source/untracked/tools/performance/measurement-env.json": "1a9fa165ecea2568dd819cf0d4e1688140330d9abb99557608cce08c74efcd98",
+    "svg/flock-prove-0064.svg": "563f489165a935e0a4757e4adb3256fd03ce726a4654e6592966be2747254f1d",
+    "svg/flock-prove-0128.svg": "1d2dcad39e41cceaabcf73ed17feafa17eace1f0dbd7e9320ce50122f7a542af",
+    "svg/flock-prove-0256.svg": "7eafa8b15c18b2f456e05a1e486e66e3e9058f05303fadaac7632924c692b8a7",
+    "svg/flock-prove-0512.svg": "fe7755f8ac6cb0c02060835e38355bf8f6ed6da64f8084e3a4c9f1b0965548d8",
+    "svg/flock-prove-1024.svg": "642c3605a5626658bc064ea4a20e62e08902e542a498fec844764e156a2e79b6",
+    "svg/flock-prove-2048.svg": "b7466b0b7559fad7008af1138cb0a35fad6a3b4db5de0109db821ce5a5f22141",
+    "svg/flock-prove-4096.svg": "82bb857fce5987d0951a7570ced0b97d61a216ac18e36b854bd5710ba74fe03d",
+    "svg/flock-verify-0064.svg": "7b925066c00ad5fea92431017acac65731c4a44a135afdc24c1f4038af19fc57",
+    "svg/flock-verify-0128.svg": "6c90c521353e7e14f1e534a8de5ed487489072b843a01f9acee02a3ef00f57e0",
+    "svg/flock-verify-0256.svg": "bdd20c0e6317b93f45c64a7118bf594a38893dcc4bf9e4a9039a811719600646",
+    "svg/flock-verify-0512.svg": "61a73c698465b1d119af1fa089ec9bc1c39d596403a68b99dfaf9404569070e3",
+    "svg/flock-verify-1024.svg": "25a1d9b982620c4e9261ff2fe23d6dff92159b3e823456cec621097fe3930301",
+    "svg/flock-verify-2048.svg": "d222191356a3e59b8ec406f2512827892282d60a9b3c2787b9f72c517fa08b38",
+    "svg/flock-verify-4096.svg": "75c852c78d27be962a64031eb3d4dc3f969018d106ced8253a952543a1ad24f4",
+    "svg/full-zk-prove-0064.svg": "1d87431da49dbf6ecebd0b78f1adcbb9ab107fb4273840dd21b8089b1f249f66",
+    "svg/full-zk-prove-0128.svg": "ab89f8a3e57cabf2d68d137bee0311b1c11573d4d34a59a79538d4c23c6b3038",
+    "svg/full-zk-prove-0256.svg": "2ccad1ee48ea3561584df5bb9c4252a8fa17a4c50b0855ecd1696260bdc4c4c1",
+    "svg/full-zk-prove-0512.svg": "13510fe964f384c2d097a030458a13eb2945d4d76da2958fd26d4b80a666a205",
+    "svg/full-zk-prove-1024.svg": "11633c688155d93d7848d10131003217490f8dcd03e048b51006f718c65caffb",
+    "svg/full-zk-prove-2048.svg": "a81cf47710aa3ac6086c273b19062b4223644f99dc216b16e96d8e7481ae7690",
+    "svg/full-zk-prove-4096.svg": "f1fcda6d52cb9ab2164a240e3bb30fa802edc0fb70864c30a5d06883ebea1350",
+    "svg/full-zk-verify-0064.svg": "a06002f11934026c7fe04dd537222c1733f401173d12222eed8375fd4e00b5a3",
+    "svg/full-zk-verify-0128.svg": "153d38ca646271890e4a1e5a145fd0f57c94bfb3b87f9b276cd49d828d23ceef",
+    "svg/full-zk-verify-0256.svg": "68fac9c084823b440ac75ad2fd667e65c81fbd8a1404fb1dbea47f1786db7d35",
+    "svg/full-zk-verify-0512.svg": "1d01e8c670fef2284cb145228a20e3e5f6c6522f2485f96d67438fc3a0195462",
+    "svg/full-zk-verify-1024.svg": "5386bf0766f79cad9964d71f71be81ef236aff6035c4d247bdc79ee922ec0050",
+    "svg/full-zk-verify-2048.svg": "b691b7541d74ce02d71f47c619bf45728eced356d39d99628791a3b349dce517",
+    "svg/full-zk-verify-4096.svg": "b1ae550918702ff64bbd22353490c9abfe7b2fcc59d7efff15a01a6fec705726"
+  },
+  "source_to_section_coverage": [
+    {
+      "appendix_anchor": "complete-reviewed-report",
+      "edits": [
+        {
+          "after": "<a id=\"report-blake3-preimage-flamegraph-report\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 0,
+            "start": 0
+          }
+        },
+        {
+          "after": "\n\n- [Environment and measurement](#report-environment-and-measurement)\n- [Fresh timing and size results](#report-fresh-timing-and-size-results)\n- [Flamegraph matrix](#report-flamegraph-matrix)\n- [Capture quality and phase durations](#report-capture-quality-and-phase-durations)\n- [Hotspots](#report-hotspots)\n- [Endpoint repeat variability](#report-endpoint-repeat-variability)\n- [Ranked follow-up experiments](#report-ranked-follow-up-experiments)\n- [Evidence and limitations](#report-evidence-and-limitations)\n\n",
+          "before": "",
+          "reason": "insert appendix navigation after its title",
+          "source_bytes": {
+            "end": 36,
+            "start": 36
+          }
+        },
+        {
+          "after": "20260910T142900Z/index.html",
+          "before": "index.html",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 135,
+            "start": 125
+          }
+        },
+        {
+          "after": "20260910T142900Z/reference.csv",
+          "before": "reference.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 237,
+            "start": 224
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0064/primary-001/attempt.json",
+          "before": "cases/flock-prove-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1040,
+            "start": 993
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0064/repeat-001/attempt.json",
+          "before": "cases/full-zk-verify-0064/repeat-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1112,
+            "start": 1063
+          }
+        },
+        {
+          "after": "20260910T142900Z/resume.json",
+          "before": "resume.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1152,
+            "start": 1141
+          }
+        },
+        {
+          "after": "20260910T142900Z/findings.md",
+          "before": "findings.md",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1227,
+            "start": 1216
+          }
+        },
+        {
+          "after": "20260910T142900Z/report-generated.md",
+          "before": "report-generated.md",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1440,
+            "start": 1421
+          }
+        },
+        {
+          "after": "20260910T142900Z/editorial-review.json",
+          "before": "editorial-review.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1490,
+            "start": 1469
+          }
+        },
+        {
+          "after": "20260910T142900Z/report-processing.json",
+          "before": "report-processing.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 2010,
+            "start": 1988
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-resume-before.csv",
+          "before": "baseline-resume-before.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 2420,
+            "start": 2394
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-after.csv",
+          "before": "baseline-after.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 2465,
+            "start": 2447
+          }
+        },
+        {
+          "after": "20260910T142900Z/resume.json",
+          "before": "resume.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 2687,
+            "start": 2676
+          }
+        },
+        {
+          "after": "<a id=\"report-environment-and-measurement\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 2846,
+            "start": 2846
+          }
+        },
+        {
+          "after": "20260910T142900Z/manifest.json",
+          "before": "manifest.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 3202,
+            "start": 3189
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-prover/examples/preimage_scaling.rs",
+          "before": "source/locations/crates/flock-prover/examples/preimage_scaling.rs",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 3929,
+            "start": 3864
+          }
+        },
+        {
+          "after": "20260910T142900Z/logs/make-test.stderr",
+          "before": "logs/make-test.stderr",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 4611,
+            "start": 4590
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases",
+          "before": "cases/",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 6040,
+            "start": 6034
+          }
+        },
+        {
+          "after": "<a id=\"report-fresh-timing-and-size-results\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 6078,
+            "start": 6078
+          }
+        },
+        {
+          "after": "<a id=\"report-cross-session-timing-changes-and-debug-symbol-comparison\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 7401,
+            "start": 7401
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-before.csv",
+          "before": "baseline-before.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 10692,
+            "start": 10673
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-after.csv",
+          "before": "baseline-after.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 10721,
+            "start": 10703
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-symbols.csv",
+          "before": "baseline-symbols.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 10754,
+            "start": 10734
+          }
+        },
+        {
+          "after": "<a id=\"report-resumed-episode-baseline-controls\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 10758,
+            "start": 10758
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-resume-before.csv",
+          "before": "baseline-resume-before.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 11140,
+            "start": 11114
+          }
+        },
+        {
+          "after": "20260910T142900Z/baseline-after.csv",
+          "before": "baseline-after.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 11175,
+            "start": 11157
+          }
+        },
+        {
+          "after": "<a id=\"report-scaling-observations\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 12784,
+            "start": 12784
+          }
+        },
+        {
+          "after": "<a id=\"report-flamegraph-matrix\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 13140,
+            "start": 13140
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0064.svg",
+          "before": "svg/flock-prove-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13355,
+            "start": 13331
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0064.svg",
+          "before": "svg/flock-verify-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13390,
+            "start": 13365
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0064.svg",
+          "before": "svg/full-zk-prove-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13426,
+            "start": 13400
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0064.svg",
+          "before": "svg/full-zk-verify-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13463,
+            "start": 13436
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0128.svg",
+          "before": "svg/flock-prove-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13505,
+            "start": 13481
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0128.svg",
+          "before": "svg/flock-verify-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13540,
+            "start": 13515
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0128.svg",
+          "before": "svg/full-zk-prove-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13576,
+            "start": 13550
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0128.svg",
+          "before": "svg/full-zk-verify-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13613,
+            "start": 13586
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0256.svg",
+          "before": "svg/flock-prove-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13655,
+            "start": 13631
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0256.svg",
+          "before": "svg/flock-verify-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13690,
+            "start": 13665
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0256.svg",
+          "before": "svg/full-zk-prove-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13726,
+            "start": 13700
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0256.svg",
+          "before": "svg/full-zk-verify-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13763,
+            "start": 13736
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0512.svg",
+          "before": "svg/flock-prove-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13805,
+            "start": 13781
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0512.svg",
+          "before": "svg/flock-verify-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13840,
+            "start": 13815
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0512.svg",
+          "before": "svg/full-zk-prove-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13876,
+            "start": 13850
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0512.svg",
+          "before": "svg/full-zk-verify-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13913,
+            "start": 13886
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-1024.svg",
+          "before": "svg/flock-prove-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13956,
+            "start": 13932
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-1024.svg",
+          "before": "svg/flock-verify-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 13991,
+            "start": 13966
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-1024.svg",
+          "before": "svg/full-zk-prove-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14027,
+            "start": 14001
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-1024.svg",
+          "before": "svg/full-zk-verify-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14064,
+            "start": 14037
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-2048.svg",
+          "before": "svg/flock-prove-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14107,
+            "start": 14083
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-2048.svg",
+          "before": "svg/flock-verify-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14142,
+            "start": 14117
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-2048.svg",
+          "before": "svg/full-zk-prove-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14178,
+            "start": 14152
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-2048.svg",
+          "before": "svg/full-zk-verify-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14215,
+            "start": 14188
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-4096.svg",
+          "before": "svg/flock-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14258,
+            "start": 14234
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-4096.svg",
+          "before": "svg/flock-verify-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14293,
+            "start": 14268
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-4096.svg",
+          "before": "svg/full-zk-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14329,
+            "start": 14303
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-4096.svg",
+          "before": "svg/full-zk-verify-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14366,
+            "start": 14339
+          }
+        },
+        {
+          "after": "[",
+          "before": "",
+          "reason": "link preserved source image to SVG",
+          "source_bytes": {
+            "end": 14418,
+            "start": 14418
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0064.svg",
+          "before": "svg/flock-prove-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14468,
+            "start": 14444
+          }
+        },
+        {
+          "after": "](20260910T142900Z/svg/flock-prove-0064.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-0064.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-0064/primary-001/preview.png)\n\nFLOCK prove — 64 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-0064-primary-001`.\n",
+          "before": "",
+          "reason": "caption preserved source image",
+          "source_bytes": {
+            "end": 14469,
+            "start": 14469
+          }
+        },
+        {
+          "after": "[",
+          "before": "",
+          "reason": "link preserved source image to SVG",
+          "source_bytes": {
+            "end": 14471,
+            "start": 14471
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-4096.svg",
+          "before": "svg/flock-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14523,
+            "start": 14499
+          }
+        },
+        {
+          "after": "](20260910T142900Z/svg/flock-prove-4096.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-4096.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-4096/primary-001/preview.png)\n\nFLOCK prove — 4096 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-4096-primary-001`.\n",
+          "before": "",
+          "reason": "caption preserved source image",
+          "source_bytes": {
+            "end": 14524,
+            "start": 14524
+          }
+        },
+        {
+          "after": "[",
+          "before": "",
+          "reason": "link preserved source image to SVG",
+          "source_bytes": {
+            "end": 14526,
+            "start": 14526
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0064.svg",
+          "before": "svg/full-zk-prove-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14580,
+            "start": 14554
+          }
+        },
+        {
+          "after": "](20260910T142900Z/svg/full-zk-prove-0064.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-0064.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-0064/primary-001/preview.png)\n\nFull-ZK prove — 64 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-0064-primary-001`.\n",
+          "before": "",
+          "reason": "caption preserved source image",
+          "source_bytes": {
+            "end": 14581,
+            "start": 14581
+          }
+        },
+        {
+          "after": "[",
+          "before": "",
+          "reason": "link preserved source image to SVG",
+          "source_bytes": {
+            "end": 14583,
+            "start": 14583
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-4096.svg",
+          "before": "svg/full-zk-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 14639,
+            "start": 14613
+          }
+        },
+        {
+          "after": "](20260910T142900Z/svg/full-zk-prove-4096.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-4096.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-4096/primary-001/preview.png)\n\nFull-ZK prove — 4096 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-4096-primary-001`.\n",
+          "before": "",
+          "reason": "caption preserved source image",
+          "source_bytes": {
+            "end": 14640,
+            "start": 14640
+          }
+        },
+        {
+          "after": "<a id=\"report-capture-quality-and-phase-durations\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 14642,
+            "start": 14642
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0064/primary-001/attempt.json",
+          "before": "cases/flock-prove-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 15323,
+            "start": 15276
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0128/primary-001/attempt.json",
+          "before": "cases/flock-prove-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 15476,
+            "start": 15429
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0256/primary-001/attempt.json",
+          "before": "cases/flock-prove-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 15629,
+            "start": 15582
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0512/primary-001/attempt.json",
+          "before": "cases/flock-prove-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 15782,
+            "start": 15735
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-1024/primary-001/attempt.json",
+          "before": "cases/flock-prove-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 15935,
+            "start": 15888
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-2048/primary-001/attempt.json",
+          "before": "cases/flock-prove-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 16089,
+            "start": 16042
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-4096/primary-001/attempt.json",
+          "before": "cases/flock-prove-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 16243,
+            "start": 16196
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0064/primary-001/attempt.json",
+          "before": "cases/flock-verify-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 16399,
+            "start": 16351
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0128/primary-001/attempt.json",
+          "before": "cases/flock-verify-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 16551,
+            "start": 16503
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0256/primary-001/attempt.json",
+          "before": "cases/flock-verify-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 16703,
+            "start": 16655
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0512/primary-001/attempt.json",
+          "before": "cases/flock-verify-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 16855,
+            "start": 16807
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-1024/primary-001/attempt.json",
+          "before": "cases/flock-verify-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17007,
+            "start": 16959
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-2048/primary-001/attempt.json",
+          "before": "cases/flock-verify-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17159,
+            "start": 17111
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-4096/primary-001/attempt.json",
+          "before": "cases/flock-verify-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17311,
+            "start": 17263
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0064/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17465,
+            "start": 17416
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0128/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17622,
+            "start": 17573
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0256/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17779,
+            "start": 17730
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0512/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 17934,
+            "start": 17885
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-1024/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 18091,
+            "start": 18042
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-2048/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 18247,
+            "start": 18198
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-4096/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 18404,
+            "start": 18355
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0064/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 18563,
+            "start": 18513
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0128/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 18719,
+            "start": 18669
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0256/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 18875,
+            "start": 18825
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0512/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 19031,
+            "start": 18981
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-1024/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 19187,
+            "start": 19137
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-2048/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 19343,
+            "start": 19293
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-4096/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 19499,
+            "start": 19449
+          }
+        },
+        {
+          "after": "<a id=\"report-hotspots\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 19582,
+            "start": 19582
+          }
+        },
+        {
+          "after": "20260910T142900Z/hotspots.csv",
+          "before": "hotspots.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 19733,
+            "start": 19721
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-0064\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 20198,
+            "start": 20198
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-0064\"></a>\n\n[![FLOCK prove — 64 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-0064.svg)](20260910T142900Z/svg/flock-prove-0064.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-0064.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-0064/primary-001/preview.png)\n\nFLOCK prove — 64 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-0064-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 20219,
+            "start": 20219
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0064.svg",
+          "before": "svg/flock-prove-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 20250,
+            "start": 20226
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0064/primary-001/attempt.json",
+          "before": "cases/flock-prove-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 20321,
+            "start": 20274
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-0128\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 21979,
+            "start": 21979
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-0128\"></a>\n\n[![FLOCK prove — 128 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-0128.svg)](20260910T142900Z/svg/flock-prove-0128.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-0128.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-0128/primary-001/preview.png)\n\nFLOCK prove — 128 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-0128-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 22000,
+            "start": 22000
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0128.svg",
+          "before": "svg/flock-prove-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 22031,
+            "start": 22007
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0128/primary-001/attempt.json",
+          "before": "cases/flock-prove-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 22102,
+            "start": 22055
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-0256\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 23760,
+            "start": 23760
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-0256\"></a>\n\n[![FLOCK prove — 256 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-0256.svg)](20260910T142900Z/svg/flock-prove-0256.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-0256.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-0256/primary-001/preview.png)\n\nFLOCK prove — 256 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-0256-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 23781,
+            "start": 23781
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0256.svg",
+          "before": "svg/flock-prove-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 23812,
+            "start": 23788
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0256/primary-001/attempt.json",
+          "before": "cases/flock-prove-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 23883,
+            "start": 23836
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-0512\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 25576,
+            "start": 25576
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-0512\"></a>\n\n[![FLOCK prove — 512 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-0512.svg)](20260910T142900Z/svg/flock-prove-0512.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-0512.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-0512/primary-001/preview.png)\n\nFLOCK prove — 512 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-0512-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 25597,
+            "start": 25597
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0512.svg",
+          "before": "svg/flock-prove-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 25628,
+            "start": 25604
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0512/primary-001/attempt.json",
+          "before": "cases/flock-prove-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 25699,
+            "start": 25652
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "before": "source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 27022,
+            "start": 26953
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-1024\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 27580,
+            "start": 27580
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-1024\"></a>\n\n[![FLOCK prove — 1024 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-1024.svg)](20260910T142900Z/svg/flock-prove-1024.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-1024.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-1024/primary-001/preview.png)\n\nFLOCK prove — 1024 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-1024-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 27601,
+            "start": 27601
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-1024.svg",
+          "before": "svg/flock-prove-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 27632,
+            "start": 27608
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-1024/primary-001/attempt.json",
+          "before": "cases/flock-prove-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 27703,
+            "start": 27656
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "before": "source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 29026,
+            "start": 28957
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "before": "source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 29337,
+            "start": 29240
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-2048\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 29744,
+            "start": 29744
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-2048\"></a>\n\n[![FLOCK prove — 2048 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-2048.svg)](20260910T142900Z/svg/flock-prove-2048.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-2048.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-2048/primary-001/preview.png)\n\nFLOCK prove — 2048 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-2048-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 29765,
+            "start": 29765
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-2048.svg",
+          "before": "svg/flock-prove-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 29796,
+            "start": 29772
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-2048/primary-001/attempt.json",
+          "before": "cases/flock-prove-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 29867,
+            "start": 29820
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "before": "source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 31190,
+            "start": 31121
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "before": "source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 31501,
+            "start": 31404
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 31758,
+            "start": 31675
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-prove-4096\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 32028,
+            "start": 32028
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-prove-4096\"></a>\n\n[![FLOCK prove — 4096 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-prove-4096.svg)](20260910T142900Z/svg/flock-prove-4096.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-prove-4096.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-prove-4096/primary-001/preview.png)\n\nFLOCK prove — 4096 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-prove-4096-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 32049,
+            "start": 32049
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-4096.svg",
+          "before": "svg/flock-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 32080,
+            "start": 32056
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-4096/primary-001/attempt.json",
+          "before": "cases/flock-prove-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 32151,
+            "start": 32104
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "before": "source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 33320,
+            "start": 33251
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 33577,
+            "start": 33494
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "before": "source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 33888,
+            "start": 33791
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-0064\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 34158,
+            "start": 34158
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-0064\"></a>\n\n[![FLOCK verify — 64 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-0064.svg)](20260910T142900Z/svg/flock-verify-0064.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-0064.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-0064/primary-001/preview.png)\n\nFLOCK verify — 64 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-0064-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 34180,
+            "start": 34180
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0064.svg",
+          "before": "svg/flock-verify-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 34212,
+            "start": 34187
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0064/primary-001/attempt.json",
+          "before": "cases/flock-verify-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 34284,
+            "start": 34236
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "before": "source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 35777,
+            "start": 35712
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-0128\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 36130,
+            "start": 36130
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-0128\"></a>\n\n[![FLOCK verify — 128 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-0128.svg)](20260910T142900Z/svg/flock-verify-0128.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-0128.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-0128/primary-001/preview.png)\n\nFLOCK verify — 128 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-0128-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 36152,
+            "start": 36152
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0128.svg",
+          "before": "svg/flock-verify-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 36184,
+            "start": 36159
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0128/primary-001/attempt.json",
+          "before": "cases/flock-verify-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 36256,
+            "start": 36208
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "before": "source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 37750,
+            "start": 37685
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-0256\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 38103,
+            "start": 38103
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-0256\"></a>\n\n[![FLOCK verify — 256 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-0256.svg)](20260910T142900Z/svg/flock-verify-0256.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-0256.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-0256/primary-001/preview.png)\n\nFLOCK verify — 256 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-0256-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 38125,
+            "start": 38125
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0256.svg",
+          "before": "svg/flock-verify-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 38157,
+            "start": 38132
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0256/primary-001/attempt.json",
+          "before": "cases/flock-verify-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 38229,
+            "start": 38181
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "before": "source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 39653,
+            "start": 39588
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-0512\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 39921,
+            "start": 39921
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-0512\"></a>\n\n[![FLOCK verify — 512 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-0512.svg)](20260910T142900Z/svg/flock-verify-0512.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-0512.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-0512/primary-001/preview.png)\n\nFLOCK verify — 512 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-0512-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 39943,
+            "start": 39943
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0512.svg",
+          "before": "svg/flock-verify-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 39975,
+            "start": 39950
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0512/primary-001/attempt.json",
+          "before": "cases/flock-verify-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 40047,
+            "start": 39999
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "before": "source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 41541,
+            "start": 41476
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-1024\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 41894,
+            "start": 41894
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-1024\"></a>\n\n[![FLOCK verify — 1024 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-1024.svg)](20260910T142900Z/svg/flock-verify-1024.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-1024.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-1024/primary-001/preview.png)\n\nFLOCK verify — 1024 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-1024-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 41916,
+            "start": 41916
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-1024.svg",
+          "before": "svg/flock-verify-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 41948,
+            "start": 41923
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-1024/primary-001/attempt.json",
+          "before": "cases/flock-verify-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 42020,
+            "start": 41972
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "before": "source/locations/crates/flock-core/src/pcs/tensor_algebra.rs#L122",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 43360,
+            "start": 43295
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-prover/src/digest_bind.rs#L233",
+          "before": "source/locations/crates/flock-prover/src/digest_bind.rs#L233",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 43535,
+            "start": 43475
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-2048\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 43803,
+            "start": 43803
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-2048\"></a>\n\n[![FLOCK verify — 2048 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-2048.svg)](20260910T142900Z/svg/flock-verify-2048.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-2048.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-2048/primary-001/preview.png)\n\nFLOCK verify — 2048 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-2048-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 43825,
+            "start": 43825
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-2048.svg",
+          "before": "svg/flock-verify-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 43857,
+            "start": 43832
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-2048/primary-001/attempt.json",
+          "before": "cases/flock-verify-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 43929,
+            "start": 43881
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-prover/src/digest_bind.rs#L233",
+          "before": "source/locations/crates/flock-prover/src/digest_bind.rs#L233",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 45283,
+            "start": 45223
+          }
+        },
+        {
+          "after": "<a id=\"report-flock-verify-4096\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 45781,
+            "start": 45781
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-flock-verify-4096\"></a>\n\n[![FLOCK verify — 4096 hashes (primary); Episode 1: original](20260910T142900Z/svg/flock-verify-4096.svg)](20260910T142900Z/svg/flock-verify-4096.svg)\n\n[Open/download SVG](20260910T142900Z/svg/flock-verify-4096.svg) · [Optional PNG fallback](20260910T142900Z/cases/flock-verify-4096/primary-001/preview.png)\n\nFLOCK verify — 4096 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `flock-verify-4096-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 45803,
+            "start": 45803
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-4096.svg",
+          "before": "svg/flock-verify-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 45835,
+            "start": 45810
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-4096/primary-001/attempt.json",
+          "before": "cases/flock-verify-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 45907,
+            "start": 45859
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-prover/src/digest_bind.rs#L233",
+          "before": "source/locations/crates/flock-prover/src/digest_bind.rs#L233",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 47130,
+            "start": 47070
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-0064\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 47761,
+            "start": 47761
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-0064\"></a>\n\n[![Full-ZK prove — 64 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-0064.svg)](20260910T142900Z/svg/full-zk-prove-0064.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-0064.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-0064/primary-001/preview.png)\n\nFull-ZK prove — 64 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-0064-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 47784,
+            "start": 47784
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0064.svg",
+          "before": "svg/full-zk-prove-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 47817,
+            "start": 47791
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0064/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 47890,
+            "start": 47841
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-0128\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 49607,
+            "start": 49607
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-0128\"></a>\n\n[![Full-ZK prove — 128 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-0128.svg)](20260910T142900Z/svg/full-zk-prove-0128.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-0128.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-0128/primary-001/preview.png)\n\nFull-ZK prove — 128 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-0128-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 49630,
+            "start": 49630
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0128.svg",
+          "before": "svg/full-zk-prove-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 49663,
+            "start": 49637
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0128/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 49736,
+            "start": 49687
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-0256\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 51453,
+            "start": 51453
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-0256\"></a>\n\n[![Full-ZK prove — 256 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-0256.svg)](20260910T142900Z/svg/full-zk-prove-0256.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-0256.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-0256/primary-001/preview.png)\n\nFull-ZK prove — 256 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-0256-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 51476,
+            "start": 51476
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0256.svg",
+          "before": "svg/full-zk-prove-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 51509,
+            "start": 51483
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0256/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 51582,
+            "start": 51533
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-0512\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 53299,
+            "start": 53299
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-0512\"></a>\n\n[![Full-ZK prove — 512 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-0512.svg)](20260910T142900Z/svg/full-zk-prove-0512.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-0512.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-0512/primary-001/preview.png)\n\nFull-ZK prove — 512 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-0512-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 53322,
+            "start": 53322
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-0512.svg",
+          "before": "svg/full-zk-prove-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 53355,
+            "start": 53329
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0512/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 53428,
+            "start": 53379
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 54797,
+            "start": 54714
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-1024\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 55270,
+            "start": 55270
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-1024\"></a>\n\n[![Full-ZK prove — 1024 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-1024.svg)](20260910T142900Z/svg/full-zk-prove-1024.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-1024.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-1024/primary-001/preview.png)\n\nFull-ZK prove — 1024 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-1024-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 55293,
+            "start": 55293
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-1024.svg",
+          "before": "svg/full-zk-prove-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 55326,
+            "start": 55300
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-1024/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 55399,
+            "start": 55350
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 56614,
+            "start": 56531
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-2048\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 57087,
+            "start": 57087
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-2048\"></a>\n\n[![Full-ZK prove — 2048 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-2048.svg)](20260910T142900Z/svg/full-zk-prove-2048.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-2048.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-2048/primary-001/preview.png)\n\nFull-ZK prove — 2048 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-2048-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 57110,
+            "start": 57110
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-2048.svg",
+          "before": "svg/full-zk-prove-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 57143,
+            "start": 57117
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-2048/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 57216,
+            "start": 57167
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 58585,
+            "start": 58502
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-prove-4096\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 59078,
+            "start": 59078
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-prove-4096\"></a>\n\n[![Full-ZK prove — 4096 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-prove-4096.svg)](20260910T142900Z/svg/full-zk-prove-4096.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-prove-4096.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-prove-4096/primary-001/preview.png)\n\nFull-ZK prove — 4096 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-prove-4096-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 59101,
+            "start": 59101
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-4096.svg",
+          "before": "svg/full-zk-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 59134,
+            "start": 59108
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-4096/primary-001/attempt.json",
+          "before": "cases/full-zk-prove-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 59207,
+            "start": 59158
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 60509,
+            "start": 60426
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-0064\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 61065,
+            "start": 61065
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-0064\"></a>\n\n[![Full-ZK verify — 64 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-0064.svg)](20260910T142900Z/svg/full-zk-verify-0064.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-0064.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-0064/primary-001/preview.png)\n\nFull-ZK verify — 64 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-0064-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 61089,
+            "start": 61089
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0064.svg",
+          "before": "svg/full-zk-verify-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 61123,
+            "start": 61096
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0064/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0064/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 61197,
+            "start": 61147
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-0128\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 62910,
+            "start": 62910
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-0128\"></a>\n\n[![Full-ZK verify — 128 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-0128.svg)](20260910T142900Z/svg/full-zk-verify-0128.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-0128.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-0128/primary-001/preview.png)\n\nFull-ZK verify — 128 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-0128-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 62934,
+            "start": 62934
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0128.svg",
+          "before": "svg/full-zk-verify-0128.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 62968,
+            "start": 62941
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0128/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0128/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 63042,
+            "start": 62992
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-0256\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 64601,
+            "start": 64601
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-0256\"></a>\n\n[![Full-ZK verify — 256 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-0256.svg)](20260910T142900Z/svg/full-zk-verify-0256.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-0256.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-0256/primary-001/preview.png)\n\nFull-ZK verify — 256 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-0256-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 64625,
+            "start": 64625
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0256.svg",
+          "before": "svg/full-zk-verify-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 64659,
+            "start": 64632
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0256/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0256/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 64733,
+            "start": 64683
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-0512\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 66446,
+            "start": 66446
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-0512\"></a>\n\n[![Full-ZK verify — 512 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-0512.svg)](20260910T142900Z/svg/full-zk-verify-0512.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-0512.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-0512/primary-001/preview.png)\n\nFull-ZK verify — 512 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-0512-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 66470,
+            "start": 66470
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-0512.svg",
+          "before": "svg/full-zk-verify-0512.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 66504,
+            "start": 66477
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0512/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-0512/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 66578,
+            "start": 66528
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-1024\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 68291,
+            "start": 68291
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-1024\"></a>\n\n[![Full-ZK verify — 1024 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-1024.svg)](20260910T142900Z/svg/full-zk-verify-1024.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-1024.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-1024/primary-001/preview.png)\n\nFull-ZK verify — 1024 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-1024-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 68315,
+            "start": 68315
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-1024.svg",
+          "before": "svg/full-zk-verify-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 68349,
+            "start": 68322
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-1024/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-1024/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 68423,
+            "start": 68373
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-2048\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 70136,
+            "start": 70136
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-2048\"></a>\n\n[![Full-ZK verify — 2048 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-2048.svg)](20260910T142900Z/svg/full-zk-verify-2048.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-2048.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-2048/primary-001/preview.png)\n\nFull-ZK verify — 2048 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-2048-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 70160,
+            "start": 70160
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-2048.svg",
+          "before": "svg/full-zk-verify-2048.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 70194,
+            "start": 70167
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-2048/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-2048/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 70268,
+            "start": 70218
+          }
+        },
+        {
+          "after": "<a id=\"report-full-zk-verify-4096\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 71981,
+            "start": 71981
+          }
+        },
+        {
+          "after": "\n\n<a id=\"figure-primary-full-zk-verify-4096\"></a>\n\n[![Full-ZK verify — 4096 hashes (primary); Episode 1: original](20260910T142900Z/svg/full-zk-verify-4096.svg)](20260910T142900Z/svg/full-zk-verify-4096.svg)\n\n[Open/download SVG](20260910T142900Z/svg/full-zk-verify-4096.svg) · [Optional PNG fallback](20260910T142900Z/cases/full-zk-verify-4096/primary-001/preview.png)\n\nFull-ZK verify — 4096 hashes (primary); Episode 1: original. Width represents usable sampled backtrace rows across all threads, not elapsed latency. Attempt: `full-zk-verify-4096-primary-001`.\n\n",
+          "before": "",
+          "reason": "insert accepted primary SVG with caption",
+          "source_bytes": {
+            "end": 72005,
+            "start": 72005
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-4096.svg",
+          "before": "svg/full-zk-verify-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 72039,
+            "start": 72012
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-4096/primary-001/attempt.json",
+          "before": "cases/full-zk-verify-4096/primary-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 72113,
+            "start": 72063
+          }
+        },
+        {
+          "after": "<a id=\"report-endpoint-repeat-variability\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 73826,
+            "start": 73826
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-0064/repeat-001/attempt.json",
+          "before": "cases/flock-prove-0064/repeat-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 74652,
+            "start": 74606
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-prove-4096/repeat-002/attempt.json",
+          "before": "cases/flock-prove-4096/repeat-002/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 74906,
+            "start": 74860
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-0064/repeat-001/attempt.json",
+          "before": "cases/flock-verify-0064/repeat-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 75072,
+            "start": 75025
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/flock-verify-4096/repeat-002/attempt.json",
+          "before": "cases/flock-verify-4096/repeat-002/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 75326,
+            "start": 75279
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-0064/repeat-001/attempt.json",
+          "before": "cases/full-zk-prove-0064/repeat-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 75591,
+            "start": 75543
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-prove-4096/repeat-002/attempt.json",
+          "before": "cases/full-zk-prove-4096/repeat-002/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 75849,
+            "start": 75801
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-0064/repeat-001/attempt.json",
+          "before": "cases/full-zk-verify-0064/repeat-001/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 76116,
+            "start": 76067
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases/full-zk-verify-4096/repeat-002/attempt.json",
+          "before": "cases/full-zk-verify-4096/repeat-002/attempt.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 76375,
+            "start": 76326
+          }
+        },
+        {
+          "after": "<a id=\"report-ranked-follow-up-experiments\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 76570,
+            "start": 76570
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-verify-0064.svg",
+          "before": "svg/flock-verify-0064.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 77027,
+            "start": 77002
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/flock-prove-0256.svg",
+          "before": "svg/flock-prove-0256.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 77550,
+            "start": 77526
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-4096.svg",
+          "before": "svg/full-zk-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 78137,
+            "start": 78111
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-verify-1024.svg",
+          "before": "svg/full-zk-verify-1024.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 78633,
+            "start": 78606
+          }
+        },
+        {
+          "after": "20260910T142900Z/svg/full-zk-prove-4096.svg",
+          "before": "svg/full-zk-prove-4096.svg",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 79148,
+            "start": 79122
+          }
+        },
+        {
+          "after": "<a id=\"report-evidence-and-limitations\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 79562,
+            "start": 79562
+          }
+        },
+        {
+          "after": "20260910T142900Z/manifest.json",
+          "before": "manifest.json",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 79615,
+            "start": 79602
+          }
+        },
+        {
+          "after": "20260910T142900Z/source",
+          "before": "source/",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 79652,
+            "start": 79645
+          }
+        },
+        {
+          "after": "20260910T142900Z/logs",
+          "before": "logs/",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 79684,
+            "start": 79679
+          }
+        },
+        {
+          "after": "20260910T142900Z/cases",
+          "before": "cases/",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 79708,
+            "start": 79702
+          }
+        }
+      ],
+      "source": "20260910T142900Z/report.md",
+      "source_bytes_reconstructed_exactly": true,
+      "source_headings": [
+        {
+          "level": 1,
+          "range": {
+            "end": 36,
+            "start": 0
+          },
+          "text": "BLAKE3 preimage flamegraph report"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 2877,
+            "start": 2846
+          },
+          "text": "Environment and measurement"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 6111,
+            "start": 6078
+          },
+          "text": "Fresh timing and size results"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 7462,
+            "start": 7401
+          },
+          "text": "Cross-session timing changes and debug-symbol comparison"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 10796,
+            "start": 10758
+          },
+          "text": "Resumed-episode baseline controls"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 12809,
+            "start": 12784
+          },
+          "text": "Scaling observations"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 13161,
+            "start": 13140
+          },
+          "text": "Flamegraph matrix"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 14681,
+            "start": 14642
+          },
+          "text": "Capture quality and phase durations"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 19594,
+            "start": 19582
+          },
+          "text": "Hotspots"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 20219,
+            "start": 20198
+          },
+          "text": "flock-prove-0064"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 22000,
+            "start": 21979
+          },
+          "text": "flock-prove-0128"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 23781,
+            "start": 23760
+          },
+          "text": "flock-prove-0256"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 25597,
+            "start": 25576
+          },
+          "text": "flock-prove-0512"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 27601,
+            "start": 27580
+          },
+          "text": "flock-prove-1024"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 29765,
+            "start": 29744
+          },
+          "text": "flock-prove-2048"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 32049,
+            "start": 32028
+          },
+          "text": "flock-prove-4096"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 34180,
+            "start": 34158
+          },
+          "text": "flock-verify-0064"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 36152,
+            "start": 36130
+          },
+          "text": "flock-verify-0128"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 38125,
+            "start": 38103
+          },
+          "text": "flock-verify-0256"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 39943,
+            "start": 39921
+          },
+          "text": "flock-verify-0512"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 41916,
+            "start": 41894
+          },
+          "text": "flock-verify-1024"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 43825,
+            "start": 43803
+          },
+          "text": "flock-verify-2048"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 45803,
+            "start": 45781
+          },
+          "text": "flock-verify-4096"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 47784,
+            "start": 47761
+          },
+          "text": "full-zk-prove-0064"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 49630,
+            "start": 49607
+          },
+          "text": "full-zk-prove-0128"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 51476,
+            "start": 51453
+          },
+          "text": "full-zk-prove-0256"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 53322,
+            "start": 53299
+          },
+          "text": "full-zk-prove-0512"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 55293,
+            "start": 55270
+          },
+          "text": "full-zk-prove-1024"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 57110,
+            "start": 57087
+          },
+          "text": "full-zk-prove-2048"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 59101,
+            "start": 59078
+          },
+          "text": "full-zk-prove-4096"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 61089,
+            "start": 61065
+          },
+          "text": "full-zk-verify-0064"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 62934,
+            "start": 62910
+          },
+          "text": "full-zk-verify-0128"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 64625,
+            "start": 64601
+          },
+          "text": "full-zk-verify-0256"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 66470,
+            "start": 66446
+          },
+          "text": "full-zk-verify-0512"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 68315,
+            "start": 68291
+          },
+          "text": "full-zk-verify-1024"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 70160,
+            "start": 70136
+          },
+          "text": "full-zk-verify-2048"
+        },
+        {
+          "level": 3,
+          "range": {
+            "end": 72005,
+            "start": 71981
+          },
+          "text": "full-zk-verify-4096"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 73857,
+            "start": 73826
+          },
+          "text": "Endpoint repeat variability"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 76602,
+            "start": 76570
+          },
+          "text": "Ranked follow-up experiments"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 79590,
+            "start": 79562
+          },
+          "text": "Evidence and limitations"
+        }
+      ],
+      "source_image_count": 4,
+      "source_sha256": "7ef3513ece0116275c9ba33c0645706666bd417b9f7125eacc422ce9b1272675",
+      "table_body_rows": [
+        7,
+        14,
+        14,
+        7,
+        28,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        10,
+        8
+      ],
+      "tables": 34
+    },
+    {
+      "appendix_anchor": "complete-findings",
+      "edits": [
+        {
+          "after": "<a id=\"findings-findings-from-the-preimage-profiles\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 0,
+            "start": 0
+          }
+        },
+        {
+          "after": "\n\n- [The dominant verification kernel](#findings-the-dominant-verification-kernel)\n- [Large proving workloads](#findings-large-proving-workloads)\n- [Timing and size context](#findings-timing-and-size-context)\n\n",
+          "before": "",
+          "reason": "insert appendix navigation after its title",
+          "source_bytes": {
+            "end": 38,
+            "start": 38
+          }
+        },
+        {
+          "after": "20260910T142900Z/report.md",
+          "before": "report.md",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 62,
+            "start": 53
+          }
+        },
+        {
+          "after": "20260910T142900Z/index.html",
+          "before": "index.html",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 103,
+            "start": 93
+          }
+        },
+        {
+          "after": "20260910T142900Z/hotspots.csv",
+          "before": "hotspots.csv",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 143,
+            "start": 131
+          }
+        },
+        {
+          "after": "<a id=\"findings-the-dominant-verification-kernel\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 908,
+            "start": 908
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/lincheck.rs#L326",
+          "before": "source/locations/crates/flock-core/src/lincheck.rs#L326",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 1740,
+            "start": 1685
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/lincheck.rs#L944",
+          "before": "source/locations/crates/flock-core/src/lincheck.rs#L944",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 3124,
+            "start": 3069
+          }
+        },
+        {
+          "after": "<a id=\"findings-large-proving-workloads\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 3260,
+            "start": 3260
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "before": "source/locations/crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs#L4",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 3603,
+            "start": 3520
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "before": "source/locations/crates/flock-core/src/field/f128_slice/aarch64.rs#L8",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 3738,
+            "start": 3669
+          }
+        },
+        {
+          "after": "20260910T142900Z/source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "before": "source/locations/crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs#L51",
+          "reason": "rebase parsed Markdown destination",
+          "source_bytes": {
+            "end": 3913,
+            "start": 3816
+          }
+        },
+        {
+          "after": "<a id=\"findings-timing-and-size-context\"></a>\n\n#",
+          "before": "",
+          "reason": "heading demotion and unique anchor",
+          "source_bytes": {
+            "end": 5246,
+            "start": 5246
+          }
+        }
+      ],
+      "source": "20260910T142900Z/findings.md",
+      "source_bytes_reconstructed_exactly": true,
+      "source_headings": [
+        {
+          "level": 1,
+          "range": {
+            "end": 38,
+            "start": 0
+          },
+          "text": "Findings from the preimage profiles"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 944,
+            "start": 908
+          },
+          "text": "The dominant verification kernel"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 3287,
+            "start": 3260
+          },
+          "text": "Large proving workloads"
+        },
+        {
+          "level": 2,
+          "range": {
+            "end": 5273,
+            "start": 5246
+          },
+          "text": "Timing and size context"
+        }
+      ],
+      "source_image_count": 0,
+      "source_sha256": "1afbcd0329d9a89aced0c35ec5180cbe6d8cff2c31e9477d93422fc537f1927a",
+      "table_body_rows": [
+        2,
+        3
+      ],
+      "tables": 2
+    }
+  ],
+  "svg_regeneration": false,
+  "transformations": [
+    "demote imported headings and add unique explicit anchors",
+    "rebase parser-confirmed inline link/image destinations",
+    "preserve original images and add caption/open links",
+    "insert 44 corrected SVG figures without modifying assets",
+    "append role-specific figures and accepted-evidence index"
+  ],
+  "validation": "README.validation.json",
+  "xml_reanalysis": false
+}

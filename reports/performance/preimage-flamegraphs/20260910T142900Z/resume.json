@@ -1,0 +1,126 @@
+{
+  "completed_unix_seconds": 1789058851.140094,
+  "controller": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/tools/release/profile_preimages",
+    "sha256": "59c07bfa5112236eee9b11efbaef291c5545c5deea096c33601c986be09948fa"
+  },
+  "controller_manifest": "resume-controller/manifest.json",
+  "controller_snapshot_id": "792d1aee964adbd7e2a4e9b0a1ea9c43824a830367a54035bd51a653ce044da5",
+  "environment": {
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)\n",
+    "cpu": {
+      "stderr": "",
+      "stdout": "Apple M1 Pro\n",
+      "success": true
+    },
+    "load": {
+      "load": {
+        "stderr": "",
+        "stdout": "{ 13.04 12.06 9.24 }\n",
+        "success": true
+      },
+      "power": {
+        "stderr": "",
+        "stdout": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t44%; charging; 1:13 remaining present: true\n",
+        "success": true
+      },
+      "thermal": {
+        "stderr": "",
+        "stdout": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+        "success": true
+      },
+      "time": 1789058561.391364
+    },
+    "measurement_environment_removed": [
+      "FLOCK_COMMIT_TIMING",
+      "FLOCK_ZC_TIMING",
+      "LINCHECK_TRACE",
+      "VERIFY_TRACE",
+      "PCS_TRACE",
+      "LIG_PROVE_TRACE",
+      "LIG_VERIFY_TRACE",
+      "LIGERITO_TRACE",
+      "PERM_TRACE",
+      "MERKLE_TRACE",
+      "RAYON_NUM_THREADS",
+      "FLOCK_NO_PREFAULT"
+    ],
+    "memory": {
+      "stderr": "",
+      "stdout": "17179869184\n",
+      "success": true
+    },
+    "os": {
+      "stderr": "",
+      "stdout": "ProductName:\t\tmacOS\nProductVersion:\t\t26.1\nBuildVersion:\t\t25B78\n",
+      "success": true
+    },
+    "power_settings": {
+      "stderr": "",
+      "stdout": "Battery Power:\n Sleep On Power Button 1\n lowpowermode         0\n standby              1\n ttyskeepawake        1\n hibernatemode        3\n powernap             1\n hibernatefile        /var/vm/sleepimage\n displaysleep         0\n womp                 0\n networkoversleep     0\n sleep                1\n tcpkeepalive         1\n lessbright           0\n disksleep            0\nAC Power:\n Sleep On Power Button 1\n lowpowermode         0\n standby              1\n ttyskeepawake        1\n hibernatemode        3\n powernap             1\n hibernatefile        /var/vm/sleepimage\n displaysleep         0\n womp                 0\n networkoversleep     0\n sleep                0\n tcpkeepalive         1\n disksleep            0\n",
+      "success": true
+    },
+    "profiler": "flamegraph 0.6.13",
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)\nbinary: rustc\ncommit-hash: 88d9e12ae178fab0fb5cc050a94da85685d449ea\ncommit-date: 2026-08-18\nhost: aarch64-apple-darwin\nrelease: 1.98.0\nLLVM version: 22.1.8\n",
+    "toolchain": "1.98.0",
+    "xcode": {
+      "stderr": "",
+      "stdout": "Xcode 26.3\nBuild version 17C529\n",
+      "success": true
+    }
+  },
+  "limitation": "The primary episode has no immediate closing baseline; the new baselines bracket only the resumed 4096-hash repeats.",
+  "load_after": {
+    "load": {
+      "stderr": "",
+      "stdout": "{ 4.70 7.27 7.80 }\n",
+      "success": true
+    },
+    "power": {
+      "stderr": "",
+      "stdout": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t52%; charging; 1:07 remaining present: true\n",
+      "success": true
+    },
+    "thermal": {
+      "stderr": "",
+      "stdout": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+      "success": true
+    },
+    "time": 1789058851.140095
+  },
+  "measurement_snapshot_id": "54cc47530ad38ffbb467b0a42f1b2fb66bc8eb5f1f4b08ef800c31a0ac76b72c",
+  "new_repeats": [
+    {
+      "attempt": "repeat-002",
+      "case": "flock-prove-4096",
+      "usable_rows": 165670
+    },
+    {
+      "attempt": "repeat-002",
+      "case": "flock-verify-4096",
+      "usable_rows": 31851
+    },
+    {
+      "attempt": "repeat-002",
+      "case": "full-zk-prove-4096",
+      "usable_rows": 109224
+    },
+    {
+      "attempt": "repeat-002",
+      "case": "full-zk-verify-4096",
+      "usable_rows": 80976
+    }
+  ],
+  "original_measurement_manifest": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/reports/performance/preimage-flamegraphs/20260910T142900Z/manifest.json",
+    "sha256": "d5d166a24c0b437b545ced5d15972360b2ea14bd7e141cb8333f6457df4039e0"
+  },
+  "pause_record": "incomplete.json",
+  "preserved_evidence_sha256": "resume-controller/manifest.json",
+  "retained_64_hash_repeats": 4,
+  "retained_primary_recordings": 28,
+  "retained_smokes": 8,
+  "schema_version": 1,
+  "started_unix_seconds": 1789058561.216864,
+  "status": "measurements_complete"
+}

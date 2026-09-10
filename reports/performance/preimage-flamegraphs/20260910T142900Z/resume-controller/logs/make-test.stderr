@@ -1,0 +1,544 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling version_check v0.9.5
+   Compiling libc v0.2.186
+   Compiling serde_core v1.0.228
+   Compiling shlex v1.3.0
+   Compiling find-msvc-tools v0.1.9
+   Compiling serde v1.0.228
+    Checking typenum v1.20.0
+    Checking cfg-if v1.0.4
+    Checking arrayvec v0.7.6
+    Checking hashbrown v0.17.1
+   Compiling cc v1.2.62
+   Compiling generic-array v0.14.7
+    Checking equivalent v1.0.2
+    Checking toml_write v0.1.2
+    Checking winnow v0.7.15
+   Compiling crossbeam-utils v0.8.21
+    Checking indexmap v2.14.0
+   Compiling rayon-core v1.13.0
+   Compiling sha2-asm v0.6.4
+   Compiling blake3 v1.8.5
+    Checking itoa v1.0.18
+    Checking memchr v2.8.1
+   Compiling zmij v1.0.21
+   Compiling thiserror v2.0.20
+   Compiling syn v2.0.117
+    Checking cpufeatures v0.2.17
+   Compiling syn v3.0.5
+    Checking either v1.16.0
+   Compiling serde_json v1.0.150
+    Checking arrayref v0.3.9
+    Checking constant_time_eq v0.4.2
+    Checking block-buffer v0.10.4
+    Checking crypto-common v0.1.7
+    Checking digest v0.10.7
+    Checking getrandom v0.2.17
+   Compiling getrandom v0.3.4
+    Checking crossbeam-epoch v0.9.18
+   Compiling zerocopy v0.8.57
+   Compiling serde_derive v1.0.228
+    Checking crossbeam-deque v0.8.6
+    Checking rayon v1.12.0
+   Compiling thiserror-impl v2.0.20
+    Checking sha2 v0.10.9
+   Compiling ahash v0.8.12
+    Checking keccak v0.1.6
+    Checking bytemuck v1.25.2
+    Checking once_cell v1.21.4
+    Checking rgb v0.8.53
+    Checking sha3 v0.10.9
+    Checking quick-xml v0.39.4
+    Checking num-format v0.4.4
+    Checking str_stack v0.1.1
+    Checking log v0.4.34
+    Checking rustc-demangle v0.1.27
+    Checking formal-proof v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/formal-proof)
+    Checking toml_datetime v0.6.11
+    Checking serde_spanned v0.6.9
+    Checking bincode v1.3.3
+    Checking toml_edit v0.22.27
+    Checking inferno v0.12.6
+    Checking toml v0.8.23
+    Checking flock-core v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-core)
+    Checking flock-performance v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/performance)
+    Checking veil-f128 v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/veil-f128)
+    Checking flock-prover v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-prover)
+    Checking veil-examples v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/examples)
+    Finished `release` profile [optimized] target(s) in 11.82s
+    Checking flock-core v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-core)
+    Checking formal-proof v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/formal-proof)
+    Checking flock-performance v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/performance)
+    Checking veil-f128 v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/veil-f128)
+    Checking flock-prover v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-prover)
+    Checking veil-examples v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/examples)
+    Finished `release` profile [optimized] target(s) in 3.17s
+info: component 'rust-std' for target 'x86_64-apple-darwin' is up to date
+   Compiling proc-macro2 v1.0.106
+   Compiling unicode-ident v1.0.24
+   Compiling quote v1.0.45
+   Compiling version_check v0.9.5
+   Compiling serde_core v1.0.228
+   Compiling find-msvc-tools v0.1.9
+   Compiling shlex v1.3.0
+   Compiling serde v1.0.228
+    Checking typenum v1.20.0
+    Checking cfg-if v1.0.4
+   Compiling libc v0.2.186
+    Checking arrayvec v0.7.6
+   Compiling cc v1.2.62
+    Checking equivalent v1.0.2
+   Compiling generic-array v0.14.7
+    Checking hashbrown v0.17.1
+    Checking toml_write v0.1.2
+    Checking winnow v0.7.15
+    Checking cpufeatures v0.2.17
+   Compiling crossbeam-utils v0.8.21
+    Checking indexmap v2.14.0
+   Compiling rayon-core v1.13.0
+   Compiling sha2-asm v0.6.4
+   Compiling blake3 v1.8.5
+    Checking itoa v1.0.18
+    Checking memchr v2.8.1
+   Compiling zmij v1.0.21
+   Compiling thiserror v2.0.20
+    Checking constant_time_eq v0.4.2
+   Compiling serde_json v1.0.150
+    Checking cpufeatures v0.3.0
+    Checking either v1.16.0
+    Checking arrayref v0.3.9
+   Compiling syn v2.0.117
+   Compiling syn v3.0.5
+    Checking getrandom v0.2.17
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+   Compiling zerocopy v0.8.57
+    Checking crossbeam-epoch v0.9.18
+   Compiling getrandom v0.3.4
+    Checking crossbeam-deque v0.8.6
+    Checking rayon v1.12.0
+   Compiling serde_derive v1.0.228
+   Compiling thiserror-impl v2.0.20
+    Checking sha2 v0.10.9
+   Compiling ahash v0.8.12
+    Checking bytemuck v1.25.2
+    Checking keccak v0.1.6
+    Checking once_cell v1.21.4
+    Checking sha3 v0.10.9
+    Checking rgb v0.8.53
+    Checking quick-xml v0.39.4
+    Checking num-format v0.4.4
+    Checking log v0.4.34
+    Checking str_stack v0.1.1
+    Checking rustc-demangle v0.1.27
+    Checking formal-proof v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/formal-proof)
+    Checking inferno v0.12.6
+    Checking toml_datetime v0.6.11
+    Checking serde_spanned v0.6.9
+    Checking bincode v1.3.3
+    Checking toml_edit v0.22.27
+    Checking toml v0.8.23
+    Checking flock-core v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-core)
+    Checking flock-performance v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/performance)
+    Checking veil-f128 v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/veil-f128)
+    Checking flock-prover v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-prover)
+    Checking veil-examples v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/examples)
+    Finished `release` profile [optimized] target(s) in 11.30s
+   Compiling cfg-if v1.0.4
+   Compiling typenum v1.20.0
+   Compiling equivalent v1.0.2
+   Compiling libc v0.2.186
+   Compiling serde_core v1.0.228
+   Compiling arrayvec v0.7.6
+   Compiling hashbrown v0.17.1
+   Compiling winnow v0.7.15
+   Compiling toml_write v0.1.2
+   Compiling sha2-asm v0.6.4
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.1
+   Compiling crossbeam-utils v0.8.21
+   Compiling zmij v1.0.21
+   Compiling arrayref v0.3.9
+   Compiling constant_time_eq v0.4.2
+   Compiling either v1.16.0
+   Compiling cpufeatures v0.2.17
+   Compiling crossbeam-epoch v0.9.18
+   Compiling getrandom v0.2.17
+   Compiling generic-array v0.14.7
+   Compiling blake3 v1.8.5
+   Compiling thiserror v2.0.20
+   Compiling indexmap v2.14.0
+   Compiling zerocopy v0.8.57
+   Compiling getrandom v0.3.4
+   Compiling crossbeam-deque v0.8.6
+   Compiling keccak v0.1.6
+   Compiling once_cell v1.21.4
+   Compiling bytemuck v1.25.2
+   Compiling rayon-core v1.13.0
+   Compiling quick-xml v0.39.4
+   Compiling rgb v0.8.53
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling num-format v0.4.4
+   Compiling rayon v1.12.0
+   Compiling digest v0.10.7
+   Compiling log v0.4.34
+   Compiling sha2 v0.10.9
+   Compiling sha3 v0.10.9
+   Compiling str_stack v0.1.1
+   Compiling rustc-demangle v0.1.27
+   Compiling formal-proof v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/formal-proof)
+   Compiling serde v1.0.228
+   Compiling serde_json v1.0.150
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling bincode v1.3.3
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43106]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `formal-proof` (bin "formal-proof" test) generated 1 warning
+   Compiling toml_edit v0.22.27
+   Compiling ahash v0.8.12
+   Compiling inferno v0.12.6
+   Compiling toml v0.8.23
+   Compiling flock-core v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-core)
+   Compiling flock-performance v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/tools/performance)
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43142]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "repair_preimage_report" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43177]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "folded_capture" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43193]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "folded_capture") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43196]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "repair_preimage_report") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43198]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "xctrace_capture" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43210]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (test "snapshot") generated 1 warning
+   Compiling veil-f128 v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/veil-f128)
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43223]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "xctrace_capture") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43251]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (test "runner") generated 1 warning
+   Compiling flock-prover v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/crates/flock-prover)
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43264]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "profile_preimages" test) generated 1 warning
+   Compiling veil-examples v0.1.0 (/private/tmp/flock-profile-source-40934-1789058443482158000/examples)
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43267]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (test "helpers") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43279]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (lib test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43297]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-performance` (bin "profile_preimages") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43328]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "keccak_chain_bench" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43347]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-core` (test "symbolic_mask_coverage") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43360]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "linear_sha_verifier" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43387]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "gen_ligerito_configs" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43400]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (bin "veiled_flock" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43413]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "chain_bench" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43417]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (bench "keccak_native_chain") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43431]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "mle_eval_bench" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43444]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (bin "flock_chain" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43457]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "preimage_scaling" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43476]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (bin "veiled_flock") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43489]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "keccak_mid_density" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43503]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-core` (test "symbolic_kernels") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43528]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-core` (test "symbolic_pcs_translator") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43530]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (bench "blake3_native_chain") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43544]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `veil-examples` (example "mle_eval_zk" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43556]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (example "preimage_profile" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43574]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `veil-f128` (lib test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43586]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (bin "flock_chain") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43598]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `veil-examples` (example "zerocheck_zk" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43610]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (test "verifier_roundtrip") generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43622]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `veil-examples` (example "root_zk" test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43634]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `veil-examples` (lib test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43652]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-core` (lib test) generated 1 warning
+warning: stripping debug info with `rust-objcopy` failed: signal: 6 (SIGABRT)
+  |
+  = note: dyld[43672]: Library not loaded: @rpath/libLLVM.dylib
+            Referenced from: <AC0D75A8-23BF-301F-B7CE-3E5CC0C1BC06> /Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/rust-objcopy
+            Reason: tried: '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/.rustup/toolchains/1.98.0-aarch64-apple-darwin/lib/rustlib/aarch64-apple-darwin/bin/../lib/libLLVM.dylib' (no such file), '/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/libLLVM.dylib' (no such file), '/Users/ai/lib/libLLVM.dylib' (no such file), '/usr/local/lib/libLLVM.dylib' (no such file), '/usr/lib/libLLVM.dylib' (no such file, not in dyld cache)
+          
+
+warning: `flock-prover` (lib test) generated 1 warning
+    Finished `release` profile [optimized] target(s) in 29.10s
+     Running unittests src/lib.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/flock_core-df52aa48c33d8881)
+     Running tests/symbolic_kernels.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/symbolic_kernels-6550276aa3427d76)
+     Running tests/symbolic_mask_coverage.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/symbolic_mask_coverage-913a7aadb7ca6de7)
+     Running tests/symbolic_pcs_translator.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/symbolic_pcs_translator-bfd14996dec89179)
+     Running unittests src/lib.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/flock_performance-2b45ae2af2b03d0a)
+     Running unittests src/bin/folded_capture.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/folded_capture-cc45ee9ee3ceee3b)
+     Running unittests src/bin/profile_preimages.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/profile_preimages-07daba68f438ce6d)
+     Running unittests src/bin/repair_preimage_report.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/repair_preimage_report-376b91b4e8c242cf)
+     Running unittests src/bin/xctrace_capture.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/xctrace_capture-03b86de29a71a593)
+     Running tests/helpers.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/helpers-b668775240d282c8)
+     Running tests/runner.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/runner-4f468ba4ed16af30)
+     Running tests/snapshot.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/snapshot-09a88206a74e8eac)
+     Running unittests src/lib.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/flock_prover-c9dce9f2915998e7)
+     Running unittests src/bin/flock_chain.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/flock_chain-f8a34198e036d162)
+     Running unittests src/bin/veiled_flock.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/veiled_flock-c1c4a12ea26323d5)
+     Running tests/verifier_roundtrip.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/verifier_roundtrip-74bba10a48f3bc12)
+     Running benches/blake3_native_chain.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/blake3_native_chain-3fe9daeff8c3005e)
+     Running benches/keccak_native_chain.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/keccak_native_chain-4635a837166f50a0)
+     Running unittests examples/chain_bench.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/chain_bench-9238a8303eb6cd5a)
+     Running unittests examples/gen_ligerito_configs.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/gen_ligerito_configs-4a79ad6038e95ff5)
+     Running unittests examples/keccak_chain_bench.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/keccak_chain_bench-2a402b8fbc6768bc)
+     Running unittests examples/keccak_mid_density.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/keccak_mid_density-6098fbede5b640dd)
+     Running unittests examples/linear_sha_verifier.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/linear_sha_verifier-06471fe4e6ab4d8d)
+     Running unittests examples/mle_eval_bench.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/mle_eval_bench-f4082cb93fa6233c)
+     Running unittests examples/preimage_profile.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/preimage_profile-39ad0ac0e56a3cc2)
+     Running unittests examples/preimage_scaling.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/preimage_scaling-7a1baa70713c6ada)
+     Running unittests src/main.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/formal_proof-81d632fbbd888cde)
+     Running unittests src/lib.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/veil_examples-613c9a921cc1db4f)
+     Running unittests mle_eval_zk.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/mle_eval_zk-a30d75540dae9144)
+     Running unittests root_zk.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/root_zk-7fe4d135dddd1c95)
+     Running unittests zerocheck_zk.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/examples/zerocheck_zk-4f8c61d31dffb6c9)
+     Running unittests src/lib.rs (/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/resume-controller/checks/release/deps/veil_f128-99ab19d3f241da20)

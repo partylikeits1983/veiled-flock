@@ -1,0 +1,4 @@
+# Retain raw measurement artifacts locally; publish reports and supporting records.
+**/raw/
+**/*.folded
+**/build-artifacts/

@@ -1,0 +1,4 @@
+{
+  "stderr": "preimage_profile: --protocol must be flock or full-zk\n",
+  "successfully_rejected": true
+}

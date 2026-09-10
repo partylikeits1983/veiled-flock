@@ -18,8 +18,8 @@ use flock_prover::r1cs_hashes::blake3_preimage::{
     Blake3PreimageSetup, Blake3PreimageZkSetup, MESSAGE_BYTES,
 };
 
-const SIZES: [usize; 7] = [64, 128, 256, 512, 1024, 2048, 4096];
-const FLOCK_BENCHMARK_DOMAIN: &[u8] = b"flock-blake3-preimage-scaling";
+mod support;
+use support::{FLOCK_BENCHMARK_DOMAIN, SIZES, messages};
 
 #[derive(Clone, Copy)]
 struct Sample {
@@ -134,18 +134,4 @@ fn print_samples(size: usize, protocol: &str, samples: &mut [Sample]) {
         samples.first().expect("at least one sample").proof_bytes,
         samples.last().expect("at least one sample").proof_bytes,
     );
-}
-
-fn messages(size: usize) -> Vec<[u8; MESSAGE_BYTES]> {
-    (0..size)
-        .map(|message_index| {
-            std::array::from_fn(|byte_index| {
-                let word = (message_index as u64)
-                    .wrapping_mul(0x9E37_79B9_7F4A_7C15)
-                    .rotate_left((byte_index % 64) as u32)
-                    ^ byte_index as u64;
-                word as u8
-            })
-        })
-        .collect()
 }

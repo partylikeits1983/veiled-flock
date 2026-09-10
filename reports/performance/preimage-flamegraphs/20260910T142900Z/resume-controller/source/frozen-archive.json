@@ -1,0 +1,10 @@
+{
+  "excluded": [
+    ".profile-scratch"
+  ],
+  "input_count": 443,
+  "path": "frozen.tar",
+  "sha256": "3cd97ad2f16e249200d1b60f8e427c0bb16be5f8489b49957a43c5e9cb8a37fe",
+  "snapshot_id": "792d1aee964adbd7e2a4e9b0a1ea9c43824a830367a54035bd51a653ce044da5",
+  "verified_by": "independent extraction and complete snapshot inventory verification"
+}

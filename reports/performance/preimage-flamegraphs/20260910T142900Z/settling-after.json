@@ -1,0 +1,39 @@
+{
+  "after": {
+    "load": {
+      "stderr": "",
+      "stdout": "{ 4.83 7.47 7.88 }\n",
+      "success": true
+    },
+    "power": {
+      "stderr": "",
+      "stdout": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t52%; charging; 1:07 remaining present: true\n",
+      "success": true
+    },
+    "thermal": {
+      "stderr": "",
+      "stdout": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+      "success": true
+    },
+    "time": 1789058832.843001
+  },
+  "before": {
+    "load": {
+      "stderr": "",
+      "stdout": "{ 5.61 7.86 8.03 }\n",
+      "success": true
+    },
+    "power": {
+      "stderr": "",
+      "stdout": "Now drawing from 'AC Power'\n -InternalBattery-0 (id=23658595)\t51%; charging; 1:08 remaining present: true\n",
+      "success": true
+    },
+    "thermal": {
+      "stderr": "",
+      "stdout": "Note: No thermal warning level has been recorded\nNote: No performance warning level has been recorded\nNote: No CPU power status has been recorded\n",
+      "success": true
+    },
+    "time": 1789058802.575128
+  },
+  "seconds": 30
+}

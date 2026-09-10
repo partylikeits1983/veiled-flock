@@ -1,0 +1,26 @@
+{
+  "baseline-normal": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/performance-normal/release/examples/preimage_scaling",
+    "sha256": "51d05a6c7d1618551ecc444877f98bfb26a4b42aee65021e9e2e03049825e80c"
+  },
+  "baseline-symbols": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/performance-symbols/release/examples/preimage_scaling",
+    "sha256": "c5e601e186ebabf2239fc923bc823bf39071bba38afaeececed80665668f02eb"
+  },
+  "folded_capture": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/tools/release/folded_capture",
+    "sha256": "96f7bd2bb8e774da5787baa55cf79c6d8dde673603145e223be594232a0ccbcc"
+  },
+  "preimage_profile": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/performance-symbols/release/examples/preimage_profile",
+    "sha256": "dcd64fe89102ed700fc72c04c540171ccd44ca71f1f5eb03c00ad5ad018c6391"
+  },
+  "profile_preimages": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/tools/release/profile_preimages",
+    "sha256": "59926681735478e73e228fb5e2fee7edff5f2bfbd0b5ecb5a6f83d92e86d36f8"
+  },
+  "xctrace_capture": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/tools/release/xctrace_capture",
+    "sha256": "c35ceffc07a526f16c970afdd959fab7135fd0ccafced34f88ac7beff078a842"
+  }
+}

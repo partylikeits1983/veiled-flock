@@ -1,0 +1,26 @@
+{
+  "args": [
+    "--width",
+    "1200",
+    "--output",
+    "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/reports/performance/preimage-flamegraphs/20260910T142900Z/cases/full-zk-verify-4096/smoke-001/preview.png",
+    "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/reports/performance/preimage-flamegraphs/20260910T142900Z/cases/full-zk-verify-4096/smoke-001/flamegraph.svg"
+  ],
+  "cwd": null,
+  "environment_overrides": {
+    "FLOCK_COMMIT_TIMING": null,
+    "FLOCK_NO_PREFAULT": null,
+    "FLOCK_ZC_TIMING": null,
+    "LIGERITO_TRACE": null,
+    "LIG_PROVE_TRACE": null,
+    "LIG_VERIFY_TRACE": null,
+    "LINCHECK_TRACE": null,
+    "MERKLE_TRACE": null,
+    "PCS_TRACE": null,
+    "PERM_TRACE": null,
+    "RAYON_NUM_THREADS": null,
+    "VERIFY_TRACE": null
+  },
+  "program": "/opt/homebrew/Cellar/librsvg/2.62.3/bin/rsvg-convert",
+  "started_unix_seconds": 1789051058.748409
+}

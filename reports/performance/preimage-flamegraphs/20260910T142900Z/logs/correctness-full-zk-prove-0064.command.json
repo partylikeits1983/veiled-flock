@@ -1,0 +1,33 @@
+{
+  "args": [
+    "--protocol",
+    "full-zk",
+    "--operation",
+    "prove",
+    "--hashes",
+    "64",
+    "--seconds",
+    "0.01",
+    "--attempt-id",
+    "correctness-full-zk-prove-0064",
+    "--metadata",
+    "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/reports/performance/preimage-flamegraphs/20260910T142900Z/logs/correctness-full-zk-prove-0064.json"
+  ],
+  "cwd": "/private/tmp/flock-profile-source-13341-1789050686471632000",
+  "environment_overrides": {
+    "FLOCK_COMMIT_TIMING": null,
+    "FLOCK_NO_PREFAULT": null,
+    "FLOCK_ZC_TIMING": null,
+    "LIGERITO_TRACE": null,
+    "LIG_PROVE_TRACE": null,
+    "LIG_VERIFY_TRACE": null,
+    "LINCHECK_TRACE": null,
+    "MERKLE_TRACE": null,
+    "PCS_TRACE": null,
+    "PERM_TRACE": null,
+    "RAYON_NUM_THREADS": null,
+    "VERIFY_TRACE": null
+  },
+  "program": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-flamegraphs/20260910T142900Z/checks/release/examples/preimage_profile",
+  "started_unix_seconds": 1789050825.398977
+}

@@ -1,0 +1,7 @@
+{
+  "collects_measurements": false,
+  "executable": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/release/profile_preimages",
+    "sha256": "59926681735478e73e228fb5e2fee7edff5f2bfbd0b5ecb5a6f83d92e86d36f8"
+  }
+}

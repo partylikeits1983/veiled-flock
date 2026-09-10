@@ -1,0 +1,7 @@
+Starting recording with the Time Profiler template. Launching process: preimage_profile. 
+Ctrl-C to stop the recording
+full-zk prove 2048: 631 calls in 30.025203 seconds; validated
+Target app exited, ending recording...
+Recording completed. Saving output file...
+Output file saved as: cargo-flamegraph.trace
+writing flamegraph to "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/reports/performance/preimage-flamegraphs/20260910T142900Z/cases/full-zk-prove-2048/primary-001/flamegraph.svg"

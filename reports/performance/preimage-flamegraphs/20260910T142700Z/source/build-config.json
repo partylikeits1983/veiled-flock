@@ -1,0 +1,81 @@
+{
+  "environment": {
+    "CARGO_HOME": "/Users/ai/.cargo",
+    "RUSTUP_HOME": "/Users/ai/.rustup"
+  },
+  "external_config": [
+    {
+      "path": "/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/partylikeits1983/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/partylikeits1983/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/private/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/private/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/private/tmp/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/private/tmp/.cargo/config.toml",
+      "sha256": null
+    }
+  ],
+  "toolchain": "1.98.0"
+}

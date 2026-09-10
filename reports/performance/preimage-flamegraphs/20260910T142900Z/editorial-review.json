@@ -1,0 +1,37 @@
+{
+  "additional_source": {
+    "path": "source/locations/crates/flock-core/src/lincheck.rs",
+    "sha256": "16bbc99dbea12354cd92893baf74251c349e7af6c29cd120726f36b1724b7f39"
+  },
+  "changes": [
+    "Disclose battery primary/small repeats and AC resumed large repeats prominently.",
+    "Clarify that the backtrace-row denominator applies to hotspot percentages.",
+    "Add reviewed hotspot findings, CSC source mapping and concrete follow-up experiments."
+  ],
+  "finalizer": {
+    "path": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/preimage-editorial-finalize",
+    "sha256": "4f88abf8c6e9ffbca26421239ab41e68f5e678e2cb4e042c608e929c33e48718",
+    "source": "editorial-finalize.rs",
+    "source_sha256": "36728dfee687f296342f7f856151fe105a146ed13cb3c35cb4459cf1cf0ced41"
+  },
+  "findings": {
+    "path": "findings.md",
+    "sha256": "1afbcd0329d9a89aced0c35ec5180cbe6d8cff2c31e9477d93422fc537f1927a"
+  },
+  "generated_report": {
+    "path": "report-generated.md",
+    "sha256": "0c8f05b7fac5d35fedd3fc00ad1db68b5ed97bd1da5f336abdcf73aa404f922e"
+  },
+  "kind": "post-generation editorial review",
+  "local_link_targets_checked": 241,
+  "measurement_snapshot_id": "54cc47530ad38ffbb467b0a42f1b2fb66bc8eb5f1f4b08ef800c31a0ac76b72c",
+  "pre_editorial_inventory": "artifacts-generated.json",
+  "recordings_and_generated_metrics_changed": false,
+  "reviewed_report": {
+    "path": "report.md",
+    "sha256": "7ef3513ece0116275c9ba33c0645706666bd417b9f7125eacc422ce9b1272675"
+  },
+  "schema_version": 1,
+  "status": "complete",
+  "verification": "Every previously inventoried file except reviewed report.md must retain its exact checksum. The preserved generated report must equal that file's original checksum. The final inventory covers all report files except its own index and the completion marker."
+}

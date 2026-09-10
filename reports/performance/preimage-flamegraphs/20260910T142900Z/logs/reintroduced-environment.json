@@ -1,0 +1,4 @@
+{
+  "stderr": "preimage_profile: measurement policy requires absent environment variables: FLOCK_COMMIT_TIMING\n",
+  "successfully_rejected": true
+}

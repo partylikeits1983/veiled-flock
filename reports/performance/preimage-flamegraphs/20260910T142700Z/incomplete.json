@@ -1,0 +1,5 @@
+{
+  "error": "\"/Users/ai/go/src/github.com/partylikeits1983/veiled-flock/target/profiling-tools/flamegraph-0.6.13/bin/cargo-flamegraph\": error: unexpected argument '--version' found\n\nUsage: cargo <COMMAND>\n\nFor more information, try '--help'.\n",
+  "stage": "bootstrap",
+  "time": 1789050522.754398
+}

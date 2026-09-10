@@ -1,0 +1,4 @@
+Starting recording with the Time Profiler template. Launching process: preimage_profile. 
+Ctrl-C to stop the recording
+flock prove 4096: 1310 calls in 30.013984 seconds; validated
+Target app exited, ending recording...

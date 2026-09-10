@@ -1,0 +1,3614 @@
+{
+  "root": "/private/tmp/flock-profile-source-12646-1789050521169833000",
+  "id": "a50ab4787763391595f21dc8cb4e29aaebfcd123edb8b93a7ecf212cc0887d76",
+  "editing_root": "/Users/ai/go/src/github.com/partylikeits1983/veiled-flock",
+  "base_revision": "73f5361629a2683b5e18bc084c7b64a0ab77fe05",
+  "inventory": [
+    {
+      "path": ".cargo/config.toml",
+      "kind": "file",
+      "sha256": "8ea425180afe0e2fc0cd930d9a5dbd4da07aebe14263eeec4d6df9c7ab996a20",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": ".github/workflows/ci.yml",
+      "kind": "file",
+      "sha256": "dee9f7a7b48179bc03c720d0f7c6dde554f70319d487a828e65f51e7271b5e6b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": ".gitignore",
+      "kind": "file",
+      "sha256": "eb91d1c75c3a717a83c42274d474a66fbbdec2723469b0c4edd1c13a0968ee65",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "Cargo.lock",
+      "kind": "file",
+      "sha256": "8ce3ed00deff76ffd75d5aec13e54e781483a0fac392179baa455d3730b88b21",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "Cargo.toml",
+      "kind": "file",
+      "sha256": "468e29ae8fc1b5fbd366b299403c6b62c006384dafa0e9324a45dff2ebfc5f47",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "LICENSE-APACHE",
+      "kind": "file",
+      "sha256": "1451f14d812ac78a159791bdeaafc7d400d888f60a8502790042930c1c9be7ff",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "LICENSE-MIT",
+      "kind": "file",
+      "sha256": "ed21a0d573a473913534aa8462b410c4c03d899900096bf3bdeb8fea650a01b5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "Makefile",
+      "kind": "file",
+      "sha256": "89684a8922c51f8c3e85983bead38ba2e2b61119f627736a0479abacbaf5ea39",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "README.md",
+      "kind": "file",
+      "sha256": "f8e538aa060cf8b452d4290d7c9e04a8289ff040a45efc1b3a159bb2cedf5115",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "SPEC.md",
+      "kind": "file",
+      "sha256": "7f6ff50928dd416a79b8930a7263451dfb795b2b51fa19728fc2d132f5ae68bf",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/Cargo.toml",
+      "kind": "file",
+      "sha256": "371711feafb56454f51e319a966f1cddc5d06ef39d174faca025e7c925ab6b7a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m22_fast.toml",
+      "kind": "file",
+      "sha256": "e995a246342a3179a977cd2d8ff67324703fcfc00c2e69fb206fa218b9d52372",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m22_secure.toml",
+      "kind": "file",
+      "sha256": "f301c178a071e48840db7c4462637fd2b961621b8c18d906a2122d7fa3152023",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m22_slim.toml",
+      "kind": "file",
+      "sha256": "e05ac249ecf74a32a4210c636591eeea0d6c96b3335e8520f32a047497c01289",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m23_fast.toml",
+      "kind": "file",
+      "sha256": "9a1a667f4726568d6fbba3cea7924e9cfa511809279df67d22f2e88d75537dd2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m23_secure.toml",
+      "kind": "file",
+      "sha256": "0e6126b1365afd74f1f6d0ec66d53a048e652488f9000849c1ae89d85cc6a67c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m23_slim.toml",
+      "kind": "file",
+      "sha256": "94de04edcfd7f59daa3d8a8670feca56b2970e3fdb5497723a88b2463a716631",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m24_fast.toml",
+      "kind": "file",
+      "sha256": "8fd5ccdeef0c88cfdd5ddbf6c82bd0ee79c8af7dd38263ad9edde00e62e00cf0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m24_secure.toml",
+      "kind": "file",
+      "sha256": "25899cf66dfc6072297f142a29ddbca1ea313aec497394817cbf6cb1c9927efe",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m24_slim.toml",
+      "kind": "file",
+      "sha256": "870f73aee4cacff13afae2b5c5bbacef60a80b0ee5812d8b842603543b5415d5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m25_fast.toml",
+      "kind": "file",
+      "sha256": "f41689bd9c88fdd9351e5c0b56c70dd06affc8405abeff252120c25d261a5042",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m25_secure.toml",
+      "kind": "file",
+      "sha256": "1a768e7400a00f580c08c94de738bf35656bd0c87a2b44999b92e185984ddbb0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m25_slim.toml",
+      "kind": "file",
+      "sha256": "20b35fc8dca6edcc85d315ad6387a9d96b09afc885eb796ac65cd314e780f30f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m26_fast.toml",
+      "kind": "file",
+      "sha256": "92bf8dafe909cf077bcd02af891df6ea11951f2d05eeca7a6d8038adc8343881",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m26_secure.toml",
+      "kind": "file",
+      "sha256": "e64449926291ecc98d5006ef7eb9d69c97e0fe97a8d55098af0856e15a8c8450",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m26_slim.toml",
+      "kind": "file",
+      "sha256": "32c438427f5af56c049d4def50910c71c0016d856c73dff86d81e6163b95c37d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m27_fast.toml",
+      "kind": "file",
+      "sha256": "d5e88d3d26464b2f10c4d2d56a9f0b79b7068e3204f6b5de043303335d8f6aa3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m27_secure.toml",
+      "kind": "file",
+      "sha256": "03dd614f4126972824118f28b6d1167554ee0302d17839fa98de287f9c234fa8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m27_slim.toml",
+      "kind": "file",
+      "sha256": "88d64c80415288add1d4460a32cec7a7bb1bf1f57dc826f31423fe74567b0220",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m28_fast.toml",
+      "kind": "file",
+      "sha256": "61d53aefb970af7b85d2c720201ea77860e752fa17466fd19500f76fe12bd981",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m28_secure.toml",
+      "kind": "file",
+      "sha256": "6b4cbe00903c43a3a3a9a789bbc126d0dbc07621a6e06108f683877642784cab",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m28_slim.toml",
+      "kind": "file",
+      "sha256": "16535788cd756bd904a8f132feffd9697b59a2396be786910494cbce0da7732b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m29_fast.toml",
+      "kind": "file",
+      "sha256": "8c4cfda11da01a48cbea56c5fd5a4c4c96c3f6037699b9cbfc371b847badeae6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m29_secure.toml",
+      "kind": "file",
+      "sha256": "7b9fabb9976e4389c8ad3fd26e64ce0dfa6afcd03c3005fd11ae7b0c47e62494",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m29_slim.toml",
+      "kind": "file",
+      "sha256": "d1ca9a38f552917da7f8b7b143d1c35d42b30b14f990a678a2a2c099b932550d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m30_fast.toml",
+      "kind": "file",
+      "sha256": "17801506c04b329515e1a53ef4e1ce41cdf234297364f91407ba189991905cc1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m30_secure.toml",
+      "kind": "file",
+      "sha256": "54cb924a63b36eaf1142dbdb413a9b018130f0914c9a5c34918b3b19540535b2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m30_slim.toml",
+      "kind": "file",
+      "sha256": "e7b8e75e40cc33576c015cca0241b1028857ad189d9d487bf7bcc74a98ec2d3f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m31_fast.toml",
+      "kind": "file",
+      "sha256": "74cb3b4c0a8e014ca852e1f142364153b26e26a4ceca37019357793e0f4e95a6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m31_secure.toml",
+      "kind": "file",
+      "sha256": "416533f580c34b4b9bac99f8d572e873dfa4b0db79d942a1f90d2c1c75e1b22e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m31_slim.toml",
+      "kind": "file",
+      "sha256": "3979b725c670550696b533e8b5c31de15f6f86af0ad940ca6bc6185780ab33ac",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m32_fast.toml",
+      "kind": "file",
+      "sha256": "58b63bc4dd3e64f736ab7068199fc2b3919a0cf6dad1d0142487d9ef2a6fadc0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m32_secure.toml",
+      "kind": "file",
+      "sha256": "9765e693b24db1e2ad5b408aad889196d53edaee037b9da37d3d3313ffadb5e0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m32_slim.toml",
+      "kind": "file",
+      "sha256": "ab1dff435a7862a990bb226e46f31f62c588217458ba7844ed1b2b0b32130a61",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m33_fast.toml",
+      "kind": "file",
+      "sha256": "f24313bbbc6fe7553b92d0832e1f028aae742f9297e7aa4cb2a860c933abd92c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m33_secure.toml",
+      "kind": "file",
+      "sha256": "6d3fcb15fe6d6c02b4d1dbadae0996c98e2b1f9cd21df6687ff892d65a057237",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m33_slim.toml",
+      "kind": "file",
+      "sha256": "feb21ec18d63604e484cd1d066f26d4a5a44651f4a4200a10235903515b00c58",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m34_fast.toml",
+      "kind": "file",
+      "sha256": "966a6af57fe290ce7a497bbb00422d73b0139a7b0a58e920cce42ee2b7fc1acf",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m34_secure.toml",
+      "kind": "file",
+      "sha256": "9d3c8840cb25afa5a894747112b993649280e52fdabfb1d3a2e4907872064d87",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m34_slim.toml",
+      "kind": "file",
+      "sha256": "69ac71d99cb7f57cc6d6905ee78275f3a52ff39dd6579941c57423c54df2c665",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m35_fast.toml",
+      "kind": "file",
+      "sha256": "76db3dc5b264f6535d0162808749ef21da8c5d64c6e541654d53e16b1cb92039",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m35_secure.toml",
+      "kind": "file",
+      "sha256": "2338426b41f36dede7cf02a69bc1c4e4ea04bd70741607943c5b2bfa1dfe1e2e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/configs/ligerito/m35_slim.toml",
+      "kind": "file",
+      "sha256": "8f8231f188ad54220c1678310d8278d478935e303ad6bbb394c0285f9720fcf4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/bits.rs",
+      "kind": "file",
+      "sha256": "bc9fe88a9c549da9ab2972a4d3e429831080f860a89e83e7c8474249c803640c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/challenger.rs",
+      "kind": "file",
+      "sha256": "133bc4abda73d23eaf3022f0579a239fa34a20ea587acf1319499d3ca82646e3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/f128_slice/aarch64.rs",
+      "kind": "file",
+      "sha256": "8c3d8e44e0b6719f3debeb36b5fcbf03b748344c57bd46c38ba3d33466aa76b3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/f128_slice/portable.rs",
+      "kind": "file",
+      "sha256": "d44d59879d1fadf9b59cd41fcd83380170a0d5a0e3a5764c0aa709e055c8db55",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/f128_slice/x86_64.rs",
+      "kind": "file",
+      "sha256": "a6e6722beab25a465231134f7b1b4b9c6afdc2e7512391cbfd7795d34b7c2ef5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/f128_slice.rs",
+      "kind": "file",
+      "sha256": "96ec196570bb0ffe4c1553201e0dd3abdb2265bb8bf46afefb1e25f38d9016c6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/gf2_128/aarch64.rs",
+      "kind": "file",
+      "sha256": "8d2df63769d9e76b94fe75ac7f006dc2ee1779b99197bd3c0b8541f524cb39b5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/gf2_128/portable.rs",
+      "kind": "file",
+      "sha256": "9e24eb282f921602f643aaf2e49c233b0f678b7abd004c007c7e61a174009739",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/gf2_128/x86_64.rs",
+      "kind": "file",
+      "sha256": "27322b688a4faa686977f92e704b735e62ff989180ba10cbbbb11998d391ffd4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/gf2_128.rs",
+      "kind": "file",
+      "sha256": "ca3c406fd08adf074b455b2a1425587c6395fba2d24986f856391a79514f6463",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/gf2_8.rs",
+      "kind": "file",
+      "sha256": "56230adc11e690da87df0cd53e9d0fa071a777704bd8944ad2922ab91b8ab53e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field/phi8.rs",
+      "kind": "file",
+      "sha256": "5b90571b87ad76fa46a9e070d3c2cc72c448a28c1c43bfd9a24a16ea7957bea2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/field.rs",
+      "kind": "file",
+      "sha256": "82637b4e6e513622b35b5a60f7c89b5abbfc20a1d9a2c6d323fa37b28d05aafe",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/lib.rs",
+      "kind": "file",
+      "sha256": "17e27cfad44e0e73dc62935dd8dd29ab84026cbd654a7f0b4d2723a11994699b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/linalg.rs",
+      "kind": "file",
+      "sha256": "09e328dd8970bf618b82c6b2449769c640e2bc1791edc6260edee81c588bc964",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/lincheck/kernels/aarch64.rs",
+      "kind": "file",
+      "sha256": "27424942ddea53c7ab529798647fd7af98e0750e8ad8e00a812214535e28dd37",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/lincheck/kernels/x86_64.rs",
+      "kind": "file",
+      "sha256": "064caca1eeec97df3a71a0fe6ccb3e585204ab9c61a70de8476643e523e02f18",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/lincheck/kernels.rs",
+      "kind": "file",
+      "sha256": "f33888a8cd8710ee66e9e5e842bef1f91e0303a26706ee7e1710656205442231",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/lincheck.rs",
+      "kind": "file",
+      "sha256": "16bbc99dbea12354cd92893baf74251c349e7af6c29cd120726f36b1724b7f39",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/merkle/aarch64.rs",
+      "kind": "file",
+      "sha256": "577c206a84180c981462f968880c113f8661280ef5339f6314baeed216769e65",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/merkle/x86_64.rs",
+      "kind": "file",
+      "sha256": "09e48119be6913031372c00ea1acdb6f9117a71790ae72b17ceccedbab73d1c5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/merkle.rs",
+      "kind": "file",
+      "sha256": "8ee399496c940fbcf67b8d6bb4884096b10fffd452c583eded243b55e6f22a68",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/additive_ntt_f128/kernels/aarch64.rs",
+      "kind": "file",
+      "sha256": "bded4761683a7294d283193f7e90650bc39cbad18e95e2e6430f0959936fbf76",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/additive_ntt_f128/kernels/portable.rs",
+      "kind": "file",
+      "sha256": "c0ee27095ba98bc13136cfc931a3fd60293eff543716710b9ac5a1992f4eeb97",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/additive_ntt_f128/kernels/x86_64.rs",
+      "kind": "file",
+      "sha256": "2a59709fd1ca045093f9f540060ae5fbdc4a17c3ab265dcad7add1204fb5462a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/additive_ntt_f128/kernels.rs",
+      "kind": "file",
+      "sha256": "c97535bf5ff034bbd7315f65288288085b9e9af006b7cdbb6df2106726d21738",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/additive_ntt_f128.rs",
+      "kind": "file",
+      "sha256": "0f2da308dd170becd96e0b567eb6ebc67f48ed69b29ee6fb95b922765ca26b47",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/inv_table.rs",
+      "kind": "file",
+      "sha256": "d93a6c483fc8efe31f756c2e33ec77e916121a487f31ca904ab11338614f1f0f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/inv_table_deg4.rs",
+      "kind": "file",
+      "sha256": "9993877b5990ea869a256198feff56413df2c378d270986d6d1de46033ba2c74",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt/parallel_f128.rs",
+      "kind": "file",
+      "sha256": "a58d952ce3ed7f6051e0b10ced4a70104782d685e8edb3d57e7e03166ddc3a9c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ntt.rs",
+      "kind": "file",
+      "sha256": "6dbb782b27d14df1bfb4f2b0c04d9a568910a9867312a2368a0a3d882ac519a9",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/commit.rs",
+      "kind": "file",
+      "sha256": "88852cd8763faab4fb41ac1f34d0ac5cc3c6f4813bbd0d459845e04c2cb33fd0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/jagged.rs",
+      "kind": "file",
+      "sha256": "c34edb3e249e928aabe95c081e48a38649731a202283efca11a8695814d5d391",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/ligerito.rs",
+      "kind": "file",
+      "sha256": "9f7eed5aa84c47770ed4252e19ad158bf65c37dffbbfba72924175b1fb635927",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/pack.rs",
+      "kind": "file",
+      "sha256": "e74b0fc5d296ca479bc98aca78779b50d1f6cf5f7826f2a5f30c154a8b76cd68",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/ring_switch.rs",
+      "kind": "file",
+      "sha256": "509a6ed4e02033125327425fff3b5376646c48b5f8f2e15d117951d96d63beac",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/symbolic_opening.rs",
+      "kind": "file",
+      "sha256": "eca702a8b4938ab846d832bd7d83d1d8176f52f0bd75a24466cd9a70c5e21761",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/tensor_algebra.rs",
+      "kind": "file",
+      "sha256": "ba9d1407b1a764359c236295f7f0225e4414cc0e04acf77985143312a2a468a2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs/zk_audit.rs",
+      "kind": "file",
+      "sha256": "091602fce365b867d2ddbb8ee1b6cc1441cb13e51397fe4eff2f6d5d55ab11b2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/pcs.rs",
+      "kind": "file",
+      "sha256": "66df5bd81b62dae1af07360d937a035c87854750afe57512f90b37ae7229b10c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/permutation.rs",
+      "kind": "file",
+      "sha256": "a6b58d8f60664ba2598ed7c0ba05da422999d83cbf00d055d52d7b8d0d68cadf",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/proof.rs",
+      "kind": "file",
+      "sha256": "f20fe68a3bd4664895e1cbd340f63d390b435f543033b8f352d9253430c3e0fe",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/r1cs.rs",
+      "kind": "file",
+      "sha256": "e2cccb8c1674b2bc59cd722b40319b0e5bcec2d2000c3cce610a867848dc9c0c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/ro.rs",
+      "kind": "file",
+      "sha256": "2841cd9896085fc0c771c416ee8d8bf2a2e8fcc50fab57aecf7b9956fd15c872",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/scratch.rs",
+      "kind": "file",
+      "sha256": "9205badba4a64bcab16801ca5afd91c224f2a38f207e6cb8b2701b3fa44b9a7b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/cleared.rs",
+      "kind": "file",
+      "sha256": "cd8ea4d5002ce3bd75f73f6e425659544cd45518a6abb1a9bdf6938d5a6599cb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/degree.rs",
+      "kind": "file",
+      "sha256": "6d9c354351eb4e53b5fb1373c83896aa60207c17424f4fc220cfb9a20a9b830b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/kernels.rs",
+      "kind": "file",
+      "sha256": "8a321775f5057c91b0f627c5c00ec6a9decb010679bec1bfb73f2cc902c1cfc7",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/linform.rs",
+      "kind": "file",
+      "sha256": "2b2e5c17840f9732f7c978bcec1cd8b9e4e04f9d781f14b7140ed2f21d66f016",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/mod.rs",
+      "kind": "file",
+      "sha256": "4211323d197f59ddcd10d649479f63a760517498339e10ae5a1062bd0f4a3838",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/poly.rs",
+      "kind": "file",
+      "sha256": "8395441243b7a06cde29d05880001b9dc80480d83ed120f7f1c17e5715897191",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/scalar.rs",
+      "kind": "file",
+      "sha256": "09f46c081fcc071d43648b2a1e939a776aa4c7916b9c26e28aa48cd0a9fb7987",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/symbolic/vars.rs",
+      "kind": "file",
+      "sha256": "709426e07c984c7dd943c2e43b8552cc8ed3c3b9f06d314ec8273ce3df3fb606",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/verifier.rs",
+      "kind": "file",
+      "sha256": "e72a8b64f0dc5084f9bb1a36e4236de8eb6c4c143cf778ed54cf4456b0a053b6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/multilinear/kernels/aarch64.rs",
+      "kind": "file",
+      "sha256": "56247bc21b1bb3ed786224fcb10a1c7d77ebd8d9bfca5facaeb639af573ec1d3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/multilinear/kernels/x86_64.rs",
+      "kind": "file",
+      "sha256": "fe0ac64c52ed431b080a82ee31a83cd4d61002fe6be2f341a11a36a654ee977b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/multilinear/kernels.rs",
+      "kind": "file",
+      "sha256": "e8f28ab068e4b2ea22042e6af6144e1dd3b594c1a34c534edce5dd964d402280",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/multilinear.rs",
+      "kind": "file",
+      "sha256": "9dcb2ee47e1ba1ed1da76a474aa7bd1b74b3e4c4d72871e6e1dd398f23cf760f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/tests/helpers.rs",
+      "kind": "file",
+      "sha256": "4ba6e3e0fd934fc61ef85e24a045594f54a648568f3a75bb4787306c7668ed80",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/tests.rs",
+      "kind": "file",
+      "sha256": "b092cb08a75d61d81c5adbdc22047356388426121cdae29f78a635da69b0a918",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip.rs",
+      "kind": "file",
+      "sha256": "63822ee5b398a1f837b98179244a62308f7aed9fe40fc984c7000b1dc685389f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_deg4.rs",
+      "kind": "file",
+      "sha256": "6836590108cd1ab968788f27efc5a4cb9d8e17ff6b09eb6d371a5c8c9fd72bfe",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_deg4_optimized.rs",
+      "kind": "file",
+      "sha256": "f5c8d7e50a1273f7481487a607bd756f8010fcc84edca636d17b83a1626c9639",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/aarch64.rs",
+      "kind": "file",
+      "sha256": "23b2d1ad2e5d2b0facba93b0141d4c998240c70fc6f3be72fce5594cd238cb3f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/portable.rs",
+      "kind": "file",
+      "sha256": "1951ffb3356b1cddfc7a9f719149ce9438ac7cf32e0233be90791361a2627160",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels/x86_64.rs",
+      "kind": "file",
+      "sha256": "283a1d8e12fd74a572320ca80447bd06d901a187e1682cd112bf7916943db57f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_optimized/kernels.rs",
+      "kind": "file",
+      "sha256": "6243d597d641d20bd9cf0a9b161d2de9ae79b0953323320498da661b9ccee1aa",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck/univariate_skip_optimized.rs",
+      "kind": "file",
+      "sha256": "bd17eb8060f064abed38ad7afa6b679dcbae5ca88c81382b219094a45631fee5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zerocheck.rs",
+      "kind": "file",
+      "sha256": "25c980943f64d9a472c058885a7c42d6142807aa3ef5fba2443d0e8992292a88",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/src/zk.rs",
+      "kind": "file",
+      "sha256": "d344dfa217e71cd8052a4ecd70a9719a1778bf46969e0a7d2fcaad854307baa4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/tests/symbolic_kernels.rs",
+      "kind": "file",
+      "sha256": "7f73a47697c55dfe6eb9cff356ca0e42cc5f7bbe31641e2b44964f7488b306b2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/tests/symbolic_mask_coverage.rs",
+      "kind": "file",
+      "sha256": "d5a0b9de54ff00aa80f86071d044b70a011db8406dce85a264ca2c7fb28029b1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-core/tests/symbolic_pcs_translator.rs",
+      "kind": "file",
+      "sha256": "c76ee00e024704d131bc6504e2125405880a0ffc64d4ef84c41e440db0a3e96c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/Cargo.toml",
+      "kind": "file",
+      "sha256": "27499e4a7c41bd9254cae16ae7f0eb084063eb95d53ddb1cc0071134fdbfd3f7",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/benches/blake3_native_chain.rs",
+      "kind": "file",
+      "sha256": "f4a48840b35bc22907c68655e4559113594f88bd23a36d345cef53d150dce650",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/benches/keccak_native_chain.rs",
+      "kind": "file",
+      "sha256": "3526cfe35b0527388cb25f97fa8b526119d6fd53ca67a5d615e5fdae5b462d67",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/chain_bench.rs",
+      "kind": "file",
+      "sha256": "226f9b167f8a0c0ed9786b83750fdc1755371a8ab072864bae0873389643781f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/gen_ligerito_configs.rs",
+      "kind": "file",
+      "sha256": "f86591760ea720242045143995068d8105cc0fd99452e4a44b21c5acac83ba74",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/keccak_chain_bench.rs",
+      "kind": "file",
+      "sha256": "6ed2b7732f78305fe558f6c62afd21fc1820306a3ba475b261545f84b34029e8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/keccak_mid_density.rs",
+      "kind": "file",
+      "sha256": "e1267ee1361f5a79b119046d41f2b198ee5e3475ed8f6efad2f4ea7008246972",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/linear_sha_verifier.rs",
+      "kind": "file",
+      "sha256": "8a73acd763562e1cf3fb0aa63349d1f3e3c35ec9443062469c530bd1b4ae7f38",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/mle_eval_bench.rs",
+      "kind": "file",
+      "sha256": "591acbe9b1f209df77377c9259d227ad16c3a4921344a5c5e5a7b0fdd8a52aff",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/preimage_profile.rs",
+      "kind": "file",
+      "sha256": "67ba808159dedca6cc69ee58746b9f04707de5618f83e626b0d4b2c5cc4984b2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/examples/preimage_scaling.rs",
+      "kind": "file",
+      "sha256": "a4b3b86e46c06845b9539143db5649c28547e3a32250e4489e876f2caf757adb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/bin/flock_chain.rs",
+      "kind": "file",
+      "sha256": "f461d412a945e5799f2391a1c550a0af887106981c853c1416a3c8306bef5ebe",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/bin/veiled_flock/tests.rs",
+      "kind": "file",
+      "sha256": "035fc2fa96239ca4f76a76e6c6a12e6f18e41e6e49a4ad3ee8e495fd78b70dc0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/bin/veiled_flock.rs",
+      "kind": "file",
+      "sha256": "abd94ae84243f0571f3f97e15e32d47b5644faf2993c41f3f28c8d382618acbe",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/chain.rs",
+      "kind": "file",
+      "sha256": "cff94f75ddb302e26827f1c4d49f2d55d92dd4bbef7a969200832870dab7eae9",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/digest_bind.rs",
+      "kind": "file",
+      "sha256": "3c28c7627f4f33d5a31957323536a6523445c12b0aae5f693a8f23069f040439",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/lib.rs",
+      "kind": "file",
+      "sha256": "1a559c7d3f5f8422643297209e42341b031075effe0161c1d4717b8a122b37dd",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/ligerito_decode.rs",
+      "kind": "file",
+      "sha256": "cdba589bae53b55f4e49edd10627574a7494048cd5a79a44e89cbd847b909596",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/merkle_path.rs",
+      "kind": "file",
+      "sha256": "6ec6c7433e1a6a866a6605a76e23ccb1961c203c1c8fddb66c205f292a7b8409",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/preimage_extractor.rs",
+      "kind": "file",
+      "sha256": "f3dc2d0869b722caeab8a004e2608231271386a9a33f39d03d4985a465b9a033",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/proof_io.rs",
+      "kind": "file",
+      "sha256": "9eab1c7882e3f550131bd0c552054fa5b88ff990322d34eff90438705aa1743b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/prover.rs",
+      "kind": "file",
+      "sha256": "4a0f86b4ff7bc55b910b6cd5c459ab4aaeb5223e71b56b868187835bd3da3436",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/blake3.rs",
+      "kind": "file",
+      "sha256": "ade51c74ea7cab82a9cd9ed5d18d19850e7ead59d79966f2b5696823b7cc0bc4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/blake3_preimage.rs",
+      "kind": "file",
+      "sha256": "8c6256f55eb62bf6a3426cc94bf08691145e81fe0c6e65a708936ce6497806d1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/chain_common.rs",
+      "kind": "file",
+      "sha256": "e4ee06a89fe4aed233f69363ae5b7d23811bac1a163cb1fcb50c5c512b9f652b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/common.rs",
+      "kind": "file",
+      "sha256": "e71e7a5f5b71e0d6c9fc1580d85efd3f79cbc38328c762b45a5ef7633d179519",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/keccak.rs",
+      "kind": "file",
+      "sha256": "08e9b7f93b30ff07e0d8eb61e01a7a7b6ccccb9208389486e4194ec51c0929ad",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/keccak3.rs",
+      "kind": "file",
+      "sha256": "10b28451d94e462140b2782f8bdacb8ae406ec7bec9e317b810b8e30084c1d3d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/merkle_path_common.rs",
+      "kind": "file",
+      "sha256": "2ab76054eaa6d2f440d618ea21a1f836f7a612fad33180b77c3125d0eb05589f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes/sha2.rs",
+      "kind": "file",
+      "sha256": "cfaab85bb7cbc00d784c8c4d2ee14385836c739b6f423620698305ce0ec72913",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/r1cs_hashes.rs",
+      "kind": "file",
+      "sha256": "34028090adf1e9b6bded26885a5ac28125a4e233cf04f88762302b2292e85ef8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/sim_game.rs",
+      "kind": "file",
+      "sha256": "3f54033f14abee44795c66747133c557e5b839c432ce67abb97f72231c51e4f6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/sim_oracle.rs",
+      "kind": "file",
+      "sha256": "5f6d6b21a3e18180da66e5e4174af11aa2e853b52139be4f323a111bd8bf07d5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/succinct_veil/tests.rs",
+      "kind": "file",
+      "sha256": "0209baa18d9b4c29b11d5fea4365e5f78d90a41f185edc6a0775b67202b28a8d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/src/succinct_veil.rs",
+      "kind": "file",
+      "sha256": "eefeeb6ce07a3cb4dc156cfd14c29a6c65418553bcbec82a89752afdf5b3667f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/flock-prover/tests/verifier_roundtrip.rs",
+      "kind": "file",
+      "sha256": "a9db550b22d58a38b25ec442f30f4801c606b814d5dd3bd0a0571405c764f893",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/Cargo.toml",
+      "kind": "file",
+      "sha256": "66b6aaea3999f70b2a4524a0e4cca48810ce4837d834620d12b9493ca3837388",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/code.rs",
+      "kind": "file",
+      "sha256": "824d2d0b91578c07cb044783ad47bb73251a13a9c2c93336d1c2b5373c077508",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/commitment.rs",
+      "kind": "file",
+      "sha256": "2ece1eb12e1e42d04d2dca184f1f1e756d16de28ea6e492594dddf96b3e5ce38",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/constraints.rs",
+      "kind": "file",
+      "sha256": "832bce9c4ef34f47ae832db0af96c4f53b6ba62dbaef9e5a81694bc8b4990402",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/dot_product.rs",
+      "kind": "file",
+      "sha256": "b4fceb0bb3ddd5c73991844e16bac48ac8884b418a86fd0be2b1603b55632d50",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/hadamard/tests.rs",
+      "kind": "file",
+      "sha256": "dd9af157fb62affb07a45522306ad05d76226f7a1937d894aa40d7b891729ae6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/hadamard.rs",
+      "kind": "file",
+      "sha256": "71ba05db5268d681fd0bb928484a86264c88e36c958f0651b37671e592155f41",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/lib.rs",
+      "kind": "file",
+      "sha256": "1078f8189ba8812e9a4efbf3d20556b24653d03bc330574cc37dd1fa06affa98",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "crates/veil-f128/src/ntt.rs",
+      "kind": "file",
+      "sha256": "99abb4ab0ef0659b2347b94ddd16bf99d74a7dfd6f27fb426efe4d4a16d94563",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "kind": "file",
+      "sha256": "1ae40943665699a7fb77e415efb17a7b2caff821ac19f5f5cba8cd77ba24b66b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "docs/SECURITY.md",
+      "kind": "file",
+      "sha256": "9c59501e3af2779db3689b8b22344d8da360d979c0845919959e7550f95d9d45",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "docs/SOURCES.md",
+      "kind": "file",
+      "sha256": "d9643a99663c8861f4d0e3edd137a6d796c8bd466bdba2dc69569ff480b11723",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "docs/TRANSCRIPT.md",
+      "kind": "file",
+      "sha256": "bdaf9d71d061dd9d5f22112d0f0ab37a9e31b7e356e93c6bba9905cffb38b4d6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/Cargo.toml",
+      "kind": "file",
+      "sha256": "e3d07d707d948769fd651ccbb1ce5611eb00fce91ec0eedcd07da659fe9adc8a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/README.md",
+      "kind": "file",
+      "sha256": "f0253d5acaf02c738ea9418cf722463fba4bfea76d00788452e4c03f5e0e4a07",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/mle_eval_zk.rs",
+      "kind": "file",
+      "sha256": "80e15b4450a73c99c72dc47e9aac5605c4a1711b1c1bfa048bcccd65bb02ed4d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/root_zk.rs",
+      "kind": "file",
+      "sha256": "1980e303c9f8ad7c8b9ee8679e626b822d9a70c648dfd84523b31f3dfccd3e93",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/assurance.rs",
+      "kind": "file",
+      "sha256": "235ac28403d449256993eacf2fda6c544a1e4a64cb11176adce05d36b4492dca",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/challenger.rs",
+      "kind": "file",
+      "sha256": "f49d3dedcee4b43444080265c33db3d0458920341e7479e440f9c53d17ef1b59",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/ctx.rs",
+      "kind": "file",
+      "sha256": "0b7d1aa01fa62372fe8de174a55dd78da81795ed4edc74ef3e64944f5b4f2a09",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/error.rs",
+      "kind": "file",
+      "sha256": "f365fa29a466d05a90b13d75e4dabc2966314967c80139115a5c0cecd2afa0f8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/flock.rs",
+      "kind": "file",
+      "sha256": "1772540d70d218f47996c38a9b1cbeb60fe93299c92cf7c13c140afe5c4dd2da",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/lib.rs",
+      "kind": "file",
+      "sha256": "b768a10068a646abd52874b2893f79b8ffb4e8956939931f5b0a71c0fde30d1d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/pcs.rs",
+      "kind": "file",
+      "sha256": "2fd4010865edc6f0c3dd846c0cc31b7f4f340081ce2cd6b95ce108dafd61ebca",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/proof.rs",
+      "kind": "file",
+      "sha256": "ce906a8ed5f2207c5d2136538bf9c0b36dfc1ab386b48bdd27647e126f0845a4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/src/report.rs",
+      "kind": "file",
+      "sha256": "729bcd8bb819a52085369c828375cf5e60be5442db34f266ac0a6dd2c3cb6486",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "examples/zerocheck_zk.rs",
+      "kind": "file",
+      "sha256": "e641b95b8933b95ab6ed08631649cc6b91c853e0fc67cc33db00a10d4bfbcc25",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/.gitignore",
+      "kind": "file",
+      "sha256": "fde850d24186b6e99c8c0debd641fb3ab85198b109eb66f71a1fea02bd6ea1b3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/ConditionalReplacement.lean",
+      "kind": "file",
+      "sha256": "64687953af050865ad5a9f21c1d355b53c9e13a5b48c7a7b2db06717f60c880f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/Masking.lean",
+      "kind": "file",
+      "sha256": "a9afd16153e8e2f6558d4c37185d76d8c83f72d2235b056ef49f073e05cc3ad1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/MaskingMixture.lean",
+      "kind": "file",
+      "sha256": "da2ba452810e9c41b3d5acd59a3bf60e65e5944d70f93da03c39d900d514350b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/MaskingMixtureBadSet.lean",
+      "kind": "file",
+      "sha256": "0dcb984febcbf0189e53dd67da065687309aa656fffdf9fb626312d5606bafa0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/MaskingSurjective.lean",
+      "kind": "file",
+      "sha256": "cc6846f762f28b0a5675c4461a7bfb396e38851ab0b934aab53af8e6eddcd624",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/MaskingTriangular.lean",
+      "kind": "file",
+      "sha256": "003faa134aaa502ce2beab92305e9109054a1c5d88dbd80ed262014a43953bbd",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk/SchwartzZippelBound.lean",
+      "kind": "file",
+      "sha256": "9ee9a00427314d44d662b331fe863dbb209a1e8b32cc88c69e49150dbd325131",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/Flockzk.lean",
+      "kind": "file",
+      "sha256": "e141d5d80fed015bdd43efcd59341787eadf8cc2aace15976a80b196410a46fb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/README.md",
+      "kind": "file",
+      "sha256": "d9c61cee55ffcb69a058478b16e96883df8ff42f922346ec4885aef61a77d5c5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/AdditiveReedSolomon.lean",
+      "kind": "file",
+      "sha256": "efa5b8893ef29c3cbcd7a30bceb7ce1a3577793733a3e592e5266780941bb9dc",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/AlgebraicProtocol.lean",
+      "kind": "file",
+      "sha256": "c71a715d4351c4280b5695c4198caefb9173ca40affa583fe15d48df1665bd96",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/AlgebraicStateMachine.lean",
+      "kind": "file",
+      "sha256": "e8ec396db3032ae42be7d92f3a50ca4af8bf208e5b4ae4808ceec5ff5751ac2b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/BinaryPolynomial.lean",
+      "kind": "file",
+      "sha256": "33b3e4bb6e0d3119cc00468d2d586ab90dd78b61f8759295d8f22ae1d0f72942",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/ConcreteZerocheck.lean",
+      "kind": "file",
+      "sha256": "08b286a94ff4b71b561578bfb7deb85c6f3f9fbfa42ee90bade681ae39f45bff",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/EndToEnd.lean",
+      "kind": "file",
+      "sha256": "d4ee578064aaa8b4cfe6a04920afc36928e971ab8fa9cda9f74c84806c44fd06",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/Field128.lean",
+      "kind": "file",
+      "sha256": "cbe467a6a867ef816a02e0721a4d5825dedb8452332d55d54003a3e2fdeb64aa",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/Field128Ghash.lean",
+      "kind": "file",
+      "sha256": "ecfe683fd432567fd3d487cbca6b0e57ccec3c8d839f0cb9412cd7b93c779da8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/Field128Serialization.lean",
+      "kind": "file",
+      "sha256": "9ad3b1ca6c97ace6cbc0014bba9e2409775daf724d5a5bdb169f76f7c197f333",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/HornerMask.lean",
+      "kind": "file",
+      "sha256": "cbe60bd65945f12d3a009950b8e4d12a0075a068a1eeba2a498fdfa3c90444a0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/InteractiveAlgebraic.lean",
+      "kind": "file",
+      "sha256": "754053f171424272fe8db5074e3cec07fed0b15b751e396c7df3fc8f560d2f49",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/JointPcs.lean",
+      "kind": "file",
+      "sha256": "6a74096956f1ce5142abfc23504caab1b5cd707810231c60d2ef5eef341defd0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/LinearLeakageMask.lean",
+      "kind": "file",
+      "sha256": "bf315226ea03da21e06fd63812b021545cc06f3ffc39862c19b5af0065190121",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/LinearPivot.lean",
+      "kind": "file",
+      "sha256": "fb0f2b7814c132d30f58fab23b721d3846af4694db13ea29e3a3c353bfa36b45",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/OneTimePad.lean",
+      "kind": "file",
+      "sha256": "700485b23f559ba6acf69576b348bd52d8533879910b99932e0a7941d481fbe8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/PaddedHornerCommitment.lean",
+      "kind": "file",
+      "sha256": "888acefe4a068eb4f5f7a09d80c9abdb31395df88f3b65e1163808eb1e7af164",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/ProductMask.lean",
+      "kind": "file",
+      "sha256": "3139e18b9fa7bbdd8979e09521266d6897e4635dc67f5eb300d9bfe58fefd36b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/PublicProjection.lean",
+      "kind": "file",
+      "sha256": "94038721af3ab4daf767498d5190b0b4e47c9d36749d236e688a8546325f304d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/ReedSolomonDecomposition.lean",
+      "kind": "file",
+      "sha256": "eb8b0a0bf3dc27f8654738c0aef5938f3cb165d8be5f4e8729cda6b26bbcbba5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/RingScale.lean",
+      "kind": "file",
+      "sha256": "d6f54ce6872e26ea65fcf2742888ae4fd53375520b40cbfb7c63beeaad3f1f69",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/ShiftedLinearCircuit.lean",
+      "kind": "file",
+      "sha256": "b3acec5d4118c337acf48b7637e4ebe5e22ddd134cdb227dbb6155529687dc6f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/ShiftedZerocheckCircuit.lean",
+      "kind": "file",
+      "sha256": "f30b63e33a7f23ebf59a8f105e7de2419e547b11b0ebbb2aea3f6bf1dc56215d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/VeilMultiplicationPadding.lean",
+      "kind": "file",
+      "sha256": "a178910dadf7bed45cbcd1d482a3fb8afcad46ebd56a518213cbcebb8af2e244",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Algebra/ZerocheckSimulator.lean",
+      "kind": "file",
+      "sha256": "9dc073342d894b57703d204818ef50dc47b0eafbe83be14fc8a528d655d14dce",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ChallengeSampling.lean",
+      "kind": "file",
+      "sha256": "2d04eccbe7ee65f5cc23e2f9fffcbbbcbd9aa649e0555a3e061137584200fd66",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteFraming.lean",
+      "kind": "file",
+      "sha256": "e8cfaba0151b9af86ebac145a6f2b9c698d5dd97a0af02fa1496a52f772ad324",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteOracle.lean",
+      "kind": "file",
+      "sha256": "09139d8aef021af0e00418078f14d4c71e3da4081c2bf95b6f45cf359733da4a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteParameters.lean",
+      "kind": "file",
+      "sha256": "2d219b54842fde0329a945e8e9f471f405ab66206a68eff600136efc0d6b673f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteRandomTape.lean",
+      "kind": "file",
+      "sha256": "b8a6f1702689dc1ec56aeb2af96e5c66e59df424746ab6c881cb19476fbee0e8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteScalarScheduleFreshness.lean",
+      "kind": "file",
+      "sha256": "bb35ecf5536d3f6db924d9f6c99367ec6599c35e2e4a4c422dab4061598ed972",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteSecurityBound.lean",
+      "kind": "file",
+      "sha256": "14a3897d0ce7747bc1f16031681434859138eef2ac2bd083de7f4831e0ea756d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ConcreteTranscript.lean",
+      "kind": "file",
+      "sha256": "f323243935f656e22b65403222dd77341dfe0647c2cf67813f45679ce2bc682a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/Framing.lean",
+      "kind": "file",
+      "sha256": "58b3aa7e7c3ff3a01446c03850af8e109ecad063cd5d84209129a3f71313c884",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/Grinding.lean",
+      "kind": "file",
+      "sha256": "dd2a9ab03547184d53fee57522e360080810db08cdfea32c3a0299920e7883c8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/KernelFailureBounds.lean",
+      "kind": "file",
+      "sha256": "000865313f759f7b6e41523c6385b9d1cf18ca6caff94396e65bb73cbef84350",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/NonceSerialization.lean",
+      "kind": "file",
+      "sha256": "0592b5b81222046195bc07ade2468c0a713d8e47116537afd28c4be062617b52",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/ProtocolStateMachine.lean",
+      "kind": "file",
+      "sha256": "1457b62ef244ae8030734e60bcbe00742072a1474cfdb6b8c07f769d6b9a3b6e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/TranscriptSchedule.lean",
+      "kind": "file",
+      "sha256": "0dbf86b79edb131a78c43c6663cd9ed0e629d2c66547695431e256008eccf022",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/UniquePositionSampling.lean",
+      "kind": "file",
+      "sha256": "d4aa390e27103ba13ba3e8966fef0a836853ad5c0c1ffa7dfb3b58a79bef99f4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Concrete/VeilFlockProm.lean",
+      "kind": "file",
+      "sha256": "079ba87eec8ba1c45a2991c546b3407a484054e8cf81b9bd1e931964cf285a37",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/Birthday.lean",
+      "kind": "file",
+      "sha256": "b0ea0417edae517706fcce31ac8c2f4b352a605c0570d99c1f7eec1d1e2882cc",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/FiniteSubtypeExtension.lean",
+      "kind": "file",
+      "sha256": "1abaed06532bc0e00c2e0c88c5bd1e2634334ed7e1fd5baee664d2b688cb519e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/FixedWindowProbability.lean",
+      "kind": "file",
+      "sha256": "f4056a2253b2bfb892b7131f823cff3c428c4a694da08733f195752d4b70c88d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/Probability.lean",
+      "kind": "file",
+      "sha256": "82013acc7d6bac0865df44badf95b37f6338962ee8299b6380bc500191764643",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/RejectionSampling.lean",
+      "kind": "file",
+      "sha256": "215481caeb88ee9fab428e23af8b87933c4f16253373b4b7640001f3fc97939a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/RepeatedEvents.lean",
+      "kind": "file",
+      "sha256": "d9e4e23b5c2aa9896a0af1a6fe3e68d1b3e746eedde6e730bea94e8b1a28b0c9",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Core/SecurityLedger.lean",
+      "kind": "file",
+      "sha256": "a9ad2e46d09e9589cc2549f6e63d2a2b8b21b0fa198fb892aca9361b26d7a3e3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/AdaptiveHiddenInput.lean",
+      "kind": "file",
+      "sha256": "393a1c91ac18d05689c62efda2cc44f76ba0d3a543348e7a9810ece8ff7d55ef",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/AdaptiveOneTimePad.lean",
+      "kind": "file",
+      "sha256": "94d7dded112228cdc66b21696b6bc3d1d674ba4ff2bed0086bb5d18c7833f1d1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/AdaptiveOracleProgramming.lean",
+      "kind": "file",
+      "sha256": "94b21743e74339b520a4f5601d8d209344a6a07d97cf103c0e7993633eba6c38",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/AdaptiveScalarPrefixProgramming.lean",
+      "kind": "file",
+      "sha256": "4b625c3817b6d6f95a8e075deee7403bb514217bf63ec3259d7e64781b7cc7ee",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/AdaptiveTraceStateMachine.lean",
+      "kind": "file",
+      "sha256": "733176a868fc529b720a9f04b096cc01efce3208d88369bc6bec1b3988aceb11",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/CoinOracleTransport.lean",
+      "kind": "file",
+      "sha256": "c14c187e74ed08b7eef1346ca802b83e34a86e024dd2578091c78ab8d3a50da2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/CoupledFiatShamir.lean",
+      "kind": "file",
+      "sha256": "daaec4e397b071c5196f141f87898d10b0c819e64f229c8f8f1c04338f839ad6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/CoupledOperationalSimulator.lean",
+      "kind": "file",
+      "sha256": "4b293457a9713b44f0962aa6136163b8e8ced4b51582e2d24cba380c0e60c378",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/CoupledScalarOperationalSimulator.lean",
+      "kind": "file",
+      "sha256": "d1a7c87f87c584b0afa3acd55ca168f01135e8908bc8e7d46d741d7ffce4e96c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/DependentProtectedAdaptiveOracle.lean",
+      "kind": "file",
+      "sha256": "697d7ec55bf43c8b3e62739b4b78b6273ed9b84b1a9aae3993db1c1e5730a613",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/DependentProtocolSimulator.lean",
+      "kind": "file",
+      "sha256": "ebea5db20c633c3a40ebbeee5c61350355a8e89b90268fa2436e3df6e25da437",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/DependentScalarPrefixSimulator.lean",
+      "kind": "file",
+      "sha256": "9daf5be2c4d9f30565ba6e1c3c5e27e20a84e8c95aaabb70994a1919858225eb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/InterleavedFiatShamir.lean",
+      "kind": "file",
+      "sha256": "83bf714935fc94493becacf51234e2a0f7746a41c88b05ce1e0c50087d940be4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/LookaheadOperationalSimulator.lean",
+      "kind": "file",
+      "sha256": "fdbdf33917a85dbfeb016f117a7f5009c171cb9dbd50f604a6af4c025101edb7",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/LookaheadScalarPrefixSimulator.lean",
+      "kind": "file",
+      "sha256": "7e7b05d307217a1718b509658690d098b984972c517415af92bc050525b22782",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/MerkleHiding.lean",
+      "kind": "file",
+      "sha256": "5a7056302e1476c66d80ac4cf9beb1e2c346d61af5a93c55f8e690860227e47b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/OptionalAdaptiveOracle.lean",
+      "kind": "file",
+      "sha256": "bd10fc6fae2e756bedfa6f8ce9647b01803d7e4d48da104689d89ffb74189ec7",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/OptionalPairedInterleaved.lean",
+      "kind": "file",
+      "sha256": "2f765d18c6fc712053c6adf0471153037891572fd08efb580d8b90fd2aab272b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/OracleCausalOneTimePad.lean",
+      "kind": "file",
+      "sha256": "a9234db285a79d62973087161f314759ef182d84aa3c25d918055ebc814237a6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/OracleProgramming.lean",
+      "kind": "file",
+      "sha256": "5f7fe15b22904826f81776928bd34c591b8b09dbdae86bf0e4f838f851f73ef6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/PairedInterleavedFiatShamir.lean",
+      "kind": "file",
+      "sha256": "85fbd9d79082f7a73441bba3b02f08170eb9f1acde376363d1f633c3e008e5bf",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/PairedOracleReplacement.lean",
+      "kind": "file",
+      "sha256": "24b0ce3a86f64d6a731ea724b54b46799df4366a0f9cbbe31689ed0b8e6fcc15",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/ProgrammableOracle.lean",
+      "kind": "file",
+      "sha256": "d21e81ed4f89350262cd66a11c43ad2a5677f7521d622502a367f4fec58ec649",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/ProtectedAdaptiveOracle.lean",
+      "kind": "file",
+      "sha256": "fe4dccd405a0c0dab1265852c802b6b42a2df8bf8fe2f1e6834c5725f0028b74",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/ProtectedAdaptiveStateMachine.lean",
+      "kind": "file",
+      "sha256": "fefd8adb5ab6275b167624ed1aec95af26c71d150e3d2a12f453ead54b81c571",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/ProtectedLookaheadOperationalSimulator.lean",
+      "kind": "file",
+      "sha256": "49710292bac01779b9762a7e0e7b3e2033355aa8abfe30789e62e6f45535a78f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/ProtectedLookaheadScalarPrefixSimulator.lean",
+      "kind": "file",
+      "sha256": "7c35a5b6ff9f1a454d301b93513139874e3b12df7520053feaa3096e1427e26d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/ScalarPrefixProgramming.lean",
+      "kind": "file",
+      "sha256": "071df3080ba0496e447265f8f433db9f0b0081f0c295c3c225d770155294bafa",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Oracle/UniversalFreshness.lean",
+      "kind": "file",
+      "sha256": "5a2db1491bf29cc3d6a33fd08eb8a2f2748b3289a629db54fa4531246874c1c3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/Algebraic.lean",
+      "kind": "file",
+      "sha256": "9bcc58ebf983241f7a1710a97cf4d7f7f6e0219a1e8811be1083c47bdc2d19b2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/AlgebraicE2E.lean",
+      "kind": "file",
+      "sha256": "de36da204ad697e9cdd13d10b7e93396f2eb2ae0a773cbbb138262eb40905f23",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/AlgebraicTrace.lean",
+      "kind": "file",
+      "sha256": "7fcb7c6b95066a29fc527779f5e083ba188870317e4e9c50d1dc724cf9173d17",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CodeDomains.lean",
+      "kind": "file",
+      "sha256": "f0dfc5fbc16235ee9e30c52e20553fa9ae99afa878b30a03029e76b9bee5f9be",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CodeHiding.lean",
+      "kind": "file",
+      "sha256": "59c2e7d84db2a9c659d3c4f4fdeabb74cb01936cc5a07d6699619d187b0bc011",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ConcreteAlgebraic.lean",
+      "kind": "file",
+      "sha256": "0615e3ef824dd68a8170226ce6394fa1de88ac5f96f71a20d0d41c4be52fab7c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ConcreteOuter.lean",
+      "kind": "file",
+      "sha256": "756cd35bb2b332c4a9647d2e62de5a8ae8495c984246d3de68c2893b69e60f67",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ConcreteSimulator.lean",
+      "kind": "file",
+      "sha256": "4d991bd299dafb1cf8ed5f489c04815e3a9b4991933a08865c5ea87f0e1f3805",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ConstraintCompiler.lean",
+      "kind": "file",
+      "sha256": "5b334613549c5b94dc71180c601a643fc414d35f9606d543d72e71e294f90e86",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CorrelatedConstraintCompiler.lean",
+      "kind": "file",
+      "sha256": "97c779acdffcd71a2b2086f9a64b534bcfc36f01f3f258beffd634d063339719",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CorrelatedHadamard.lean",
+      "kind": "file",
+      "sha256": "ed8e68c54a08244e85a2fb0b9871d58463b4b841fd4fbca2fb9a0e9cba44d42c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CorrelatedLayerSpec.lean",
+      "kind": "file",
+      "sha256": "4c792120ffbe73c459999a2ac55b1745e0371308b5297a566b2e91e145a773d7",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CorrelatedVeilCore.lean",
+      "kind": "file",
+      "sha256": "880593c846680fd1c7b4faf1790309cdc9e13ff8d0c9e673c16348a5ef430025",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/CorrelatedVeilLayer.lean",
+      "kind": "file",
+      "sha256": "3b3ae29b314cffe7d5f8cbee1350c84b13de987d44b3d54001faa3192cf155b3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/FlockVeil.lean",
+      "kind": "file",
+      "sha256": "8bb0ec170d34df732524d8df19841f4c524322e1d62fc78cf5c104b752149c65",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/InterleavedSimulator.lean",
+      "kind": "file",
+      "sha256": "2f8679ada7247a1e08f4696ad894e68b66f3adea2022b0b1d233513ce60c5208",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/LayerSpec.lean",
+      "kind": "file",
+      "sha256": "373184f4c8adecc6342563d813dfbd2969fe7d4ba711c8dec3c484603254bbd8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/LinearBatch.lean",
+      "kind": "file",
+      "sha256": "ee330a2f93ef12ab6b4638fb2b38672ce23bbb0d9af780efb5bde5220ac9de43",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/MaskLayout.lean",
+      "kind": "file",
+      "sha256": "81e69153eb8c1469d4803c43a130379be2bb765188a996825526dce3b9d4d913",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/MultiplicationPadding.lean",
+      "kind": "file",
+      "sha256": "907bb48987e863f576c4cdcb0d0eca4012cb1b1007767c32db046c1b4f4800a5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/PaddedAlgebraicE2E.lean",
+      "kind": "file",
+      "sha256": "0dbe3e9fed04983e4c2d5d1de062c0dd79f77ed593c78b9a5b4e4a996693394e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/PaddedAlgebraicTrace.lean",
+      "kind": "file",
+      "sha256": "2ea8121d338e6b65e0895b4c13fa5c7e167074419b132ebc8815876ec8e28bdb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/PaddedCommitments.lean",
+      "kind": "file",
+      "sha256": "00a14f5251b78bda1b02a13d9ad04531d50348348e821d213c90a95622458b8e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ProductMask.lean",
+      "kind": "file",
+      "sha256": "b4926ac232d43e991888eb02150050faca5a9ba846a0ed77164ffb06a70bc6d8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ShiftedCompiler.lean",
+      "kind": "file",
+      "sha256": "c0e1b2dd7d064a3054dd47648a232f74470c4afd571fad97ca4b76448bb8c954",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/ShiftedRows.lean",
+      "kind": "file",
+      "sha256": "d5b53f5b081bf28d595ec0dd1c1b4865f3e7aa2cde9678279767e706853ffe4b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/VeilCore.lean",
+      "kind": "file",
+      "sha256": "6b96293f50682d6cfd1d21b0a88780a0c089b667b2c63447f6c05a85dfea5bcd",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Algebra/VeilLayer.lean",
+      "kind": "file",
+      "sha256": "0e78cf3ea258eaaf2380eb3a472ff38c06715da43b4b8317481e32ac853a9cdb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/AdaptiveTrace.lean",
+      "kind": "file",
+      "sha256": "b6acae4a6234005033e577a729b52359e1e968ed956b1c3f0f12c59d71b57888",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/EncodedTrace.lean",
+      "kind": "file",
+      "sha256": "3b60e78116bd32faa0a62f94b5419b08600016ece12050614e26b67380f9d1ed",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/Framing.lean",
+      "kind": "file",
+      "sha256": "da7b3138985e51d9973033742e3997bc2c2de67992c6907dda782351499d5a02",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/GlobalGood.lean",
+      "kind": "file",
+      "sha256": "e91f531fbb2c59a1f1b4916e1758e933dad9a062478a0df7cacf72696d697fb0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/Grinding.lean",
+      "kind": "file",
+      "sha256": "a9efda4f79a8d4f0e2300fa7492e60839d6bcb40e7e0d55cccfc6f698049a676",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/GrindingProjection.lean",
+      "kind": "file",
+      "sha256": "0f3cc4c8e4b6c28f82a39f8128d6ede83cdfa7673a9317507329d269e74b6ba9",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/PositionProjection.lean",
+      "kind": "file",
+      "sha256": "e7b21cf00a695e81722cca0072cf0d1f01118c721fed80dab47defa97c35286c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/Prom.lean",
+      "kind": "file",
+      "sha256": "f8bba55dabb6314bf02cd5eff8d6ccbf6df3f737a54055885859df45cf9e1fcd",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/QuerySchedule.lean",
+      "kind": "file",
+      "sha256": "c381deeb1622d249c5b0ab5bebe046a47795f335d3578e7259dd1d2109db9d6e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/ScalarProjection.lean",
+      "kind": "file",
+      "sha256": "b494b8c0d04be7f7cdb8537a46e2b6f02e9eacb463b45d6c4e87fa57aef77771",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/TranscriptFraming.lean",
+      "kind": "file",
+      "sha256": "6d117db71437bbbb35464f5a56f8f036d028e9e9d8e8006c88984e5e79cfdf0c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Core/ZerocheckSchedule.lean",
+      "kind": "file",
+      "sha256": "d49605f81135864c3940e1b25d4f2b103dfac5e6767b20a35d85022ba997ee59",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/ChallengeSampler.lean",
+      "kind": "file",
+      "sha256": "00cafa82c0bbafb3164c9558ffddf4c3d3cc3dead84a38920d0aa71460b8efd9",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/CombinedMerkleTransport.lean",
+      "kind": "file",
+      "sha256": "ec030b2928928c434948da3557ef68fe71b2d54e5035875f24336bbf104ee320",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/EqualitySampler.lean",
+      "kind": "file",
+      "sha256": "18d3671756fab89cfb7441df1daa20494fd014de7583dd9fbbca3100435cb68a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/MerkleFamilyTransport.lean",
+      "kind": "file",
+      "sha256": "f8155e61e8714f1ae7c698803559de37d5fef07e548ed3398459d5d254606979",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/MerklePrelude.lean",
+      "kind": "file",
+      "sha256": "194bb7a0a20df4ac34d9278fbf30c28926f9a744b64a654a098c79434d13cc3c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/MerkleTree.lean",
+      "kind": "file",
+      "sha256": "99e30a3a7f76c9337c2aa2e4aca7fe7d6e1ac79a4669bb14be9a985af4daf38a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/ThreeTree.lean",
+      "kind": "file",
+      "sha256": "73ee217fdcfe83e0b2d32f7cc63a753a7a9f573caf3897df47e789aed9eea105",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Merkle/UniquePositionSampler.lean",
+      "kind": "file",
+      "sha256": "0685bc427bd68e477b44bc2a725d0c7d67834f941ede57f30819ce693ae44ddb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/AdaptiveAdversary.lean",
+      "kind": "file",
+      "sha256": "aa763be0c6944937715b0ca531d86b3a981d2659cc5f2e23873531e9e6d1e26d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/BoundedOracle.lean",
+      "kind": "file",
+      "sha256": "3e2d2f0492737e32966e41d7fad02f2b7c599ea693563b2ae9443c1ae4ca3e89",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/CompleteExperiment.lean",
+      "kind": "file",
+      "sha256": "8b0b55344961d313a876985703687defff991d054570e4e6fa7e78305acc3935",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkAdversary.lean",
+      "kind": "file",
+      "sha256": "153b9a79d3dd76db8fb9ebbb824b62dbc89e9490d60f200099df1f17e65fc4a2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkCompleteViewCoupling.lean",
+      "kind": "file",
+      "sha256": "65662e1b05528f079e25a72ae48800aec118e3c1e7c954878414232df438db6a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkConcreteCoupling.lean",
+      "kind": "file",
+      "sha256": "883ba8ca1714cb856b948ff3eb4375f0573235427629acedf420f9509a5648ea",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkCoupling.lean",
+      "kind": "file",
+      "sha256": "4b2abacc2ae900c6b5148d8fc728d7d404f8fbc51172d85fe4a597b3351b4087",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkExperiment.lean",
+      "kind": "file",
+      "sha256": "0695f7b97e88aaa447a88d5b65b04ff6ffc1160cfd07993afd24f507ccbcc8eb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkProof.lean",
+      "kind": "file",
+      "sha256": "e66c51de61a973223f520ccc9087c23bc06100dabd57ec24c0d54e67070f49f2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/NizkViewCoupling.lean",
+      "kind": "file",
+      "sha256": "e747b640c69a6d29efc943ed1abf057a5b84529a00a6cf11cbbfa4005fa36df5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/ProgrammedPoints.lean",
+      "kind": "file",
+      "sha256": "3d090c7f14fac92d20b868cc8156b62d434278212b42d70bdce0714aff886e80",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Nizk/PublicRepresentative.lean",
+      "kind": "file",
+      "sha256": "983a8e804def23c137d2950ad593df0f582dcb6dbf843051ac2c8138eda09fba",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/CausalMaskTranscript.lean",
+      "kind": "file",
+      "sha256": "3a2689a7325d6f4dd699d90f16c426e30feed9bfbdd63f502bb05eff8c0b50aa",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/CausalOperational.lean",
+      "kind": "file",
+      "sha256": "efc4897ca2b270cc05c304c71e68182d2dedc302b0e7727ccd10835eb1505602",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/CausalScheduleTransport.lean",
+      "kind": "file",
+      "sha256": "8c0b754e124eb8d49677e60c7bdd6d498d5c96b0a316e8c18125bebdf6994317",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/CoupledOperational.lean",
+      "kind": "file",
+      "sha256": "245a38eb2ff69a8cc851217f85c222a56307b22e42a7a3d86ea7d11fe2efb6eb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/ExactMaskTape.lean",
+      "kind": "file",
+      "sha256": "583427c1f7a7ecc49718b1e0ef642a8cd40639fef233df3fa486a753925497d0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/HiddenSaltTransport.lean",
+      "kind": "file",
+      "sha256": "b4232f43afe7a66bfd8cfbf27697388b23dc08df2d5a7147311fe1ea025f876b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/MaskCausality.lean",
+      "kind": "file",
+      "sha256": "ce46b3afce1858a2c32dd7b582ef8782939d89ee5a66964dec24161ebb689285",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/OperationalGood.lean",
+      "kind": "file",
+      "sha256": "cd02ccd1b3768b20edd304a2fca4840631a386d7a729ac173f2e360754b0c322",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/OperationalTape.lean",
+      "kind": "file",
+      "sha256": "f8198e1fed6fb5aa5f31d1d36802888b808b4bdc3712d15b69bae65e9144f7a6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/ProtectedCausalOperational.lean",
+      "kind": "file",
+      "sha256": "6b5a498fa01982d0fc3f32c48d49fbf3caf9b27199a2fbe53113cea7bfe98e7b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Operational/ProtectedSimulator.lean",
+      "kind": "file",
+      "sha256": "d336dfd513dbfacf4e8af0f8f271ceaf3360c4893dd85801e9f102a478684f32",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Outer/OuterCodeDomains.lean",
+      "kind": "file",
+      "sha256": "7fe090d64532ee90445f2ef4ea6f1253bfeca69cc11c8026fd91fd3a13575831",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Outer/OuterPaddedPcs.lean",
+      "kind": "file",
+      "sha256": "de4f42e137fad8e40e6b59127ddd6713f0f8c6f8cb8a236ce307445d58d4e19e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Outer/OuterPcs.lean",
+      "kind": "file",
+      "sha256": "a507141d28ec0019efedfb95fc5d4e88d23bbc0dfbc6aba96a72a3f066d37c92",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingBadTape.lean",
+      "kind": "file",
+      "sha256": "ed1e2cbcc720557669a72ffcfedd4d4764089ed63507b5af178390d474a805f8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingControlTransport.lean",
+      "kind": "file",
+      "sha256": "041d50855e743732a8301f90278c29e62a16606a02a4624227ed3f5304fa7792",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingJoint.lean",
+      "kind": "file",
+      "sha256": "6f2e943700da3438826f8b69afeea4c42007f717dc582bb78f7ea639a6c86c87",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingLayout.lean",
+      "kind": "file",
+      "sha256": "a9e0763a7078d438ecc9a9bcefddcacdcdf7b3daf63acc90aab09448f9fdb64e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingLayoutBounds.lean",
+      "kind": "file",
+      "sha256": "978533e72e3085ac4f20d5ccaf931d4c762c670246b6826a70ce7aff15d071f3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingOperationalProbability.lean",
+      "kind": "file",
+      "sha256": "4c3116524ce5249e77c7dfb0e4a9dc304a7f003176e0d5adafc73a730d3951e4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingOperationalTrace.lean",
+      "kind": "file",
+      "sha256": "3c3d8e8ac427d03113100453c6a0acbaf5e02c9ad01ec905a23ca4facb65e29c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingOracleSplit.lean",
+      "kind": "file",
+      "sha256": "a21d69aa93fa48e132668c5edc7beafe80ef8bb41c2b4f2156234de811368cc5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingSchedule.lean",
+      "kind": "file",
+      "sha256": "85f3cfb540a93f8520d62bbbf3d55ccb50440f8c185bc266b44c4eb3fb133e10",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleAudit.lean",
+      "kind": "file",
+      "sha256": "8bfa0f084bb894445f1c077af5fd9a6c02f383a8a2c6069dfe1154279b36f40d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBeforeInjective.lean",
+      "kind": "file",
+      "sha256": "c0f2d3f49e8357fae57ba5105ec77ce9e2d1769e652980a8b2f7c28e221391c0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBeforePostFreshness.lean",
+      "kind": "file",
+      "sha256": "4a8ae61ac6f124df7db2c8a7f77e3745744e6879e47acf352896a656cfb10115",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindControlFreshness.lean",
+      "kind": "file",
+      "sha256": "72ef56b51bb3ef7f3a575d292491e004b8133dcab079552fcad5f1eb6af7f97a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindControlGrowth.lean",
+      "kind": "file",
+      "sha256": "055997747afcf575fde0e0c7a729af0fe7036645209fcec43677fc4b2b37e65a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindExplicit.lean",
+      "kind": "file",
+      "sha256": "336b7cdbeff1d23e79dc5e92d9ddaf217a8694d58fd52839a78fc69932363022",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindFreshness.lean",
+      "kind": "file",
+      "sha256": "85f3a9a24e662ed633761efa071b45e9406af3ca13a431680dd90d006648041a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindPrefix.lean",
+      "kind": "file",
+      "sha256": "d3a7a890332806647b6b20055dd512ab872cd6e1d1c08623451e62ec313536f7",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindQueryFreshness.lean",
+      "kind": "file",
+      "sha256": "20cd45d6e0dec8be36ed552ffcc6e64427f1aa830c1578e6508147ef92e7b4d6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindSegment.lean",
+      "kind": "file",
+      "sha256": "ae54e5f18fb3e1a4df22af36a6be70acfefd3abedefe769b55754311ecb4dd2f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindSegmentLength.lean",
+      "kind": "file",
+      "sha256": "32b16dc4154a7ea14ae81309ae4cb3d4c790ee9abb70e0d41f83030dc8a29247",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleBlindStateProjection.lean",
+      "kind": "file",
+      "sha256": "64143b06c52bfa732d0f098cabae63279499b5ff7812e4693a603f88942e56e2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleClassification.lean",
+      "kind": "file",
+      "sha256": "46d532ac59e1e19548637198487c2616bd5113ed1708df333ee14b26cab82e83",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleCollisionFree.lean",
+      "kind": "file",
+      "sha256": "9d8dc9a438f92f30dfc44dcea20e5c8529977adfb33e6bf3f9ad50782b22f863",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleEqualityAcceptedBoundary.lean",
+      "kind": "file",
+      "sha256": "fd504e8602184a14a923e07fecfbe87272024e09adce4dbfd602412d19a48ad0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleEqualityActive.lean",
+      "kind": "file",
+      "sha256": "a533bc2585733f6a3a26d2f1aba1376c2186e0fd9f629fa3585a6be048166207",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleEqualityBoundary.lean",
+      "kind": "file",
+      "sha256": "ffaa6eabfcb1f63a481dcb91cfda686d928995432825f65e464296c16e5defd8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleEqualityGrowth.lean",
+      "kind": "file",
+      "sha256": "ba87726fb4af4ab54a24ebed8af4aefe43a3c219ac538d7559ceee3a37f0d6f2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleEqualityPrefix.lean",
+      "kind": "file",
+      "sha256": "be73b78780004ccf03b4bbe15efffdbd1b6fea1b52647fcffeabbb6250d35d32",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleEqualityQuery.lean",
+      "kind": "file",
+      "sha256": "976fe47716c3ec57d1880926685e69c41a239866f5ccbfb32f9bf3b05e7649db",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleFiatInjective.lean",
+      "kind": "file",
+      "sha256": "b5133d6896df80f2865c7f97f07d60a465c0b384b35bdefb5c826d7166398ec2",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleFreshness.lean",
+      "kind": "file",
+      "sha256": "83408f9822e8e1415ee545e21a319ec66a674f43992dab37f282b1679466792c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleInjective.lean",
+      "kind": "file",
+      "sha256": "8bcf958e9711acc6c6493d7978b705a58cfcce8e63c8b529e1319c65f223391a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleLigeritoGrowth.lean",
+      "kind": "file",
+      "sha256": "41982021be8ba86fd3fd13c3a27595404659ffb1ea3fe0ee7fb2bafd8d85bc7b",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleLigeritoQueryFreshness.lean",
+      "kind": "file",
+      "sha256": "f8696613253445c705dfee9d7642a6a99c88e38881ff2564d4845ccda90c3041",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleLigeritoSegment.lean",
+      "kind": "file",
+      "sha256": "5f77b892ce34fe757b4a4eb07e2c1613f987717a3dc8d7b0c88bc068418df9b4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingSchedulePostFiatInjective.lean",
+      "kind": "file",
+      "sha256": "130a72aa31f7e2ea9afb8cac7c8362fed0126bbb1c88fb5fa02bebbf01a1b035",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingSchedulePostFreshness.lean",
+      "kind": "file",
+      "sha256": "b52cddd9d92cd9466bf7abc1dc9fc0fec6d0e4bf7da169edfc045a3217895415",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingSchedulePowOrigin.lean",
+      "kind": "file",
+      "sha256": "82b782f75e13e6e71c08ed5db935ac32b228a71932421de7aef3de7174100d76",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingSchedulePowRange.lean",
+      "kind": "file",
+      "sha256": "d841586ce2901d4c639676d1733df25b557cdd5b5bb00f30b2bcbafded74d365",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingSchedulePowState.lean",
+      "kind": "file",
+      "sha256": "5bc70a3c3574af89f66c5968278c4baef9d0650910b5232f639a17f7f63ed9b1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleQueryFreshness.lean",
+      "kind": "file",
+      "sha256": "69db1c852d09a4e8ef339c206f7087a50ca1094dadc507bc5a09f71e9f9fd8a0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleSemantics.lean",
+      "kind": "file",
+      "sha256": "683aec7efa8d4c1cb9b1baf2d3ed71aa08992df2035ead6a374b8c8b0411cf09",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleWhole.lean",
+      "kind": "file",
+      "sha256": "44483975c8f3bdf9ad3919c5693d128015412df400e9abdb5d5e0f15d46d8889",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleWholeBlind.lean",
+      "kind": "file",
+      "sha256": "a46bd50fefb93f40ff7ae0642a86c16256d9c0d452b4c5919ac8c0203c095e42",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleWholeEquality.lean",
+      "kind": "file",
+      "sha256": "5f6cc049357f2de3ee486bb35e4e2003d94ee681503387724b7dd3a245aab7fd",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleWholeSkip.lean",
+      "kind": "file",
+      "sha256": "59f25b6325b7b27b7eb28fc776bab561544f97a92a53b72e8e7807ea408365ee",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleWholeSuccess.lean",
+      "kind": "file",
+      "sha256": "2cd5faae207e3ee8a0532b34b8ae4063fdc62f7046ffb14f061c1199ef4a4bf9",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleWholeZerocheck.lean",
+      "kind": "file",
+      "sha256": "58f02824575cbdd78d9f474f3cc9006c319161b86a47c4693cf8e12deae2925c",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingScheduleZerocheckPostFreshness.lean",
+      "kind": "file",
+      "sha256": "3c834a49d0f9d4029ecc9f9de949668c987d5ba1aa13ffb19b4c952d61f844a5",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceBlind.lean",
+      "kind": "file",
+      "sha256": "121c69f702f30c4d76ad0c184bd7d23c858d0fe0eb1a64f3c34f8aaa2e38f84d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceComplete.lean",
+      "kind": "file",
+      "sha256": "6e894e345eb7fdd1b024734c7cd9fa9d24b8855aafe03332ec85a339e8fec627",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceEquality.lean",
+      "kind": "file",
+      "sha256": "b9d94592829305147c76684c66238f2c360d3bb1fc8899dc01abd7adbf250e64",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceLigerito.lean",
+      "kind": "file",
+      "sha256": "adf04c79c74a92612ccae93de46298172e02278f004b2a71a7824f2de1e30921",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTracePositions.lean",
+      "kind": "file",
+      "sha256": "369944a60753ff168e4255318464c74f1805d971de315da167b36f150e446810",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTracePrefix.lean",
+      "kind": "file",
+      "sha256": "ae3be8ee22c46abcdaf167a1a371c51580506c5f86990a765ee1ffed792ff740",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceScalar.lean",
+      "kind": "file",
+      "sha256": "e7dc1446a12b78c870b1b4dc123e84fc832a3a8aa34fc75ebc1b3ab998bd3a01",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceTail.lean",
+      "kind": "file",
+      "sha256": "e0fc129260b2938a516b26146f207c990c8744ce163d5c1e098206e187a467e4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceTailBlind.lean",
+      "kind": "file",
+      "sha256": "a007ea8b8e7a2200d93aa41631a4cc7550ca7cfb898a2acd96a162f3400fff5d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceTailBlindOracle.lean",
+      "kind": "file",
+      "sha256": "34d6c25fcf392e37432d3bddb3013d904ab90eabdc40e1fb928a27b065cec9d3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceTailBlindRun.lean",
+      "kind": "file",
+      "sha256": "540a82989355423b36284fd30a64bf856a345658322a5f34322283bf7f084bd1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceTailComplete.lean",
+      "kind": "file",
+      "sha256": "acec392fe50b40da5fd9c27c5699f4cc918b0a0d8b1de6754571bfecb05b0f77",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Sampling/SamplingTraceZerocheck.lean",
+      "kind": "file",
+      "sha256": "e5815c7a525a6932d1b1a37b7a7e1fc3af5a99bf9b4ca617d4f3a06e1d98e038",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/AdaptiveSamplingProbability.lean",
+      "kind": "file",
+      "sha256": "9400588545c9a4ef338020e2dba19dc90636f04aae118f854392d9d8eaf5c6be",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/ConcreteFailureBound.lean",
+      "kind": "file",
+      "sha256": "f9f5bf8c031bc68bfde8a6cb7b48cdf7e7ac3e558ed187b27062d6e2e9f6c4f1",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/CouplingRecovery.lean",
+      "kind": "file",
+      "sha256": "259acf0b152038547a3805ee862cc3cad6c148a2e1768b02f493c289c0ae63e6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/FormalZK.lean",
+      "kind": "file",
+      "sha256": "4d37b01f16ebad4e49c480d5da29c8f8bd5124b585d2fca7bff8fe5957c966d3",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/FormalZKAxiomAudit.lean",
+      "kind": "file",
+      "sha256": "393c614f048180e01521f1dd71d82f9bc2c2dac65e0b3277f8f7491f6a58eb36",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/OperationalGlobalProbability.lean",
+      "kind": "file",
+      "sha256": "0e74bacfbe75a1b5150ff60b18541c78e9b3270382f4aa7fb0d8f3bda20b1f0d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/PostMerkleProbability.lean",
+      "kind": "file",
+      "sha256": "db538681d54dba0e3b8bf02c3ebf4d115cbae7b570e9b817201cbcffb0560b11",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/StatisticalDistance.lean",
+      "kind": "file",
+      "sha256": "e66d18e63d0eda87d58c7625ab869ef1912fd58286569d168c31d0a723c5422e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/StatisticalZK.lean",
+      "kind": "file",
+      "sha256": "b3a159ff81f4872bc39cbfa9f3584860a1cc3125971229e903691f1a5468747a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/SuccessfulCoupling.lean",
+      "kind": "file",
+      "sha256": "12cf0060fb4a22d9ea748aa7e4c3600532245c6f577f086b4cfc8d933759b8bc",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock/Production/Security/TraceFailureProbability.lean",
+      "kind": "file",
+      "sha256": "911e35ba039dd56bf4667677e822b9d8b7a314a140475e16ca75b580f44dc4dc",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/VeiledFlock.lean",
+      "kind": "file",
+      "sha256": "87bfa8c1b38379a10ac0bdb6f1c66212f1d08e7ab3a9bd92bc75a414f5bc0e51",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/lake-manifest.json",
+      "kind": "file",
+      "sha256": "e03915e9a57719bc7265d90fff025adadfa0e3be1a3436f01b5c28639a4e84d0",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/lakefile.toml",
+      "kind": "file",
+      "sha256": "30f8e74f736b23e9e3d86b0c7e89c5ba311bdc03f695d7b7db523cdeb11681c6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "lean/lean-toolchain",
+      "kind": "file",
+      "sha256": "8e3538e0ab5f81a3ee04927d8838c8c674e0e112838b4b3ce87ec218143276af",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "rust-toolchain.toml",
+      "kind": "file",
+      "sha256": "168d580980d77be4b30d0d2c067ea0901b73ebb0b720e58f9df356e103f57f1a",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/formal-proof/Cargo.toml",
+      "kind": "file",
+      "sha256": "9e9cd128e155768a45b3e8d76e4a71c8fa76a62b74aca227f4782eb9e8593c13",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/formal-proof/src/main.rs",
+      "kind": "file",
+      "sha256": "989bdd51bff9c84415958994eb5349348e686a20520092875ed1f565f92e2a9e",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/Cargo.toml",
+      "kind": "file",
+      "sha256": "447ddc4c6778288e3f28bd61eacd850278bac2dd6fbad99d2be09136aa477d1f",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/README.md",
+      "kind": "file",
+      "sha256": "606d892489209f4b79d43b0e99ef3f6b427e773ffc198a1482c1c901286feffb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/measurement-env.json",
+      "kind": "file",
+      "sha256": "1a9fa165ecea2568dd819cf0d4e1688140330d9abb99557608cce08c74efcd98",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/src/bin/folded_capture.rs",
+      "kind": "file",
+      "sha256": "8fe27e81157c1f16363e52940afd4685d4bbd467e9982669f2960f87937eb722",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/src/bin/profile_preimages.rs",
+      "kind": "file",
+      "sha256": "ebb250b4f267062d50da83ed7dd5cb2c4f576afc77c9fa28f3322e9da1735acb",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/src/bin/xctrace_capture.rs",
+      "kind": "file",
+      "sha256": "20973e5af61452f583edbcbd470d9d2c660e8d8bcaeb53b163237c10f31e156d",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/src/lib.rs",
+      "kind": "file",
+      "sha256": "8f17a337d23f1e78839d7b5675709d4247652e75d4ff3c5e926056941a2dc288",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/src/report.rs",
+      "kind": "file",
+      "sha256": "85d623dcd81b10203c4cbfb279ab10c4310790c4a5aa6786a8fcc075e4465266",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/src/snapshot.rs",
+      "kind": "file",
+      "sha256": "378c24d94f5bbc7654cc36c33b8846659e12b4201c30c28a1193eca612e080d8",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/tests/helpers.rs",
+      "kind": "file",
+      "sha256": "5f8ad47cf27e24d310cbe943317c5942d5ac8181cfa1e27e662f82d83c026030",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/tests/runner.rs",
+      "kind": "file",
+      "sha256": "3436c2d91581bb8217c71b3f5d2841f871dabc061e02e65c38b714c7396938a4",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    },
+    {
+      "path": "tools/performance/tests/snapshot.rs",
+      "kind": "file",
+      "sha256": "4881bdf5c66afa8d3a262875009ef2bb147fcf9d396d423034d35852731225c6",
+      "symlink_target": null,
+      "original_mode": 420,
+      "sealed_mode": 292
+    }
+  ],
+  "external_config": [
+    {
+      "path": "/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/partylikeits1983/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/Users/ai/go/src/github.com/partylikeits1983/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/private/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/private/.cargo/config.toml",
+      "sha256": null
+    },
+    {
+      "path": "/private/tmp/.cargo/config",
+      "sha256": null
+    },
+    {
+      "path": "/private/tmp/.cargo/config.toml",
+      "sha256": null
+    }
+  ],
+  "build_environment": {
+    "CARGO_HOME": "/Users/ai/.cargo",
+    "RUSTUP_HOME": "/Users/ai/.rustup"
+  }
+}

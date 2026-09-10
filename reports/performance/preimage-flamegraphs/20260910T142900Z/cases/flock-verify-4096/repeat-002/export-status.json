@@ -1,0 +1,9 @@
+{
+  "attempt_id": "flock-verify-4096-repeat-002",
+  "stage": "export",
+  "exit_code": 0,
+  "signal": null,
+  "io_ok": true,
+  "success": true,
+  "error": null
+}
