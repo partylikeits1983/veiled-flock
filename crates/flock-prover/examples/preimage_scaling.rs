@@ -1,9 +1,12 @@
 //! Reproducible release benchmark for the pinned 64-byte BLAKE3-preimage
 //! relation.
 //!
-//! Compares full-ZK VEIL-FLOCK with non-ZK FLOCK. The non-ZK baseline uses
-//! the Secure Ligerito profile; the full-ZK path uses the high-rate PCS
-//! selected by `Blake3PreimageZkSetup`. Setup construction, message
+//! Compares full-ZK VEIL-FLOCK with non-ZK FLOCK. Both select the Secure
+//! Ligerito profile at rate 1/2. The full-ZK path uses registered configs;
+//! non-ZK batches below the registry floor use ad hoc configs. Full-ZK
+//! batches below 256 hashes are padded to 256 slots. Sizes count serialized
+//! proof objects, excluding commitments, public digests, and bundle framing.
+//! Setup construction, message
 //! generation, digest generation, and serialization are excluded from the
 //! prove/verify timings; checks performed by the public prove APIs remain
 //! included. One untimed warm-up precedes the reported median samples.
