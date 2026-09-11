@@ -1,24 +1,13 @@
 use super::LigeritoSecurityConfig;
 
-/// Build the Standard ZK schedule for a supported committed dimension.
+/// Build the Standard ZK schedule for a supported witness dimension.
 pub fn standard_config(m: usize) -> Result<LigeritoSecurityConfig, String> {
-    let queries: &[usize] = match m {
-        23 => &[121, 114, 111],
-        24 => &[121, 113, 110],
-        25 => &[121, 113, 109, 109],
-        26 => &[121, 113, 109, 108],
-        27 => &[121, 113, 109, 107],
-        _ => return Err("ZK PCS supports committed m=23..=27 only".into()),
-    };
-    let mut config = LigeritoSecurityConfig::derive_paper_compatible(m, 3, 100)?;
-    if config.levels.len() != queries.len() {
-        return Err("ZK PCS recursion shape changed".into());
-    }
-    for (level, &queries) in config.levels.iter_mut().zip(queries) {
-        level.queries = queries;
-        level.expected_eps_query_bits = super::round1(level.paper_predicted_bits().1);
-    }
-    let bits = config.aggregate_soundness_bound_zk_l0()?.bits();
+    let source = super::embedded_security_config(m, super::LigeritoProfile::Standard)
+        .ok_or_else(|| format!("unsupported Standard PCS dimension: {m}"))?;
+    let config = LigeritoSecurityConfig::from_toml_str(source)?;
+    let bits = config
+        .aggregate_soundness_bound_query_padded(config.levels[0].queries)?
+        .bits();
     if !bits.is_finite() || bits < 100.0 {
         return Err(format!("ZK PCS aggregate below 100 bits: {bits}"));
     }
@@ -32,10 +21,19 @@ mod tests {
 
     #[test]
     fn canonical_schedules_validate_and_roundtrip() {
-        for m in 23..=27 {
+        for m in 22..=26 {
             let config = standard_config(m).unwrap();
-            assert!(config.aggregate_soundness_bound_zk_l0().unwrap().bits() >= 100.0);
-            assert_eq!(config.levels[0].log_inv_rate, 3);
+            assert!(
+                config
+                    .aggregate_soundness_bound_query_padded(config.levels[0].queries)
+                    .unwrap()
+                    .bits()
+                    >= 100.0
+            );
+            assert_eq!(
+                config.levels[0].log_inv_rate,
+                LigeritoProfile::Standard.log_inv_rate_for_m(m)
+            );
             assert!(
                 config
                     .levels
@@ -63,11 +61,8 @@ mod tests {
                     .unwrap(),
                 encoded
             );
-            // Per-round 100-bit query counts alone do not clear the aggregate.
-            let untuned = LigeritoSecurityConfig::derive_paper_compatible(m, 3, 100).unwrap();
-            assert!(untuned.aggregate_soundness_bound_zk_l0().unwrap().bits() < 100.0);
         }
-        for m in [0, 22, 28, usize::MAX] {
+        for m in [0, 21, 27, usize::MAX] {
             assert!(standard_config(m).is_err());
         }
     }

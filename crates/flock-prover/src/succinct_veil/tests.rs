@@ -1,12 +1,11 @@
 use super::{
     MaskLayout, RING_WIDTH, SuccinctVeilError, certify_flock_piop_soundness,
-    certify_shifted_veil_soundness, scale_ring_expressions, solve_sumcheck_messages,
-    validate_batch_opening, validate_l0_hiding_budget, validate_succinct_parameters,
+    certify_shifted_veil_soundness, solve_sumcheck_messages, validate_batch_opening,
+    validate_l0_hiding_budget, validate_succinct_parameters,
 };
 use crate::r1cs_hashes::blake3::build_block_r1cs_zk;
 use crate::r1cs_hashes::blake3_preimage::{Blake3PreimageZkSetup, MAX_ZK_PREIMAGE_BLOCKS};
 use flock_core::field::F128;
-use veil_f128::LinearCombination;
 
 #[test]
 fn succinct_shape_rejects_nonidentity_c() {
@@ -25,7 +24,10 @@ fn production_entry_point_is_pinned_to_supported_relation_and_registered_pcs() {
     assert!(super::supported_mask_count(&setup.r1cs).is_some());
     assert_eq!(
         setup.pcs_params.log_inv_rate,
-        setup.pcs_params.profile.log_inv_rate()
+        setup
+            .pcs_params
+            .profile
+            .log_inv_rate_for_m(setup.pcs_params.m)
     );
     validate_succinct_parameters(&setup.r1cs, &setup.pcs_params).unwrap();
     let piop = certify_flock_piop_soundness(&setup.r1cs, setup.r1cs.csc_lincheck_circuit())
@@ -109,37 +111,37 @@ fn embedded_standard_profiles_match_the_registered_parameter_table() {
 
     const EXPECTED: [ExpectedProfile; 5] = [
         ExpectedProfile {
-            log_inv_rates: &[3, 4, 5],
+            log_inv_rates: &[2, 2, 4],
             log_message_columns: &[10, 7, 4],
-            queries: &[121, 114, 111],
+            queries: &[163, 156, 117],
             fold_grinding_bits: &[0, 0, 0],
             final_log_size: 4,
         },
         ExpectedProfile {
-            log_inv_rates: &[3, 4, 5],
+            log_inv_rates: &[1, 2, 3],
             log_message_columns: &[11, 8, 5],
-            queries: &[121, 113, 110],
+            queries: &[299, 154, 129],
             fold_grinding_bits: &[0, 0, 0],
             final_log_size: 5,
         },
         ExpectedProfile {
-            log_inv_rates: &[3, 4, 5, 6],
+            log_inv_rates: &[1, 2, 3, 4],
             log_message_columns: &[12, 9, 6, 3],
-            queries: &[121, 113, 109, 109],
+            queries: &[269, 153, 127, 122],
             fold_grinding_bits: &[0, 0, 0, 0],
             final_log_size: 3,
         },
         ExpectedProfile {
-            log_inv_rates: &[3, 4, 5, 6],
+            log_inv_rates: &[1, 2, 3, 4],
             log_message_columns: &[13, 10, 7, 4],
-            queries: &[121, 113, 109, 108],
+            queries: &[257, 152, 125, 117],
             fold_grinding_bits: &[0, 0, 0, 0],
             final_log_size: 4,
         },
         ExpectedProfile {
-            log_inv_rates: &[3, 4, 5, 6],
+            log_inv_rates: &[1, 2, 3, 4],
             log_message_columns: &[14, 11, 8, 5],
-            queries: &[121, 113, 109, 107],
+            queries: &[252, 152, 125, 115],
             fold_grinding_bits: &[0, 0, 0, 0],
             final_log_size: 5,
         },
@@ -149,7 +151,7 @@ fn embedded_standard_profiles_match_the_registered_parameter_table() {
         let blocks = 1usize << (8 + index);
         let setup = Blake3PreimageZkSetup::new(blocks);
         let config = flock_core::pcs::ligerito::prover_config_for(
-            setup.pcs_params.log_msg_len(),
+            setup.pcs_params.witness_log_msg_len(),
             setup.pcs_params.log_batch_size,
             setup.pcs_params.profile,
         )
@@ -161,8 +163,8 @@ fn embedded_standard_profiles_match_the_registered_parameter_table() {
             config.recursive_log_msg_cols,
             expected.log_message_columns[1..]
         );
-        assert_eq!(config.initial_log_num_interleaved, 6);
-        assert_eq!(config.initial_k, 6);
+        assert_eq!(config.initial_log_num_interleaved, 5);
+        assert_eq!(config.initial_k, 5);
         assert_eq!(
             config.recursive_ks,
             vec![3; expected.log_inv_rates.len() - 1]
@@ -189,15 +191,15 @@ fn production_mask_layout_matches_every_visible_private_coordinate() {
     let layout = MaskLayout::new(&r1cs).unwrap();
     assert_eq!(layout.piop_count(), 242);
     assert_eq!(2 * super::RING_CLAIM_COUNT * RING_WIDTH, 512);
-    assert_eq!(layout.observed_count(), 754);
+    assert_eq!(layout.observed_count(), 763);
 
     let shifted = layout.shifted_circuit_certificate(true);
-    assert_eq!(shifted.private_inputs, 754);
-    assert_eq!(shifted.flock_multiplications, 1);
+    assert_eq!(shifted.private_inputs, 763);
+    assert_eq!(shifted.multiplications, 1 + super::RING_AUXILIARIES);
     assert_eq!(shifted.lincheck_linear_constraints, 1);
-    assert_eq!(shifted.ring_scale_linear_constraints, 2 * RING_WIDTH);
+    assert_eq!(shifted.pcs_link_linear_constraints, 1);
     assert_eq!(shifted.ring_claim_linear_constraints, 2);
-    assert_eq!(shifted.linear_constraints(), 259);
+    assert_eq!(shifted.linear_constraints(), 4);
 }
 
 #[test]
@@ -259,26 +261,6 @@ fn l0_hiding_budget_fails_closed_above_the_mask_dimension() {
         &[6, 3],
     )
     .unwrap();
-}
-
-#[test]
-fn ring_constraint_map_matches_packed_field_scaling() {
-    let slices = (0..RING_WIDTH)
-        .map(|i| F128::new(i as u64 * 0x9e37 + 1, (i as u64).rotate_left(17)))
-        .collect::<Vec<_>>();
-    let scalar = F128::new(0x0123_4567_89ab_cdef, 0xfedc_ba98_7654_3210);
-    let expressions = (0..RING_WIDTH)
-        .map(LinearCombination::variable)
-        .collect::<Vec<_>>();
-    let evaluated = scale_ring_expressions(&expressions, scalar)
-        .iter()
-        .map(|expression| expression.evaluate(&slices).unwrap())
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        evaluated,
-        flock_core::pcs::ring_switch::scale_s_hat_v(&slices, scalar)
-    );
 }
 
 #[test]

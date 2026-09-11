@@ -7,6 +7,7 @@
 //! Pointwise codeword products are evaluations of the product polynomial, so a
 //! twice-degree square code supplies VEIL's Hadamard reduction.
 
+use rayon::prelude::*;
 use std::fmt;
 
 use flock_core::field::F128;
@@ -197,7 +198,7 @@ impl AdditiveRsCode {
 
     pub fn encode_batch(&self, messages: &[Vec<F128>]) -> Result<Vec<Vec<F128>>, CodeError> {
         messages
-            .iter()
+            .par_iter()
             .map(|message| self.encode(message))
             .collect()
     }

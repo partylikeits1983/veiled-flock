@@ -1,14 +1,4 @@
-//! Succinct VEIL compilation for FLOCK's algebraic transcript.
-//!
-//! VEIL masks the zerocheck and lincheck messages and the terminal ring-switch
-//! slices. A non-zero transcript challenge combines the witness with the
-//! committed uniform PCS blinder before ring switching. The VEIL circuit
-//! checks the FLOCK transcript, its terminal claims, and the characteristic-two
-//! linear map relating the masked slices to the blinded PCS opening.
-//!
-//! For a ring-switch slice map `S` and packed-field multiplication map `M_c`,
-//! `S(z + c·g) = S(z) + M_c(S(g))`. Every masked slice is bound before `c` is
-//! sampled, and `M_c` is invertible for non-zero `c`.
+//! VEIL compilation of the FLOCK transcript and single-column PCS reduction.
 
 use flock_core::{
     challenger::Challenger,
@@ -30,15 +20,16 @@ use veil_f128::{
 };
 
 use crate::prover::quirky_x_outer_full;
+mod ring_circuit;
 
 const MASK_ROOT_LABEL: &[u8] = b"veil-flock-mask-root";
 const RING_MASK_LABEL: &[u8] = b"veil-flock-ring-masks";
-const PCS_BLIND_LABEL: &[u8] = b"veil-flock-public-pcs-blind";
-const BLINDED_RING_LABEL: &[u8] = b"veil-flock-blinded-ring";
 const PCS_FORK_LABEL: &[u8] = b"veil-flock-pcs-fork";
 const VEIL_FORK_LABEL: &[u8] = b"veil-flock-inner-fork";
 const TREE_NONCES_LABEL: &[u8] = b"veil-flock-tree-nonces";
 const RING_CLAIM_COUNT: usize = 2;
+const PCS_LANE_FOLDS: usize = 5;
+const RING_AUXILIARIES: usize = RING_CLAIM_COUNT * ring_circuit::AUXILIARY_PER_CLAIM;
 const PUBLIC_DIRECT_CLAIM_COUNT: usize = 1;
 const RING_WIDTH: usize = 1 << pcs::LOG_PACKING;
 
@@ -59,7 +50,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
             0x72, 0x58, 0x2d, 0x4f,
         ],
         r1cs_m: 22,
-        mask_count: 754,
+        mask_count: 763,
     },
     SupportedBlake3R1csShape {
         digest: [
@@ -68,7 +59,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
             0x01, 0x89, 0x0a, 0x4b,
         ],
         r1cs_m: 23,
-        mask_count: 756,
+        mask_count: 765,
     },
     SupportedBlake3R1csShape {
         digest: [
@@ -77,7 +68,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
             0x6b, 0xb3, 0xa2, 0x23,
         ],
         r1cs_m: 24,
-        mask_count: 758,
+        mask_count: 767,
     },
     SupportedBlake3R1csShape {
         digest: [
@@ -86,7 +77,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
             0x3d, 0x22, 0xc6, 0x7c,
         ],
         r1cs_m: 25,
-        mask_count: 760,
+        mask_count: 769,
     },
     SupportedBlake3R1csShape {
         digest: [
@@ -95,7 +86,7 @@ const SUPPORTED_BLAKE3_R1CS_SHAPES: [SupportedBlake3R1csShape; 5] = [
             0xf6, 0x2e, 0x0d, 0x74,
         ],
         r1cs_m: 26,
-        mask_count: 762,
+        mask_count: 771,
     },
 ];
 /// Registered full-ZK schedules may derive up to a 6-bit L0 grind.
@@ -128,14 +119,9 @@ pub struct SuccinctVeilProof {
     /// padded.
     pub masked_zerocheck: MaskedZerocheckProof,
     pub masked_lincheck: LincheckProof,
-    /// Masked slice evaluations for the witness and the PCS blinder at the
-    /// two terminal FLOCK points.
-    pub masked_ring_claims: Vec<MaskedRingClaim>,
-    /// Evaluations of the uniform PCS blinder at packed-direct claim bases.
-    /// They are bound before the non-zero witness-blinding challenge.
-    pub public_direct_blind_values: Vec<F128>,
-    pub blind_grind_nonce: u64,
-    pub pcs_open: pcs::BatchOpeningProofLigerito,
+    pub masked_ring_claims: Vec<Vec<F128>>,
+    pub ring_auxiliary: Vec<F128>,
+    pub pcs_open: pcs::single_column::ColumnOpening,
     pub veil: ConstraintProof,
 }
 
@@ -146,12 +132,6 @@ pub struct InitialTreeNonces {
     pub outer: [u8; 32],
     pub veil_linear: [u8; 32],
     pub veil_hadamard: [u8; 32],
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MaskedRingClaim {
-    pub witness: Vec<F128>,
-    pub blind: Vec<F128>,
 }
 
 /// Audit marker for a packed functional whose claimed value is derived only
@@ -515,9 +495,9 @@ struct MaskLayout {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ShiftedCircuitCertificate {
     pub private_inputs: usize,
-    pub flock_multiplications: usize,
+    pub multiplications: usize,
     pub lincheck_linear_constraints: usize,
-    pub ring_scale_linear_constraints: usize,
+    pub pcs_link_linear_constraints: usize,
     pub ring_claim_linear_constraints: usize,
 }
 
@@ -536,6 +516,7 @@ pub struct FlockPiopSoundnessBound {
     pub lincheck_skip_probability: f64,
     pub ring_switch_probability: f64,
     pub pcs_claim_batch_probability: f64,
+    pub pcs_lane_reduction_probability: f64,
 }
 
 impl FlockPiopSoundnessBound {
@@ -549,6 +530,7 @@ impl FlockPiopSoundnessBound {
             + self.lincheck_skip_probability
             + self.ring_switch_probability
             + self.pcs_claim_batch_probability
+            + self.pcs_lane_reduction_probability
     }
 
     pub fn bits(self) -> f64 {
@@ -608,6 +590,7 @@ pub fn certify_flock_piop_soundness(
         // Independent coefficients batch both ring claims and the one public
         // packed-direct claim into the single Ligerito opening.
         pcs_claim_batch_probability: 1.0 / q,
+        pcs_lane_reduction_probability: (2 * PCS_LANE_FOLDS) as f64 / q,
     };
     if !bound.bits().is_finite() || bound.bits() < 110.0 {
         return Err(SuccinctVeilError::InvalidParameters);
@@ -628,7 +611,7 @@ pub fn certify_shifted_veil_soundness(
     let inventory = layout.shifted_circuit_certificate(true);
     let mut builder = CircuitBuilder::new(inventory.private_inputs);
     let zero = builder.constant(F128::ZERO);
-    for _ in 0..inventory.flock_multiplications {
+    for _ in 0..inventory.multiplications {
         builder.assert_mul(&zero, &zero, &zero);
     }
     for _ in 0..inventory.linear_constraints() {
@@ -662,14 +645,14 @@ fn binary_rank(rows: &mut [u128]) -> usize {
 impl ShiftedCircuitCertificate {
     pub fn linear_constraints(self) -> usize {
         self.lincheck_linear_constraints
-            + self.ring_scale_linear_constraints
+            + self.pcs_link_linear_constraints
             + self.ring_claim_linear_constraints
     }
 
     fn validate(self, circuit: &ArithmeticCircuit) -> Result<(), SuccinctVeilError> {
         if circuit.num_inputs() != self.private_inputs
             || circuit.num_variables() != self.private_inputs
-            || circuit.num_multiplications() != self.flock_multiplications
+            || circuit.num_multiplications() != self.multiplications
             || circuit.num_linear_constraints() != self.linear_constraints()
         {
             return Err(SuccinctVeilError::InvalidShape(
@@ -707,7 +690,11 @@ impl MaskLayout {
     }
 
     fn observed_count(self) -> usize {
-        self.piop_count() + 2 * RING_CLAIM_COUNT * RING_WIDTH
+        self.piop_count()
+            + RING_CLAIM_COUNT * RING_WIDTH
+            + 2 * PCS_LANE_FOLDS
+            + 1
+            + RING_AUXILIARIES
     }
 
     fn shifted_circuit_certificate(self, with_ring_link: bool) -> ShiftedCircuitCertificate {
@@ -717,13 +704,13 @@ impl MaskLayout {
             } else {
                 self.piop_count()
             },
-            flock_multiplications: 1,
-            lincheck_linear_constraints: 1,
-            ring_scale_linear_constraints: if with_ring_link {
-                RING_CLAIM_COUNT * RING_WIDTH
+            multiplications: if with_ring_link {
+                1 + RING_AUXILIARIES
             } else {
-                0
+                1
             },
+            lincheck_linear_constraints: 1,
+            pcs_link_linear_constraints: usize::from(with_ring_link),
             ring_claim_linear_constraints: if with_ring_link { RING_CLAIM_COUNT } else { 0 },
         }
     }
@@ -740,8 +727,8 @@ fn validate_succinct_parameters(
     if !pcs_params.zk
         || r1cs.zk.is_none()
         || pcs_params.m != r1cs.m
-        || pcs_params.log_inv_rate != pcs_params.profile.log_inv_rate()
-        || pcs_params.log_batch_size != 6
+        || pcs_params.log_inv_rate != pcs_params.profile.log_inv_rate_for_m(pcs_params.m)
+        || pcs_params.log_batch_size != PCS_LANE_FOLDS
         || !supported_zk_profile(pcs_params.profile)
     {
         return Err(SuccinctVeilError::InvalidParameters);
@@ -959,107 +946,27 @@ fn dot(expressions: &[LinearCombination], coefficients: &[F128]) -> LinearCombin
     )
 }
 
-fn mask_ring_claims(
-    witness: &[Vec<F128>],
-    blind: &[Vec<F128>],
-    masks: &[F128],
-) -> Vec<MaskedRingClaim> {
-    assert_eq!(witness.len(), RING_CLAIM_COUNT);
-    assert_eq!(blind.len(), RING_CLAIM_COUNT);
-    assert_eq!(masks.len(), 2 * RING_CLAIM_COUNT * RING_WIDTH);
-    let mut cursor = 0;
-    witness
-        .iter()
-        .zip(blind)
-        .map(|(witness, blind)| {
-            assert_eq!(witness.len(), RING_WIDTH);
-            assert_eq!(blind.len(), RING_WIDTH);
-            let witness = witness
-                .iter()
-                .map(|value| {
-                    let masked = *value + masks[cursor];
-                    cursor += 1;
-                    masked
-                })
-                .collect();
-            let blind = blind
-                .iter()
-                .map(|value| {
-                    let masked = *value + masks[cursor];
-                    cursor += 1;
-                    masked
-                })
-                .collect();
-            MaskedRingClaim { witness, blind }
-        })
-        .collect()
-}
-
-fn observe_masked_ring_claims<C: Challenger>(challenger: &mut C, claims: &[MaskedRingClaim]) {
+fn observe_masked_ring_claims<C: Challenger>(challenger: &mut C, claims: &[Vec<F128>]) {
     challenger.observe_label(RING_MASK_LABEL);
     for claim in claims {
-        challenger.observe_f128_slice(&claim.witness);
-        challenger.observe_f128_slice(&claim.blind);
+        challenger.observe_f128_slice(claim);
     }
-}
-
-fn observe_direct_blinds<C: Challenger>(challenger: &mut C, values: &[F128]) {
-    challenger.observe_label(PCS_BLIND_LABEL);
-    challenger.observe_f128_slice(values);
-}
-
-fn observe_blinded_ring_claims<C: Challenger>(challenger: &mut C, slices: &[Vec<F128>]) {
-    challenger.observe_label(BLINDED_RING_LABEL);
-    for slice in slices {
-        challenger.observe_f128_slice(slice);
-    }
-}
-
-fn sample_nonzero<C: Challenger>(challenger: &mut C) -> F128 {
-    loop {
-        let value = challenger.sample_f128();
-        if !value.is_zero() {
-            return value;
-        }
-    }
-}
-
-fn scale_ring_expressions(
-    expressions: &[LinearCombination],
-    scalar: F128,
-) -> Vec<LinearCombination> {
-    assert_eq!(expressions.len(), RING_WIDTH);
-    let mut out = vec![LinearCombination::zero(); RING_WIDTH];
-    for (input_bit, expression) in expressions.iter().enumerate() {
-        let basis = if input_bit < 64 {
-            F128::new(1u64 << input_bit, 0)
-        } else {
-            F128::new(0, 1u64 << (input_bit - 64))
-        };
-        let product = scalar * basis;
-        for output_bit in 0..RING_WIDTH {
-            let present = if output_bit < 64 {
-                (product.lo >> output_bit) & 1
-            } else {
-                (product.hi >> (output_bit - 64)) & 1
-            };
-            if present == 1 {
-                out[output_bit] = out[output_bit].add(expression);
-            }
-        }
-    }
-    out
 }
 
 struct RingLink<'a> {
-    masked: &'a [MaskedRingClaim],
-    q_slices: &'a [Vec<F128>],
-    challenge: F128,
+    masked: &'a [Vec<F128>],
+    ring_weights: &'a [Vec<F128>],
+    gammas: &'a [F128],
+    direct_target: F128,
+    opening: pcs::single_column::ColumnReductionView<'a>,
+    reduction: &'a pcs::single_column::ColumnReduction,
+    auxiliary: &'a mut Vec<F128>,
+    masks: Option<&'a [F128]>,
+    lincheck_weights: Option<&'a [F128]>,
 }
 
 /// Replay the public, masked PIOP transcript and construct
-/// `C'(h) = C(masked + h)`. When ring linkage is present, the returned claims
-/// are evaluations of the blinded witness at the two terminal FLOCK points.
+/// `C'(h) = C(masked + h)`, including the masked PCS reduction when supplied.
 fn shifted_verifier_circuit<C: Challenger>(
     r1cs: &BlockR1cs,
     zc: &MaskedZerocheckProof,
@@ -1144,11 +1051,21 @@ fn shifted_verifier_circuit<C: Challenger>(
     challenger.observe_label(b"flock-lincheck");
     let alpha = challenger.sample_f128();
     let eq_inner = lincheck::build_quirky_eq_table(x_ab.z_skip, &x_ab.x_inner_rest, r1cs.k_skip);
-    let mut comb_vec = lincheck_circuit.fold_alpha_batched(alpha, &eq_inner);
+    let cached_weights = ring_link.as_ref().and_then(|link| link.lincheck_weights);
+    let mut comb_vec = if let Some(weights) = cached_weights {
+        if weights.len() != layout.z_partial {
+            return Err(SuccinctVeilError::InvalidShape("lincheck weights"));
+        }
+        weights.to_vec()
+    } else {
+        lincheck_circuit.fold_alpha_batched(alpha, &eq_inner)
+    };
     let mut lc_running = final_a.scale(alpha).add(&final_b);
     if let Some(column) = lincheck_circuit.const_pin_col() {
         let beta = challenger.sample_f128();
-        comb_vec[column] += beta;
+        if cached_weights.is_none() {
+            comb_vec[column] += beta;
+        }
         lc_running = lc_running.add(&LinearCombination::constant(beta));
     }
 
@@ -1162,7 +1079,9 @@ fn shifted_verifier_circuit<C: Challenger>(
         let e0 = lc_running.add(&e1);
         let c1 = e0.add(&e1).add(&einf);
         lc_running = einf.scale(rho * rho).add(&c1.scale(rho)).add(&e0);
-        lincheck::sumcheck_bind_top_in_place_par_pub(&mut comb_vec, rho);
+        if cached_weights.is_none() {
+            lincheck::sumcheck_bind_top_in_place_par_pub(&mut comb_vec, rho);
+        }
         lc_challenges.push(rho);
     }
     let z_partial = lc
@@ -1180,53 +1099,66 @@ fn shifted_verifier_circuit<C: Challenger>(
     lc_challenges.reverse();
     let ab_point = r1cs.ab_claim_point(r_inner_skip, &lc_challenges, &x_ab.x_outer);
     let c_point = r1cs.c_claim_point(z, &r[zerocheck::K_SKIP..]);
-    let mut values = [F128::ZERO; RING_CLAIM_COUNT];
+    let values = [F128::ZERO; RING_CLAIM_COUNT];
 
     if let Some(link) = ring_link {
         if link.masked.len() != RING_CLAIM_COUNT
-            || link.q_slices.len() != RING_CLAIM_COUNT
-            || link.challenge.is_zero()
+            || link.ring_weights.len() != RING_CLAIM_COUNT
+            || link.gammas.len() != RING_CLAIM_COUNT
+            || link.reduction.lane_challenges.len() != PCS_LANE_FOLDS
+            || link.opening.masked_rounds.len() != PCS_LANE_FOLDS
+            || link.reduction.blind_challenge.is_zero()
         {
-            return Err(SuccinctVeilError::InvalidShape("ring claim geometry"));
+            return Err(SuccinctVeilError::InvalidShape("ring reduction geometry"));
         }
+        let mut auxiliary = ring_circuit::AuxiliaryWires {
+            masks: link.masks,
+            offset: mask_count - RING_AUXILIARIES,
+            values: link.auxiliary,
+            cursor: 0,
+        };
         let points = [&ab_point, &c_point];
-        for (index, ((masked, q_slice), point)) in link
-            .masked
-            .iter()
-            .zip(link.q_slices)
-            .zip(points)
-            .enumerate()
-        {
-            if masked.witness.len() != RING_WIDTH
-                || masked.blind.len() != RING_WIDTH
-                || q_slice.len() != RING_WIDTH
-            {
+        let mut pcs_target = LinearCombination::constant(link.direct_target);
+        for (index, (masked, point)) in link.masked.iter().zip(points).enumerate() {
+            if masked.len() != RING_WIDTH || link.ring_weights[index].len() != RING_WIDTH {
                 return Err(SuccinctVeilError::InvalidShape("ring claim width"));
             }
             let witness = masked
-                .witness
                 .iter()
                 .map(|value| expressions.unmask(*value))
                 .collect::<Vec<_>>();
-            let blind = masked
-                .blind
-                .iter()
-                .map(|value| expressions.unmask(*value))
-                .collect::<Vec<_>>();
-            let scaled_blind = scale_ring_expressions(&blind, link.challenge);
-            for ((q, witness), blind) in q_slice.iter().zip(&witness).zip(&scaled_blind) {
-                builder.assert_zero(&LinearCombination::constant(*q).add(witness).add(blind));
-            }
             let x_outer = quirky_x_outer_full(point);
             let weights = pcs::ring_switch::build_claim_weights(point.z_skip, x_outer[0]);
-            let witness_value = dot(&witness, &weights);
-            if index == 0 {
-                builder.assert_zero(&w.add(&witness_value));
+            let witness_value =
+                ring_circuit::transpose_claim(&mut builder, &witness, &weights, &mut auxiliary)?;
+            builder.assert_zero(&if index == 0 {
+                w.add(&witness_value)
             } else {
-                builder.assert_zero(&computed_c.add(&witness_value));
-            }
-            values[index] = pcs::ring_switch::claim_check(&weights, q_slice);
+                computed_c.add(&witness_value)
+            });
+            pcs_target =
+                pcs_target.add(&dot(&witness, &link.ring_weights[index]).scale(link.gammas[index]));
         }
+        for (msg, r) in link
+            .opening
+            .masked_rounds
+            .iter()
+            .zip(&link.reduction.lane_challenges)
+        {
+            let u0 = expressions.unmask(msg.u_0);
+            let u2 = expressions.unmask(msg.u_2);
+            pcs_target = u0.add(&pcs_target.scale(*r)).add(&u2.scale(*r * *r + *r));
+        }
+        let blind = expressions.unmask(link.opening.masked_blind_value);
+        builder.assert_zero(
+            &pcs_target
+                .add(&blind.scale(link.reduction.blind_challenge))
+                .add(&LinearCombination::constant(link.opening.target)),
+        );
+        if auxiliary.cursor != RING_AUXILIARIES || auxiliary.values.len() != RING_AUXILIARIES {
+            return Err(SuccinctVeilError::InvalidShape("ring auxiliary count"));
+        }
+        expressions.cursor += RING_AUXILIARIES;
     }
     if expressions.cursor != mask_count {
         return Err(SuccinctVeilError::InvalidShape("mask expression cursor"));
@@ -1291,22 +1223,37 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     let placeholder = CircuitBuilder::new(layout.observed_count()).finish();
     let veil_parameters = ConstraintParameters::succinct_flock_secure();
     let mut veil_rng = rng.fork(b"succinct-veil-inner-proof");
-    let veil_commitment = commit_constraint_inputs(
-        &placeholder,
-        &masks,
-        veil_parameters,
-        &mut veil_rng,
-        &veil_linear_ro,
-    )?;
     let mut witness_rng = rng.fork(b"succinct-veil-witness-pcs");
-    let (commitment, prover_data) = pcs::commit::commit_zk_with_ro(
-        &z_packed,
-        pcs_params,
-        &mut witness_rng,
-        &outer_ro,
-        RoChannel::Witness,
-    );
+    let mut commit_masks = || {
+        commit_constraint_inputs(
+            &placeholder,
+            &masks,
+            veil_parameters,
+            &mut veil_rng,
+            &veil_linear_ro,
+        )
+    };
+    let mut commit_witness = || {
+        pcs::single_column::commit_with_query_padding(
+            &z_packed,
+            pcs_params,
+            lig_config.queries[0],
+            &mut witness_rng,
+            &outer_ro,
+            RoChannel::Witness,
+        )
+    };
+    let (veil_commitment, (column_commitment, prover_data)) = if outer_ro.is_native() {
+        rayon::join(commit_masks, commit_witness)
+    } else {
+        (commit_masks(), commit_witness())
+    };
+    let veil_commitment = veil_commitment?;
 
+    let commitment = Commitment {
+        root: column_commitment.root,
+        params: column_commitment.params.clone(),
+    };
     bind_statement(challenger, r1cs, &commitment, &proof_nonce);
     observe_tree_nonces(challenger, &tree_nonces);
     challenger.observe_label(MASK_ROOT_LABEL);
@@ -1369,13 +1316,13 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
 
     let x_ab = r1cs.x_ab_from_mlv(zc_claim.z, &zc_claim.mlv_challenges);
     let zc_mask_count = 2 * layout.ell + 2 * layout.zc_rounds + 2;
-    let (honest_lc, lc_claim, z_vec) = {
+    let (honest_lc, lc_claim, z_vec, lincheck_weights) = {
         let mut masking = MaskingChallenger {
             inner: challenger,
             masks: &masks,
             cursor: zc_mask_count,
         };
-        let result = lincheck::prove_padded_capture_z_vec(
+        let result = lincheck::prove_padded_capture_vectors(
             &z_lincheck,
             r1cs.m,
             r1cs.k_log,
@@ -1418,133 +1365,118 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     } else {
         None
     };
-    let witness_slices = vec![
+    let witness_slices = [
         s_hat_v_ab.unwrap_or_else(|| pcs::ring_switch::s_hat_v_at_point(&z_packed, &x_fulls[0])),
         s_hat_v_c.unwrap_or_else(|| pcs::ring_switch::s_hat_v_at_point(&z_packed, &x_fulls[1])),
     ];
-    let witness_len = z_packed.len();
-    let g_top = &prover_data.zk_blind[witness_len..];
-    let blind_slices = x_fulls
+    let ring_slices = witness_slices
         .iter()
-        .map(|point| pcs::ring_switch::s_hat_v_at_point(g_top, point))
+        .map(|v| pcs::ring_switch::tensor_algebra_transpose(v))
         .collect::<Vec<_>>();
-    let masked_ring_claims = mask_ring_claims(
-        &witness_slices,
-        &blind_slices,
-        &masks[layout.piop_count()..],
-    );
-    observe_masked_ring_claims(challenger, &masked_ring_claims);
-
-    let mut pd = public_packed_direct(challenger)
-        .into_iter()
-        .map(|claim| claim.0)
-        .collect::<Vec<_>>();
-    if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT {
-        return Err(SuccinctVeilError::InvalidShape(
-            "public packed-direct claim count",
-        ));
-    }
-    let public_direct_blind_values = pd
+    let ring_offset = layout.piop_count();
+    let masked_ring_claims = ring_slices
         .iter()
-        .map(|claim| claim.evaluate(g_top))
-        .collect::<Vec<_>>();
-    observe_direct_blinds(challenger, &public_direct_blind_values);
-    let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
-        return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
-    }
-    let blind_grind_nonce = challenger.grind_pow(blind_bits);
-    if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
-        return Err(SuccinctVeilError::GrindingLimitExceeded);
-    }
-    let blind_challenge = sample_nonzero(challenger);
-
-    let q_slices = witness_slices
-        .iter()
-        .zip(&blind_slices)
-        .map(|(witness, blind)| {
-            let scaled = pcs::ring_switch::scale_s_hat_v(blind, blind_challenge);
-            witness
-                .iter()
-                .zip(scaled)
-                .map(|(witness, blind)| *witness + blind)
+        .enumerate()
+        .map(|(claim, row)| {
+            row.iter()
+                .enumerate()
+                .map(|(i, v)| *v + masks[ring_offset + claim * RING_WIDTH + i])
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();
-    observe_blinded_ring_claims(challenger, &q_slices);
-    for (claim, blind_value) in pd.iter_mut().zip(&public_direct_blind_values) {
-        claim.value += blind_challenge * *blind_value;
-    }
-    let mut q_packed = z_packed;
-    q_packed
-        .par_iter_mut()
-        .zip(g_top.par_iter())
-        .for_each(|(witness, blind)| *witness += blind_challenge * *blind);
-
-    let mut circuit_challenger = circuit_start;
-    let (circuit, circuit_ab, circuit_c) = shifted_verifier_circuit(
-        r1cs,
-        &masked_zerocheck,
-        &masked_lincheck,
-        Some(RingLink {
-            masked: &masked_ring_claims,
-            q_slices: &q_slices,
-            challenge: blind_challenge,
-        }),
-        lincheck_circuit,
-        &mut circuit_challenger,
-    )?;
-    if circuit_ab.point != ab.point || circuit_c.point != c.point {
-        return Err(SuccinctVeilError::InvalidShape(
-            "shifted verifier output points",
-        ));
-    }
-    certify_constraint_soundness(&circuit, veil_parameters)?;
-
-    // The VEIL constraint proof and the PCS opening use independent terminal
-    // transcript branches after their shared linkage data is bound.
-    let mut pcs_challenger = challenger.clone();
-    pcs_challenger.observe_label(PCS_FORK_LABEL);
-    let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(VEIL_FORK_LABEL);
-    let x_refs = x_fulls.iter().map(Vec::as_slice).collect::<Vec<_>>();
-    let precomputed = q_slices
-        .iter()
-        .map(|slice| Some(slice.as_slice()))
+    observe_masked_ring_claims(challenger, &masked_ring_claims);
+    let pd = public_packed_direct(challenger)
+        .into_iter()
+        .map(|v| v.0)
         .collect::<Vec<_>>();
-    let (pcs_open, veil) = rayon::join(
-        || {
-            pcs::open_batch_mixed_ligerito_preblinded_ro(
-                pcs::PreblindedOpening {
-                    q_packed,
-                    prover_data: &prover_data,
-                    commitment: &commitment,
-                    challenge: blind_challenge,
-                    x_outers: &x_refs,
-                    precomputed_s_hat_v: &precomputed,
-                    packed_direct: &pd,
-                    padding: &padding,
-                    lig_config,
-                    ro: &outer_ro,
-                    channel: RoChannel::Witness,
-                },
-                &mut pcs_challenger,
-            )
-        },
-        || {
-            prove_constraints_from_commitment(
+    if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT {
+        return Err(SuccinctVeilError::InvalidShape("public direct claims"));
+    }
+    let schedule = ring_schedule(&pd.iter().map(|v| v.value).collect::<Vec<_>>(), challenger);
+    let direct_target = pd
+        .iter()
+        .zip(&schedule.direct_gammas)
+        .fold(F128::ZERO, |sum, (v, g)| sum + v.value * *g);
+    let target = ring_slices
+        .iter()
+        .zip(&schedule.ring_weights)
+        .zip(&schedule.gammas)
+        .fold(direct_target, |sum, ((slice, weight), gamma)| {
+            sum + pcs::ring_switch::inner_product(slice, weight) * *gamma
+        });
+    let rs_bases = x_fulls
+        .iter()
+        .zip(&schedule.ring_weights)
+        .zip(&schedule.gammas)
+        .map(|((point, weights), gamma)| {
+            let weights = weights
+                .iter()
+                .map(|weight| *gamma * *weight)
+                .collect::<Vec<_>>();
+            pcs::ring_switch::RsEqInd::deferred_dense(&point[1..], &weights)
+        })
+        .collect::<Vec<_>>();
+    let (basis, (u_0, u_2)) = pcs::combine_claim_bases(
+        &z_packed,
+        &rs_bases.iter().collect::<Vec<_>>(),
+        &pd,
+        &schedule.direct_gammas,
+        &[],
+        &[],
+    );
+    let mut veil_challenger = challenger.clone();
+    challenger.observe_label(PCS_FORK_LABEL);
+    let column_offset = ring_offset + RING_CLAIM_COUNT * RING_WIDTH;
+    let (pcs_open, _, auxiliary) = pcs::single_column::open_with(
+        z_packed,
+        basis,
+        target,
+        &prover_data,
+        lig_config,
+        &masks[column_offset..column_offset + pcs::single_column::mask_count(pcs_params)],
+        &outer_ro,
+        RoChannel::Witness,
+        challenger,
+        Some(pcs::ligerito::SumcheckMessage { u_0, u_2 }),
+        |opening, reduction| {
+            let mut ring_auxiliary = Vec::new();
+            let mut circuit_challenger = circuit_start;
+            let (circuit, circuit_ab, circuit_c) = shifted_verifier_circuit(
+                r1cs,
+                &masked_zerocheck,
+                &masked_lincheck,
+                Some(RingLink {
+                    masked: &masked_ring_claims,
+                    ring_weights: &schedule.ring_weights,
+                    gammas: &schedule.gammas,
+                    direct_target,
+                    opening,
+                    reduction,
+                    auxiliary: &mut ring_auxiliary,
+                    masks: Some(&masks),
+                    lincheck_weights: Some(&lincheck_weights),
+                }),
+                lincheck_circuit,
+                &mut circuit_challenger,
+            )?;
+            if circuit_ab.point != ab.point || circuit_c.point != c.point {
+                return Err(SuccinctVeilError::InvalidShape(
+                    "shifted verifier output points",
+                ));
+            }
+            bind_column_reduction(&mut veil_challenger, opening, &ring_auxiliary);
+            let veil = prove_constraints_from_commitment(
                 &circuit,
                 veil_commitment,
                 &mut veil_rng,
                 &mut veil_challenger,
                 &veil_hadamard_ro,
-            )
+            )?;
+            Ok::<_, SuccinctVeilError>((ring_auxiliary, veil))
         },
     );
-    if !ligerito_grinding_is_bounded(&pcs_open.ligerito) {
-        return Err(SuccinctVeilError::GrindingLimitExceeded);
-    }
-    let veil = veil?;
+    validate_column_grinding(&pcs_open)?;
+    let (ring_auxiliary, veil) = auxiliary?;
     Ok((
         SuccinctVeilProof {
             proof_nonce,
@@ -1552,8 +1484,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             masked_zerocheck,
             masked_lincheck,
             masked_ring_claims,
-            public_direct_blind_values,
-            blind_grind_nonce,
+            ring_auxiliary,
             pcs_open,
             veil,
         },
@@ -1606,45 +1537,101 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
     )?;
 
     if proof.masked_ring_claims.len() != RING_CLAIM_COUNT
-        || proof.pcs_open.ring_switches.len() != RING_CLAIM_COUNT
+        || proof
+            .masked_ring_claims
+            .iter()
+            .any(|v| v.len() != RING_WIDTH)
+        || proof.ring_auxiliary.len() != RING_AUXILIARIES
     {
         return Err(SuccinctVeilError::InvalidShape("ring claim count"));
     }
     observe_masked_ring_claims(challenger, &proof.masked_ring_claims);
     let pd = public_packed_direct(challenger);
-    if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT
-        || proof.public_direct_blind_values.len() != PUBLIC_DIRECT_CLAIM_COUNT
-    {
-        return Err(SuccinctVeilError::InvalidShape(
-            "packed-direct blind values",
-        ));
+    if pd.len() != PUBLIC_DIRECT_CLAIM_COUNT {
+        return Err(SuccinctVeilError::InvalidShape("public direct claims"));
     }
-    observe_direct_blinds(challenger, &proof.public_direct_blind_values);
-    let blind_bits = pcs::ligerito::l0_derived_grind_bits(&lig_config.fold_grinding_bits);
-    if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits)
-        || proof.blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS
-        || !challenger.verify_pow(proof.blind_grind_nonce, blind_bits)
-    {
-        return Err(SuccinctVeilError::InvalidParameters);
-    }
-    let blind_challenge = sample_nonzero(challenger);
-
-    let q_slices = proof
-        .pcs_open
-        .ring_switches
+    let schedule = ring_schedule(&pd.iter().map(|v| v.value).collect::<Vec<_>>(), challenger);
+    let direct_target = pd
         .iter()
-        .map(|ring| ring.s_hat_v.clone())
+        .zip(&schedule.direct_gammas)
+        .fold(F128::ZERO, |sum, (v, g)| sum + v.value * *g);
+    let x_fulls = [&preliminary_ab.point, &preliminary_c.point]
+        .iter()
+        .map(|point| quirky_x_outer_full(point))
         .collect::<Vec<_>>();
-    observe_blinded_ring_claims(challenger, &q_slices);
+    validate_column_grinding(&proof.pcs_open)?;
+    let mut veil_challenger = challenger.clone();
+    challenger.observe_label(PCS_FORK_LABEL);
+    let reduction = pcs::single_column::verify_backend(
+        &pcs::single_column::ColumnCommitment {
+            root: commitment.root,
+            params: pcs_params.clone(),
+        },
+        &proof.pcs_open,
+        lig_config,
+        |lanes, ris, log_yr| {
+            let mut prefix = lanes.to_vec();
+            prefix.extend_from_slice(ris);
+            let n = prefix.len();
+            let ring_prefixes = x_fulls
+                .iter()
+                .map(|x| pcs::ring_switch::eval_rs_eq_prefix(&x[1..1 + n], &prefix))
+                .collect::<Vec<_>>();
+            let direct_prefixes = pd
+                .iter()
+                .map(|v| zerocheck::multilinear::eq_eval(&v.point[..n], &prefix))
+                .collect::<Vec<_>>();
+            let count = 1usize << log_yr;
+            (0..count)
+                .into_par_iter()
+                .map(|y| {
+                    let mut value = F128::ZERO;
+                    for (((x, weights), gamma), prefix) in x_fulls
+                        .iter()
+                        .zip(&schedule.ring_weights)
+                        .zip(&schedule.gammas)
+                        .zip(&ring_prefixes)
+                    {
+                        value += *gamma
+                            * pcs::ring_switch::eval_rs_eq_finish_from_prefix_binary_q(
+                                prefix,
+                                &x[1 + n..],
+                                y as u32,
+                                weights,
+                            );
+                    }
+                    for ((pd, gamma), prefix) in
+                        pd.iter().zip(&schedule.direct_gammas).zip(&direct_prefixes)
+                    {
+                        value += *gamma
+                            * *prefix
+                            * zerocheck::multilinear::eq_eval_binary_x(&pd.point[n..], y as u32);
+                    }
+                    value
+                })
+                .collect::<Vec<_>>()
+        },
+        &outer_ro,
+        RoChannel::Witness,
+        challenger,
+    )
+    .ok_or(SuccinctVeilError::InvalidShape("single-column PCS opening"))?;
     let mut circuit_challenger = circuit_start;
+    let mut ring_auxiliary = proof.ring_auxiliary.clone();
     let (circuit, ab, c) = shifted_verifier_circuit(
         r1cs,
         &proof.masked_zerocheck,
         &proof.masked_lincheck,
         Some(RingLink {
             masked: &proof.masked_ring_claims,
-            q_slices: &q_slices,
-            challenge: blind_challenge,
+            ring_weights: &schedule.ring_weights,
+            gammas: &schedule.gammas,
+            direct_target,
+            opening: proof.pcs_open.reduction_view(),
+            reduction: &reduction,
+            auxiliary: &mut ring_auxiliary,
+            masks: None,
+            lincheck_weights: None,
         }),
         lincheck_circuit,
         &mut circuit_challenger,
@@ -1655,36 +1642,11 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         ));
     }
     certify_constraint_soundness(&circuit, proof.veil.parameters)?;
-
-    let mut pcs_challenger = challenger.clone();
-    pcs_challenger.observe_label(PCS_FORK_LABEL);
-    let mut veil_challenger = challenger.clone();
-    veil_challenger.observe_label(VEIL_FORK_LABEL);
-    let pd_refs = pd
-        .iter()
-        .zip(&proof.public_direct_blind_values)
-        .map(|(claim, blind)| pcs::PackedDirectClaimRef {
-            point: claim.point.as_slice(),
-            value: claim.value + blind_challenge * *blind,
-        })
-        .collect::<Vec<_>>();
-    if !ligerito_grinding_is_bounded(&proof.pcs_open.ligerito) {
-        return Err(SuccinctVeilError::GrindingLimitExceeded);
-    }
-    flock_core::verifier::verify_claims_ligerito_with_config_pd_preblinded_ro(
-        flock_core::verifier::PreblindedClaimVerification {
-            commitment,
-            claims: &[ab, c],
-            packed_direct: &pd_refs,
-            pcs_open: &proof.pcs_open,
-            pcs_params,
-            lig_v_config: lig_config,
-            challenge: blind_challenge,
-            ro: &outer_ro,
-            channel: RoChannel::Witness,
-        },
-        &mut pcs_challenger,
-    )?;
+    bind_column_reduction(
+        &mut veil_challenger,
+        proof.pcs_open.reduction_view(),
+        &proof.ring_auxiliary,
+    );
     verify_constraints(
         &circuit,
         &proof.veil,
@@ -1692,6 +1654,66 @@ pub(crate) fn verify_succinct_veil_r1cs<Ch: Challenger + Clone>(
         &veil_linear_ro,
         &veil_hadamard_ro,
     )?;
+    Ok(())
+}
+
+struct RingSchedule {
+    ring_weights: Vec<Vec<F128>>,
+    gammas: Vec<F128>,
+    direct_gammas: Vec<F128>,
+}
+
+fn ring_schedule<C: Challenger>(direct_values: &[F128], challenger: &mut C) -> RingSchedule {
+    challenger.observe_label(b"flock-single-column-ring");
+    let ring_weights = (0..RING_CLAIM_COUNT)
+        .map(|_| {
+            zerocheck::univariate_skip::build_eq(&challenger.sample_f128_vec(pcs::LOG_PACKING))
+        })
+        .collect();
+    let gammas = (0..RING_CLAIM_COUNT)
+        .map(|_| challenger.sample_f128())
+        .collect();
+    challenger.observe_f128_slice(direct_values);
+    let direct_gammas = direct_values
+        .iter()
+        .map(|_| challenger.sample_f128())
+        .collect();
+    RingSchedule {
+        ring_weights,
+        gammas,
+        direct_gammas,
+    }
+}
+
+fn bind_column_reduction<C: Challenger>(
+    challenger: &mut C,
+    opening: pcs::single_column::ColumnReductionView<'_>,
+    auxiliary: &[F128],
+) {
+    challenger.observe_label(VEIL_FORK_LABEL);
+    for (round, nonce) in opening.masked_rounds.iter().zip(opening.fold_nonces) {
+        challenger.observe_f128(round.u_0);
+        challenger.observe_f128(round.u_2);
+        challenger.observe_bytes(&nonce.to_le_bytes());
+    }
+    challenger.observe_f128(opening.masked_blind_value);
+    challenger.observe_bytes(&opening.blind_nonce.to_le_bytes());
+    challenger.observe_f128(opening.target);
+    challenger.observe_f128_slice(auxiliary);
+}
+
+fn validate_column_grinding(
+    opening: &pcs::single_column::ColumnOpening,
+) -> Result<(), SuccinctVeilError> {
+    if opening.blind_nonce >= MAX_BLIND_GRIND_TRIALS
+        || opening
+            .fold_nonces
+            .iter()
+            .any(|v| *v >= MAX_LIGERITO_GRIND_TRIALS)
+        || !ligerito_grinding_is_bounded(&opening.ligerito)
+    {
+        return Err(SuccinctVeilError::GrindingLimitExceeded);
+    }
     Ok(())
 }
 

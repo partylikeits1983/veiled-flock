@@ -47,12 +47,17 @@ pub struct BitPcs {
 impl BitPcs {
     /// Load and validate registered ZK parameters for the witness dimension.
     pub fn new(m: usize) -> Result<Self, VeilError> {
-        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Standard, true)
+        if !(22..=26).contains(&m) {
+            return Err(VeilError::Ligerito(
+                "unsupported example PCS dimension".into(),
+            ));
+        }
+        let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Secure, true)
             .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let log_n = params.log_msg_len();
-        let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Standard)
+        let prover_config = prover_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
             .map_err(VeilError::Ligerito)?;
-        let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Standard)
+        let verifier_config = verifier_config_for(log_n, LOG_BATCH_SIZE, LigeritoProfile::Secure)
             .map_err(VeilError::Ligerito)?;
         let pcs = Self {
             params,
@@ -243,7 +248,7 @@ mod tests {
         assert!(matches!(BitPcs::new(27), Err(VeilError::Ligerito(_))));
         assert!(BitPcs::new(12).is_err());
         let pcs = BitPcs::new(22).unwrap();
-        assert_eq!(pcs.blind_grinding_bits().unwrap(), 1);
+        assert_eq!(pcs.blind_grinding_bits().unwrap(), 2);
         assert_eq!(pcs.packed_len(), 1 << 15);
     }
 

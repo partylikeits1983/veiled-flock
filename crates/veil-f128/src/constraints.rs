@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     dot_product::{
         DotProductError, DotProductProof, VectorParameters, commit_vectors, prove_dot_product,
-        sample_not_zero_or_one, verify_dot_product,
+        sample_nonzero, sample_not_zero_or_one, verify_dot_product,
     },
     hadamard::{
         HadamardError, HadamardProof, commit_hadamard, prove_hadamard_and_dots,
@@ -92,23 +92,23 @@ impl LinearCombination {
 
     fn normalize(&mut self) {
         self.terms.sort_unstable_by_key(|(index, _)| *index);
-        let mut merged: Vec<(usize, F128)> = Vec::with_capacity(self.terms.len());
-        for (index, coefficient) in self.terms.drain(..) {
+        let mut length = 0;
+        for read in 0..self.terms.len() {
+            let (index, coefficient) = self.terms[read];
             if coefficient.is_zero() {
                 continue;
             }
-            if let Some((last_index, last_coefficient)) = merged.last_mut()
-                && *last_index == index
-            {
-                *last_coefficient += coefficient;
-                if last_coefficient.is_zero() {
-                    merged.pop();
+            if length > 0 && self.terms[length - 1].0 == index {
+                self.terms[length - 1].1 += coefficient;
+                if self.terms[length - 1].1.is_zero() {
+                    length -= 1;
                 }
-                continue;
+            } else {
+                self.terms[length] = (index, coefficient);
+                length += 1;
             }
-            merged.push((index, coefficient));
         }
-        self.terms = merged;
+        self.terms.truncate(length);
     }
 }
 
@@ -177,9 +177,13 @@ impl ArithmeticCircuit {
             });
         }
         for gate in &self.multiplications {
-            if gate.left.evaluate(witness)? * gate.right.evaluate(witness)?
-                != gate.output.evaluate(witness)?
-            {
+            let left = gate.left.evaluate(witness)?;
+            let right = if gate.left == gate.right {
+                left
+            } else {
+                gate.right.evaluate(witness)?
+            };
+            if left * right != gate.output.evaluate(witness)? {
                 return Ok(false);
             }
         }
@@ -468,10 +472,22 @@ fn constraint_soundness_geometry(
     parameters: ConstraintParameters,
 ) -> Result<ConstraintSoundnessGeometry, ConstraintError> {
     validate_certified_circuit_shape(circuit)?;
-    let padded = padded_circuit(circuit);
-    let linear_dimension = checked_dimension(padded.num_variables, parameters.linear_padding)?;
-    let hadamard_dimension =
-        checked_dimension(padded.multiplications.len(), parameters.hadamard_padding)?;
+    let variables = circuit
+        .num_variables
+        .checked_add(6)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let multiplications = circuit
+        .multiplications
+        .len()
+        .checked_add(2)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let constraints = circuit
+        .linear_constraints
+        .len()
+        .checked_add(1 + HADAMARD_LINK_LINEAR_CONSTRAINTS)
+        .ok_or(ConstraintError::InvalidParameters)?;
+    let linear_dimension = checked_dimension(variables, parameters.linear_padding)?;
+    let hadamard_dimension = checked_dimension(multiplications, parameters.hadamard_padding)?;
     let linear_code_length = checked_code_length(linear_dimension, parameters.inverse_rate)?;
     let hadamard_code_length = checked_code_length(hadamard_dimension, parameters.inverse_rate)?;
     let product_dimension = checked_hadamard_product_dimension(hadamard_dimension)?;
@@ -491,8 +507,8 @@ fn constraint_soundness_geometry(
         product_dimension,
         product_gamma: unique_decoding_radius(hadamard_code_length, product_dimension)?,
         query_count,
-        hadamard_multiplications: padded.multiplications.len(),
-        combined_constraints: padded.linear_constraints.len() + HADAMARD_LINK_LINEAR_CONSTRAINTS,
+        hadamard_multiplications: multiplications,
+        combined_constraints: constraints,
     })
 }
 
@@ -549,7 +565,7 @@ fn constraint_soundness_from_geometry(
     let hadamard_link_probability = geometry.hadamard_multiplications.saturating_sub(1) as f64
         / nonzero_challenge_denominator();
     let constraint_batch_probability =
-        geometry.combined_constraints.saturating_sub(1) as f64 / field_size;
+        geometry.combined_constraints.saturating_sub(1) as f64 / nonzero_challenge_denominator();
 
     ConstraintSoundnessBound {
         linear_code_length: geometry.linear_code_length,
@@ -773,11 +789,11 @@ pub fn prove_constraints_from_commitment<C: Challenger, R: MaskSampler + ?Sized>
         let multiplication_rlc = sample_not_zero_or_one(challenger);
         let dot_vector = powers(multiplication_rlc, padded.multiplications.len());
         let proof = prove_hadamard_and_dots(&dot_vector, hadamard_data, challenger)?;
-        append_multiplication_link_constraints(&padded, &dot_vector, &proof, &mut constraints);
+        append_multiplication_link_constraints(&padded, &dot_vector, &proof, &mut constraints)?;
         proof
     };
 
-    let constraint_rlc = challenger.sample_f128();
+    let constraint_rlc = sample_nonzero(challenger);
     let (dot_vector, expected_dot) =
         combine_linear_constraints(padded.num_variables, &constraints, constraint_rlc)?;
     let linear = prove_dot_product(&dot_vector, linear_data, challenger)?;
@@ -842,9 +858,14 @@ pub fn verify_constraints<C: Challenger>(
         hadamard_ro,
         RoChannel::VeilHadamard,
     )?;
-    append_multiplication_link_constraints(&padded, &dot_vector, &proof.hadamard, &mut constraints);
+    append_multiplication_link_constraints(
+        &padded,
+        &dot_vector,
+        &proof.hadamard,
+        &mut constraints,
+    )?;
 
-    let constraint_rlc = challenger.sample_f128();
+    let constraint_rlc = sample_nonzero(challenger);
     let (dot_vector, expected_dot) =
         combine_linear_constraints(padded.num_variables, &constraints, constraint_rlc)?;
     if proof.linear.claimed_dot_products.as_slice() != [expected_dot] {
@@ -903,8 +924,13 @@ fn multiplication_vectors(
     let mut b = Vec::with_capacity(circuit.multiplications.len());
     let mut c = Vec::with_capacity(circuit.multiplications.len());
     for gate in &circuit.multiplications {
-        a.push(gate.left.evaluate(witness)?);
-        b.push(gate.right.evaluate(witness)?);
+        let left = gate.left.evaluate(witness)?;
+        a.push(left);
+        b.push(if gate.left == gate.right {
+            left
+        } else {
+            gate.right.evaluate(witness)?
+        });
         c.push(gate.output.evaluate(witness)?);
     }
     Ok((a, b, c))
@@ -915,20 +941,32 @@ fn append_multiplication_link_constraints(
     dot_vector: &[F128],
     proof: &HadamardProof,
     constraints: &mut Vec<LinearCombination>,
-) {
+) -> Result<(), ConstraintError> {
     for side in 0..3 {
         let mut linked = LinearCombination::constant(proof.claimed_dot_products[side]);
+        let mut coefficients = vec![F128::ZERO; circuit.num_variables];
         for (gate, coefficient) in circuit.multiplications.iter().zip(dot_vector) {
             let expression = match side {
-                0 => gate.left.clone(),
-                1 => gate.right.clone(),
-                2 => gate.output.clone(),
+                0 => &gate.left,
+                1 => &gate.right,
+                2 => &gate.output,
                 _ => unreachable!(),
             };
-            linked = linked.add(&expression.scale(*coefficient));
+            linked.constant += expression.constant * *coefficient;
+            for &(index, value) in &expression.terms {
+                *coefficients
+                    .get_mut(index)
+                    .ok_or(ConstraintError::InvalidVariable(index))? += value * *coefficient;
+            }
         }
+        linked.terms = coefficients
+            .into_iter()
+            .enumerate()
+            .filter(|(_, value)| !value.is_zero())
+            .collect();
         constraints.push(linked);
     }
+    Ok(())
 }
 
 fn combine_linear_constraints(

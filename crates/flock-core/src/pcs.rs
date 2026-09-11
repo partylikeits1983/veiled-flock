@@ -23,7 +23,11 @@ pub mod commit;
 pub mod jagged;
 pub mod ligerito;
 pub mod pack;
+#[cfg(feature = "zk")]
+pub mod query_padding;
 pub mod ring_switch;
+#[cfg(feature = "zk")]
+pub mod single_column;
 #[cfg(feature = "symbolic")]
 pub mod symbolic_opening;
 pub mod tensor_algebra;
@@ -629,9 +633,66 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         target_combined += *g * pl.value;
     }
 
-    let rs_baked: Vec<&[F128]> = rs_results
+    let rs_bases = rs_results
         .iter()
-        .filter_map(|(_, o)| match &o.rs_eq_ind {
+        .map(|(_, output)| &output.rs_eq_ind)
+        .collect::<Vec<_>>();
+    let (b_combined, (round0_u0, round0_u2)) = combine_claim_bases(
+        packed_witness,
+        &rs_bases,
+        packed_direct,
+        &gammas_pd,
+        packed_linear,
+        &gammas_pl,
+    );
+    if trace {
+        eprintln!(
+            "  [open_batch] combine rs_eq_ind (L={}, rs×{}, pd×{}, pl×{}): {:6.2} ms",
+            l,
+            n_rs,
+            n_pd,
+            n_pl,
+            t.elapsed().as_secs_f64() * 1e3
+        );
+    }
+
+    CombinedClaim {
+        ring_switches: rs_results
+            .into_iter()
+            .map(|(p, o)| {
+                // The per-claim rs_eq_ind (L F128s) dies here — recycle it.
+                if let ring_switch::RsEqInd::Dense(v) = o.rs_eq_ind {
+                    crate::scratch::give_f128(v);
+                }
+                p
+            })
+            .collect(),
+        b_combined,
+        target_combined,
+        round0_prime: (round0_u0, round0_u2),
+    }
+}
+
+/// Combine weighted claim bases and compute the first sumcheck message in the same pass.
+/// Ring-switch bases must already include their batching coefficients.
+pub fn combine_claim_bases(
+    packed_witness: &[F128],
+    rs_bases: &[&ring_switch::RsEqInd],
+    packed_direct: &[PackedDirectClaim],
+    gammas_pd: &[F128],
+    packed_linear: &[PackedLinearClaim],
+    gammas_pl: &[F128],
+) -> (Vec<F128>, (F128, F128)) {
+    let l = packed_witness.len();
+    assert!(l >= 2 && l.is_power_of_two());
+    assert_eq!(packed_direct.len(), gammas_pd.len());
+    assert_eq!(packed_linear.len(), gammas_pl.len());
+    assert!(rs_bases.iter().all(|b| b.len() == l));
+    assert!(packed_direct.iter().all(|p| 1usize << p.point.len() == l));
+    assert!(packed_linear.iter().all(|p| p.basis.len() == l));
+    let rs_baked: Vec<&[F128]> = rs_bases
+        .iter()
+        .filter_map(|basis| match basis {
             ring_switch::RsEqInd::Dense(v) => Some(v.as_slice()),
             _ => None,
         })
@@ -640,9 +701,9 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     // was never materialized — fold each slot on the fly below and accumulate
     // straight into `b_combined`, saving a 2^(m-7) materialize + readback per
     // claim. Carries (eq_lo, eq_hi, γ-baked table, log₂ B).
-    let rs_deferred: Vec<(&[F128], &[F128], &[F128], usize)> = rs_results
+    let rs_deferred: Vec<(&[F128], &[F128], &[F128], usize)> = rs_bases
         .iter()
-        .filter_map(|(_, o)| match &o.rs_eq_ind {
+        .filter_map(|basis| match basis {
             ring_switch::RsEqInd::DeferredDense {
                 eq_lo,
                 eq_hi,
@@ -688,7 +749,10 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
     // `pd_dense.is_empty()`, not `packed_direct.is_empty()`. This keeps the two
     // big ab/c claims on the fused fold instead of materializing them.
     let use_fast = !rs_deferred.is_empty()
-        && rs_deferred.len() == rs_results.len()
+        && rs_deferred.len() == rs_bases.len()
+        && rs_deferred
+            .iter()
+            .all(|d| d.0.len() >= 2 && d.0.len() == rs_deferred[0].0.len())
         && pd_dense.is_empty()
         && pl_dense.is_empty();
 
@@ -737,9 +801,9 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         // deferred-dense claims (parallel block fold), then the per-element
         // combine over all dense buffers + packed-direct, matching the
         // original behavior.
-        let materialized: Vec<Vec<F128>> = rs_results
+        let materialized: Vec<Vec<F128>> = rs_bases
             .iter()
-            .filter_map(|(_, o)| match &o.rs_eq_ind {
+            .filter_map(|basis| match basis {
                 ring_switch::RsEqInd::DeferredDense {
                     eq_lo,
                     eq_hi,
@@ -792,8 +856,8 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
         }
         round0_u2 += (a0 + a1) * delta;
     };
-    for (_, output) in rs_results.iter() {
-        if let ring_switch::RsEqInd::Sparse { entries, .. } = &output.rs_eq_ind {
+    for output in rs_bases {
+        if let ring_switch::RsEqInd::Sparse { entries, .. } = output {
             for &(idx, val) in entries {
                 b_combined[idx] += val;
                 adjust_prime_for_delta(idx, val);
@@ -812,32 +876,7 @@ fn compute_combined_basis_and_target<Ch: Challenger>(
             round0_u2 += du2;
         }
     }
-    if trace {
-        eprintln!(
-            "  [open_batch] combine rs_eq_ind (L={}, rs×{}, pd×{}, pl×{}): {:6.2} ms",
-            l,
-            n_rs,
-            n_pd,
-            n_pl,
-            t.elapsed().as_secs_f64() * 1e3
-        );
-    }
-
-    CombinedClaim {
-        ring_switches: rs_results
-            .into_iter()
-            .map(|(p, o)| {
-                // The per-claim rs_eq_ind (L F128s) dies here — recycle it.
-                if let ring_switch::RsEqInd::Dense(v) = o.rs_eq_ind {
-                    crate::scratch::give_f128(v);
-                }
-                p
-            })
-            .collect(),
-        b_combined,
-        target_combined,
-        round0_prime: (round0_u0, round0_u2),
-    }
+    (b_combined, (round0_u0, round0_u2))
 }
 
 /// Parallel sparse scatter-add: `b_combined[scatter_idx(c)] += gamma * eq.live_tensor[c]`

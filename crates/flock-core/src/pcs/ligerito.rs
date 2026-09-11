@@ -74,7 +74,15 @@ impl LigeritoProfile {
         match self {
             Self::Fast | Self::Secure => 1,
             Self::Slim => 2,
-            Self::Standard => 3,
+            Self::Standard => 1,
+        }
+    }
+
+    pub fn log_inv_rate_for_m(self, m: usize) -> usize {
+        if self == Self::Standard && m == 22 {
+            2
+        } else {
+            self.log_inv_rate()
         }
     }
     /// Security target used to derive the profile.
@@ -415,11 +423,11 @@ const EMBEDDED_CONFIGS: &[((usize, LigeritoProfile), &str)] =
 pub fn embedded_security_config(m: usize, profile: LigeritoProfile) -> Option<&'static str> {
     if profile == LigeritoProfile::Standard {
         return match m {
+            22 => Some(include_str!("../../configs/ligerito/m22_standard.toml")),
             23 => Some(include_str!("../../configs/ligerito/m23_standard.toml")),
             24 => Some(include_str!("../../configs/ligerito/m24_standard.toml")),
             25 => Some(include_str!("../../configs/ligerito/m25_standard.toml")),
             26 => Some(include_str!("../../configs/ligerito/m26_standard.toml")),
-            27 => Some(include_str!("../../configs/ligerito/m27_standard.toml")),
             _ => None,
         };
     }
@@ -1042,7 +1050,68 @@ impl LigeritoSecurityConfig {
         }
         let (pg_bits, _) = l0.paper_predicted_bits();
         let c_grind_bits = f64::from(l0_derived_grind_bits(&[l0.fold_grinding_bits]));
-        bound.proximity_probability += BINARY_PROBABILITY_BASE.powf(-(pg_bits + c_grind_bits));
+        // The blinding challenge is sampled from the nonzero field elements.
+        bound.proximity_probability += BINARY_PROBABILITY_BASE.powf(1.0 - pg_bits - c_grind_bits);
+        Ok(bound)
+    }
+
+    /// Charge the extended RS dimension and the extra nonzero-column fold.
+    /// The registered recursion describes the unpadded virtual oracle.
+    pub fn aggregate_soundness_bound_query_padded(
+        &self,
+        padding: usize,
+    ) -> Result<AggregateSoundnessBound, String> {
+        self.validate()?;
+        let l0 = self.levels.first().ok_or("empty levels")?;
+        if !matches!(l0.regime, SoundnessRegime::Udr) || padding == 0 || padding != l0.queries {
+            return Err("query padding requires UDR L0 and one pad per query".into());
+        }
+        let message = 1usize
+            .checked_shl(l0.log_msg_cols as u32)
+            .ok_or("message dimension overflow")?;
+        let length = message
+            .checked_shl(l0.log_inv_rate as u32)
+            .ok_or("code length overflow")?;
+        let extended = message
+            .checked_add(padding)
+            .ok_or("padding dimension overflow")?;
+        if padding > message || extended >= length {
+            return Err("query padding exceeds code capacity".into());
+        }
+        let delta = 1.0 - extended as f64 / length as f64;
+        let loss = l0.proximity_loss.ok_or("missing UDR proximity loss")?;
+        let ceiling = delta / 2.0 - 3.0 / (delta * length as f64);
+        let gamma = ceiling - loss;
+        if delta < 3.0 * 2f64.sqrt() / (length as f64).sqrt()
+            || gamma < delta / 3.0
+            || gamma > ceiling
+            || gamma <= 0.0
+        {
+            return Err("padded code is outside the UDR theorem range".into());
+        }
+        let pg_bits = ANALYSIS_LOG_Q - (gamma * length as f64 + 1.0).log2();
+        let query_bits = l0.queries as f64 * -(1.0 - gamma).log2();
+        let mut bound = AggregateSoundnessBound {
+            proximity_probability: 0.0,
+            query_probability: 0.0,
+            ood_probability: 0.0,
+        };
+        for (index, level) in self.levels.iter().enumerate() {
+            let (pg, query) = if index == 0 {
+                (pg_bits, query_bits)
+            } else {
+                level.paper_predicted_bits()
+            };
+            bound.proximity_probability += level.log_num_interleaved.max(MIN_EFFECTIVE_FOLD_COUNT)
+                as f64
+                * 2f64.powf(-pg - level.fold_grinding_bits as f64);
+            bound.query_probability += 2f64.powf(-query - level.grinding_bits as f64);
+            if let Some(ood) = level.expected_eps_ood_bits {
+                bound.ood_probability += 2f64.powf(-ood + ROUNDED_DIAGNOSTIC_HALF_ULP_BITS);
+            }
+        }
+        // The interactive bound takes no credit for the blinding grind.
+        bound.proximity_probability += 2f64.powf(1.0 - pg_bits);
         Ok(bound)
     }
 
@@ -1298,10 +1367,19 @@ impl LigeritoSecurityConfig {
         log_inv_rate: usize,
         target_security_bits: usize,
     ) -> Result<Self, String> {
+        Self::derive_paper_compatible_with_interleaving(m, 6, log_inv_rate, target_security_bits)
+    }
+
+    /// Derive a UDR schedule for an explicit initial interleaving width.
+    pub fn derive_paper_compatible_with_interleaving(
+        m: usize,
+        initial_k: usize,
+        log_inv_rate: usize,
+        target_security_bits: usize,
+    ) -> Result<Self, String> {
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
             .ok_or_else(|| format!("m ({m}) < LOG_PACKING (7)"))?;
-        let initial_k = 6usize;
         let prover = default_config(log_n, initial_k, log_inv_rate).map_err(|e| e.to_string())?;
         let r = prover.recursive_steps;
         let mut levels = Vec::with_capacity(r + 1);
@@ -2974,6 +3052,11 @@ impl SumcheckProver {
         &self.f
     }
 
+    #[cfg(feature = "zk")]
+    pub(crate) fn basis(&self) -> &[F128] {
+        &self.combined_basis
+    }
+
     pub fn transcript(&self) -> &[SumcheckMessage] {
         &self.transcript
     }
@@ -3212,6 +3295,126 @@ pub struct ZkL0 {
     pub c: F128,
 }
 
+#[derive(Clone, Copy)]
+enum InitialRows<'a> {
+    Pairwise(ZkL0),
+    #[cfg_attr(not(feature = "zk"), allow(dead_code))]
+    Columns {
+        weights: &'a [F128],
+        correction: &'a dyn Fn(usize) -> F128,
+    },
+}
+
+impl InitialRows<'_> {
+    fn width(self, lanes: usize) -> usize {
+        match self {
+            Self::Pairwise(_) => 2 * lanes,
+            Self::Columns { weights, .. } => weights.len(),
+        }
+    }
+
+    fn combine(self, row: &[F128], lanes: usize, position: usize) -> Vec<F128> {
+        match self {
+            Self::Pairwise(zk) => (0..lanes).map(|j| row[j] + zk.c * row[lanes + j]).collect(),
+            Self::Columns {
+                weights,
+                correction,
+            } => {
+                assert_eq!(lanes, 1);
+                vec![
+                    row.iter()
+                        .zip(weights)
+                        .fold(F128::ZERO, |s, (v, w)| s + *v * *w)
+                        + correction(position),
+                ]
+            }
+        }
+    }
+}
+
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn recursive_prover_combined_columns<Ch: Challenger>(
+    config: &ProverConfig,
+    folded: Vec<F128>,
+    basis: Vec<F128>,
+    target: F128,
+    data: &super::commit::ProverData,
+    weights: &[F128],
+    padding: Option<(&super::query_padding::PaddingCode, &[F128])>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> LigeritoProof {
+    assert_eq!(config.initial_k, 0);
+    let correction = |position| {
+        padding.map_or(F128::ZERO, |(code, pads)| {
+            code.evaluate_padding(pads, position)
+        })
+    };
+    recursive_prover_with_basis_impl(
+        config,
+        folded,
+        basis,
+        target,
+        &data.codeword,
+        &data.merkle_tree,
+        &data.initial_leaf_salts,
+        None,
+        Some(InitialRows::Columns {
+            weights,
+            correction: &correction,
+        }),
+        true,
+        ro,
+        channel,
+        challenger,
+    )
+}
+
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn recursive_verifier_combined_columns<Ch, F>(
+    config: &VerifierConfig,
+    proof: &LigeritoProof,
+    log_n: usize,
+    target: F128,
+    root: &Hash,
+    eval_basis: F,
+    weights: &[F128],
+    padding: Option<(&super::query_padding::PaddingCode, &[F128])>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> bool
+where
+    Ch: Challenger,
+    F: Fn(&[F128], usize) -> Vec<F128>,
+{
+    if config.initial_k != 0 || weights.is_empty() {
+        return false;
+    }
+    let correction = |position| {
+        padding.map_or(F128::ZERO, |(code, pads)| {
+            code.evaluate_padding(pads, position)
+        })
+    };
+    recursive_verifier_with_basis_succinct_impl(
+        config,
+        proof,
+        log_n,
+        target,
+        root,
+        eval_basis,
+        Some(InitialRows::Columns {
+            weights,
+            correction: &correction,
+        }),
+        Some((ro, channel)),
+        challenger,
+    )
+}
+
 /// zk variant of [`recursive_prover_with_basis_precomputed_round0`]: same
 /// protocol, but the L0 commitment is the wide-leaf hiding commit
 /// (`pcs::commit_zk`) and the folded vector is `F = message′ + c·g`.
@@ -3244,7 +3447,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
             u_0: round0_uv.0,
             u_2: round0_uv.1,
         }),
-        Some(zk_l0),
+        Some(InitialRows::Pairwise(zk_l0)),
         false,
         &ro,
         crate::ro::RoChannel::Witness,
@@ -3281,7 +3484,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
             u_0: round0_uv.0,
             u_2: round0_uv.1,
         }),
-        Some(zk_l0),
+        Some(InitialRows::Pairwise(zk_l0)),
         true,
         ro,
         channel,
@@ -3370,7 +3573,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     l0_tree: &[Hash],
     l0_leaf_salts: &[[u8; 32]],
     first_msg: Option<SumcheckMessage>,
-    zk_l0: Option<ZkL0>,
+    zk_l0: Option<InitialRows<'_>>,
     framed: bool,
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
@@ -3391,11 +3594,8 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let block_len_0 = 1usize << (log_msg_cols_0 + log_inv_rate_0);
     let num_interleaved_0 = 1usize << initial_k;
     // zk: each L0 leaf additionally carries the blinder-g lanes.
-    let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
-    assert_eq!(
-        l0_codeword.len(),
-        block_len_0 * num_interleaved_0 * l0_lane_mult
-    );
+    let l0_leaf_width = zk_l0.map_or(num_interleaved_0, |mode| mode.width(num_interleaved_0));
+    assert_eq!(l0_codeword.len(), block_len_0 * l0_leaf_width);
     assert_eq!(l0_tree.len(), 2 * block_len_0 - 1);
     if zk_l0.is_some() {
         assert_eq!(l0_leaf_salts.len(), block_len_0);
@@ -3421,7 +3621,6 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     // wtns_0 access reduces to: root (last tree node), row(q), block_len.
     let initial_root: Hash = l0_tree[l0_tree.len() - 1];
     let l0_block_len = block_len_0;
-    let l0_leaf_width = num_interleaved_0 * l0_lane_mult;
     let l0_row = |q: usize| -> &[F128] {
         let start = q * l0_leaf_width;
         &l0_codeword[start..start + l0_leaf_width]
@@ -3558,11 +3757,8 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let induce_rows_0: Vec<Vec<F128>> = match zk_l0 {
         Some(zk) => opened_rows_0
             .iter()
-            .map(|row| {
-                (0..num_interleaved_0)
-                    .map(|j| row[j] + zk.c * row[num_interleaved_0 + j])
-                    .collect()
-            })
+            .zip(&queries_0)
+            .map(|(row, position)| zk.combine(row, num_interleaved_0, *position))
             .collect(),
         None => opened_rows_0.clone(),
     };
@@ -3849,7 +4045,7 @@ where
         target,
         expected_initial_root,
         eval_b_residual,
-        zk_l0,
+        zk_l0.map(InitialRows::Pairwise),
         None,
         challenger,
     )
@@ -3880,7 +4076,7 @@ where
         target,
         expected_initial_root,
         eval_b_residual,
-        zk_l0,
+        zk_l0.map(InitialRows::Pairwise),
         Some((ro, channel)),
         challenger,
     )
@@ -3894,7 +4090,7 @@ fn recursive_verifier_with_basis_succinct_impl<Ch, F>(
     target: F128,
     expected_initial_root: &Hash,
     eval_b_residual: F,
-    zk_l0: Option<ZkL0>,
+    zk_l0: Option<InitialRows<'_>>,
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     challenger: &mut Ch,
 ) -> bool
@@ -4060,14 +4256,14 @@ where
     let _t = std::time::Instant::now();
     // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
     // rows, then combine each into an F-row with c for the enforced sum.
-    let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
+    let l0_leaf_width = zk_l0.map_or(num_interleaved_0, |mode| mode.width(num_interleaved_0));
     if !verify_level_opens_maybe_ro(
         &proof.initial_root,
         block_len_0,
         &queries_0,
         &proof.initial_proof.opened_rows,
         &proof.initial_proof.leaf_salts,
-        num_interleaved_0 * l0_lane_mult,
+        l0_leaf_width,
         &proof.initial_proof.merkle_proof,
         l0_salt_domain,
         ro_context,
@@ -4091,11 +4287,8 @@ where
                 .initial_proof
                 .opened_rows
                 .iter()
-                .map(|row| {
-                    (0..num_interleaved_0)
-                        .map(|j| row[j] + zk.c * row[num_interleaved_0 + j])
-                        .collect()
-                })
+                .zip(&queries_0)
+                .map(|(row, position)| zk.combine(row, num_interleaved_0, *position))
                 .collect();
             &combined_rows_0
         }
@@ -8222,6 +8415,44 @@ mod fold_grind_taper_tests {
                 cfg.aggregate_soundness_bound_zk_l0().is_err(),
                 "{profile:?} L0 is JohnsonOod, so the zk L0 bound must fail closed"
             );
+        }
+    }
+
+    #[test]
+    fn query_padding_ledger_charges_extended_dimension() {
+        let cfg = security_config(26, LigeritoProfile::Standard);
+        let q = cfg.levels[0].queries;
+        let plain = cfg.aggregate_soundness_bound_zk_l0().unwrap();
+        let padded = cfg.aggregate_soundness_bound_query_padded(q).unwrap();
+        assert!(padded.query_probability > plain.query_probability);
+        assert!(padded.bits() < plain.bits());
+        assert!(cfg.aggregate_soundness_bound_query_padded(q - 1).is_err());
+        assert!(
+            security_config(26, LigeritoProfile::Fast)
+                .aggregate_soundness_bound_query_padded(218)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn query_padding_can_clear_the_matched_soundness_floor() {
+        for m in 22..=26 {
+            let mut cfg = security_config(m, LigeritoProfile::Standard);
+            let limit = 1 << cfg.levels[0].log_msg_cols;
+            loop {
+                let q = cfg.levels[0].queries;
+                if cfg
+                    .aggregate_soundness_bound_query_padded(q)
+                    .unwrap()
+                    .bits()
+                    >= 100.0
+                {
+                    break;
+                }
+                assert!(q < limit);
+                cfg.levels[0].queries += 1;
+                cfg.levels[0].expected_eps_query_bits = cfg.levels[0].paper_predicted_bits().1;
+            }
         }
     }
 }

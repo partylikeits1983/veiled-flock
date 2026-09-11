@@ -67,12 +67,8 @@ pub struct PcsParams {
     /// (`profile.log_inv_rate() == log_inv_rate`). Defaults to `Fast`.
     #[serde(default)]
     pub profile: LigeritoProfile,
-    /// Zero-knowledge mode. The committed message becomes
-    /// `[mask ‖ z_packed]` (uniform low half, witness in the top half), and a
-    /// full-support blinder codeword `g` is committed alongside it in shared
-    /// wide Merkle leaves. Doubles both the message dimension and the leaf
-    /// width; the opening folds `F = message′ + c·g` for an FS challenge `c`.
-    /// Requires the `zk` cargo feature.
+    /// Enable hiding PCS support. The opening protocol selects its blinding
+    /// layout; the full-ZK wrapper uses the single-column commitment.
     #[serde(default)]
     pub zk: bool,
 }
@@ -97,7 +93,7 @@ impl PcsParams {
     ) -> Result<Self, PcsParamsError> {
         let params = Self {
             m,
-            log_inv_rate: profile.log_inv_rate(),
+            log_inv_rate: profile.log_inv_rate_for_m(m),
             log_batch_size,
             profile,
             zk,
@@ -107,7 +103,7 @@ impl PcsParams {
     }
 
     pub fn profile_rate_matches(&self) -> bool {
-        self.log_inv_rate == self.profile.log_inv_rate()
+        self.log_inv_rate == self.profile.log_inv_rate_for_m(self.m)
     }
 
     pub fn validate_profile_rate(&self) -> Result<(), ProfileRateMismatchError> {
@@ -116,14 +112,13 @@ impl PcsParams {
         } else {
             Err(ProfileRateMismatchError {
                 profile: self.profile,
-                expected_log_inv_rate: self.profile.log_inv_rate(),
+                expected_log_inv_rate: self.profile.log_inv_rate_for_m(self.m),
                 actual_log_inv_rate: self.log_inv_rate,
             })
         }
     }
 
-    /// Log length of the **committed** message (= log2 packed witness length,
-    /// +1 in zk mode for the low-half mask block).
+    /// Message dimension for the legacy full-padding layout.
     pub fn log_msg_len(&self) -> usize {
         self.m - LOG_PACKING + (self.zk as usize)
     }
@@ -131,8 +126,7 @@ impl PcsParams {
     pub fn witness_log_msg_len(&self) -> usize {
         self.m - LOG_PACKING
     }
-    /// Log lane count actually committed per Merkle leaf: the f′ lanes, plus
-    /// the blinder-`g` lanes in zk mode.
+    /// Lane width of the legacy pairwise commitment.
     pub fn log_lanes_committed(&self) -> usize {
         self.log_batch_size + (self.zk as usize)
     }
@@ -152,8 +146,8 @@ impl PcsParams {
     pub fn num_ntts(&self) -> usize {
         1usize << self.log_batch_size
     }
-    /// Total codeword length in F_{2^128} elements
-    /// (= `n_positions() * num_ntts()`, ×2 in zk mode for the `g` lanes).
+    /// Field-element count for the legacy pairwise commitment.
+    /// The single-column commitment computes its own row width.
     pub fn codeword_len_f128(&self) -> usize {
         self.n_positions() << self.log_lanes_committed()
     }
@@ -217,11 +211,9 @@ pub struct ProverData {
     pub merkle_tree: Vec<Hash>,
     /// ZK mode only: one salt per initial commitment leaf.
     pub initial_leaf_salts: Vec<[u8; 32]>,
-    /// zk mode only: the uniform low-half mask block of the committed message
-    /// `message′ = [zk_mask ‖ z_packed]` (length `2^{m−7}`; empty otherwise).
+    /// Secret witness-column padding, stored in the selected PCS layout.
     pub zk_mask: Vec<F128>,
-    /// zk mode only: the full-support blinder codeword `g` (length `2^{m−6}`;
-    /// empty otherwise). The opening runs on `F = message′ + c·g`.
+    /// Secret coefficients of the independent blinder columns.
     pub zk_blind: Vec<F128>,
 }
 
@@ -448,6 +440,35 @@ fn finalize_commit<'a, const PARTS: usize>(
             t_ntt.elapsed().as_secs_f64() * 1e3
         );
     }
+    commit_encoded_rows(codeword, params, initial_leaf_salts, ro, channel)
+}
+
+pub(super) fn commit_encoded_rows(
+    codeword: Vec<F128>,
+    params: &PcsParams,
+    initial_leaf_salts: Vec<[u8; 32]>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
+    commit_encoded_rows_at(
+        codeword,
+        params,
+        params.n_leaves(),
+        initial_leaf_salts,
+        ro,
+        channel,
+    )
+}
+
+pub(super) fn commit_encoded_rows_at(
+    codeword: Vec<F128>,
+    params: &PcsParams,
+    leaves: usize,
+    initial_leaf_salts: Vec<[u8; 32]>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
+    let timing = std::env::var_os("FLOCK_COMMIT_TIMING").is_some();
     let t_merkle = std::time::Instant::now();
 
     // ---- Merkle commitment: one leaf per codeword position = num_ntts F128.
@@ -464,11 +485,11 @@ fn finalize_commit<'a, const PARTS: usize>(
     // row-batch lanes (num_ntts F_{2^128} values = 2^log_batch_size). This is
     // Ligerito's L0 commitment.
     let merkle_tree = if initial_leaf_salts.is_empty() {
-        merkle::merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0)
+        merkle::merkle_tree_framed(codeword_bytes, leaves, ro, channel, 0)
     } else {
         merkle::merkle_tree_framed_salted(
             codeword_bytes,
-            params.n_leaves(),
+            leaves,
             &initial_leaf_salts,
             ro,
             channel,
@@ -591,8 +612,8 @@ mod tests {
     #[cfg(feature = "zk")]
     #[test]
     fn standard_profile_preserves_rate_consistency() {
-        let mut params = PcsParams::new(22, 6, LigeritoProfile::Standard, true).unwrap();
-        assert_eq!(params.log_inv_rate, 3);
+        let mut params = PcsParams::new(22, 5, LigeritoProfile::Standard, true).unwrap();
+        assert_eq!(params.log_inv_rate, 2);
         params.log_inv_rate = 1;
         assert!(matches!(
             params.validate(),

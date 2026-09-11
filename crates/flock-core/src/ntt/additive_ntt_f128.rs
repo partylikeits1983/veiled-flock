@@ -137,6 +137,13 @@ impl AdditiveNttF128 {
         span_get(&v[1..], block)
     }
 
+    #[cfg(feature = "zk")]
+    pub(crate) fn normalized_subspace_at(&self, log_degree: usize, position: usize) -> F128 {
+        assert!(log_degree < self.log_domain_size());
+        assert!(position < 1usize << self.log_domain_size());
+        span_get(&self.evals[log_degree], position >> log_degree)
+    }
+
     /// Forward additive NTT in place. `data.len()` must be `2^log_d` for some
     /// `log_d ≤ log_domain_size()`. Layer `l ∈ [0, log_d)` is processed in
     /// order (neighbors-last: top layer first).
@@ -164,7 +171,7 @@ impl AdditiveNttF128 {
     /// (same `self.twiddle(layer, block)` is applied to every lane at the
     /// corresponding butterfly).
     ///
-    /// `num_ntts` must be a positive power of 2. `data.len()` must equal
+    /// `num_ntts` must be positive. `data.len()` must equal
     /// `(1 << log_d) * num_ntts` for some `log_d ≤ log_domain_size()`.
     ///
     /// This produces the SAME RS code per lane as `forward_transform`, with
@@ -185,7 +192,7 @@ impl AdditiveNttF128 {
         log_inv_rate: usize,
         row: impl Fn(usize) -> [&'a [F128]; PARTS] + Sync,
     ) {
-        assert!(num_ntts.is_power_of_two());
+        assert!(num_ntts > 0);
         assert_eq!(data.len() % num_ntts, 0);
         let log_d = log2_pow2(data.len() / num_ntts);
         assert!(log_d <= self.log_domain_size());
@@ -298,7 +305,7 @@ impl AdditiveNttF128 {
         num_ntts: usize,
         start_layer: usize,
     ) {
-        assert!(num_ntts.is_power_of_two() && num_ntts > 0);
+        assert!(num_ntts > 0);
         let n_total = data.len();
         assert_eq!(n_total % num_ntts, 0);
         let log_d = log2_pow2(n_total / num_ntts);
@@ -400,7 +407,7 @@ impl AdditiveNttF128 {
         // num_ntts=32: 2^12 positions. (Without this scaling, sub-groups at
         // num_ntts=32 would be 64 MB and overflow L2 cache.)
         const TARGET_SUBGROUP_LOG_BYTES: usize = 21;
-        let log_bytes_per_position = 4 + log2_pow2(num_ntts);
+        let log_bytes_per_position = 4 + num_ntts.ilog2() as usize;
         let target_log_positions = TARGET_SUBGROUP_LOG_BYTES.saturating_sub(log_bytes_per_position);
         let cache_n_top = log_d.saturating_sub(target_log_positions);
 
@@ -996,7 +1003,7 @@ mod tests {
         let mut rng = Rng::new(0xD1EC7);
         for log_msg in [0, 1, 2, 5, 9] {
             for log_rate in [1, 2, 3, 6] {
-                for lanes in [1, 8, 64] {
+                for lanes in [1, 3, 8, 9, 64, 65] {
                     let msg = rand_vec(&mut rng, (1 << log_msg) * lanes);
                     let ntt = AdditiveNttF128::standard(log_msg + log_rate);
                     let mut expected = vec![F128::ZERO; msg.len() << log_rate];
