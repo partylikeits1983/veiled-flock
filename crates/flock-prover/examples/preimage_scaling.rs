@@ -1,7 +1,7 @@
 //! Compare the public ZK and non-ZK BLAKE3-preimage APIs.
 //! Reports medians after one warm-up. Timings exclude setup and serialization;
-//! sizes count proof objects only. Both configurations target the same composed
-//! interactive soundness floor; the non-ZK default is unchanged.
+//! sizes count proof objects only. The default comparison also matches the PCS
+//! layout; `stock` retains FLOCK's layout. Non-ZK production defaults are unchanged.
 
 use std::time::{Duration, Instant};
 
@@ -24,6 +24,12 @@ struct Sample {
     proof_bytes: usize,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Layout {
+    Matched,
+    Stock,
+}
+
 fn main() {
     flock_prover::init_perf_thread_pool();
     let mut args = std::env::args().skip(1);
@@ -36,27 +42,39 @@ fn main() {
         })
         .unwrap_or(5);
     assert!(samples > 0, "sample count must be positive");
-    let selected_size = args.next().map(|value| {
+    let selected_size = args.next().filter(|value| value != "all").map(|value| {
         let size = value.parse::<usize>().expect("size must be an integer");
         assert!(SIZES.contains(&size), "unsupported benchmark size");
         size
     });
+    let layout = match args.next().as_deref().unwrap_or("matched") {
+        "matched" => Layout::Matched,
+        "stock" => Layout::Stock,
+        _ => panic!("layout must be matched or stock"),
+    };
     assert!(
         args.next().is_none(),
-        "usage: preimage_scaling [samples] [size]"
+        "usage: preimage_scaling [samples] [size|all] [matched|stock]"
+    );
+    assert!(
+        layout == Layout::Stock || selected_size.is_none_or(|size| size >= 256),
+        "matched layouts require at least 256 hashes; smaller ZK batches use padding"
     );
 
     println!(
         "hashes,protocol,prove_ms_median,verify_ms_median,proof_bytes_median,proof_bytes_min,proof_bytes_max"
     );
     for size in SIZES {
+        if layout == Layout::Matched && size < 256 {
+            continue;
+        }
         if selected_size.is_none_or(|selected| selected == size) {
-            benchmark_size(size, samples);
+            benchmark_size(size, samples, layout);
         }
     }
 }
 
-fn benchmark_size(size: usize, samples: usize) {
+fn benchmark_size(size: usize, samples: usize, layout: Layout) {
     let messages = messages(size);
     let digests = Blake3PreimageSetup::digests_of(&messages);
 
@@ -64,6 +82,9 @@ fn benchmark_size(size: usize, samples: usize) {
     let zk_bound = zk.interactive_soundness_bound().expect("ZK composed bound");
     assert!(zk_bound.bits() >= SOUNDNESS_BITS as f64);
     let mut flock = Blake3PreimageSetup::new(size);
+    if layout == Layout::Matched {
+        match_pcs_layout(&mut flock, &zk);
+    }
     // The ZK PIOP ledger conservatively covers the smaller non-ZK circuit,
     // including its ring/direct claim batching and public digest check.
     assert!(flock.r1cs.m <= zk.r1cs.m && flock.r1cs.k_log <= zk.r1cs.k_log);
@@ -72,6 +93,13 @@ fn benchmark_size(size: usize, samples: usize) {
     let pcs_bound = security
         .aggregate_soundness_bound()
         .expect("FLOCK PCS bound");
+    eprintln!(
+        "{size} hashes: FLOCK columns {}, ZK columns {}+1; outer inverse rates {} / {}",
+        flock.pcs_params.num_ntts(),
+        zk.pcs_params.num_ntts(),
+        1usize << flock.pcs_params.log_inv_rate,
+        1usize << zk.pcs_params.log_inv_rate,
+    );
     eprintln!(
         "{size} hashes: FLOCK PCS {:.6}, composed {:.6} bits; ZK PCS {:.6}, composed {:.6} bits; FLOCK queries {:?}, fold grinding {:?}",
         pcs_bound.bits(),
@@ -123,6 +151,13 @@ fn benchmark_size(size: usize, samples: usize) {
     }
     print_samples(size, "FLOCK-non-ZK", &mut flock_samples);
     print_samples(size, "VEIL-FLOCK-full-ZK", &mut zk_samples);
+}
+
+fn match_pcs_layout(flock: &mut Blake3PreimageSetup, zk: &Blake3PreimageZkSetup) {
+    assert_eq!(flock.r1cs.m, zk.r1cs.m);
+    assert_eq!(flock.r1cs.k_log, zk.r1cs.k_log);
+    flock.pcs_params = zk.pcs_params.clone();
+    flock.pcs_params.zk = false;
 }
 
 fn matched_flock_config(
@@ -278,6 +313,37 @@ fn messages(size: usize) -> Vec<[u8; MESSAGE_BYTES]> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn matched_layouts_share_code_geometry_and_soundness_floor() {
+        for size in SIZES.into_iter().filter(|size| *size >= 256) {
+            let zk = Blake3PreimageZkSetup::new(size);
+            let bound = zk.interactive_soundness_bound().unwrap();
+            let piop = bound.flock_piop_probability + bound.digest_binding_probability;
+            let mut flock = Blake3PreimageSetup::new(size);
+            match_pcs_layout(&mut flock, &zk);
+            let config = matched_flock_config(&mut flock, piop);
+            let zk_config = LigeritoSecurityConfig::from_toml_str(
+                embedded_security_config(zk.pcs_params.m, zk.pcs_params.profile).unwrap(),
+            )
+            .unwrap();
+            assert!(!flock.pcs_params.zk);
+            assert_eq!(flock.pcs_params.num_ntts(), zk.pcs_params.num_ntts());
+            assert_eq!(config.initial_k, zk_config.initial_k);
+            assert_eq!(config.final_block.yr_log_n, zk_config.final_block.yr_log_n);
+            assert_eq!(config.levels.len(), zk_config.levels.len());
+            for (a, b) in config.levels.iter().zip(&zk_config.levels) {
+                assert_eq!(a.log_msg_cols, b.log_msg_cols);
+                assert_eq!(a.log_inv_rate, b.log_inv_rate);
+                assert_eq!(a.log_num_interleaved, b.log_num_interleaved);
+                assert_eq!(a.k_recursive, b.k_recursive);
+            }
+            assert!(
+                -(config.aggregate_soundness_bound().unwrap().probability() + piop).log2()
+                    >= SOUNDNESS_BITS as f64
+            );
+        }
+    }
 
     #[test]
     fn matched_schedules_reach_composed_floor_and_fit_their_codewords() {
