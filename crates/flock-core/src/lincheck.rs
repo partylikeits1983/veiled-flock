@@ -1225,6 +1225,7 @@ pub fn prove_padded<Ch: Challenger>(
         x_ab,
         false,
         None,
+        None,
         challenger,
     );
     (proof, claim)
@@ -1259,12 +1260,46 @@ pub fn prove_padded_capture_z_vec<Ch: Challenger>(
         x_ab,
         true,
         None,
+        None,
         challenger,
     );
     (
         proof,
         claim,
         captured.expect("capture=true must produce z_vec"),
+    )
+}
+
+/// Retain the witness fold and the public weights needed by the VEIL compiler.
+pub fn prove_padded_capture_vectors<Ch: Challenger>(
+    z_packed: &[u8],
+    m: usize,
+    k_log: usize,
+    k_skip: usize,
+    useful_bits: usize,
+    circuit: &dyn LincheckCircuit,
+    x_ab: &QuirkyPoint,
+    challenger: &mut Ch,
+) -> (LincheckProof, LincheckClaim, Vec<F128>, Vec<F128>) {
+    let mut weights = Vec::new();
+    let (proof, claim, witness, _) = prove_padded_inner(
+        z_packed,
+        m,
+        k_log,
+        k_skip,
+        useful_bits,
+        circuit,
+        x_ab,
+        true,
+        None,
+        Some(&mut weights),
+        challenger,
+    );
+    (
+        proof,
+        claim,
+        witness.expect("captured witness fold"),
+        weights,
     )
 }
 
@@ -1303,6 +1338,7 @@ pub fn prove_padded_masked_capture_z_vec<Ch: Challenger>(
         x_ab,
         true,
         Some(mask),
+        None,
         challenger,
     );
     (
@@ -1324,6 +1360,7 @@ fn prove_padded_inner<Ch: Challenger>(
     x_ab: &QuirkyPoint,
     capture_z_vec: bool,
     mask: Option<LincheckMask<'_>>,
+    capture_weights: Option<&mut Vec<F128>>,
     challenger: &mut Ch,
 ) -> (
     LincheckProof,
@@ -1534,6 +1571,9 @@ fn prove_padded_inner<Ch: Challenger>(
         r_inner_rest,
         w,
     };
+    if let Some(weights) = capture_weights {
+        *weights = comb_vec;
+    }
     (proof, claim, captured_z_vec, mask_transcript)
 }
 

@@ -1,5 +1,5 @@
-//! PCS leakage-rank audit — the machine-checked ZK certificate for the
-//! hiding commitment + blinded opening (test-only).
+//! Fixed-challenge leakage-rank tests for the hiding PCS.
+//! These small instances do not establish ZK for the production protocol.
 //!
 //! With a fixed challenger (`RandomChallenger` ignores observations, so every
 //! challenge, query set, and fold coefficient is constant across runs), every
@@ -84,7 +84,7 @@ fn tiny_config() -> ProverConfig {
 /// `s_hat_v` are the PIOP layer's masking responsibility (witness
 /// randomizers) and are deliberately NOT part of this audit's revealed set —
 /// this run uses a packed-direct claim only, so no `s_hat_v` exists at all.
-fn revealed_vector(mask: &[F128], g: &[F128], z_packed: &[F128]) -> Vec<F128> {
+fn revealed_vector(mask: &[F128], g: &[F128], z_packed: &[F128], seed: u64) -> Vec<F128> {
     assert_eq!(mask.len(), MASK_SLOTS);
     assert_eq!(g.len(), G_SLOTS);
     assert_eq!(z_packed.len(), W);
@@ -115,7 +115,7 @@ fn revealed_vector(mask: &[F128], g: &[F128], z_packed: &[F128]) -> Vec<F128> {
         .map(|(e, z)| *e * *z)
         .fold(F128::ZERO, |a, b| a + b);
 
-    let mut ch = RandomChallenger::new(CH_SEED);
+    let mut ch = RandomChallenger::new(seed);
     let proof = open_batch_mixed_ligerito_with_precomputed_s_hat_v(
         z_packed.to_vec(),
         &prover_data,
@@ -202,7 +202,7 @@ fn audit_pd_point() -> Vec<F128> {
 /// Extract the probe matrices A (mask columns) and B (claim-preserving
 /// witness columns) by affine differencing. `use_g`: whether the blinder-g
 /// slots participate on the mask side (false = negative control).
-fn probe_matrices(use_g: bool) -> (Vec<Vec<F128>>, Vec<Vec<F128>>) {
+fn probe_matrices(use_g: bool, seed: u64) -> (Vec<Vec<F128>>, Vec<Vec<F128>>) {
     let mask0 = vec![F128::ZERO; MASK_SLOTS];
     let g0 = vec![F128::ZERO; G_SLOTS];
     // Fixed nonzero witness so constants don't hide structural terms.
@@ -212,20 +212,20 @@ fn probe_matrices(use_g: bool) -> (Vec<Vec<F128>>, Vec<Vec<F128>>) {
             hi: 0x9E51_7A1B * (i as u64 + 7),
         })
         .collect();
-    let base = revealed_vector(&mask0, &g0, &w0);
+    let base = revealed_vector(&mask0, &g0, &w0, seed);
 
     let mut a_cols: Vec<Vec<F128>> = Vec::new();
     for i in 0..MASK_SLOTS {
         let mut m = mask0.clone();
         m[i] = F128::ONE;
-        let v = revealed_vector(&m, &g0, &w0);
+        let v = revealed_vector(&m, &g0, &w0, seed);
         a_cols.push(v.iter().zip(base.iter()).map(|(x, b)| *x + *b).collect());
     }
     if use_g {
         for i in 0..G_SLOTS {
             let mut g = g0.clone();
             g[i] = F128::ONE;
-            let v = revealed_vector(&mask0, &g, &w0);
+            let v = revealed_vector(&mask0, &g, &w0, seed);
             a_cols.push(v.iter().zip(base.iter()).map(|(x, b)| *x + *b).collect());
         }
     }
@@ -242,7 +242,7 @@ fn probe_matrices(use_g: bool) -> (Vec<Vec<F128>>, Vec<Vec<F128>>) {
         let mut w = w0.clone();
         w[j] += pd_eq[j].inv();
         w[0] += pd_eq[0].inv();
-        let v = revealed_vector(&mask0, &g0, &w);
+        let v = revealed_vector(&mask0, &g0, &w, seed);
         b_cols.push(v.iter().zip(base.iter()).map(|(x, b)| *x + *b).collect());
     }
     (a_cols, b_cols)
@@ -250,7 +250,7 @@ fn probe_matrices(use_g: bool) -> (Vec<Vec<F128>>, Vec<Vec<F128>>) {
 
 #[test]
 fn pcs_rank_audit_witness_image_covered() {
-    let (a_cols, b_cols) = probe_matrices(true);
+    let (a_cols, b_cols) = probe_matrices(true, CH_SEED);
     let rank_a = rank_f128(a_cols.clone());
     let mut all = a_cols;
     let n_a = all.len();
@@ -269,7 +269,7 @@ fn pcs_rank_audit_negative_control_without_g() {
     // Withhold the blinder g from the mask side: the low-half mask alone must
     // NOT cover the witness image (pre-glue sumcheck messages + yr top half
     // are then clear witness functionals). This validates the auditor.
-    let (a_cols, b_cols) = probe_matrices(false);
+    let (a_cols, b_cols) = probe_matrices(false, CH_SEED);
     let rank_a = rank_f128(a_cols.clone());
     let mut all = a_cols;
     all.extend(b_cols);
@@ -279,4 +279,40 @@ fn pcs_rank_audit_negative_control_without_g() {
         "negative control failed: mask-only image unexpectedly covers the witness \
          (rank {rank_a} = {rank_ab}) — the auditor would not catch a missing blinder"
     );
+}
+
+#[test]
+fn pcs_rank_audit_reduced_blinding() {
+    let query_slots = tiny_config().queries[0] * tiny_params().num_ntts();
+    for seed in [CH_SEED, CH_SEED + 1, CH_SEED + 2] {
+        let (a_cols, b_cols) = probe_matrices(true, seed);
+        for (name, mask_slots, blind_slots, covered) in [
+            ("full", MASK_SLOTS, G_SLOTS, true),
+            ("query mask", query_slots, G_SLOTS, true),
+            ("query blinder", MASK_SLOTS, query_slots, false),
+            ("query both", query_slots, query_slots, false),
+            (
+                "rounded query both",
+                query_slots.next_power_of_two(),
+                query_slots.next_power_of_two(),
+                false,
+            ),
+        ] {
+            // Restrict randomness to these prefixes without changing the opening.
+            let selected: Vec<_> = a_cols[..mask_slots]
+                .iter()
+                .chain(&a_cols[MASK_SLOTS..MASK_SLOTS + blind_slots])
+                .cloned()
+                .collect();
+            let rank_a = rank_f128(selected.clone());
+            let mut all = selected;
+            all.extend(b_cols.iter().cloned());
+            let rank_ab = rank_f128(all);
+            assert_eq!(
+                rank_a == rank_ab,
+                covered,
+                "{name}, seed {seed}: randomness rank {rank_a}, joint rank {rank_ab}"
+            );
+        }
+    }
 }

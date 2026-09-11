@@ -67,12 +67,8 @@ pub struct PcsParams {
     /// (`profile.log_inv_rate() == log_inv_rate`). Defaults to `Fast`.
     #[serde(default)]
     pub profile: LigeritoProfile,
-    /// Zero-knowledge mode. The committed message becomes
-    /// `[mask ‖ z_packed]` (uniform low half, witness in the top half), and a
-    /// full-support blinder codeword `g` is committed alongside it in shared
-    /// wide Merkle leaves. Doubles both the message dimension and the leaf
-    /// width; the opening folds `F = message′ + c·g` for an FS challenge `c`.
-    /// Requires the `zk` cargo feature.
+    /// Enable hiding PCS support. The opening protocol selects its blinding
+    /// layout; the full-ZK wrapper uses the single-column commitment.
     #[serde(default)]
     pub zk: bool,
 }
@@ -97,7 +93,7 @@ impl PcsParams {
     ) -> Result<Self, PcsParamsError> {
         let params = Self {
             m,
-            log_inv_rate: profile.log_inv_rate(),
+            log_inv_rate: profile.log_inv_rate_for_m(m),
             log_batch_size,
             profile,
             zk,
@@ -107,7 +103,7 @@ impl PcsParams {
     }
 
     pub fn profile_rate_matches(&self) -> bool {
-        self.log_inv_rate == self.profile.log_inv_rate()
+        self.log_inv_rate == self.profile.log_inv_rate_for_m(self.m)
     }
 
     pub fn validate_profile_rate(&self) -> Result<(), ProfileRateMismatchError> {
@@ -116,14 +112,13 @@ impl PcsParams {
         } else {
             Err(ProfileRateMismatchError {
                 profile: self.profile,
-                expected_log_inv_rate: self.profile.log_inv_rate(),
+                expected_log_inv_rate: self.profile.log_inv_rate_for_m(self.m),
                 actual_log_inv_rate: self.log_inv_rate,
             })
         }
     }
 
-    /// Log length of the **committed** message (= log2 packed witness length,
-    /// +1 in zk mode for the low-half mask block).
+    /// Message dimension for the legacy full-padding layout.
     pub fn log_msg_len(&self) -> usize {
         self.m - LOG_PACKING + (self.zk as usize)
     }
@@ -131,8 +126,7 @@ impl PcsParams {
     pub fn witness_log_msg_len(&self) -> usize {
         self.m - LOG_PACKING
     }
-    /// Log lane count actually committed per Merkle leaf: the f′ lanes, plus
-    /// the blinder-`g` lanes in zk mode.
+    /// Lane width of the legacy pairwise commitment.
     pub fn log_lanes_committed(&self) -> usize {
         self.log_batch_size + (self.zk as usize)
     }
@@ -152,8 +146,8 @@ impl PcsParams {
     pub fn num_ntts(&self) -> usize {
         1usize << self.log_batch_size
     }
-    /// Total codeword length in F_{2^128} elements
-    /// (= `n_positions() * num_ntts()`, ×2 in zk mode for the `g` lanes).
+    /// Field-element count for the legacy pairwise commitment.
+    /// The single-column commitment computes its own row width.
     pub fn codeword_len_f128(&self) -> usize {
         self.n_positions() << self.log_lanes_committed()
     }
@@ -217,11 +211,9 @@ pub struct ProverData {
     pub merkle_tree: Vec<Hash>,
     /// ZK mode only: one salt per initial commitment leaf.
     pub initial_leaf_salts: Vec<[u8; 32]>,
-    /// zk mode only: the uniform low-half mask block of the committed message
-    /// `message′ = [zk_mask ‖ z_packed]` (length `2^{m−7}`; empty otherwise).
+    /// Secret witness-column padding, stored in the selected PCS layout.
     pub zk_mask: Vec<F128>,
-    /// zk mode only: the full-support blinder codeword `g` (length `2^{m−6}`;
-    /// empty otherwise). The opening runs on `F = message′ + c·g`.
+    /// Secret coefficients of the independent blinder columns.
     pub zk_blind: Vec<F128>,
 }
 
@@ -272,27 +264,12 @@ pub fn commit_with_ro(
 
     let codeword_len = params.codeword_len_f128();
 
-    // ---- Codeword buffer (SoA): codeword[pos * num_ntts + lane].
-    // Copy first 2^log_msg_len positions from packed witness; zero-pad the rest.
-    //
-    // At large m the codeword buffer is huge (128 MB at m=29, 512 MB at m=31).
-    // `vec![F128::ZERO; n]` would eagerly zero all 128 MB upfront, then
-    // immediately overwrite the lower half with `z_packed` — half the zero-fill
-    // is wasted. Instead allocate uninit, write each half exactly once: copy
-    // `z_packed` into the lower half, and zero-fill JUST the upper half (the
-    // RS-encoding zero coefficients that the NTT's first-layer butterfly will
-    // read). Saves ~64 MB of memory writes at m=29 (~9 ms).
     let codeword = crate::scratch::take_f128(codeword_len);
     commit_into_with_ro(z_packed, params, codeword, ro, channel)
 }
 
-/// Like [`commit`], but reuses a caller-provided codeword buffer instead of
-/// allocating its own. The buffer must have length `codeword_len`; its
-/// CONTENTS may be arbitrary (uninit/stale) — every slot is written here:
-/// `z_packed` is replicated into all `2^log_inv_rate` sub-blocks (the exact
-/// state after the first `log_inv_rate` NTT layers on `[z, 0, …, 0]`), in
-/// parallel. Buffers from [`prefault_codeword_during`] or the scratch pool
-/// are already resident, so no write faults.
+/// Commit using a caller-provided codeword buffer. Every slot is overwritten;
+/// its previous contents do not affect the commitment.
 pub fn commit_into(
     z_packed: &[F128],
     params: &PcsParams,
@@ -312,7 +289,7 @@ pub fn commit_into(
 pub fn commit_into_with_ro(
     z_packed: &[F128],
     params: &PcsParams,
-    mut codeword: Vec<F128>,
+    codeword: Vec<F128>,
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
 ) -> (Commitment, ProverData) {
@@ -326,15 +303,10 @@ pub fn commit_into_with_ro(
         "commit_into: prebuilt codeword buffer has wrong length"
     );
 
-    // RS encoding of [z, 0, …, 0] starts with `log_inv_rate` butterfly layers
-    // whose bottom inputs are all zero — each is a pure copy, so after those
-    // layers the buffer holds 2^log_inv_rate replicas of z. Write that state
-    // directly (replicating z costs the same writes as the zero-fill it
-    // replaces) and start the NTT at layer `log_inv_rate`, skipping those
-    // layers' full-buffer reads and multiplies.
-    replicate_message_fill(&mut codeword, z_packed);
-
-    finalize_commit(codeword, params, ro, channel, Vec::new())
+    let lanes = params.num_ntts();
+    finalize_commit(codeword, params, ro, channel, Vec::new(), |pos| {
+        [&z_packed[pos * lanes..(pos + 1) * lanes]]
+    })
 }
 
 /// Zero-knowledge commit: commits `message′ = [mask ‖ z_packed]` (uniform
@@ -398,49 +370,24 @@ pub fn commit_zk_with_ro<R: crate::zk::MaskSampler + ?Sized>(
         })
         .collect::<Vec<_>>();
 
-    let mut codeword = crate::scratch::take_f128(params.codeword_len_f128());
-    replicate_message_fill_zk(&mut codeword, &mask, z_packed, &blind, params.num_ntts());
-    let (commitment, mut pd) = finalize_commit(codeword, params, ro, channel, initial_leaf_salts);
+    let codeword = crate::scratch::take_f128(params.codeword_len_f128());
+    let lanes = params.num_ntts();
+    let mask_positions = w / lanes;
+    let (commitment, mut pd) =
+        finalize_commit(codeword, params, ro, channel, initial_leaf_salts, |pos| {
+            let (source, p) = if pos < mask_positions {
+                (mask.as_slice(), pos)
+            } else {
+                (z_packed, pos - mask_positions)
+            };
+            [
+                &source[p * lanes..(p + 1) * lanes],
+                &blind[pos * lanes..(pos + 1) * lanes],
+            ]
+        });
     pd.zk_mask = mask;
     pd.zk_blind = blind;
     (commitment, pd)
-}
-
-/// Fill the wide zk codeword buffer with the replicated interleaved message —
-/// the exact state after the first `log_inv_rate` forward-NTT layers on the
-/// zero-padded wide coefficient vector. Lane `j < num_ntts` of position `p`
-/// carries `message′[p·num_ntts + j]` (`message′ = [mask ‖ z_packed]` flat);
-/// lane `num_ntts + j` carries `g[p·num_ntts + j]`.
-#[cfg(feature = "zk")]
-pub(crate) fn replicate_message_fill_zk(
-    codeword: &mut [F128],
-    mask: &[F128],
-    z_packed: &[F128],
-    g: &[F128],
-    num_ntts: usize,
-) {
-    debug_assert_eq!(mask.len(), z_packed.len());
-    debug_assert_eq!(g.len(), 2 * z_packed.len());
-    let wide = 2 * num_ntts;
-    debug_assert!(codeword.len().is_multiple_of(wide));
-    let msg_positions = g.len() / num_ntts;
-    let mask_positions = mask.len() / num_ntts;
-    debug_assert!((codeword.len() / wide).is_multiple_of(msg_positions));
-    codeword
-        .par_chunks_mut(wide)
-        .with_min_len(1 << 10)
-        .enumerate()
-        .for_each(|(pos, leaf)| {
-            let p = pos % msg_positions;
-            let f_src = if p < mask_positions {
-                &mask[p * num_ntts..(p + 1) * num_ntts]
-            } else {
-                let q = p - mask_positions;
-                &z_packed[q * num_ntts..(q + 1) * num_ntts]
-            };
-            leaf[..num_ntts].copy_from_slice(f_src);
-            leaf[num_ntts..].copy_from_slice(&g[p * num_ntts..(p + 1) * num_ntts]);
-        });
 }
 
 /// Fill `codeword` with `2^r` replicas of `msg` (`r = log2(codeword.len() /
@@ -470,26 +417,22 @@ pub(crate) fn replicate_message_fill(codeword: &mut [F128], msg: &[F128]) {
 
 /// Shared tail of [`commit`] / [`commit_into`]: interleaved forward additive
 /// NTT (RS-encode every lane) then the initial Merkle tree over codeword rows.
-fn finalize_commit(
+fn finalize_commit<'a, const PARTS: usize>(
     mut codeword: Vec<F128>,
     params: &PcsParams,
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
     initial_leaf_salts: Vec<[u8; 32]>,
+    row: impl Fn(usize) -> [&'a [F128]; PARTS] + Sync,
 ) -> (Commitment, ProverData) {
     let timing = std::env::var_os("FLOCK_COMMIT_TIMING").is_some();
     let t_ntt = std::time::Instant::now();
-    // ---- Interleaved forward additive NTT: 2^log_batch_size independent
-    // sub-NTTs with shared twiddles. Each sub-NTT operates on its lane of the
-    // SoA buffer. The first `log_inv_rate` layers were pre-applied by the
-    // caller's replicate-fill (commit_into), so start past them.
     let ntt = AdditiveNttF128::standard(params.k_code());
-    ntt.forward_transform_interleaved_from_layer(
+    ntt.rs_encode_interleaved_from_rows(
         &mut codeword,
-        // In zk mode the leaf-width lanes include the blinder-g lanes; the
-        // NTT treats them as additional independent sub-NTTs.
         1usize << params.log_lanes_committed(),
         params.log_inv_rate,
+        row,
     );
     if timing {
         eprintln!(
@@ -497,6 +440,35 @@ fn finalize_commit(
             t_ntt.elapsed().as_secs_f64() * 1e3
         );
     }
+    commit_encoded_rows(codeword, params, initial_leaf_salts, ro, channel)
+}
+
+pub(super) fn commit_encoded_rows(
+    codeword: Vec<F128>,
+    params: &PcsParams,
+    initial_leaf_salts: Vec<[u8; 32]>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
+    commit_encoded_rows_at(
+        codeword,
+        params,
+        params.n_leaves(),
+        initial_leaf_salts,
+        ro,
+        channel,
+    )
+}
+
+pub(super) fn commit_encoded_rows_at(
+    codeword: Vec<F128>,
+    params: &PcsParams,
+    leaves: usize,
+    initial_leaf_salts: Vec<[u8; 32]>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+) -> (Commitment, ProverData) {
+    let timing = std::env::var_os("FLOCK_COMMIT_TIMING").is_some();
     let t_merkle = std::time::Instant::now();
 
     // ---- Merkle commitment: one leaf per codeword position = num_ntts F128.
@@ -513,11 +485,11 @@ fn finalize_commit(
     // row-batch lanes (num_ntts F_{2^128} values = 2^log_batch_size). This is
     // Ligerito's L0 commitment.
     let merkle_tree = if initial_leaf_salts.is_empty() {
-        merkle::merkle_tree_framed(codeword_bytes, params.n_leaves(), ro, channel, 0)
+        merkle::merkle_tree_framed(codeword_bytes, leaves, ro, channel, 0)
     } else {
         merkle::merkle_tree_framed_salted(
             codeword_bytes,
-            params.n_leaves(),
+            leaves,
             &initial_leaf_salts,
             ro,
             channel,
@@ -637,6 +609,18 @@ mod tests {
         PcsParams::new(m, 1, LigeritoProfile::Fast, false).unwrap()
     }
 
+    #[cfg(feature = "zk")]
+    #[test]
+    fn standard_profile_preserves_rate_consistency() {
+        let mut params = PcsParams::new(22, 5, LigeritoProfile::Standard, true).unwrap();
+        assert_eq!(params.log_inv_rate, 2);
+        params.log_inv_rate = 1;
+        assert!(matches!(
+            params.validate(),
+            Err(PcsParamsError::ProfileRateMismatch(_))
+        ));
+    }
+
     #[test]
     fn params_new_derives_profile_rate() {
         for (profile, log_inv_rate) in [
@@ -704,15 +688,17 @@ mod tests {
         );
     }
 
-    /// The replicate-fill + start-at-layer-`log_inv_rate` fast path must be
-    /// byte-identical to the definitional encoding: zero-padded coefficients
-    /// through the FULL forward NTT. Covers rate 1/2 and 1/4 and both
-    /// interleaving widths.
     #[test]
     fn commit_matches_full_ntt_oracle() {
         let mut rng = Rng::new(0xFEED);
-        for (m, log_inv_rate, log_batch_size) in [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3)] {
-            let profile = LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile");
+        for (m, log_inv_rate, log_batch_size) in
+            [(10, 1, 1), (12, 1, 2), (12, 2, 1), (14, 2, 3), (15, 3, 3)]
+        {
+            let profile = if log_inv_rate == 3 {
+                LigeritoProfile::Standard
+            } else {
+                LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile")
+            };
             let params = PcsParams::new(m, log_batch_size, profile, false).unwrap();
             let z = rng.bits(1 << m);
             let z_packed = super::super::pack::pack_witness(&z, m);
@@ -757,15 +743,27 @@ mod tests {
     #[test]
     fn commit_zk_matches_wide_oracle() {
         let mut rng = Rng::new(0xC0FFEE);
-        for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3)] {
-            let profile = LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile");
+        for (m, log_inv_rate, log_batch_size) in [(12, 1, 2), (13, 2, 3), (15, 3, 3)] {
+            let profile = if log_inv_rate == 3 {
+                LigeritoProfile::Standard
+            } else {
+                LigeritoProfile::try_from(log_inv_rate).expect("test rate has a profile")
+            };
             let params = PcsParams::new(m, log_batch_size, profile, true).unwrap();
             let z = rng.bits(1 << m);
             let z_packed = super::super::pack::pack_witness(&z, m);
             let w = z_packed.len();
 
             let mut mask_rng = ZkRng::from_seed([3u8; 32]);
-            let (commitment, pd) = commit_zk(&z_packed, &params, &mut mask_rng);
+            let recording = std::sync::Arc::new(crate::ro::RecordingOracle::new());
+            let context = crate::ro::RoContext::external([0; 32], recording.clone());
+            let (commitment, pd) = commit_zk_with_ro(
+                &z_packed,
+                &params,
+                &mut mask_rng,
+                &context,
+                crate::ro::RoChannel::Witness,
+            );
 
             // Reproduce the masks from the same seed, in the same order.
             let mut oracle_rng = ZkRng::from_seed([3u8; 32]);
@@ -795,7 +793,8 @@ mod tests {
             let oracle_bytes: &[u8] = unsafe {
                 core::slice::from_raw_parts(oracle.as_ptr() as *const u8, oracle.len() * 16)
             };
-            let ro = crate::ro::RoContext::plain();
+            let oracle_recording = std::sync::Arc::new(crate::ro::RecordingOracle::new());
+            let ro = crate::ro::RoContext::external([0; 32], oracle_recording.clone());
             let oracle_root = *crate::merkle::merkle_tree_framed_salted(
                 oracle_bytes,
                 params.n_leaves(),
@@ -807,6 +806,8 @@ mod tests {
             .last()
             .unwrap();
             assert_eq!(commitment.root, oracle_root, "zk root mismatch at m={m}");
+
+            assert_eq!(recording.queries(), oracle_recording.queries());
 
             // Determinism under the seed; fresh masks under a new seed.
             let mut rng_same = ZkRng::from_seed([3u8; 32]);

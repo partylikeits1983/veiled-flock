@@ -8,6 +8,7 @@
 
 use flock_core::field::F128;
 use rayon::prelude::*;
+use std::sync::{Arc, LazyLock, Mutex};
 
 #[inline]
 fn next_subspace_value(value: F128, root_value: F128) -> F128 {
@@ -162,12 +163,40 @@ fn inverse_recursive(values: &mut [F128], twiddles: &[F128], index: usize) {
     inverse_butterfly(values, twiddles[index - 1]);
 }
 
+type TwiddleEntry = ((usize, F128), Arc<[F128]>);
+static TWIDDLE_CACHE: LazyLock<Mutex<Vec<TwiddleEntry>>> = LazyLock::new(|| Mutex::new(Vec::new()));
+
+fn cached_twiddles(log_size: usize, offset: F128) -> Arc<[F128]> {
+    let key = (log_size, offset);
+    if let Some((_, values)) = TWIDDLE_CACHE
+        .lock()
+        .unwrap()
+        .iter()
+        .find(|(k, _)| *k == key)
+    {
+        return values.clone();
+    }
+    let values: Arc<[F128]> = compute_twiddles(log_size, offset).into();
+    // Only retain small public domains; arbitrary callers cannot grow the cache.
+    if log_size <= 16 {
+        let mut cache = TWIDDLE_CACHE.lock().unwrap();
+        if let Some((_, existing)) = cache.iter().find(|(k, _)| *k == key) {
+            return existing.clone();
+        }
+        if cache.len() == 16 {
+            cache.remove(0);
+        }
+        cache.push((key, values.clone()));
+    }
+    values
+}
+
 /// Additive NTT for one affine binary subspace.
 #[derive(Clone, Debug)]
 pub struct AdditiveCosetNtt {
     log_size: usize,
     offset: F128,
-    twiddles: Vec<F128>,
+    twiddles: Arc<[F128]>,
 }
 
 impl AdditiveCosetNtt {
@@ -176,7 +205,7 @@ impl AdditiveCosetNtt {
         Self {
             log_size,
             offset,
-            twiddles: compute_twiddles(log_size, offset),
+            twiddles: cached_twiddles(log_size, offset),
         }
     }
 

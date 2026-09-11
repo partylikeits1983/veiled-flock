@@ -137,6 +137,13 @@ impl AdditiveNttF128 {
         span_get(&v[1..], block)
     }
 
+    #[cfg(feature = "zk")]
+    pub(crate) fn normalized_subspace_at(&self, log_degree: usize, position: usize) -> F128 {
+        assert!(log_degree < self.log_domain_size());
+        assert!(position < 1usize << self.log_domain_size());
+        span_get(&self.evals[log_degree], position >> log_degree)
+    }
+
     /// Forward additive NTT in place. `data.len()` must be `2^log_d` for some
     /// `log_d ≤ log_domain_size()`. Layer `l ∈ [0, log_d)` is processed in
     /// order (neighbors-last: top layer first).
@@ -164,7 +171,7 @@ impl AdditiveNttF128 {
     /// (same `self.twiddle(layer, block)` is applied to every lane at the
     /// corresponding butterfly).
     ///
-    /// `num_ntts` must be a positive power of 2. `data.len()` must equal
+    /// `num_ntts` must be positive. `data.len()` must equal
     /// `(1 << log_d) * num_ntts` for some `log_d ≤ log_domain_size()`.
     ///
     /// This produces the SAME RS code per lane as `forward_transform`, with
@@ -173,6 +180,114 @@ impl AdditiveNttF128 {
     /// `num_ntts` F_{2^128} elements).
     pub fn forward_transform_interleaved(&self, data: &mut [F128], num_ntts: usize) {
         self.forward_transform_interleaved_from_layer(data, num_ntts, 0);
+    }
+
+    /// Encode concatenated row segments directly into the first active NTT
+    /// layers, without materializing or replicating the interleaved message.
+    /// Row segments must have consistent widths totaling `num_ntts` elements.
+    pub(crate) fn rs_encode_interleaved_from_rows<'a, const PARTS: usize>(
+        &self,
+        data: &mut [F128],
+        num_ntts: usize,
+        log_inv_rate: usize,
+        row: impl Fn(usize) -> [&'a [F128]; PARTS] + Sync,
+    ) {
+        assert!(num_ntts > 0);
+        assert_eq!(data.len() % num_ntts, 0);
+        let log_d = log2_pow2(data.len() / num_ntts);
+        assert!(log_d <= self.log_domain_size());
+        assert!(log_inv_rate <= log_d);
+        let msg_positions = 1usize << (log_d - log_inv_rate);
+        let msg_len = msg_positions * num_ntts;
+
+        if msg_positions < 4 {
+            data.par_chunks_mut(num_ntts)
+                .enumerate()
+                .for_each(|(pos, dst)| {
+                    let mut rest = dst;
+                    for part in row(pos % msg_positions) {
+                        let (out, tail) = rest.split_at_mut(part.len());
+                        out.copy_from_slice(part);
+                        rest = tail;
+                    }
+                    assert!(rest.is_empty());
+                });
+            self.forward_transform_interleaved_from_layer(data, num_ntts, log_inv_rate);
+            return;
+        }
+
+        let quarter = msg_positions / 4;
+        let rows_per_chunk = 64;
+        let chunk_len = num_ntts * rows_per_chunk;
+        let mut jobs = (0..quarter.div_ceil(rows_per_chunk))
+            .map(|_| Vec::new())
+            .collect::<Vec<_>>();
+        for (block, dst) in data.chunks_mut(msg_len).enumerate() {
+            let twiddles = [
+                self.twiddle(log_inv_rate, block),
+                self.twiddle(log_inv_rate + 1, 2 * block),
+                self.twiddle(log_inv_rate + 1, 2 * block + 1),
+            ];
+            let (a, tail) = dst.split_at_mut(quarter * num_ntts);
+            let (b, tail) = tail.split_at_mut(quarter * num_ntts);
+            let (c, d) = tail.split_at_mut(quarter * num_ntts);
+            for (chunk, (((a, b), c), d)) in a
+                .chunks_mut(chunk_len)
+                .zip(b.chunks_mut(chunk_len))
+                .zip(c.chunks_mut(chunk_len))
+                .zip(d.chunks_mut(chunk_len))
+                .enumerate()
+            {
+                jobs[chunk].push((twiddles, [a, b, c, d]));
+            }
+        }
+        // Keep each source tile hot while producing all of its encoded blocks.
+        jobs.into_par_iter()
+            .enumerate()
+            .for_each(|(chunk, blocks)| {
+                for ([t0, t1, t2], [a, b, c, d]) in blocks {
+                    for (r, (((a, b), c), d)) in a
+                        .chunks_mut(num_ntts)
+                        .zip(b.chunks_mut(num_ntts))
+                        .zip(c.chunks_mut(num_ntts))
+                        .zip(d.chunks_mut(num_ntts))
+                        .enumerate()
+                    {
+                        let r = chunk * rows_per_chunk + r;
+                        let sources = row(r)
+                            .into_iter()
+                            .zip(row(r + quarter))
+                            .zip(row(r + 2 * quarter))
+                            .zip(row(r + 3 * quarter));
+                        let mut offset = 0;
+                        for (((sa, sb), sc), sd) in sources {
+                            assert_eq!(sa.len(), sb.len());
+                            assert_eq!(sa.len(), sc.len());
+                            assert_eq!(sa.len(), sd.len());
+                            let end = offset + sa.len();
+                            let a = &mut a[offset..end];
+                            let b = &mut b[offset..end];
+                            let c = &mut c[offset..end];
+                            let d = &mut d[offset..end];
+                            for i in 0..sa.len() {
+                                let u = sa[i] + sc[i] * t0;
+                                let v = sb[i] + sd[i] * t0;
+                                let w = sc[i] + u;
+                                let x = sd[i] + v;
+                                let top = u + v * t1;
+                                let bottom = w + x * t2;
+                                a[i] = top;
+                                b[i] = v + top;
+                                c[i] = bottom;
+                                d[i] = x + bottom;
+                            }
+                            offset = end;
+                        }
+                        assert_eq!(offset, num_ntts);
+                    }
+                }
+            });
+        self.forward_transform_interleaved_from_layer(data, num_ntts, log_inv_rate + 2);
     }
 
     /// Forward interleaved NTT starting at `start_layer`, assuming the first
@@ -190,7 +305,7 @@ impl AdditiveNttF128 {
         num_ntts: usize,
         start_layer: usize,
     ) {
-        assert!(num_ntts.is_power_of_two() && num_ntts > 0);
+        assert!(num_ntts > 0);
         let n_total = data.len();
         assert_eq!(n_total % num_ntts, 0);
         let log_d = log2_pow2(n_total / num_ntts);
@@ -292,7 +407,7 @@ impl AdditiveNttF128 {
         // num_ntts=32: 2^12 positions. (Without this scaling, sub-groups at
         // num_ntts=32 would be 64 MB and overflow L2 cache.)
         const TARGET_SUBGROUP_LOG_BYTES: usize = 21;
-        let log_bytes_per_position = 4 + log2_pow2(num_ntts);
+        let log_bytes_per_position = 4 + num_ntts.ilog2() as usize;
         let target_log_positions = TARGET_SUBGROUP_LOG_BYTES.saturating_sub(log_bytes_per_position);
         let cache_n_top = log_d.saturating_sub(target_log_positions);
 
@@ -881,6 +996,44 @@ mod tests {
 
     fn rand_vec(rng: &mut Rng, n: usize) -> Vec<F128> {
         (0..n).map(|_| rng.f128()).collect()
+    }
+
+    #[test]
+    fn direct_encoding_matches_zero_padded_scalar_ntt() {
+        let mut rng = Rng::new(0xD1EC7);
+        for log_msg in [0, 1, 2, 5, 9] {
+            for log_rate in [1, 2, 3, 6] {
+                for lanes in [1, 3, 8, 9, 64, 65] {
+                    let msg = rand_vec(&mut rng, (1 << log_msg) * lanes);
+                    let ntt = AdditiveNttF128::standard(log_msg + log_rate);
+                    let mut expected = vec![F128::ZERO; msg.len() << log_rate];
+                    expected[..msg.len()].copy_from_slice(&msg);
+                    ntt.forward_transform_interleaved_scalar(&mut expected, lanes);
+                    for poison in [
+                        F128::ZERO,
+                        F128 {
+                            lo: u64::MAX,
+                            hi: 0xDEADBEEF,
+                        },
+                    ] {
+                        let mut actual = vec![poison; expected.len()];
+                        ntt.rs_encode_interleaved_from_rows(&mut actual, lanes, log_rate, |r| {
+                            [&msg[r * lanes..(r + 1) * lanes]]
+                        });
+                        assert_eq!(
+                            actual, expected,
+                            "message={log_msg}, rate={log_rate}, lanes={lanes}"
+                        );
+                        actual.fill(poison);
+                        ntt.rs_encode_interleaved_from_rows(&mut actual, lanes, log_rate, |r| {
+                            let (a, b) = msg[r * lanes..(r + 1) * lanes].split_at(lanes / 2);
+                            [a, b]
+                        });
+                        assert_eq!(actual, expected, "segmented rows differ");
+                    }
+                }
+            }
+        }
     }
 
     #[test]

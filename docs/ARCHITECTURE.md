@@ -20,7 +20,7 @@ block length 64, and `CHUNK_START|CHUNK_END|ROOT` flags.
 
 Short batches are padded to the next registered power-of-two shape. The ZK
 path supports a 256-slot floor and a 4096-slot ceiling. The verifier checks the
-circuit digest and Secure PCS parameters for the selected shape.
+circuit digest and Standard PCS parameters for the selected shape.
 
 ## Shielded PCS
 

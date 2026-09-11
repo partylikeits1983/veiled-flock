@@ -45,46 +45,57 @@ and the native `GF(2^128)` VEIL backend. See the
 
 ## Performance
 
-| Hashes | FLOCK prove | FLOCK verify | FLOCK size | Full-ZK prove | Full-ZK verify | Full-ZK size | Size overhead vs. non-ZK FLOCK |
-| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 64 | 4.944 ms | 13.123 ms | 274,609 B | 19.350 ms | 11.454 ms | 801,705 B | 191.9% |
-| 128 | 5.140 ms | 13.544 ms | 283,537 B | 18.987 ms | 11.338 ms | 801,865 B | 182.8% |
-| 256 | 6.447 ms | 13.467 ms | 377,697 B | 19.485 ms | 11.534 ms | 802,185 B | 112.4% |
-| 512 | 7.961 ms | 14.042 ms | 385,081 B | 24.723 ms | 12.499 ms | 811,281 B | 110.7% |
-| 1,024 | 10.381 ms | 14.460 ms | 398,657 B | 32.597 ms | 11.974 ms | 847,489 B | 112.6% |
-| 2,048 | 15.925 ms | 15.033 ms | 433,425 B | 49.119 ms | 13.442 ms | 863,857 B | 99.3% |
-| 4,096 | 23.917 ms | 16.476 ms | 451,937 B | 81.780 ms | 15.662 ms | 885,585 B | 96.0% |
+This comparison matches the circuit shape, witness-column count, outer code
+length, and recursion layout, with a common **100-bit composed interactive
+soundness floor**. Both use 32 witness columns; ZK adds one random column and
+query-sized padding. Query counts are calculated separately to include the
+extra ZK polynomial dimension. Non-ZK production defaults are unchanged.
 
-Measured on an Apple M2 Pro with 16 GiB RAM, using Rust 1.98.0,
-commit `9a369670ba5ad3d9a450b859572760b179085666`, a release build with
-`target-cpu=native`, and the benchmark's default thread pool. Each value is
-the median of five samples after one untimed warm-up per protocol and batch
-size. Every generated proof is verified. Setup construction, message and
-digest generation, and serialization are excluded from the timings; the
-public prove APIs' witness checks are included.
+| Hashes | FLOCK prove | ZK prove | FLOCK verify | ZK verify | FLOCK size | ZK size | Size overhead | Proving ratio |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 256 | 6.018 ms | 9.864 ms | 13.898 ms | 8.600 ms | 152,649 B | 289,288 B | 89.5% | 1.64× |
+| 512 | 6.982 ms | 10.609 ms | 14.965 ms | 9.434 ms | 214,841 B | 383,256 B | 78.4% | 1.52× |
+| 1,024 | 10.589 ms | 14.637 ms | 14.592 ms | 10.016 ms | 246,513 B | 395,712 B | 60.5% | 1.38× |
+| 2,048 | 15.490 ms | 19.133 ms | 15.785 ms | 10.748 ms | 264,865 B | 405,568 B | 53.1% | 1.24× |
+| 4,096 | 24.962 ms | 30.330 ms | 17.599 ms | 12.672 ms | 281,145 B | 421,128 B | 49.8% | 1.22× |
 
-Sizes are the bincode-serialized proof objects, excluding the separately
-returned witness commitment, public digests, and bundle framing. Size overhead
-is `(full-ZK size / FLOCK size - 1) * 100%`. Fresh ZK randomness causes small
-size variations: the five 4,096-hash proofs ranged from 882,737 to 887,089 B.
+Measured September 11, 2026, on an Apple M2 Pro with 16 GiB RAM, Rust 1.98.0,
+a release build with `target-cpu=native`, and eight Rayon threads. Values are
+medians of 25 samples after one warm-up per protocol and size. Prover order
+alternates and every proof is verified. Timings exclude setup, message/digest
+generation, and serialization; public prove API witness checks are included.
+A separate 75-sample run at 4,096 hashes measured 25.050 ms for FLOCK and
+30.235 ms for ZK, or 20.7% proving overhead.
 
-Both setups select the Secure profile at rate 1/2 (`log_inv_rate = 1`). The
-full-ZK path uses registered PCS configurations and pads batches below 256
-hashes to 256 slots. The 64- and 128-hash non-ZK baselines use smaller circuit
-shapes with ad hoc PCS schedules below the registry floor, so those rows do
-not compare identical circuit geometry or registered security budgets.
+Sizes count serialized proof objects, excluding the separately returned witness
+commitment, public digests, and bundle framing. Fresh ZK randomness causes small
+size differences: the 4,096-hash proofs ranged from 419,880 to 423,656 B.
+Size overhead is `(ZK size / FLOCK size - 1) * 100%`; proving ratio is
+`ZK prove time / FLOCK prove time`.
 
-The ZK PCS doubles the committed message dimension with `[mask || witness]`
-and doubles the initial Merkle leaf width with a same-length blinding vector
-`g`. VEIL constraint and ring-linkage proofs add further overhead. These
-measurements establish a baseline for future size and proving-time experiments.
+The earlier comparison retained FLOCK's 64-column layout while ZK used 32
+witness columns, giving different costs for the initial openings. At 256 hashes,
+ZK also used a larger outer encoded domain. Those choices could make the ZK
+proof smaller overall; they do not isolate the cost of adding ZK. With matched
+layouts, the current 4,096-hash proof-size overhead is about **50%**, above the
+10–20% target.
 
-Reproduce the benchmark with:
+Batches below 256 hashes are omitted here because ZK pads them to 256 slots
+while non-ZK FLOCK uses smaller circuit shapes. The `stock` comparison retains
+FLOCK's existing layouts and includes those smaller batches; it still retunes
+soundness to the same floor.
 
 ```sh
-cargo run --locked --release -p flock-prover --features veil \
-  --example preimage_scaling -- 5
+RAYON_NUM_THREADS=8 cargo run --locked --release -p flock-prover --features veil \
+  --example preimage_scaling -- 25 all matched
+# Compare against FLOCK's existing layouts instead:
+RAYON_NUM_THREADS=8 cargo run --locked --release -p flock-prover --features veil \
+  --example preimage_scaling -- 25 all stock
 ```
+
+The Lean update for the single-column construction is pending; the checked-in
+salted-Merkle/Fiat–Shamir ZK theorem covers the legacy Secure construction.
+See the [formal proof scope](lean/README.md).
 
 ## Quickstart
 
@@ -143,7 +154,7 @@ The `flock-prover` crate also has benchmark and development examples:
 
 | Example | Command | Notes |
 |---|---|---|
-| `preimage_scaling` | `cargo run --locked --release -p flock-prover --features veil --example preimage_scaling -- 5` | Reproduces the performance table with five samples. |
+| `preimage_scaling` | `cargo run --locked --release -p flock-prover --features veil --example preimage_scaling -- 5` | Reproduces the canonical ZK versus non-ZK performance table with five samples. |
 | `mle_eval_bench` | `cargo run --locked --release -p flock-prover --example mle_eval_bench` | Compares naive and Remark 1.7 MLE folding. |
 | `chain_bench` | `cargo run --locked --release -p flock-prover --features unsound-challenger --example chain_bench` | Isolates hash-chain shift sumcheck cost with the insecure test challenger. |
 | `keccak_mid_density` | `cargo run --locked --release -p flock-prover --example keccak_mid_density` | Reports midpoint Keccak R1CS row density. |
@@ -193,6 +204,6 @@ Apache-2.0 or MIT.
 
 ## Status
 
-Experimental and unaudited. The Lean proof covers statistical zero knowledge
-for the formal model; production Rust expands an OS seed with BLAKE3 XOF, and
-Rust-to-Lean correspondence remains future work.
+Unaudited. The Lean update for the single-column Standard construction is
+pending. The checked-in ZK theorem covers the legacy Secure construction.
+See the [formal proof scope](lean/README.md).

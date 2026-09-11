@@ -2111,6 +2111,15 @@ pub enum RsEqInd {
 }
 
 impl RsEqInd {
+    pub fn deferred_dense(point: &[F128], weights: &[F128]) -> Self {
+        let (eq_lo, eq_hi) = build_eq_split(point, point.len() / 2);
+        Self::DeferredDense {
+            eq_lo,
+            eq_hi,
+            table: build_fold_byte_table(weights),
+        }
+    }
+
     /// Logical length of the underlying vector.
     pub fn len(&self) -> usize {
         match self {

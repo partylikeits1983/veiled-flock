@@ -375,6 +375,19 @@ pub fn merkle_tree_framed(
         }
     }
 
+    fill_framed_internal_nodes(&mut tree, num_leaves, ctx, channel, tree_depth);
+
+    tree
+}
+
+fn fill_framed_internal_nodes(
+    tree: &mut [Hash],
+    num_leaves: usize,
+    ctx: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    tree_depth: u8,
+) {
+    let leaf_level = num_leaves.trailing_zeros();
     // Internal levels. Node payload is the 64-byte child pair; `level` is the
     // node's own level (leaf_level - 1 down to 0), `index` its position.
     let mut read_start = 0usize;
@@ -451,8 +464,6 @@ pub fn merkle_tree_framed(
         read_start += read_len;
         read_len = next_len;
     }
-
-    tree
 }
 
 /// Framed Merkle tree with one independent 256-bit salt prepended to every
@@ -472,12 +483,65 @@ pub fn merkle_tree_framed_salted(
     assert_eq!(data.len() % num_leaves, 0);
     let leaf_size = data.len() / num_leaves;
     assert!(leaf_size > 0);
-    let mut salted = Vec::with_capacity(data.len() + 32 * num_leaves);
-    for (salt, leaf) in salts.iter().zip(data.chunks_exact(leaf_size)) {
-        salted.extend_from_slice(salt);
-        salted.extend_from_slice(leaf);
+    let payload_len = leaf_size + 32;
+    let leaf_level = num_leaves.trailing_zeros();
+    let leaf_hasher = RoTreeHasher::new(ctx, ROLE_LEAF, channel, tree_depth, payload_len as u64);
+    let mut tree: Vec<Hash> = crate::alloc_uninit_vec(2 * num_leaves - 1);
+
+    // Hash four salted leaves at a time without copying the entire codeword.
+    const LEAVES_PER_CHUNK: usize = 64;
+    let hash_chunk = |scratch: &mut Vec<u8>, (chunk, outs): (usize, &mut [Hash])| {
+        scratch.resize(4 * payload_len, 0);
+        for (quad, batch) in outs.chunks_mut(4).enumerate() {
+            let base_index = chunk * LEAVES_PER_CHUNK + quad * 4;
+            for lane in 0..batch.len() {
+                let index = base_index + lane;
+                let payload = &mut scratch[lane * payload_len..(lane + 1) * payload_len];
+                payload[..32].copy_from_slice(&salts[index]);
+                payload[32..].copy_from_slice(&data[index * leaf_size..(index + 1) * leaf_size]);
+            }
+            #[cfg(any(
+                all(target_arch = "aarch64", target_feature = "sha2"),
+                all(target_arch = "x86_64", target_feature = "sha")
+            ))]
+            if ctx.is_native() && batch.len() == 4 {
+                let prefixes = std::array::from_fn(|lane| {
+                    crate::ro::encode_location(leaf_level, (base_index + lane) as u64)
+                });
+                sha256x4::hash4_equal_len_from_midstate(
+                    leaf_hasher.native_midstate().expect("native midstate"),
+                    64,
+                    prefixes,
+                    std::array::from_fn(|lane| {
+                        &scratch[lane * payload_len..(lane + 1) * payload_len]
+                    }),
+                    batch,
+                );
+                continue;
+            }
+            for (lane, out) in batch.iter_mut().enumerate() {
+                *out = leaf_hasher.hash(
+                    leaf_level,
+                    (base_index + lane) as u64,
+                    &scratch[lane * payload_len..(lane + 1) * payload_len],
+                );
+            }
+        }
+    };
+    if ctx.is_native() {
+        tree[..num_leaves]
+            .par_chunks_mut(LEAVES_PER_CHUNK)
+            .enumerate()
+            .for_each_init(Vec::new, hash_chunk);
+    } else {
+        // Preserve the external oracle's exact query order.
+        let mut scratch = Vec::new();
+        for chunk in tree[..num_leaves].chunks_mut(LEAVES_PER_CHUNK).enumerate() {
+            hash_chunk(&mut scratch, chunk);
+        }
     }
-    merkle_tree_framed(&salted, num_leaves, ctx, channel, tree_depth)
+    fill_framed_internal_nodes(&mut tree, num_leaves, ctx, channel, tree_depth);
+    tree
 }
 
 /// Verify a framed Merkle opening (single leaf), recomputing the root through
@@ -1137,6 +1201,48 @@ mod tests {
                     RoChannel::MaskS,
                     2,
                 ));
+            }
+        }
+    }
+
+    #[test]
+    fn streamed_salted_tree_matches_materialized_tree_and_oracle_trace() {
+        // Cover short trees, chunk tails, SHA padding boundaries, and wide leaves.
+        for n in [1, 2, 4, 64, 128] {
+            for leaf_size in [1, 7, 8, 15, 16, 23, 24, 31, 32, 33, 64, 2048] {
+                let data = random_data(n, leaf_size, 0x5A17);
+                let salts = (0..n).map(|i| [i as u8; 32]).collect::<Vec<_>>();
+                let materialized = salts
+                    .iter()
+                    .zip(data.chunks_exact(leaf_size))
+                    .flat_map(|(salt, leaf)| salt.iter().chain(leaf).copied())
+                    .collect::<Vec<_>>();
+                let nonce = [0x39; 32];
+                let native = RoContext::native(nonce);
+                let expected = merkle_tree_framed(&materialized, n, &native, RoChannel::Witness, 1);
+                let actual =
+                    merkle_tree_framed_salted(&data, n, &salts, &native, RoChannel::Witness, 1);
+                assert_eq!(actual, expected, "n={n}, leaf_size={leaf_size}");
+                let reference_recorder = Arc::new(RecordingOracle::new());
+                let actual_recorder = Arc::new(RecordingOracle::new());
+                let reference_context = RoContext::external(nonce, reference_recorder.clone());
+                let actual_context = RoContext::external(nonce, actual_recorder.clone());
+                assert_eq!(
+                    merkle_tree_framed(&materialized, n, &reference_context, RoChannel::Witness, 1),
+                    expected
+                );
+                assert_eq!(
+                    merkle_tree_framed_salted(
+                        &data,
+                        n,
+                        &salts,
+                        &actual_context,
+                        RoChannel::Witness,
+                        1
+                    ),
+                    expected
+                );
+                assert_eq!(actual_recorder.queries(), reference_recorder.queries());
             }
         }
     }

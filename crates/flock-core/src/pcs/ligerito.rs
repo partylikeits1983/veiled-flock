@@ -39,29 +39,14 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use thiserror::Error;
 
+mod standard;
+pub use standard::standard_config;
+
 // ===================================================================
 // Config
 // ===================================================================
 
-/// Per-level Reed-Solomon inverse rate (log₂). The CORE Ligerito idea is to
-/// **decrease the rate at deeper levels**: at level i, lower rate ⟹ Johnson
-/// list-decoding per-query error = √ρ ≈ 2^(-log_inv_rate/2) ⟹ fewer queries
-/// needed for the same security ⟹ drastically smaller opened-rows cost at
-/// deeper levels.
-///
-/// `log_inv_rates[i]` is the log inverse rate at commit i (so wtns_0 uses
-/// `log_inv_rates[0]`, wtns_1 uses `log_inv_rates[1]`, …). Length = R + 1.
-/// Named parameter profile for the Ligerito PCS. Decouples "which security
-/// config" from the raw code rate: `Fast` and `Secure` share rate 1/2 but
-/// differ in regime/target, so the rate alone cannot key the config lookup.
-///
-/// - `Fast`:   rate 1/2, Johnson list-decoding regime with OOD binding,
-///             100-bit overall soundness. Default.
-/// - `Slim`:   rate 1/4, Johnson + OOD + 16-bit query grinding, 100-bit
-///             overall. Roughly half the proof, ~2x the L0 encoding work.
-/// - `Secure`: rate 1/2, unique-decoding regime (list size 1, no OOD),
-///             120-bit overall soundness. Largest proof, most conservative
-///             analysis.
+/// Named PCS security configuration; the code rate alone does not identify a profile.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LigeritoProfile {
@@ -69,6 +54,8 @@ pub enum LigeritoProfile {
     Fast,
     Slim,
     Secure,
+    /// Default profile for full-ZK proofs.
+    Standard,
 }
 
 #[derive(Clone, Copy, Debug, Error, PartialEq, Eq)]
@@ -87,14 +74,21 @@ impl LigeritoProfile {
         match self {
             Self::Fast | Self::Secure => 1,
             Self::Slim => 2,
+            Self::Standard => 1,
         }
     }
-    /// Round-by-round soundness target (bits) the profile's configs are derived
-    /// for: every round must individually clear this level (total security =
-    /// min over rounds, per the Fiat-Shamir / `soundcalc` convention).
+
+    pub fn log_inv_rate_for_m(self, m: usize) -> usize {
+        if self == Self::Standard && m == 22 {
+            2
+        } else {
+            self.log_inv_rate()
+        }
+    }
+    /// Security target used to derive the profile.
     pub fn security_bits(self) -> usize {
         match self {
-            Self::Fast | Self::Slim => 100,
+            Self::Fast | Self::Slim | Self::Standard => 100,
             Self::Secure => 120,
         }
     }
@@ -103,6 +97,7 @@ impl LigeritoProfile {
             Self::Fast => "fast",
             Self::Slim => "slim",
             Self::Secure => "secure",
+            Self::Standard => "standard",
         }
     }
     pub fn parse(s: &str) -> Option<Self> {
@@ -110,6 +105,7 @@ impl LigeritoProfile {
             "fast" => Some(Self::Fast),
             "slim" => Some(Self::Slim),
             "secure" => Some(Self::Secure),
+            "standard" => Some(Self::Standard),
             _ => None,
         }
     }
@@ -425,6 +421,16 @@ const EMBEDDED_CONFIGS: &[((usize, LigeritoProfile), &str)] =
 /// Look up the embedded security config TOML for `(m, profile)`.
 /// Returns `None` if no config has been derived for this combination yet.
 pub fn embedded_security_config(m: usize, profile: LigeritoProfile) -> Option<&'static str> {
+    if profile == LigeritoProfile::Standard {
+        return match m {
+            22 => Some(include_str!("../../configs/ligerito/m22_standard.toml")),
+            23 => Some(include_str!("../../configs/ligerito/m23_standard.toml")),
+            24 => Some(include_str!("../../configs/ligerito/m24_standard.toml")),
+            25 => Some(include_str!("../../configs/ligerito/m25_standard.toml")),
+            26 => Some(include_str!("../../configs/ligerito/m26_standard.toml")),
+            _ => None,
+        };
+    }
     EMBEDDED_CONFIGS.iter().find_map(|&(key, toml)| {
         if key == (m, profile) {
             Some(toml)
@@ -1044,7 +1050,68 @@ impl LigeritoSecurityConfig {
         }
         let (pg_bits, _) = l0.paper_predicted_bits();
         let c_grind_bits = f64::from(l0_derived_grind_bits(&[l0.fold_grinding_bits]));
-        bound.proximity_probability += BINARY_PROBABILITY_BASE.powf(-(pg_bits + c_grind_bits));
+        // The blinding challenge is sampled from the nonzero field elements.
+        bound.proximity_probability += BINARY_PROBABILITY_BASE.powf(1.0 - pg_bits - c_grind_bits);
+        Ok(bound)
+    }
+
+    /// Charge the extended RS dimension and the extra nonzero-column fold.
+    /// The registered recursion describes the unpadded virtual oracle.
+    pub fn aggregate_soundness_bound_query_padded(
+        &self,
+        padding: usize,
+    ) -> Result<AggregateSoundnessBound, String> {
+        self.validate()?;
+        let l0 = self.levels.first().ok_or("empty levels")?;
+        if !matches!(l0.regime, SoundnessRegime::Udr) || padding == 0 || padding != l0.queries {
+            return Err("query padding requires UDR L0 and one pad per query".into());
+        }
+        let message = 1usize
+            .checked_shl(l0.log_msg_cols as u32)
+            .ok_or("message dimension overflow")?;
+        let length = message
+            .checked_shl(l0.log_inv_rate as u32)
+            .ok_or("code length overflow")?;
+        let extended = message
+            .checked_add(padding)
+            .ok_or("padding dimension overflow")?;
+        if padding > message || extended >= length {
+            return Err("query padding exceeds code capacity".into());
+        }
+        let delta = 1.0 - extended as f64 / length as f64;
+        let loss = l0.proximity_loss.ok_or("missing UDR proximity loss")?;
+        let ceiling = delta / 2.0 - 3.0 / (delta * length as f64);
+        let gamma = ceiling - loss;
+        if delta < 3.0 * 2f64.sqrt() / (length as f64).sqrt()
+            || gamma < delta / 3.0
+            || gamma > ceiling
+            || gamma <= 0.0
+        {
+            return Err("padded code is outside the UDR theorem range".into());
+        }
+        let pg_bits = ANALYSIS_LOG_Q - (gamma * length as f64 + 1.0).log2();
+        let query_bits = l0.queries as f64 * -(1.0 - gamma).log2();
+        let mut bound = AggregateSoundnessBound {
+            proximity_probability: 0.0,
+            query_probability: 0.0,
+            ood_probability: 0.0,
+        };
+        for (index, level) in self.levels.iter().enumerate() {
+            let (pg, query) = if index == 0 {
+                (pg_bits, query_bits)
+            } else {
+                level.paper_predicted_bits()
+            };
+            bound.proximity_probability += level.log_num_interleaved.max(MIN_EFFECTIVE_FOLD_COUNT)
+                as f64
+                * 2f64.powf(-pg - level.fold_grinding_bits as f64);
+            bound.query_probability += 2f64.powf(-query - level.grinding_bits as f64);
+            if let Some(ood) = level.expected_eps_ood_bits {
+                bound.ood_probability += 2f64.powf(-ood + ROUNDED_DIAGNOSTIC_HALF_ULP_BITS);
+            }
+        }
+        // The interactive bound takes no credit for the blinding grind.
+        bound.proximity_probability += 2f64.powf(1.0 - pg_bits);
         Ok(bound)
     }
 
@@ -1300,10 +1367,19 @@ impl LigeritoSecurityConfig {
         log_inv_rate: usize,
         target_security_bits: usize,
     ) -> Result<Self, String> {
+        Self::derive_paper_compatible_with_interleaving(m, 6, log_inv_rate, target_security_bits)
+    }
+
+    /// Derive a UDR schedule for an explicit initial interleaving width.
+    pub fn derive_paper_compatible_with_interleaving(
+        m: usize,
+        initial_k: usize,
+        log_inv_rate: usize,
+        target_security_bits: usize,
+    ) -> Result<Self, String> {
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
             .ok_or_else(|| format!("m ({m}) < LOG_PACKING (7)"))?;
-        let initial_k = 6usize;
         let prover = default_config(log_n, initial_k, log_inv_rate).map_err(|e| e.to_string())?;
         let r = prover.recursive_steps;
         let mut levels = Vec::with_capacity(r + 1);
@@ -1378,26 +1454,18 @@ impl LigeritoSecurityConfig {
         Ok(cfg)
     }
 
-    /// Derive the security config for a named [`LigeritoProfile`] at witness
-    /// size `m`. Each profile targets its bit level under **round-by-round
-    /// soundness**: every error term (pg + fold grinding, query + query
-    /// grinding, OOD) clears the target individually, and the protocol's
-    /// security is the *minimum* over rounds — the notion that governs
-    /// Fiat-Shamir security (cf. Ethereum's `soundcalc`), not a whole-protocol
-    /// union bound over terms. The three shipped profiles:
-    ///
-    /// - `Fast`:   JohnsonOod, rate 1/2, η = 0.02, 100 bits per round.
-    /// - `Slim`:   JohnsonOod, rate 1/4, η = 0.02, 16-bit query grinding at
-    ///             every level, 100 bits per round.
-    /// - `Secure`: Udr, rate 1/2, ε* = 1e-3, 120 bits per round.
+    /// Derive security parameters for a named profile and committed dimension.
     pub fn derive_profile(m: usize, profile: LigeritoProfile) -> Result<Self, String> {
+        if profile == LigeritoProfile::Standard {
+            return standard_config(m);
+        }
         /// Johnson slack below the Johnson radius, flat across levels.
         const JOHNSON_ETA: f64 = 0.02;
         let target_bits = profile.security_bits();
         let log_inv_rate = profile.log_inv_rate();
         let query_grind: usize = match profile {
             LigeritoProfile::Slim => 16,
-            LigeritoProfile::Fast | LigeritoProfile::Secure => 0,
+            LigeritoProfile::Fast | LigeritoProfile::Secure | LigeritoProfile::Standard => 0,
         };
         let log_n = m
             .checked_sub(crate::pcs::LOG_PACKING)
@@ -1410,7 +1478,9 @@ impl LigeritoSecurityConfig {
         // below uses the n-aware `udr_per_query_bits`.
         let per_query_bits_feas = |rate: usize| -> f64 {
             match profile {
-                LigeritoProfile::Secure => udr_per_query_bits_asymptotic(rate),
+                LigeritoProfile::Secure | LigeritoProfile::Standard => {
+                    udr_per_query_bits_asymptotic(rate)
+                }
                 LigeritoProfile::Fast | LigeritoProfile::Slim => {
                     paper_per_query_bits(rate, JOHNSON_ETA)
                 }
@@ -1448,7 +1518,9 @@ impl LigeritoSecurityConfig {
             // Actual per-level per-query bits: n-aware (maximal radius) for
             // UDR, length-agnostic Johnson otherwise.
             let per_q = match profile {
-                LigeritoProfile::Secure => udr_per_query_bits(rate, cols, UDR_PROXIMITY_LOSS),
+                LigeritoProfile::Secure | LigeritoProfile::Standard => {
+                    udr_per_query_bits(rate, cols, UDR_PROXIMITY_LOSS)
+                }
                 LigeritoProfile::Fast | LigeritoProfile::Slim => {
                     paper_per_query_bits(rate, JOHNSON_ETA)
                 }
@@ -1463,7 +1535,7 @@ impl LigeritoSecurityConfig {
             let eps_query = queries as f64 * per_q;
 
             let (regime, eta, proximity_loss, eps_pg, ood_samples, eps_ood) = match profile {
-                LigeritoProfile::Secure => {
+                LigeritoProfile::Secure | LigeritoProfile::Standard => {
                     // No row-union penalty in the unique-decoding regime (list
                     // size 1): per Diamond and Gruen, MCA-commutes holds with
                     // error ε directly (vs the Johnson regime's 2^{ℓ-1} factor).
@@ -1523,7 +1595,9 @@ impl LigeritoSecurityConfig {
         }
 
         let analysis = match profile {
-            LigeritoProfile::Secure => "no_row_union_over_ben_sasson_2025_cor_1_4",
+            LigeritoProfile::Secure | LigeritoProfile::Standard => {
+                "no_row_union_over_ben_sasson_2025_cor_1_4"
+            }
             LigeritoProfile::Fast | LigeritoProfile::Slim => {
                 "johnson_ood_row_union_over_bchks25_thm_4_6"
             }
@@ -2978,6 +3052,11 @@ impl SumcheckProver {
         &self.f
     }
 
+    #[cfg(feature = "zk")]
+    pub(crate) fn basis(&self) -> &[F128] {
+        &self.combined_basis
+    }
+
     pub fn transcript(&self) -> &[SumcheckMessage] {
         &self.transcript
     }
@@ -3216,6 +3295,126 @@ pub struct ZkL0 {
     pub c: F128,
 }
 
+#[derive(Clone, Copy)]
+enum InitialRows<'a> {
+    Pairwise(ZkL0),
+    #[cfg_attr(not(feature = "zk"), allow(dead_code))]
+    Columns {
+        weights: &'a [F128],
+        correction: &'a dyn Fn(usize) -> F128,
+    },
+}
+
+impl InitialRows<'_> {
+    fn width(self, lanes: usize) -> usize {
+        match self {
+            Self::Pairwise(_) => 2 * lanes,
+            Self::Columns { weights, .. } => weights.len(),
+        }
+    }
+
+    fn combine(self, row: &[F128], lanes: usize, position: usize) -> Vec<F128> {
+        match self {
+            Self::Pairwise(zk) => (0..lanes).map(|j| row[j] + zk.c * row[lanes + j]).collect(),
+            Self::Columns {
+                weights,
+                correction,
+            } => {
+                assert_eq!(lanes, 1);
+                vec![
+                    row.iter()
+                        .zip(weights)
+                        .fold(F128::ZERO, |s, (v, w)| s + *v * *w)
+                        + correction(position),
+                ]
+            }
+        }
+    }
+}
+
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn recursive_prover_combined_columns<Ch: Challenger>(
+    config: &ProverConfig,
+    folded: Vec<F128>,
+    basis: Vec<F128>,
+    target: F128,
+    data: &super::commit::ProverData,
+    weights: &[F128],
+    padding: Option<(&super::query_padding::PaddingCode, &[F128])>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> LigeritoProof {
+    assert_eq!(config.initial_k, 0);
+    let correction = |position| {
+        padding.map_or(F128::ZERO, |(code, pads)| {
+            code.evaluate_padding(pads, position)
+        })
+    };
+    recursive_prover_with_basis_impl(
+        config,
+        folded,
+        basis,
+        target,
+        &data.codeword,
+        &data.merkle_tree,
+        &data.initial_leaf_salts,
+        None,
+        Some(InitialRows::Columns {
+            weights,
+            correction: &correction,
+        }),
+        true,
+        ro,
+        channel,
+        challenger,
+    )
+}
+
+#[cfg(feature = "zk")]
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn recursive_verifier_combined_columns<Ch, F>(
+    config: &VerifierConfig,
+    proof: &LigeritoProof,
+    log_n: usize,
+    target: F128,
+    root: &Hash,
+    eval_basis: F,
+    weights: &[F128],
+    padding: Option<(&super::query_padding::PaddingCode, &[F128])>,
+    ro: &crate::ro::RoContext,
+    channel: crate::ro::RoChannel,
+    challenger: &mut Ch,
+) -> bool
+where
+    Ch: Challenger,
+    F: Fn(&[F128], usize) -> Vec<F128>,
+{
+    if config.initial_k != 0 || weights.is_empty() {
+        return false;
+    }
+    let correction = |position| {
+        padding.map_or(F128::ZERO, |(code, pads)| {
+            code.evaluate_padding(pads, position)
+        })
+    };
+    recursive_verifier_with_basis_succinct_impl(
+        config,
+        proof,
+        log_n,
+        target,
+        root,
+        eval_basis,
+        Some(InitialRows::Columns {
+            weights,
+            correction: &correction,
+        }),
+        Some((ro, channel)),
+        challenger,
+    )
+}
+
 /// zk variant of [`recursive_prover_with_basis_precomputed_round0`]: same
 /// protocol, but the L0 commitment is the wide-leaf hiding commit
 /// (`pcs::commit_zk`) and the folded vector is `F = message′ + c·g`.
@@ -3248,7 +3447,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk<Ch: Challenger>(
             u_0: round0_uv.0,
             u_2: round0_uv.1,
         }),
-        Some(zk_l0),
+        Some(InitialRows::Pairwise(zk_l0)),
         false,
         &ro,
         crate::ro::RoChannel::Witness,
@@ -3285,7 +3484,7 @@ pub fn recursive_prover_with_basis_precomputed_round0_zk_with_ro<Ch: Challenger>
             u_0: round0_uv.0,
             u_2: round0_uv.1,
         }),
-        Some(zk_l0),
+        Some(InitialRows::Pairwise(zk_l0)),
         true,
         ro,
         channel,
@@ -3374,7 +3573,7 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     l0_tree: &[Hash],
     l0_leaf_salts: &[[u8; 32]],
     first_msg: Option<SumcheckMessage>,
-    zk_l0: Option<ZkL0>,
+    zk_l0: Option<InitialRows<'_>>,
     framed: bool,
     ro: &crate::ro::RoContext,
     channel: crate::ro::RoChannel,
@@ -3395,11 +3594,8 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let block_len_0 = 1usize << (log_msg_cols_0 + log_inv_rate_0);
     let num_interleaved_0 = 1usize << initial_k;
     // zk: each L0 leaf additionally carries the blinder-g lanes.
-    let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
-    assert_eq!(
-        l0_codeword.len(),
-        block_len_0 * num_interleaved_0 * l0_lane_mult
-    );
+    let l0_leaf_width = zk_l0.map_or(num_interleaved_0, |mode| mode.width(num_interleaved_0));
+    assert_eq!(l0_codeword.len(), block_len_0 * l0_leaf_width);
     assert_eq!(l0_tree.len(), 2 * block_len_0 - 1);
     if zk_l0.is_some() {
         assert_eq!(l0_leaf_salts.len(), block_len_0);
@@ -3425,7 +3621,6 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     // wtns_0 access reduces to: root (last tree node), row(q), block_len.
     let initial_root: Hash = l0_tree[l0_tree.len() - 1];
     let l0_block_len = block_len_0;
-    let l0_leaf_width = num_interleaved_0 * l0_lane_mult;
     let l0_row = |q: usize| -> &[F128] {
         let start = q * l0_leaf_width;
         &l0_codeword[start..start + l0_leaf_width]
@@ -3562,11 +3757,8 @@ fn recursive_prover_with_basis_impl<Ch: Challenger>(
     let induce_rows_0: Vec<Vec<F128>> = match zk_l0 {
         Some(zk) => opened_rows_0
             .iter()
-            .map(|row| {
-                (0..num_interleaved_0)
-                    .map(|j| row[j] + zk.c * row[num_interleaved_0 + j])
-                    .collect()
-            })
+            .zip(&queries_0)
+            .map(|(row, position)| zk.combine(row, num_interleaved_0, *position))
             .collect(),
         None => opened_rows_0.clone(),
     };
@@ -3853,7 +4045,7 @@ where
         target,
         expected_initial_root,
         eval_b_residual,
-        zk_l0,
+        zk_l0.map(InitialRows::Pairwise),
         None,
         challenger,
     )
@@ -3884,7 +4076,7 @@ where
         target,
         expected_initial_root,
         eval_b_residual,
-        zk_l0,
+        zk_l0.map(InitialRows::Pairwise),
         Some((ro, channel)),
         challenger,
     )
@@ -3898,7 +4090,7 @@ fn recursive_verifier_with_basis_succinct_impl<Ch, F>(
     target: F128,
     expected_initial_root: &Hash,
     eval_b_residual: F,
-    zk_l0: Option<ZkL0>,
+    zk_l0: Option<InitialRows<'_>>,
     ro_context: Option<(&crate::ro::RoContext, crate::ro::RoChannel)>,
     challenger: &mut Ch,
 ) -> bool
@@ -4064,14 +4256,14 @@ where
     let _t = std::time::Instant::now();
     // zk: L0 leaves are wide ([f′ lanes ‖ g lanes]); Merkle-check the wide
     // rows, then combine each into an F-row with c for the enforced sum.
-    let l0_lane_mult = if zk_l0.is_some() { 2 } else { 1 };
+    let l0_leaf_width = zk_l0.map_or(num_interleaved_0, |mode| mode.width(num_interleaved_0));
     if !verify_level_opens_maybe_ro(
         &proof.initial_root,
         block_len_0,
         &queries_0,
         &proof.initial_proof.opened_rows,
         &proof.initial_proof.leaf_salts,
-        num_interleaved_0 * l0_lane_mult,
+        l0_leaf_width,
         &proof.initial_proof.merkle_proof,
         l0_salt_domain,
         ro_context,
@@ -4095,11 +4287,8 @@ where
                 .initial_proof
                 .opened_rows
                 .iter()
-                .map(|row| {
-                    (0..num_interleaved_0)
-                        .map(|j| row[j] + zk.c * row[num_interleaved_0 + j])
-                        .collect()
-                })
+                .zip(&queries_0)
+                .map(|(row, position)| zk.combine(row, num_interleaved_0, *position))
                 .collect();
             &combined_rows_0
         }
@@ -8226,6 +8415,44 @@ mod fold_grind_taper_tests {
                 cfg.aggregate_soundness_bound_zk_l0().is_err(),
                 "{profile:?} L0 is JohnsonOod, so the zk L0 bound must fail closed"
             );
+        }
+    }
+
+    #[test]
+    fn query_padding_ledger_charges_extended_dimension() {
+        let cfg = security_config(26, LigeritoProfile::Standard);
+        let q = cfg.levels[0].queries;
+        let plain = cfg.aggregate_soundness_bound_zk_l0().unwrap();
+        let padded = cfg.aggregate_soundness_bound_query_padded(q).unwrap();
+        assert!(padded.query_probability > plain.query_probability);
+        assert!(padded.bits() < plain.bits());
+        assert!(cfg.aggregate_soundness_bound_query_padded(q - 1).is_err());
+        assert!(
+            security_config(26, LigeritoProfile::Fast)
+                .aggregate_soundness_bound_query_padded(218)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn query_padding_can_clear_the_matched_soundness_floor() {
+        for m in 22..=26 {
+            let mut cfg = security_config(m, LigeritoProfile::Standard);
+            let limit = 1 << cfg.levels[0].log_msg_cols;
+            loop {
+                let q = cfg.levels[0].queries;
+                if cfg
+                    .aggregate_soundness_bound_query_padded(q)
+                    .unwrap()
+                    .bits()
+                    >= 100.0
+                {
+                    break;
+                }
+                assert!(q < limit);
+                cfg.levels[0].queries += 1;
+                cfg.levels[0].expected_eps_query_bits = cfg.levels[0].paper_predicted_bits().1;
+            }
         }
     }
 }

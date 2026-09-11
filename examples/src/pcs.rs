@@ -45,16 +45,13 @@ pub struct BitPcs {
 }
 
 impl BitPcs {
-    /// The committed ZK message is `[mask || z]`, so the Ligerito config is
-    /// loaded for `params.log_msg_len() = m - 6`; `m = 22` therefore uses the
-    /// embedded `m23_secure` config. Every registered config must also pass
-    /// the production batch-opening certificate: the L0 query count must not
-    /// exceed the mask symbols per lane, no query-phase grinding, bounded
-    /// fold grinding, and a blind grind of 1 to `MAX_BLIND_GRINDING_BITS`
-    /// bits. `m = 21` loads `m22_secure`, which opens 298 L0 positions
-    /// against a 256-symbol mask lane and is rejected; `m = 22` is the
-    /// smallest accepted shape.
+    /// Load and validate registered ZK parameters for the witness dimension.
     pub fn new(m: usize) -> Result<Self, VeilError> {
+        if !(22..=26).contains(&m) {
+            return Err(VeilError::Ligerito(
+                "unsupported example PCS dimension".into(),
+            ));
+        }
         let params = PcsParams::new(m, LOG_BATCH_SIZE, LigeritoProfile::Secure, true)
             .map_err(|error| VeilError::Ligerito(error.to_string()))?;
         let log_n = params.log_msg_len();
@@ -246,11 +243,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_floor_is_rejected_by_the_hiding_budget() {
-        assert_eq!(
-            BitPcs::new(21).unwrap_err(),
-            VeilError::ProofShape("L0 hiding query budget")
-        );
+    fn unregistered_shapes_are_rejected() {
+        assert!(matches!(BitPcs::new(21), Err(VeilError::Ligerito(_))));
+        assert!(matches!(BitPcs::new(27), Err(VeilError::Ligerito(_))));
         assert!(BitPcs::new(12).is_err());
         let pcs = BitPcs::new(22).unwrap();
         assert_eq!(pcs.blind_grinding_bits().unwrap(), 2);

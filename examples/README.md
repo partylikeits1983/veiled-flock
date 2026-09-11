@@ -132,20 +132,15 @@ they do not make a standalone pROM theorem for this package.
 
 ## Parameters and scope
 
-The hiding PCS uses `PcsParams { m: 22, log_inv_rate: 1, log_batch_size: 6,
-profile: Secure, zk: true }`, the production floor. The committed message is
-`[mask || z]`, so the Ligerito config is the embedded `m23_secure` profile
-and the blind grind uses two bits. `BitPcs::new` runs the production
-batch-opening certificate on both configs: the L0 query count must fit in
-the mask symbols of one lane, query-phase grinding is not allowed, fold
-grinding is bounded per site and in the number of sites, and the blind grind
-is in range. `m = 21` fails that certificate (298 queries against a
-256-symbol lane) and is rejected; `m = 22` is the smallest accepted shape.
+These layer examples use the full-matrix hiding PCS with the Secure schedule.
+The public BLAKE3-preimage API uses the single-column Standard construction.
+`BitPcs::new` accepts the supported witness dimensions and validates the query
+budget and grinding limits against both prover and verifier configurations.
 The grind bounds are the production values from `succinct_veil.rs`. The VEIL constraint layer uses
 `ConstraintParameters::succinct_flock_secure()` and every circuit passes
 `certify_constraint_soundness`.
 
-The examples mirror the production zero-knowledge construction: VEIL one-time
+The examples demonstrate the masking layers: VEIL one-time
 pads cover every visible coordinate, the hiding PCS and blinded openings cover
 the committed witnesses, and `root_zk` includes private randomizer rows in its
 R1CS witness. The simulator-style tests above are deliberately narrower than

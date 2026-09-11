@@ -223,7 +223,7 @@ pub mod neon {
 mod tests {
     use super::*;
     #[cfg(target_arch = "aarch64")]
-    use core::mem::transmute;
+    use core::{arch::aarch64::vld1q_u8, mem::transmute};
 
     /// Deterministic splitmix64 PRNG for test reproducibility.
     struct Rng(u64);

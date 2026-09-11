@@ -1,9 +1,9 @@
 # Security scope
 
-VEIL-FLOCK has a Lean proof of statistical zero knowledge for a formal model
-of the 64-byte BLAKE3-preimage protocol in the classical programmable
-random-oracle model (pROM). The Rust code follows the same protocol, but is
-not mechanically linked to the Lean model.
+The canonical ZK construction uses a single random PCS column, query-sized
+polynomial padding, and the Standard profile. Its Lean update is pending.
+The checked-in salted-Merkle/Fiat–Shamir experiment and statistical-distance
+bound cover the earlier full-matrix blinder and Secure parameters.
 
 The Lean relation is broader than the Rust relation: it checks padded public
 projection, while Rust also checks BLAKE3/R1CS satisfaction and computes public
@@ -16,10 +16,9 @@ implementation is unaudited and should not be used for production secrets.
 |---|---|
 | Relation | Ordered batch of 1-4096 64-byte BLAKE3 preimages, padded to a registered 256/512/1024/2048/4096-slot shape |
 | Completeness | Honest proofs verify |
-| Zero knowledge | Proved for the finite Lean uniform coin model with distance `< 2^-126`; Rust correspondence and seeded XOF instantiation not proved |
-| Algebraic privacy | Perfect in the formal uniform coin model, conditioned on the public statement and accepted challenge history |
+| Zero knowledge | Legacy Secure Lean model has distance `< 2^-126`; the single-column Lean update is pending |
 | Noninteractive privacy loss | Random-oracle prequeries, collisions, nonce collisions, and bounded-grinding failures |
-| Interactive soundness | Additive bound from FLOCK PIOP, VEIL constraints, and Secure Ligerito |
+| Interactive soundness | FLOCK PIOP, VEIL constraints, and Standard Ligerito error ledger; numerical PCS and composed floors of 100 bits under the adopted reductions |
 | Fiat-Shamir soundness | Classical-ROM assumption and reduction boundary |
 | Argument of knowledge | Not claimed |
 | QROM/post-quantum ZK | Not claimed |
@@ -39,8 +38,8 @@ relation, the real adaptive adversary view is within `2^-126` statistical
 distance of a witness-free simulated view in the finite classical pROM model.
 
 Because the formal relation is broader than the Rust BLAKE3 relation, the
-privacy result applies to the Rust relation once the missing correspondence
-obligations are discharged.
+privacy result could be transferred to Rust only after the single-column
+construction, Standard parameters, and correspondence obligations are proved.
 
 Rust production provers sample a 32-byte OS seed and expand it with BLAKE3 XOF
 for prover secret coins. This replaces direct OS sampling of every mask byte;
@@ -75,8 +74,8 @@ caller-selected deterministic seeds.
 
 ## Privacy chain
 
-The Lean model proves the privacy chain below. Rust enforces matching runtime
-checks, but a mechanized Rust-to-model proof remains future work.
+The following chain describes the legacy end-to-end Lean model; see
+[the Lean proof scope](../lean/README.md).
 
 1. The outer blinded additive-RS encoder is linear, reduces to ordinary FLOCK
    when padding is zero, and opens no more positions than its random-padding
@@ -129,8 +128,10 @@ transcript.
 
 Outer blinding grinding is modeled as first success within 8192 attempts. Each
 positive Ligerito fold grind is modeled as first success within 4096 attempts,
-with sixteen reserved grind sites. The Lean-backed registered schedules
-currently checked into the repo are:
+with sixteen reserved grind sites. The legacy schedules covered by the
+concrete Lean tables are shown below.
+They are retained for the formal model and are not selected by the canonical
+Rust ZK API:
 
 | Slots | Rust profile | Levels | Final `yr_log_n` |
 |---:|---|---|---:|
@@ -162,25 +163,36 @@ adds these errors:
 - VEIL dot-product and Hadamard binding
 - operand- and product-code proximity generation
 - Hadamard reduction and linkage
-- Secure-profile Ligerito whole-opening soundness
+- Standard-profile Ligerito whole-opening soundness
 
 The RS proximity terms use the finite-length unique-decoding backoff
-`gamma = delta/2 - 3/(delta*N)` and union-bound every live binary fold. Fast
-and Slim/list-decoding profiles are rejected by the full-ZK setup. Missing or
-mismatched PCS registry entries fail closed instead of falling back to ad hoc
-parameters.
+`gamma = delta/2 - 3/(delta*N)` and union-bound every live binary fold. For
+the outer code, `delta = 1 - (n+q)/N`: the padding increases the polynomial
+dimension even though the recursive virtual oracle retains the original
+FLOCK code. The nonzero blinding challenge is charged separately. Query
+budgets must equal the padding dimension; mismatches fail closed. Fast
+and Slim/list-decoding profiles, and legacy Secure, are rejected by the
+full-ZK setup. Missing or mismatched PCS registry entries fail closed instead
+of falling back to ad hoc parameters.
 
 The public full-ZK API rejects any setup whose registered PCS aggregate is below
-114 bits or whose composed interactive ledger is below 106 bits. These floors
+100 bits or whose composed interactive ledger is below 100 bits. These floors
 are enforced before proving, simulation, or verification.
 
+The proximity-gap analysis uses
+[Corollary 1.4 of Improved Proximity Gaps for Reed–Solomon Codes](https://www.math.toronto.edu/swastik/rs-proximity-gaps-2025.pdf).
+The reduction from protocol acceptance to the ledger remains outside the
+checked-in Lean theorems.
+
 `rom_soundness_bound(Q, attempts)` also accounts for proof attempts and oracle
-collisions. It is a classical-ROM statement and does not make SHA-256
-information-theoretic.
+collisions. This is a Rust numerical calculation under the classical-ROM
+soundness analysis, not a new Lean certificate or an information-theoretic
+claim about SHA-256. A 100-bit interactive bound is not a 100-bit ROM guarantee
+for every adversary query budget and number of proof attempts.
 
 ## Format and API
 
-The verifier checks the circuit digest, mask count, witness layout, Secure PCS
+The verifier checks the circuit digest, mask count, witness layout, Standard PCS
 profile marker, registered code geometry, query budget, and VEIL parameters.
 The canonical bundle has a 1 MiB decode limit, rejects trailing bytes, and
 rejects parameter mismatches.
@@ -200,3 +212,15 @@ The construction hides messages and witness-dependent transcript data. It does
 not hide batch size, circuit shape, parameter suite, proof length, runtime,
 memory access, allocator behavior, or host side channels. Independent
 cryptographic and side-channel review is required before production use.
+
+## Canonical ZK parameters
+
+`Blake3PreimageZkSetup::new` and the CLI use Standard with 32 witness columns
+and one random column. The outer code has twice the original witness height
+(four times at 256 slots), with one random padding coefficient per L0 query
+per column. The inner VEIL codes retain inverse rate 8. The generic protocol
+layer examples retain their legacy Secure PCS adapter. Non-ZK FLOCK keeps its
+existing profiles and defaults. The canonical ZK
+simulator and ROM numerical-bound API use the same registered configuration.
+Legacy Secure and experimental-profile proofs must be regenerated.
+Query schedules are registered in the [PCS configs](../crates/flock-core/configs/ligerito/).

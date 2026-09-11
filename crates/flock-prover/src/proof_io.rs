@@ -72,7 +72,7 @@ impl HashKind {
 const FLAVOR_R1CS_LIGERITO: u8 = 2;
 const FLAVOR_CHAIN_LIGERITO: u8 = 3;
 /// Full-view VEIL-FLOCK proof for the fixed 64-byte BLAKE3-preimage relation.
-const FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE: u8 = 5;
+const FLAVOR_VEIL_FLOCK_BLAKE3_PREIMAGE: u8 = 6;
 
 /// All flavor bytes this build understands (for the unknown-flavor check).
 const KNOWN_FLAVORS: [u8; 3] = [
