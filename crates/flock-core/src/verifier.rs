@@ -3,6 +3,9 @@
 //! ZClaims, and verifies the PCS openings at those points against the
 //! witness commitment.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::challenger::Challenger;
 use crate::field::F128;
 use crate::lincheck;

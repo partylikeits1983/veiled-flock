@@ -20,6 +20,9 @@
 //! Scalar/correctness-first implementation; NEON `apply_triple` and the
 //! unrolled `ntt_and_accum` can be added if the URM hot path needs them.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F8;
 use crate::ntt::AdditiveNttGf8;
 #[cfg(target_arch = "aarch64")]

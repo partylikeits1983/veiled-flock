@@ -1,3 +1,5 @@
+#![cfg_attr(not(feature = "std"), no_std)]
+
 //! `flock-core`: the protocol library and verifier for Flock's R1CS-over-GF(2)
 //! sumcheck/zerocheck PIOP with a multilinear PCS.
 //!
@@ -17,9 +19,37 @@
 //! Workspace-wide Clippy `allow`s for the hand-tuned numeric kernels are
 //! declared in `[workspace.lints.clippy]` at the repo root.
 
-#[cfg(target_os = "linux")]
+#[cfg(not(feature = "std"))]
+#[macro_use]
+extern crate alloc;
+
+#[cfg(not(feature = "parallel"))]
+extern crate flock_compat as rayon;
+#[cfg(not(feature = "std"))]
+extern crate flock_compat as std;
+
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
+#[cfg(not(feature = "std"))]
+#[allow(unused_macros)]
+macro_rules! eprintln {
+    ($($arg:tt)*) => {{
+        let _ = core::format_args!($($arg)*);
+    }};
+}
+
+#[cfg(not(feature = "std"))]
+#[allow(unused_macros)]
+macro_rules! println {
+    ($($arg:tt)*) => {{
+        let _ = core::format_args!($($arg)*);
+    }};
+}
+
+#[cfg(all(feature = "std", target_os = "linux"))]
 use std::collections::HashSet;
-#[cfg(target_arch = "aarch64")]
+#[cfg(all(feature = "std", target_arch = "aarch64"))]
 use std::sync::OnceLock;
 
 pub mod bits;
@@ -60,6 +90,7 @@ pub mod zk;
 /// Returns the number of threads the pool was configured with, or `None`
 /// if no change was made (either because the env var was set or because
 /// rayon was already initialized).
+#[cfg(feature = "std")]
 pub fn init_perf_thread_pool() -> Option<usize> {
     if std::env::var("RAYON_NUM_THREADS").is_ok() {
         return None;
@@ -72,6 +103,11 @@ pub fn init_perf_thread_pool() -> Option<usize> {
         Ok(()) => Some(n),
         Err(_) => None, // pool already built
     }
+}
+
+#[cfg(not(feature = "std"))]
+pub fn init_perf_thread_pool() -> Option<usize> {
+    None
 }
 
 /// Allocate a `Vec<T>` of length `n` whose contents are NOT zero-initialized.
@@ -115,8 +151,15 @@ pub(crate) fn alloc_uninit_f128_vec(n: usize) -> Vec<crate::field::F128> {
 /// homogeneous P-core pool?" (i.e. `current_num_threads() <= this`).
 #[cfg(target_arch = "aarch64")]
 pub(crate) fn perf_core_count_cached() -> usize {
-    static N: OnceLock<usize> = OnceLock::new();
-    *N.get_or_init(perf_core_count)
+    #[cfg(feature = "std")]
+    {
+        static N: OnceLock<usize> = OnceLock::new();
+        *N.get_or_init(perf_core_count)
+    }
+    #[cfg(not(feature = "std"))]
+    {
+        1
+    }
 }
 
 /// Best-effort count of **physical** performance cores used to size the
@@ -129,6 +172,7 @@ pub(crate) fn perf_core_count_cached() -> usize {
 /// parallelism()` counts SMT siblings, so derive physical cores from `/sys`
 /// topology and clamp that host-wide count to the process's affinity/cgroup
 /// availability. Elsewhere, falls back to `available_parallelism()`.
+#[cfg(feature = "std")]
 fn perf_core_count() -> usize {
     #[cfg(target_os = "macos")]
     {
@@ -161,7 +205,7 @@ fn perf_core_count() -> usize {
 /// Count distinct physical cores via `/sys` topology: one entry per unique
 /// `(physical_package_id, core_id)` over the online `cpuN` directories. Returns
 /// `None` if the topology can't be read (caller falls back to logical count).
-#[cfg(target_os = "linux")]
+#[cfg(all(feature = "std", target_os = "linux"))]
 fn linux_physical_cores() -> Option<usize> {
     let mut cores: HashSet<(String, String)> = HashSet::new();
     for entry in std::fs::read_dir("/sys/devices/system/cpu").ok()? {

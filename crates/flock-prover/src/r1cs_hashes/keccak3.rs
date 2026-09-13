@@ -39,6 +39,9 @@
 //!   with `state_r` implicit via the φ substitution.
 //! - Padding: empty A, B.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::LincheckCircuit;

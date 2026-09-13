@@ -5,6 +5,9 @@
 //! twiddle table for all parallel NTTs. SIMD width is 2 (one F128 pair per
 //! `ghash_mul_vec2_neon`), so `num_ntts` must be a multiple of 2.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 #[cfg(all(target_arch = "aarch64", target_feature = "aes"))]
 use crate::field::gf2_128::aarch64::ghash_mul_vec2_neon;

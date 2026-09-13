@@ -28,6 +28,9 @@
 //! 192 (positions on Λ₄ = V₈ \ S) are the fresh extension that the zerocheck
 //! round-1 message uses.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F8;
 use crate::ntt::AdditiveNttGf8;
 #[cfg(target_arch = "aarch64")]

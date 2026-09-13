@@ -24,7 +24,10 @@
 //!
 //! This module always compiles (the layout types are plain data consumed by
 //! `BlockR1cs`), but production seeding — and every prove path that needs it —
-//! is gated behind the `zk` cargo feature.
+//! is gated behind the `os-rng` cargo feature.
+
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
 
 use crate::field::F128;
 use serde::{Deserialize, Serialize};
@@ -71,7 +74,7 @@ impl ZkRng {
 
     /// Draw one production seed from OS entropy, then expand it with BLAKE3.
     /// Panics if the seed source is unavailable.
-    #[cfg(feature = "zk")]
+    #[cfg(feature = "os-rng")]
     pub fn from_entropy() -> Self {
         let mut seed = [0u8; 32];
         getrandom::getrandom(&mut seed).expect("flock-zk: OS entropy unavailable");

@@ -11,6 +11,9 @@
 //! resulting dot claims are linked back to the same witness vector by three
 //! additional linear constraints.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::{
     challenger::Challenger,
     field::F128,

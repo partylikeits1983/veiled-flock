@@ -57,6 +57,9 @@
 //! part of the statement encoding (a verifier using the wrong padding rule
 //! computes a different target and rejects honest proofs).
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::challenger::Challenger;
 use flock_core::field::F128;
 use flock_core::lincheck::build_eq_table;

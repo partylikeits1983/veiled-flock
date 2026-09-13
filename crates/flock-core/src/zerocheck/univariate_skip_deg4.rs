@@ -43,6 +43,9 @@
 //! deferred reductions, shift-reduce, SIMD) parallel `univariate_skip_optimized.rs`
 //! and would land later; this file is the algorithmic skeleton.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::{F8, F128, phi8};
 use crate::ntt::AdditiveNttGf8;
 

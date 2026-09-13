@@ -20,6 +20,9 @@
 //!
 //! [DP24]: https://eprint.iacr.org/2024/504
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::F128;
 use rayon::prelude::*;
 

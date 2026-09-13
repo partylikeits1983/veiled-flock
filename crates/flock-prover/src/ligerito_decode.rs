@@ -4,6 +4,9 @@
 //! message portion is re-encoded and
 //! accepted only when it lies inside the code's unique-decoding radius.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::field::F128;
 use flock_core::ntt::AdditiveNttF128;
 use flock_core::pcs::PcsParams;

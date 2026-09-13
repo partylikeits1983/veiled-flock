@@ -10,6 +10,9 @@
 //! `S(z + c·g) = S(z) + M_c(S(g))`. Every masked slice is bound before `c` is
 //! sampled, and `M_c` is invertible for non-zero `c`.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use flock_core::{
     challenger::Challenger,
     field::F128,
@@ -242,12 +245,14 @@ pub trait SuccinctZerocheckSource<Ch: Challenger> {
 /// Public-witness-free ROM zerocheck simulator. It samples a transcript and
 /// solves its final quadratic coefficient so the verifier lands on the true
 /// evaluations of the caller's public-fiber representative.
+#[cfg(feature = "std")]
 pub struct RomZerocheckSimulator {
     rng: ZkRng,
     z: F128,
     rhos: Vec<F128>,
 }
 
+#[cfg(feature = "std")]
 impl RomZerocheckSimulator {
     pub fn new(m: usize, mut rng: ZkRng) -> Self {
         let mut z_value = [F128::ZERO; 1];
@@ -268,6 +273,7 @@ impl RomZerocheckSimulator {
     }
 }
 
+#[cfg(feature = "std")]
 fn solve_sumcheck_messages(
     running: F128,
     target: F128,
@@ -298,6 +304,7 @@ fn solve_sumcheck_messages(
     }
 }
 
+#[cfg(feature = "std")]
 impl SuccinctZerocheckSource<crate::sim_oracle::OracleChallenger> for RomZerocheckSimulator {
     fn emit(
         &mut self,

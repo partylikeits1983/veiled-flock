@@ -18,6 +18,9 @@
 //! [`super::univariate_skip_optimized`] drops a constant F₈ factor
 //! `C_s = φ₈(0x1C)` from the eq-on-S weights; this one keeps it.
 
+#[cfg(not(feature = "std"))]
+use std::prelude::v1::*;
+
 use crate::field::{F8, F128, mul_by_x, phi8};
 use crate::ntt::{AdditiveNttGf8, InvNttTableByteSingleGf8};
 use rayon::prelude::*;
