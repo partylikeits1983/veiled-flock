@@ -79,12 +79,32 @@ and doubles the initial Merkle leaf width with a same-length blinding vector
 `g`. VEIL constraint and ring-linkage proofs add further overhead. These
 measurements establish a baseline for future size and proving-time experiments.
 
-Reproduce the benchmark with:
+Run the current benchmark with:
 
 ```sh
 cargo run --locked --release -p flock-prover --features veil \
   --example preimage_scaling -- 5
 ```
+
+The table above records the pinned historical baseline. The current harness
+alternates FLOCK and VEIL-FLOCK sample order, also measures canonical proof
+transport including the commitment and framing, and reports PCS, VEIL, and
+initial-row byte counts. Public digests are reported separately so increasing
+the statement size cannot conceal proof overhead.
+
+The optimization targets are at most 10% median proving-time overhead and
+12% maximum sampled proof-transport overhead. They are not achieved by the
+current construction. Check a selected registered range explicitly with:
+
+```sh
+cargo run --locked --release -p flock-prover --features veil \
+  --example preimage_scaling -- 15 --sizes 256,512,1024,2048,4096 --check-targets
+```
+
+This command returns a nonzero status when either target fails at any selected
+shape. Batches below 256 are excluded from target checks because their circuit
+geometry differs. See [the optimization plan](docs/OPTIMIZATION.md) for the
+compact PCS requirements and the remaining Rust-to-Lean obligations.
 
 ## Quickstart
 

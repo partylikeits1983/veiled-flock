@@ -142,9 +142,10 @@ one 256-bit output MUST be sampled/programmed jointly; unused bytes MUST remain
 uniform.
 
 The outer blind grind uses 2-6 bits and an 8192-trial limit. Each live Ligerito
-fold grind uses at most 5 bits and a 4096-trial limit. Lean stops each search at
-its limit. Rust currently finds the first successful nonce and checks its bound
-afterward, so the Rust search itself is not yet bounded.
+fold grind uses at most 5 bits and a 4096-trial limit. Lean and Rust stop each
+grinding search at its limit. An exhausted Rust search MUST return an error,
+without returning a proof. Successful searches preserve first-success nonce
+selection and the existing transcript encoding.
 
 ## 9. Simulator
 

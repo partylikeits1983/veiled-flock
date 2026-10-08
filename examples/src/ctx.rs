@@ -55,12 +55,7 @@ const VEIL_FORK_LABEL: &[u8] = b"veil-examples-veil-fork";
 /// `sum_i weights[i] * exprs[i]`.
 pub fn linear_combination(exprs: &[Expr], weights: &[F128]) -> Expr {
     assert_eq!(exprs.len(), weights.len());
-    exprs
-        .iter()
-        .zip(weights)
-        .fold(Expr::zero(), |acc, (expr, weight)| {
-            acc.add(&expr.scale(*weight))
-        })
+    Expr::sum_scaled(exprs.iter().zip(weights.iter().copied()))
 }
 
 fn unmask(masked: F128, index: usize) -> Expr {
@@ -182,26 +177,30 @@ fn observe_oracle<C: Challenger>(challenger: &mut C, nonce: &[u8; 32], commitmen
 /// mirror of `scale_s_hat_v`.
 fn scale_ring_expressions(expressions: &[Expr], scalar: F128) -> Vec<Expr> {
     assert_eq!(expressions.len(), RING_WIDTH);
-    let mut out = vec![Expr::zero(); RING_WIDTH];
-    for (input_bit, expression) in expressions.iter().enumerate() {
-        let basis = if input_bit < 64 {
-            F128::new(1u64 << input_bit, 0)
-        } else {
-            F128::new(0, 1u64 << (input_bit - 64))
-        };
-        let product = scalar * basis;
-        for (output_bit, slot) in out.iter_mut().enumerate() {
-            let present = if output_bit < 64 {
-                (product.lo >> output_bit) & 1
+    let products = (0..RING_WIDTH)
+        .map(|input_bit| {
+            let basis = if input_bit < 64 {
+                F128::new(1u64 << input_bit, 0)
             } else {
-                (product.hi >> (output_bit - 64)) & 1
+                F128::new(0, 1u64 << (input_bit - 64))
             };
-            if present == 1 {
-                *slot = slot.add(expression);
-            }
-        }
-    }
-    out
+            scalar * basis
+        })
+        .collect::<Vec<_>>();
+    (0..RING_WIDTH)
+        .map(|output_bit| {
+            Expr::sum_scaled(expressions.iter().zip(&products).filter_map(
+                |(expression, product)| {
+                    let present = if output_bit < 64 {
+                        (product.lo >> output_bit) & 1
+                    } else {
+                        (product.hi >> (output_bit - 64)) & 1
+                    };
+                    (present == 1).then_some((expression, F128::ONE))
+                },
+            ))
+        })
+        .collect()
 }
 
 /// The masked ring slices of one claim as affine expressions.
@@ -595,10 +594,10 @@ impl ZkProverCtx {
                 witness_slices.push(witness);
                 blind_slices.push(blind);
             }
-            blind_grind_nonce = self.challenger.grind_pow(bits);
-            if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
-                return Err(VeilError::GrindingLimitExceeded);
-            }
+            blind_grind_nonce = self
+                .challenger
+                .grind_pow_bounded(bits, MAX_BLIND_GRIND_TRIALS)
+                .ok_or(VeilError::GrindingLimitExceeded)?;
             let c = sample_nonzero(&mut self.challenger)
                 .ok_or(VeilError::ChallengeSamplingLimitExceeded)?;
             self.challenger.observe_label(BLINDED_RING_LABEL);
@@ -664,7 +663,7 @@ impl ZkProverCtx {
                     },
                     &mut bounded,
                 );
-                if bounded.exhausted || !ligerito_grinding_is_bounded(&opening.ligerito) {
+                if bounded.is_exhausted() || !ligerito_grinding_is_bounded(&opening.ligerito) {
                     return Err(VeilError::GrindingLimitExceeded);
                 }
                 pcs_openings.push(opening);

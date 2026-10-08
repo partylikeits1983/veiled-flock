@@ -11,7 +11,7 @@
 //! sampled, and `M_c` is invertible for non-zero `c`.
 
 use flock_core::{
-    challenger::Challenger,
+    challenger::{BoundedGrindingChallenger, Challenger},
     field::F128,
     lincheck::{self, LincheckCircuit, LincheckProof},
     pcs::{self, Commitment, PcsParams},
@@ -889,6 +889,10 @@ impl<C: Challenger> Challenger for MaskingChallenger<'_, C> {
         self.inner.grind_pow(bits)
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        self.inner.grind_pow_bounded(bits, max_attempts)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         self.inner.verify_pow(nonce, bits)
     }
@@ -949,10 +953,7 @@ impl ExpressionCursor {
 
 fn dot(expressions: &[LinearCombination], coefficients: &[F128]) -> LinearCombination {
     assert_eq!(expressions.len(), coefficients.len());
-    expressions.iter().zip(coefficients).fold(
-        LinearCombination::zero(),
-        |acc, (expression, coefficient)| acc.add(&expression.scale(*coefficient)),
-    )
+    LinearCombination::sum_scaled(expressions.iter().zip(coefficients.iter().copied()))
 }
 
 fn mask_ring_claims(
@@ -1025,26 +1026,30 @@ fn scale_ring_expressions(
     scalar: F128,
 ) -> Vec<LinearCombination> {
     assert_eq!(expressions.len(), RING_WIDTH);
-    let mut out = vec![LinearCombination::zero(); RING_WIDTH];
-    for (input_bit, expression) in expressions.iter().enumerate() {
-        let basis = if input_bit < 64 {
-            F128::new(1u64 << input_bit, 0)
-        } else {
-            F128::new(0, 1u64 << (input_bit - 64))
-        };
-        let product = scalar * basis;
-        for output_bit in 0..RING_WIDTH {
-            let present = if output_bit < 64 {
-                (product.lo >> output_bit) & 1
+    let products = (0..RING_WIDTH)
+        .map(|input_bit| {
+            let basis = if input_bit < 64 {
+                F128::new(1u64 << input_bit, 0)
             } else {
-                (product.hi >> (output_bit - 64)) & 1
+                F128::new(0, 1u64 << (input_bit - 64))
             };
-            if present == 1 {
-                out[output_bit] = out[output_bit].add(expression);
-            }
-        }
-    }
-    out
+            scalar * basis
+        })
+        .collect::<Vec<_>>();
+    (0..RING_WIDTH)
+        .map(|output_bit| {
+            LinearCombination::sum_scaled(expressions.iter().zip(&products).filter_map(
+                |(expression, product)| {
+                    let present = if output_bit < 64 {
+                        (product.lo >> output_bit) & 1
+                    } else {
+                        (product.hi >> (output_bit - 64)) & 1
+                    };
+                    (present == 1).then_some((expression, F128::ONE))
+                },
+            ))
+        })
+        .collect()
 }
 
 struct RingLink<'a> {
@@ -1449,10 +1454,9 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
     if !(1..=MAX_BLIND_GRINDING_BITS).contains(&blind_bits) {
         return Err(SuccinctVeilError::InvalidShape("blind grinding bits"));
     }
-    let blind_grind_nonce = challenger.grind_pow(blind_bits);
-    if blind_grind_nonce >= MAX_BLIND_GRIND_TRIALS {
-        return Err(SuccinctVeilError::GrindingLimitExceeded);
-    }
+    let blind_grind_nonce = challenger
+        .grind_pow_bounded(blind_bits, MAX_BLIND_GRIND_TRIALS)
+        .ok_or(SuccinctVeilError::GrindingLimitExceeded)?;
     let blind_challenge = sample_nonzero(challenger);
 
     let q_slices = witness_slices
@@ -1510,7 +1514,9 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
         .collect::<Vec<_>>();
     let (pcs_open, veil) = rayon::join(
         || {
-            pcs::open_batch_mixed_ligerito_preblinded_ro(
+            let mut bounded =
+                BoundedGrindingChallenger::new(&mut pcs_challenger, MAX_LIGERITO_GRIND_TRIALS);
+            let opening = pcs::open_batch_mixed_ligerito_preblinded_ro(
                 pcs::PreblindedOpening {
                     q_packed,
                     prover_data: &prover_data,
@@ -1524,8 +1530,13 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
                     ro: &outer_ro,
                     channel: RoChannel::Witness,
                 },
-                &mut pcs_challenger,
-            )
+                &mut bounded,
+            );
+            if bounded.is_exhausted() {
+                Err(SuccinctVeilError::GrindingLimitExceeded)
+            } else {
+                Ok(opening)
+            }
         },
         || {
             prove_constraints_from_commitment(
@@ -1537,6 +1548,7 @@ pub(crate) fn prove_succinct_veil_r1cs<Ch: Challenger + Clone + Send>(
             )
         },
     );
+    let pcs_open = pcs_open?;
     if !ligerito_grinding_is_bounded(&pcs_open.ligerito) {
         return Err(SuccinctVeilError::GrindingLimitExceeded);
     }

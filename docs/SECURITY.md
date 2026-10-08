@@ -144,11 +144,13 @@ Each level tuple is
 `(log_inv_rate, log_msg_cols, fold width, queries, fold_grinding_bits)`.
 Query-phase grinding, tapering, and OOD sampling are zero in these profiles.
 
-The Rust prover and simulator currently check returned grind nonces against
-the caps, but some search and rejection loops are not bounded while they run.
-The executable must enforce per-loop caps and the cumulative oracle-call budget
-during execution before those values can be treated as deterministic
-implementation bounds.
+The Rust prover, simulator, and examples enforce grinding caps during search.
+The outer search returns an error on exhaustion; the Ligerito adapter marks
+exhaustion and the caller rejects the resulting opening before returning a
+proof. Successful searches return the same first nonce as an unbounded search.
+Some rejection-sampling loops and the cumulative oracle-call budget are still
+not bounded during execution. Those remaining checks are required before the
+entire formal resource ledger becomes a deterministic implementation bound.
 
 The public prove and verify methods instantiate the pinned SHA-256 transcript
 domain internally; the test-only random challenger is not part of their API.

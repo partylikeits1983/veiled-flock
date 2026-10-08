@@ -113,7 +113,8 @@ impl MerkleMatrixOpening {
         channel: RoChannel,
     ) -> bool {
         if !num_rows.is_power_of_two()
-            || self.rows.len() != self.positions.len().saturating_mul(num_columns)
+            || num_columns == 0
+            || Some(self.rows.len()) != self.positions.len().checked_mul(num_columns)
             || self.salts.len() != self.positions.len()
         {
             return false;
@@ -144,8 +145,11 @@ impl MerkleMatrixOpening {
 
     pub fn row(&self, position: usize, num_columns: usize) -> Option<&[F128]> {
         let index = self.positions.binary_search(&position).ok()?;
-        let start = index * num_columns;
-        self.rows.get(start..start + num_columns)
+        if num_columns == 0 {
+            return None;
+        }
+        let start = index.checked_mul(num_columns)?;
+        self.rows.get(start..start.checked_add(num_columns)?)
     }
 }
 
@@ -184,6 +188,26 @@ mod tests {
     use flock_core::zk::ZkRng;
 
     use super::*;
+
+    #[test]
+    fn malformed_opening_dimensions_are_rejected_without_panicking() {
+        let opening = MerkleMatrixOpening {
+            positions: vec![0, 1],
+            rows: vec![],
+            salts: vec![[0; 32]; 2],
+            siblings: vec![],
+        };
+        for columns in [0, usize::MAX] {
+            assert!(!opening.verify(
+                &[0; 32],
+                16,
+                columns,
+                &RoContext::plain(),
+                RoChannel::Witness
+            ));
+            assert!(opening.row(1, columns).is_none());
+        }
+    }
 
     #[test]
     fn multi_opening_roundtrip_and_mutation_rejection() {

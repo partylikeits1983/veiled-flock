@@ -10,6 +10,7 @@
 use std::fmt;
 
 use flock_core::field::F128;
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::ntt::{AdditiveCosetNtt, disjoint_coset_offset};
@@ -72,11 +73,14 @@ impl CodeParameters {
         if !code_length.is_power_of_two() {
             return Err(CodeError::CodeLengthNotPowerOfTwo(code_length));
         }
-        let padded = message_length.next_power_of_two();
-        if code_length < 2 * padded {
+        let required = message_length
+            .checked_next_power_of_two()
+            .and_then(|padded| padded.checked_mul(2))
+            .ok_or(CodeError::DomainTooLarge)?;
+        if code_length < required {
             return Err(CodeError::InsufficientProductDistance {
                 code_length,
-                required: 2 * padded,
+                required,
             });
         }
         if code_length.trailing_zeros() as usize >= 128 {
@@ -196,6 +200,15 @@ impl AdditiveRsCode {
     }
 
     pub fn encode_batch(&self, messages: &[Vec<F128>]) -> Result<Vec<Vec<F128>>, CodeError> {
+        if messages.len() > 1 && self.parameters.code_length >= 4096 {
+            // All random padding is already drawn in transcript order. Only
+            // independent deterministic encodings run in parallel; indexed
+            // collection preserves commitment-column order.
+            return messages
+                .par_iter()
+                .map(|message| self.encode(message))
+                .collect();
+        }
         messages
             .iter()
             .map(|message| self.encode(message))
@@ -275,6 +288,37 @@ impl AdditiveRsCode {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn oversized_message_dimensions_are_rejected_without_overflow() {
+        for length in [usize::MAX, (usize::MAX / 2) + 1] {
+            assert_eq!(
+                CodeParameters::new(length, 1usize << (usize::BITS - 1)),
+                Err(CodeError::DomainTooLarge)
+            );
+        }
+    }
+
+    #[test]
+    fn batch_encoding_matches_serial_order_and_values() {
+        let code = AdditiveRsCode::new(CodeParameters::new(129, 4096).unwrap());
+        let mut rng = Rng(0x1234);
+        let messages = (0..4).map(|_| rng.vector(129)).collect::<Vec<_>>();
+        let expected = messages
+            .iter()
+            .map(|message| code.encode(message).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(code.encode_batch(&messages).unwrap(), expected);
+        let mut invalid = messages;
+        invalid[2].pop();
+        assert_eq!(
+            code.encode_batch(&invalid),
+            Err(CodeError::WrongInputLength {
+                expected: 129,
+                actual: 128
+            })
+        );
+    }
 
     struct Rng(u64);
 

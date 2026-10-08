@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use flock_core::{
     challenger::Challenger,
-    field::F128,
+    field::{F128, F256Unreduced},
     merkle::Hash,
     ro::{RoChannel, RoContext},
     zk::MaskSampler,
@@ -58,7 +58,8 @@ impl VectorParameters {
             .checked_add(padding_length)
             .ok_or(DotProductError::InvalidParameters)?;
         let code_length = message_length
-            .next_power_of_two()
+            .checked_next_power_of_two()
+            .ok_or(DotProductError::InvalidParameters)?
             .checked_mul(inverse_rate)
             .ok_or(DotProductError::InvalidParameters)?;
         CodeParameters::new(message_length, code_length)?;
@@ -69,6 +70,15 @@ impl VectorParameters {
         if padding_length > code_length {
             return Err(DotProductError::InvalidParameters);
         }
+        let width = num_vectors
+            .checked_add(1)
+            .ok_or(DotProductError::InvalidParameters)?;
+        padding_length
+            .checked_mul(width)
+            .ok_or(DotProductError::InvalidParameters)?;
+        code_length
+            .checked_mul(width)
+            .ok_or(DotProductError::InvalidParameters)?;
         Ok(Self {
             vector_length,
             padding_length,
@@ -83,6 +93,30 @@ impl VectorParameters {
 
     pub fn commitment_width(self) -> usize {
         self.num_vectors + 1
+    }
+
+    /// Validate deserialized or directly constructed parameters before any
+    /// size arithmetic, allocation, transcript operation, or division.
+    pub fn validate(self) -> Result<Self, DotProductError> {
+        let padded = self
+            .vector_length
+            .checked_add(self.padding_length)
+            .and_then(usize::checked_next_power_of_two)
+            .ok_or(DotProductError::InvalidParameters)?;
+        let inverse_rate = self
+            .code_length
+            .checked_div(padded)
+            .ok_or(DotProductError::InvalidParameters)?;
+        let expected = Self::with_security(
+            self.vector_length,
+            self.num_vectors,
+            self.padding_length,
+            inverse_rate,
+        )?;
+        if expected != self {
+            return Err(DotProductError::InvalidParameters);
+        }
+        Ok(self)
     }
 
     fn code(self) -> AdditiveRsCode {
@@ -139,6 +173,7 @@ pub fn commit_vectors<R: MaskSampler + ?Sized>(
     ctx: &RoContext,
     channel: RoChannel,
 ) -> Result<DotProductProverData, DotProductError> {
+    parameters.validate()?;
     if vectors.len() != parameters.num_vectors {
         return Err(DotProductError::WrongVectorCount);
     }
@@ -256,21 +291,7 @@ pub fn verify_dot_product<C: Challenger>(
     ctx: &RoContext,
     channel: RoChannel,
 ) -> Result<(), DotProductError> {
-    let parameters = proof.parameters;
-    VectorParameters::with_security(
-        parameters.vector_length,
-        parameters.num_vectors,
-        parameters.padding_length,
-        parameters.code_length / parameters.message_length().next_power_of_two(),
-    )
-    .map_err(|_| DotProductError::InvalidParameters)
-    .and_then(|expected| {
-        if expected == parameters {
-            Ok(())
-        } else {
-            Err(DotProductError::InvalidParameters)
-        }
-    })?;
+    let parameters = proof.parameters.validate()?;
     if dot_vector.len() != parameters.vector_length
         || proof.claimed_dot_products.len() != parameters.num_vectors
         || proof.rlc_vector.len() != parameters.vector_length
@@ -377,7 +398,10 @@ pub(crate) fn dot_product(left: &[F128], right: &[F128]) -> F128 {
     assert_eq!(left.len(), right.len());
     left.iter()
         .zip(right)
-        .fold(F128::ZERO, |sum, (left, right)| sum + *left * *right)
+        .fold(F256Unreduced::ZERO, |sum, (left, right)| {
+            sum ^ left.mul_unreduced(*right)
+        })
+        .reduce()
 }
 
 #[cfg(test)]
@@ -385,6 +409,83 @@ mod tests {
     use flock_core::{challenger::FsChallenger, zk::ZkRng};
 
     use super::*;
+
+    #[test]
+    fn deferred_dot_product_matches_field_arithmetic() {
+        for length in [0, 1, 17, 128, 1024] {
+            let left = vector(length, 0x1234);
+            let right = vector(length, 0xfedc);
+            let expected = left
+                .iter()
+                .zip(&right)
+                .fold(F128::ZERO, |sum, (a, b)| sum + *a * *b);
+            assert_eq!(dot_product(&left, &right), expected);
+        }
+    }
+
+    #[test]
+    fn invalid_parameter_arithmetic_is_rejected() {
+        for (length, vectors, padding) in [
+            (usize::MAX, 1, 1),
+            (usize::MAX / 2, 1, 1),
+            (1, usize::MAX, 1),
+        ] {
+            assert_eq!(
+                VectorParameters::with_security(length, vectors, padding, 8),
+                Err(DotProductError::InvalidParameters)
+            );
+        }
+        for parameters in [
+            VectorParameters {
+                vector_length: usize::MAX,
+                padding_length: 1,
+                code_length: 8,
+                num_vectors: 1,
+            },
+            VectorParameters {
+                vector_length: 0,
+                padding_length: 0,
+                code_length: 8,
+                num_vectors: 1,
+            },
+            VectorParameters {
+                vector_length: 1,
+                padding_length: 1,
+                code_length: 17,
+                num_vectors: 1,
+            },
+        ] {
+            assert_eq!(
+                parameters.validate(),
+                Err(DotProductError::InvalidParameters)
+            );
+            let proof = DotProductProof {
+                parameters,
+                commitment: [0; 32],
+                claimed_dot_products: vec![],
+                mask_dot_product: F128::ZERO,
+                rlc_vector: vec![],
+                rlc_padding: vec![],
+                opening: MerkleMatrixOpening {
+                    positions: vec![],
+                    rows: vec![],
+                    salts: vec![],
+                    siblings: vec![],
+                },
+            };
+            let mut challenger = FsChallenger::new(b"invalid-parameters");
+            assert_eq!(
+                verify_dot_product(
+                    &[],
+                    &proof,
+                    &mut challenger,
+                    &RoContext::plain(),
+                    RoChannel::Witness
+                ),
+                Err(DotProductError::InvalidParameters)
+            );
+        }
+    }
 
     fn vector(length: usize, offset: u64) -> Vec<F128> {
         (0..length)

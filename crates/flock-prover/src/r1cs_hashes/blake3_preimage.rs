@@ -994,6 +994,39 @@ pub(crate) fn absorb_statement<Ch: Challenger>(challenger: &mut Ch, stmt: &Diges
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "veil")]
+    #[test]
+    fn full_zk_proof_matches_preoptimization_wire_fixture() {
+        // Generated from origin/main at 73f5361 before these optimizations.
+        // Fixed coins are confined to this test-only call to the private API.
+        // Check both serial and parallel execution against the complete bundle.
+        let setup = Blake3PreimageZkSetup::new(256);
+        let messages = msgs_of(0x5eed, 256);
+        let digests = Blake3PreimageSetup::digests_of(&messages);
+        for threads in [1, 4] {
+            let pool = rayon::ThreadPoolBuilder::new()
+                .num_threads(threads)
+                .build()
+                .unwrap();
+            pool.install(|| {
+                let mut rng = flock_core::zk::ZkRng::from_seed([42; 32]);
+                let mut challenger = FsChallenger::new(VEIL_FLOCK_FS_DOMAIN);
+                let (proof, commitment) = setup
+                    .prove_with_challenger(&messages, &digests, &mut rng, &mut challenger)
+                    .unwrap();
+                setup.verify(&commitment, &proof, &digests).unwrap();
+                let bytes = VeilFlockProofBundle::new(digests.clone(), commitment, proof)
+                    .to_bytes()
+                    .unwrap();
+                assert_eq!(bytes.len(), 808852);
+                assert_eq!(
+                    blake3::hash(&bytes).to_hex().as_str(),
+                    "386e45b6c94ab4aa21c24d1a2b7b9646199a7eae7cb06c9241d5a296db05985e"
+                );
+            });
+        }
+    }
     #[cfg(feature = "veil")]
     use crate::proof_io::{MAX_VEIL_FLOCK_BUNDLE_BYTES, VeilFlockProofBundle};
     use flock_core::challenger::FsChallenger;
