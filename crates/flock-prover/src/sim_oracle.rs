@@ -573,6 +573,21 @@ impl Challenger for OracleChallenger {
         nonce
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        if max_attempts == 0 || bits > 256 {
+            return None;
+        }
+        let state = self.pow_state_digest();
+        let nonce = if bits == 0 {
+            0
+        } else {
+            (0..max_attempts)
+                .find(|&nonce| leading_zero_bits(&self.pow_answer(&state, nonce)) >= bits)?
+        };
+        self.observe_bytes(&nonce.to_le_bytes());
+        Some(nonce)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         let state = self.pow_state_digest();
         let ok = if bits == 0 {
@@ -602,6 +617,26 @@ fn leading_zero_bits(digest: &[u8; 32]) -> u32 {
 mod tests {
     use super::*;
     use flock_core::challenger::FsChallenger;
+
+    #[test]
+    fn bounded_oracle_grinding_matches_honest_search_and_caps_queries() {
+        let oracle = shared_oracle();
+        let mut simulated = OracleChallenger::new(b"bounded-oracle", oracle.clone());
+        let mut honest = FsChallenger::new(b"bounded-oracle");
+        assert_eq!(
+            simulated.grind_pow_bounded(5, 4096),
+            honest.grind_pow_bounded(5, 4096)
+        );
+        assert_eq!(simulated.sample_f128(), honest.sample_f128());
+
+        let mut simulated = OracleChallenger::new(b"failed-bounded-oracle", oracle.clone());
+        let mut unchanged = FsChallenger::new(b"failed-bounded-oracle");
+        let before = oracle.lock().unwrap().queries().len();
+        assert_eq!(simulated.grind_pow_bounded(256, 3), None);
+        let after = oracle.lock().unwrap().queries().len();
+        assert_eq!(after - before, 4, "one state query and three nonce trials");
+        assert_eq!(simulated.sample_f128(), unchanged.sample_f128());
+    }
 
     /// **The control.** With nothing programmed, the oracle challenger must
     /// be indistinguishable from plain Fiat–Shamir — same challenges, same

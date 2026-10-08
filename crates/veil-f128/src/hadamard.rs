@@ -81,9 +81,7 @@ pub fn commit_hadamard<R: MaskSampler + ?Sized>(
     ctx: &RoContext,
     channel: RoChannel,
 ) -> Result<HadamardProverData, HadamardError> {
-    if parameters.num_vectors != 3 || parameters.padding_length == 0 {
-        return Err(HadamardError::InvalidParameters);
-    }
+    validate_parameters(parameters)?;
     if a.len() != parameters.vector_length
         || b.len() != parameters.vector_length
         || c.len() != parameters.vector_length
@@ -304,24 +302,12 @@ pub fn verify_hadamard_and_dots<C: Challenger>(
 }
 
 fn validate_parameters(parameters: VectorParameters) -> Result<(), HadamardError> {
-    if parameters.num_vectors != 3
-        || parameters.vector_length == 0
-        || parameters.padding_length == 0
-        || !parameters.code_length.is_power_of_two()
-    {
+    if parameters.num_vectors != 3 {
         return Err(HadamardError::InvalidParameters);
     }
-    let inverse_rate = parameters.code_length / parameters.message_length().next_power_of_two();
-    let expected = VectorParameters::with_security(
-        parameters.vector_length,
-        3,
-        parameters.padding_length,
-        inverse_rate,
-    )
-    .map_err(|_| HadamardError::InvalidParameters)?;
-    if expected != parameters {
-        return Err(HadamardError::InvalidParameters);
-    }
+    parameters
+        .validate()
+        .map_err(|_| HadamardError::InvalidParameters)?;
     Ok(())
 }
 

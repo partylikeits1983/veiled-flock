@@ -79,6 +79,13 @@ pub trait Challenger: Send {
         0
     }
 
+    /// Find the first successful nonce in `0..max_attempts`. Failure leaves
+    /// the transcript unchanged. Implementations must enforce the cap during
+    /// search; the default rejects rather than calling an unbounded grind.
+    fn grind_pow_bounded(&mut self, _bits: u32, _max_attempts: u64) -> Option<u64> {
+        None
+    }
+
     /// Verifier-side mirror of [`Self::grind_pow`]: check that `nonce`
     /// satisfies the `bits`-leading-zeros PoW against the current transcript
     /// state, then absorb the nonce so the running state stays in lockstep
@@ -89,6 +96,74 @@ pub trait Challenger: Send {
     /// proof if this returns `false`.
     fn verify_pow(&mut self, _nonce: u64, _bits: u32) -> bool {
         true
+    }
+}
+
+/// Adapt the infallible Ligerito challenger interface to bounded searches.
+/// A failed grind returns the out-of-range sentinel `max_attempts`; callers
+/// must check [`Self::is_exhausted`] before returning a proof. Subsequent
+/// searches do no additional grinding work after the first failure.
+pub struct BoundedGrindingChallenger<'a, C> {
+    inner: &'a mut C,
+    max_attempts: u64,
+    exhausted: bool,
+}
+
+impl<'a, C> BoundedGrindingChallenger<'a, C> {
+    pub fn new(inner: &'a mut C, max_attempts: u64) -> Self {
+        Self {
+            inner,
+            max_attempts,
+            exhausted: false,
+        }
+    }
+
+    pub fn is_exhausted(&self) -> bool {
+        self.exhausted
+    }
+}
+
+impl<C: Challenger> Challenger for BoundedGrindingChallenger<'_, C> {
+    fn ro_context(&self, nonce: [u8; 32]) -> RoContext {
+        self.inner.ro_context(nonce)
+    }
+    fn observe_label(&mut self, label: &[u8]) {
+        self.inner.observe_label(label);
+    }
+    fn observe_f128(&mut self, value: F128) {
+        self.inner.observe_f128(value);
+    }
+    fn observe_f128_slice(&mut self, values: &[F128]) {
+        self.inner.observe_f128_slice(values);
+    }
+    fn observe_bytes(&mut self, bytes: &[u8]) {
+        self.inner.observe_bytes(bytes);
+    }
+    fn sample_f128(&mut self) -> F128 {
+        self.inner.sample_f128()
+    }
+    fn sample_f128_vec(&mut self, n: usize) -> Vec<F128> {
+        self.inner.sample_f128_vec(n)
+    }
+
+    fn grind_pow(&mut self, bits: u32) -> u64 {
+        self.grind_pow_bounded(bits, self.max_attempts)
+            .unwrap_or(self.max_attempts)
+    }
+
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        if self.exhausted {
+            return None;
+        }
+        let nonce = self
+            .inner
+            .grind_pow_bounded(bits, max_attempts.min(self.max_attempts));
+        self.exhausted = nonce.is_none();
+        nonce
+    }
+
+    fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
+        self.inner.verify_pow(nonce, bits)
     }
 }
 
@@ -127,6 +202,10 @@ impl Challenger for RandomChallenger {
         let lo = splitmix64(&mut self.state);
         let hi = splitmix64(&mut self.state);
         F128 { lo, hi }
+    }
+
+    fn grind_pow_bounded(&mut self, _bits: u32, max_attempts: u64) -> Option<u64> {
+        (max_attempts > 0).then_some(0)
     }
 }
 
@@ -361,6 +440,21 @@ impl Challenger for FsChallenger {
         nonce
     }
 
+    fn grind_pow_bounded(&mut self, bits: u32, max_attempts: u64) -> Option<u64> {
+        if max_attempts == 0 || bits > 256 {
+            return None;
+        }
+        let state_digest = fs_pow_state_digest(&self.hasher);
+        let nonce = if bits == 0 {
+            0
+        } else {
+            (0..max_attempts)
+                .find(|&nonce| sha256_has_leading_zero_bits(&state_digest, nonce, bits))?
+        };
+        self.observe_bytes(&nonce.to_le_bytes());
+        Some(nonce)
+    }
+
     fn verify_pow(&mut self, nonce: u64, bits: u32) -> bool {
         let state_digest = fs_pow_state_digest(&self.hasher);
         let ok = if bits == 0 {
@@ -417,6 +511,35 @@ fn sha256_has_leading_zero_bits(state_digest: &[u8; 32], nonce: u64, bits: u32) 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bounded_grind_preserves_first_success_and_rejects_exhaustion() {
+        let mut unbounded = FsChallenger::new(b"bounded-grind");
+        let mut bounded = unbounded.clone();
+        let nonce = unbounded.grind_pow(5);
+        assert_eq!(bounded.grind_pow_bounded(5, nonce + 1), Some(nonce));
+        assert_eq!(bounded.sample_f128(), unbounded.sample_f128());
+
+        let mut failed = FsChallenger::new(b"bounded-grind");
+        let mut unchanged = failed.clone();
+        assert_eq!(failed.grind_pow_bounded(5, nonce), None);
+        assert_eq!(failed.sample_f128(), unchanged.sample_f128());
+        let mut adapter = BoundedGrindingChallenger::new(&mut failed, 0);
+        assert_eq!(adapter.grind_pow(5), 0);
+        assert!(adapter.is_exhausted());
+        assert_eq!(adapter.grind_pow_bounded(0, 100), None);
+    }
+
+    #[test]
+    fn bounded_zero_bit_grind_and_invalid_difficulty() {
+        let mut challenger = FsChallenger::new(b"bounded-zero");
+        let mut verifier = challenger.clone();
+        assert_eq!(challenger.grind_pow_bounded(0, 0), None);
+        assert_eq!(challenger.grind_pow_bounded(257, 1), None);
+        assert_eq!(challenger.grind_pow_bounded(0, 1), Some(0));
+        assert!(verifier.verify_pow(0, 0));
+        assert_eq!(challenger.sample_f128(), verifier.sample_f128());
+    }
 
     /// Prover-side PoW grinding produces a nonce that the verifier-side
     /// `verify_pow` accepts at the same transcript position. State binding

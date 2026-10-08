@@ -6,6 +6,11 @@
 //! correctness-first path; the optimized zero-offset implementation remains in
 //! `flock-core` for the main PCS.
 
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex, OnceLock},
+};
+
 use flock_core::field::F128;
 use rayon::prelude::*;
 
@@ -83,6 +88,67 @@ fn compute_twiddles(log_size: usize, offset: F128) -> Vec<F128> {
         }
     }
 
+    twiddles
+}
+
+// Public transform geometry is independent of witnesses and prover randomness.
+// Bound both storage and entry count so arbitrary library parameters cannot
+// grow a process-wide cache without limit. Oversized transforms remain usable
+// but are not retained; evicted tables live only as long as their users do.
+const MAX_CACHED_TWIDDLES: usize = 1 << 17;
+const MAX_CACHED_TRANSFORMS: usize = 16;
+
+#[derive(Default)]
+struct TwiddleCache {
+    entries: VecDeque<(usize, F128, Arc<[F128]>)>,
+    elements: usize,
+}
+
+impl TwiddleCache {
+    fn get(&mut self, log_size: usize, offset: F128) -> Option<Arc<[F128]>> {
+        let index = self
+            .entries
+            .iter()
+            .position(|entry| entry.0 == log_size && entry.1 == offset)?;
+        let entry = self.entries.remove(index)?;
+        let twiddles = Arc::clone(&entry.2);
+        self.entries.push_back(entry);
+        Some(twiddles)
+    }
+
+    fn insert(&mut self, log_size: usize, offset: F128, twiddles: Arc<[F128]>) {
+        if twiddles.len() > MAX_CACHED_TWIDDLES {
+            return;
+        }
+        while self.entries.len() >= MAX_CACHED_TRANSFORMS
+            || self.elements + twiddles.len() > MAX_CACHED_TWIDDLES
+        {
+            let entry = self.entries.pop_front().expect("nonempty transform cache");
+            self.elements -= entry.2.len();
+        }
+        self.elements += twiddles.len();
+        self.entries.push_back((log_size, offset, twiddles));
+    }
+}
+
+fn cached_twiddles(log_size: usize, offset: F128) -> Arc<[F128]> {
+    static CACHE: OnceLock<Mutex<TwiddleCache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(TwiddleCache::default()));
+    if let Some(twiddles) = cache
+        .lock()
+        .unwrap_or_else(|error| error.into_inner())
+        .get(log_size, offset)
+    {
+        return twiddles;
+    }
+    // Table construction and every transform run outside the cache lock.
+    let twiddles: Arc<[F128]> = compute_twiddles(log_size, offset).into();
+    let mut cache = cache.lock().unwrap_or_else(|error| error.into_inner());
+    // Another prover may have populated the same geometry while we computed it.
+    if let Some(existing) = cache.get(log_size, offset) {
+        return existing;
+    }
+    cache.insert(log_size, offset, Arc::clone(&twiddles));
     twiddles
 }
 
@@ -167,7 +233,7 @@ fn inverse_recursive(values: &mut [F128], twiddles: &[F128], index: usize) {
 pub struct AdditiveCosetNtt {
     log_size: usize,
     offset: F128,
-    twiddles: Vec<F128>,
+    twiddles: Arc<[F128]>,
 }
 
 impl AdditiveCosetNtt {
@@ -176,7 +242,7 @@ impl AdditiveCosetNtt {
         Self {
             log_size,
             offset,
-            twiddles: compute_twiddles(log_size, offset),
+            twiddles: cached_twiddles(log_size, offset),
         }
     }
 
@@ -218,6 +284,38 @@ pub(crate) fn disjoint_coset_offset(log_domain: usize) -> F128 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cache_reuses_exact_geometry_and_bounds_retained_tables() {
+        let offset = disjoint_coset_offset(8);
+        let first = AdditiveCosetNtt::new(8, offset);
+        let second = AdditiveCosetNtt::new(8, offset);
+        assert_eq!(first.twiddles, second.twiddles);
+        assert_eq!(&*first.twiddles, compute_twiddles(8, offset));
+
+        let mut cache = TwiddleCache::default();
+        cache.insert(8, offset, Arc::clone(&first.twiddles));
+        assert!(Arc::ptr_eq(&first.twiddles, &cache.get(8, offset).unwrap()));
+        assert!(cache.get(8, F128::ZERO).is_none());
+        let mut cache = TwiddleCache::default();
+        let table: Arc<[F128]> = vec![F128::ZERO; MAX_CACHED_TWIDDLES / 2].into();
+        for index in 0..4 {
+            cache.insert(16, F128::new(index, 0), Arc::clone(&table));
+        }
+        assert_eq!(cache.elements, MAX_CACHED_TWIDDLES);
+        assert!(cache.get(16, F128::ZERO).is_none());
+        assert!(cache.get(16, F128::new(3, 0)).is_some());
+        cache.insert(
+            18,
+            F128::ZERO,
+            vec![F128::ZERO; MAX_CACHED_TWIDDLES + 1].into(),
+        );
+        assert!(cache.get(18, F128::ZERO).is_none());
+        for index in 0..32 {
+            cache.insert(0, F128::new(index, 1), Arc::from([]));
+        }
+        assert_eq!(cache.entries.len(), MAX_CACHED_TRANSFORMS);
+    }
 
     fn samples(count: usize, seed: u64) -> Vec<F128> {
         let mut state = seed;

@@ -77,6 +77,32 @@ impl LinearCombination {
         result
     }
 
+    /// Batch an affine sum and canonicalize once, rather than cloning and
+    /// sorting every growing partial sum. The result is independent of the
+    /// input term order, including repeated variables and cancellation.
+    pub fn sum_scaled<'a>(expressions: impl IntoIterator<Item = (&'a Self, F128)>) -> Self {
+        let mut result = Self::zero();
+        for (expression, scalar) in expressions {
+            if scalar.is_zero() {
+                continue;
+            }
+            if scalar == F128::ONE {
+                result.constant += expression.constant;
+                result.terms.extend_from_slice(&expression.terms);
+                continue;
+            }
+            result.constant += scalar * expression.constant;
+            result.terms.extend(
+                expression
+                    .terms
+                    .iter()
+                    .map(|&(index, coefficient)| (index, scalar * coefficient)),
+            );
+        }
+        result.normalize();
+        result
+    }
+
     pub fn scale(&self, scalar: F128) -> Self {
         if scalar.is_zero() {
             return Self::zero();
@@ -971,6 +997,30 @@ mod tests {
     use flock_core::{challenger::FsChallenger, ro::RoContext, zk::ZkRng};
 
     use super::*;
+
+    #[test]
+    fn batched_affine_sum_matches_canonical_incremental_sum() {
+        let expressions = [
+            LinearCombination {
+                constant: F128::new(5, 1),
+                terms: vec![(3, F128::ONE), (0, F128::new(2, 7)), (3, F128::ONE)],
+            },
+            LinearCombination::variable(0),
+            LinearCombination::variable(2),
+            LinearCombination::variable(2),
+        ];
+        let coefficients = [F128::new(7, 2), F128::ZERO, F128::ONE, F128::ONE];
+        let expected = expressions.iter().zip(coefficients).fold(
+            LinearCombination::zero(),
+            |sum, (expression, coefficient)| sum.add(&expression.scale(coefficient)),
+        );
+        let actual = LinearCombination::sum_scaled(expressions.iter().zip(coefficients));
+        assert_eq!(actual, expected);
+        assert_eq!(
+            actual.evaluate(&[F128::new(2, 3); 4]),
+            expected.evaluate(&[F128::new(2, 3); 4])
+        );
+    }
 
     fn root_circuit(public_constant: F128, masked: F128) -> ArithmeticCircuit {
         // The private input is h. Reconstruct v = masked + h and prove

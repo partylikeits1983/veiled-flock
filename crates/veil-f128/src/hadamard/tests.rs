@@ -1,9 +1,32 @@
 use flock_core::{challenger::FsChallenger, zk::ZkRng};
 
 use super::{
-    F128, RoChannel, RoContext, VectorParameters, commit_hadamard, prove_hadamard_and_dots,
-    verify_hadamard_and_dots,
+    F128, HadamardError, RoChannel, RoContext, VectorParameters, commit_hadamard,
+    prove_hadamard_and_dots, verify_hadamard_and_dots,
 };
+
+#[test]
+fn malformed_parameters_are_rejected_before_size_arithmetic() {
+    let (parameters, a, b, c, dot) = fixture();
+    let ctx = RoContext::native([1; 32]);
+    let mut rng = ZkRng::from_seed([21; 32]);
+    let data = commit_hadamard(&a, &b, &c, parameters, &mut rng, &ctx, RoChannel::MaskP).unwrap();
+    let mut challenger = FsChallenger::new(b"invalid-hadamard-parameters");
+    let mut proof = prove_hadamard_and_dots(&dot, data, &mut challenger).unwrap();
+    for (length, padding, code_length) in [(usize::MAX, 1, 8), (0, 0, 8), (1, 1, 17)] {
+        proof.parameters = VectorParameters {
+            vector_length: length,
+            padding_length: padding,
+            code_length,
+            num_vectors: 3,
+        };
+        let mut challenger = FsChallenger::new(b"invalid-hadamard-parameters");
+        assert_eq!(
+            verify_hadamard_and_dots(&dot, &proof, &mut challenger, &ctx, RoChannel::MaskP),
+            Err(HadamardError::InvalidParameters)
+        );
+    }
+}
 
 fn vector(length: usize, offset: u64) -> Vec<F128> {
     (0..length)
